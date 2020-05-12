@@ -54,8 +54,10 @@ static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical Index>"),
 static cl::opt<std::string> filepath(cl::Positional, cl::desc("<Input File>"), cl::Required, cl::cat(optionsPrompt));
 
 typedef uint64_t (*RadicalFunctionType)(uint32_t fd);
+typedef pair<string, string> input_radical;
 
 void radical_grep(const string CC_expr,const string filename,ifstream&search);
+input_radical parse_input(string CC_expr);
 
 int main(int argc, char* argv[])
 {
@@ -88,6 +90,10 @@ void radical_grep(const string CC_expr,const string filename,ifstream&search)
     vector<string>record;
     vector<string>result;
     string s;
+    //CC_expr = 86_86_
+    //input_radical parse_radical("","");
+   // parse_radical=parse_input(CC_expr);
+   // cout<<parse_radical.first<<" "<<parse_radical.second<<endl;
     
     record.push_back("begin");
     while(getline(search,s))
@@ -139,3 +145,20 @@ void radical_grep(const string CC_expr,const string filename,ifstream&search)
         cout<<"Error!4"<<endl;
 }
 
+input_radical parse_input(string CC_expr)
+{
+    input_radical result("","");
+    string temp;
+    int p1, p2;
+    
+    p1=CC_expr.find_first_of("_");  //find first position of "_", and return the index
+    p2=CC_expr.find_last_of("_");   //find last position of "_", and return the index
+    
+    temp=CC_expr.substr(0,p1);
+    result.first=temp;
+    
+    temp=CC_expr.substr(p1+1,p2-p1-1);
+    result.second=temp;
+    
+    return result;
+}
