@@ -79,6 +79,7 @@ int main(int argc, char* argv[]){
 
     std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto pinyinREs = generateREs(pyregex);
+    grep->setColoring();
     grep->initREs(pinyinREs);
     grep->grepCodeGen();
     grep->initFileResult(allFiles);
