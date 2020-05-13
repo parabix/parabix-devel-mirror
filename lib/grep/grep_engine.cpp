@@ -75,6 +75,7 @@ using namespace kernel;
 namespace grep {
 
 const auto ENCODING_BITS = 8;
+const auto ENCODING_BITS_U16 = 16;
 
 void GrepCallBackObject::handle_signal(unsigned s) {
     if (static_cast<GrepSignal>(s) == GrepSignal::BinaryFile) {
@@ -266,10 +267,10 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     re::RE * anchorRE = mBreakCC;
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-        re::Name * anchorName = re::makeName("UTF8_LB", re::Name::Type::Unicode);
+        re::Name * anchorName = re::makeName("UTF16_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
-        setComponent(mExternalComponents, Component::UTF8index);
+        setComponent(mExternalComponents, Component::UTF16index);
         mExternalNames.insert(anchorName);
     }
 
@@ -289,7 +290,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
-            setComponent(mExternalComponents, Component::UTF8index);
+            setComponent(mExternalComponents, Component::UTF16index);
             if (mColoring) {
                 UnicodeIndexing = true;
             }
@@ -298,7 +299,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     if (UnicodeIndexing) {
         setComponent(mExternalComponents, Component::S2P);
-        setComponent(mExternalComponents, Component::UTF8index);
+        setComponent(mExternalComponents, Component::UTF16index);
     }
     if ((mEngineKind == EngineKind::EmitMatches) && mColoring && !mInvertMatches) {
         setComponent(mExternalComponents, Component::MatchStarts);
@@ -337,23 +338,23 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
             return;  // skip transposition and set mPrefixRE, mSuffixRE
         } else {
-            setComponent(mExternalComponents, Component::S2P);
+            setComponent(mExternalComponents, Component::S2P_16);
         }
     } else {
-        setComponent(mExternalComponents, Component::S2P);
+        setComponent(mExternalComponents, Component::S2P_16);
     }
     if (!mExternalNames.empty()) {
-        setComponent(mExternalComponents, Component::UTF8index);
+        setComponent(mExternalComponents, Component::UTF16index);
     }
 }
 
 StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, StreamSet * ByteStream) {
-    if (hasComponent(mExternalComponents, Component::S2P)) {
-        StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
+    if (hasComponent(mExternalComponents, Component::S2P_16)) {
+        StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS_U16, 1);
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         } else {
-            P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+            P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
         }
         return BasisBits;
     }
@@ -378,12 +379,19 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
     mLineBreakStream = P->CreateStreamSet(1, 1);
     mU8index = P->CreateStreamSet(1, 1);
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
+         P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
         UnicodeLinesLogic(P, SourceStream, mLineBreakStream, mU8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
     }
     else {
         if (hasComponent(mExternalComponents, Component::UTF8index)) {
             P->CreateKernelCall<UTF8_index>(SourceStream, mU8index);
-        }
+        } //run in UTF-8 mode - have the marker stream mark at the end of every byte of UTF-8 data
+
+        //if statement to invoke UTF-16 index kernel
+        if (hasComponent(mExternalComponents, Component::UTF16index)) {
+            P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
+        } //run in UTF-16 mode - have the marker stream mark at the end of final code unit of every UTF-16 sequence*/
+
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
             Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
             if (mNullMode == NullCharMode::Abort) {
@@ -505,7 +513,42 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
         options->setResults(Results);
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
-        options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
+        options->setIndexingTransformer(&mUTF8_Transformer, mU8index);
+        if (mSuffixRE != nullptr) {
+            options->setPrefixRE(mPrefixRE);
+            options->setRE(mSuffixRE);
+        } else {
+            options->setRE(re);
+        }
+    } else {
+        if (mSuffixRE != nullptr) {
+            options->setPrefixRE(toUTF8(mPrefixRE));
+            options->setRE(toUTF8(mSuffixRE));
+        } else {
+            options->setRE(toUTF8(re));
+        }
+    }
+    addExternalStreams(P, options, re);
+    P->CreateKernelCall<ICGrepKernel>(std::move(options));
+    if (hasComponent(mExternalComponents, Component::MatchStarts)) {
+        P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, Results);
+    }
+}
+
+
+void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF16);
+    auto lengths = getLengthRange(re, &cc::UTF16);
+    options->setSource(Source);
+    StreamSet * MatchResults = nullptr;
+    if (hasComponent(mExternalComponents, Component::MatchStarts)) {
+        MatchResults = P->CreateStreamSet(1, 1);
+        options->setResults(MatchResults);
+    } else {
+        options->setResults(Results);
+    }
+    if (hasComponent(mExternalComponents, Component::UTF16index)) {
+        options->setIndexingTransformer(&mUTF16_Transformer, mU16index);
         if (mSuffixRE != nullptr) {
             options->setPrefixRE(mPrefixRE);
             options->setRE(mSuffixRE);
@@ -543,7 +586,7 @@ StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, 
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(P, mREs[i], SourceStream, MatchResults);
         } else {
-            U8indexedGrep(P, mREs[i], SourceStream, MatchResults);
+            U16indexedGrep(P, mREs[i], SourceStream, MatchResults);
         }
     }
 
@@ -593,7 +636,7 @@ void GrepEngine::grepCodeGen() {
     Scalar * const useMMap = P->getInputScalar("useMMap");
     Scalar * const fileDescriptor = P->getInputScalar("fileDescriptor");
 
-    StreamSet * const ByteStream = P->CreateStreamSet(1, ENCODING_BITS);
+    StreamSet * const ByteStream = P->CreateStreamSet(1, ENCODING_BITS_U16);
     P->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     StreamSet * const Matches = grepPipeline(P, ByteStream);
     P->CreateKernelCall<PopcountKernel>(Matches, P->getOutputScalar("countResult"));
@@ -708,7 +751,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
         } else {
-            U8indexedGrep(E, mREs[i], SourceStream, MatchResults);
+            U16indexedGrep(E, mREs[i], SourceStream, MatchResults);
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
@@ -871,7 +914,7 @@ void EmitMatchesEngine::grepCodeGen() {
 
     Scalar * const useMMap = E1->getInputScalar("useMMap");
     Scalar * const fileDescriptor = E1->getInputScalar("fileDescriptor");
-    StreamSet * const ByteStream = E1->CreateStreamSet(1, ENCODING_BITS);
+    StreamSet * const ByteStream = E1->CreateStreamSet(1, ENCODING_BITS_U16);
     E1->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     grepPipeline(E1, ByteStream);
     E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
@@ -889,7 +932,7 @@ void EmitMatchesEngine::grepCodeGen() {
 
         Scalar * const buffer = E2->getInputScalar("buffer");
         Scalar * const length = E2->getInputScalar("length");
-        StreamSet * const InternalBytes = E2->CreateStreamSet(1, 8);
+        StreamSet * const InternalBytes = E2->CreateStreamSet(1, 16);  //modified to 16 to default to UTF16
         E2->CreateKernelCall<MemorySourceKernel>(buffer, length, InternalBytes);
         grepPipeline(E2, InternalBytes, /* BatchMode = */ true);
         E2->setOutputScalar("countResult", E2->CreateConstant(idb->getInt64(0)));
@@ -1201,23 +1244,23 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);
     Scalar * const callbackObject = E->getInputScalar(2);
-    StreamSet * ByteStream = E->CreateStreamSet(1, 8);
+    StreamSet * ByteStream = E->CreateStreamSet(1, 16); //modified to 16 to default to UTF16 input
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
-    StreamSet * BasisBits = E->CreateStreamSet(8);
-    E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    StreamSet * BasisBits = E->CreateStreamSet(16); //modified to 16 to default to UTF16 input
+    E->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
     E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
     StreamSet * u8index = E->CreateStreamSet();
-    E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
+    E->CreateKernelCall<UTF16_index>(BasisBits, u8index);
 
     StreamSet * MatchResults = E->CreateStreamSet();
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF8);
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF16);
     options->setRE(matchingRE);
     options->setSource(BasisBits);
     options->setResults(MatchResults);
-    options->addExternal("UTF8_index", u8index);
+    options->addExternal("UTF16_index", u8index);
     E->CreateKernelCall<ICGrepKernel>(std::move(options));
     StreamSet * MatchingRecords = E->CreateStreamSet();
     E->CreateKernelCall<MatchedLinesKernel>(MatchResults, RecordBreakStream, MatchingRecords);
@@ -1274,16 +1317,16 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);
     Scalar * const callbackObject = E->getInputScalar(2);
-    StreamSet * ByteStream = E->CreateStreamSet(1, 8);
+    StreamSet * ByteStream = E->CreateStreamSet(1, 16); //modified to 16 to default to UTF16 input
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
-    StreamSet * BasisBits = E->CreateStreamSet(8);
-    E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    StreamSet * BasisBits = E->CreateStreamSet(16); //modified to 16 to default to UTF16 input
+    E->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
     E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
     StreamSet * u8index = E->CreateStreamSet();
-    E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
+    E->CreateKernelCall<UTF16_index>(BasisBits, u8index);
 
     StreamSet * resultsSoFar = RecordBreakStream;
 
@@ -1307,7 +1350,7 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
         if (i != 0 || !isExclude) {
             options->setCombiningStream(isExclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultsSoFar);
         }
-        options->addExternal("UTF8_index", u8index);
+        options->addExternal("UTF16_index", u8index);
         E->CreateKernelCall<ICGrepKernel>(std::move(options));
         resultsSoFar = MatchResults;
     }

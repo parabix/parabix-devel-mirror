@@ -150,32 +150,39 @@ UTF8_index::UTF8_index(BuilderRef kb, StreamSet * Source, StreamSet * u8index)
 
 //=UTF-16 indexing kernel=
 void UTF16_index::generatePabloMethod() {
-    PabloBuilder pb_u16(getEntryScope());
-    std::unique_ptr<cc::CC_Compiler> ccc_u16;
-    bool useDirectCC_u16 = getInput(0)->getType()->getArrayNumElements() == 1;
-    if (useDirectCC_u16) {
-        ccc_u16 = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb_u16.createExtract(getInput(0), pb_u16.getInteger(0)));
-    } else {
-        ccc_u16 = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
-    }
+    PabloBuilder pb(getEntryScope());
+    std::unique_ptr<cc::CC_Compiler> ccc_u16_hi;
+    std::unique_ptr<cc::CC_Compiler> ccc_u16_lo;
 
-    Zeroes * const ZEROES = pb_u16.createZeroes();
-    PabloAST * const u16_2bytes = ccc_u16->compileCC(makeCC(0, 0xFFFF));
+    //input
+    std::vector<PabloAST *> u16bytes = getInputStreamSet("source");
+    //separate the 2 bytes into hi and lo 8 bits
+    std::vector<PabloAST *> hiByte(u16bytes.begin()+ u16bytes.size()/2, u16bytes.end());
+    std::vector<PabloAST *> loByte(u16bytes.begin(), u16bytes.begin()+ u16bytes.size()/2);
+    //works only with bitStream
+    ccc_u16_hi = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), hiByte);
+    ccc_u16_lo = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), loByte);
 
-    auto it = pb_u16.createScope();
-    pb_u16.createIf(u16_2bytes, it);
-    PabloAST * const u16_2bytes_valid = ccc_u16->compileCC(makeCC(0, 0xFFFF), it);
-
-    Var * const nonFinal = pb_u16.createVar("nonFinal", u16_2bytes);
-    Var * const anyscope = it.createVar("anyscope", ZEROES);
-    auto it2 = it.createScope();
-    it.createIf(u16_2bytes_valid, it2);
-    it2.createAssign(nonFinal, it2.createAdvance(u16_2bytes_valid, 1));
+    PabloAST * const u16sur_1 = ccc_u16_hi->compileCC(makeByte(0xD8, 0xDB));
+    PabloAST * const u16sur_2 = ccc_u16_hi->compileCC(makeByte(0xDC, 0xDF)); 
+    //mark all low bytes
+    PabloAST * const u16lo = ccc_u16_lo->compileCC(makeByte(0x0, 0xFF));
+    //mark valid surrogate pair
+    PabloAST * const u16_sur = pb.createOr(u16sur_1, u16sur_2);
+    pb.createDebugPrint(u16_sur, "u16sur");
+    //mark the prefix of valid surrogate pair
+    PabloAST * const u16sur_final = pb.createAnd(u16_sur, u16sur_1);
+    pb.createDebugPrint(u16sur_final, "u16sur_final");
+    
+    PabloAST * const u16valid = pb.createNot(u16sur_final, "u16prefix");
+    pb.createDebugPrint(u16valid, "u16prefix");
+    //mark all 2 byte code units and final code unit of valid surrogare pairs
+    PabloAST * const u16valid_final = pb.createAnd(u16lo, u16valid);
+    pb.createDebugPrint(u16valid_final, "u16valid_final");
 
     //output
     Var * const u16index = getOutputStreamVar("u16index");
-    PabloAST * u16final = pb_u16.createInFile(pb_u16.createNot(nonFinal));
-    pb_u16.createAssign(pb_u16.createExtract(u16index, pb_u16.getInteger(0)), u16final);
+    pb.createAssign(pb.createExtract(u16index, pb.getInteger(0)), u16valid_final);
 }
 
 UTF16_index::UTF16_index(BuilderRef kb, StreamSet * Source, StreamSet * u16index)
