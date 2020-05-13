@@ -335,6 +335,60 @@ void S2P_PabloKernel::generatePabloMethod() {
     }
 }
 
+//S2P_16 kernel
+S2P_16Kernel::S2P_16Kernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
+: MultiBlockKernel(b, "s2p_16",
+{Binding{"codeUnitStream", codeUnitStream, FixedRate(), Principal()}},
+    {Binding{"basisBits", BasisBits}}, {}, {}, {})  {}
+
+void S2P_16Kernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks) {
+    BasicBlock * entry = kb->GetInsertBlock();
+    BasicBlock * processBlock = kb->CreateBasicBlock("s2p16_loop");
+    BasicBlock * s2pDone = kb->CreateBasicBlock("s2p16_done");
+    Constant * const ZERO = kb->getSize(0);
+
+    kb->CreateBr(processBlock);
+
+    kb->SetInsertPoint(processBlock);
+    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
+    blockOffsetPhi->addIncoming(ZERO, entry);
+
+    //need only 2 bytes
+    Value * u16byte0[8];
+    Value * u16byte1[8];
+
+    for (unsigned i = 0; i < 8; i++) {
+        Value * UTF16units[2];
+        for (unsigned j = 0; j < 2; j++) {
+            UTF16units[j] = kb->loadInputStreamPack("codeUnitStream", ZERO, kb->getInt32(2 * i + j), blockOffsetPhi);
+        }
+        //RegEx match found when every 32 bits were considered and low 16 and high 16 bits were concatenated.
+        //Those low and high Values were again passed through hsimd_packh/hsimd_packl operations to get parallel bit streams of column of text from the input file (Ref notes)
+
+         u16byte0[i] = kb->hsimd_packl(16, UTF16units[0], UTF16units[1]);   //consider every 16 bits and concatenate the low 8 bits
+	       u16byte1[i] = kb->hsimd_packh(16,  UTF16units[0], UTF16units[1]);   //consider every 16 bits and concatenate the high 8 bits
+    }
+    Value * basisbits0[8];
+    Value * basisbits1[8];
+    s2p(kb, u16byte0, basisbits0);
+    s2p(kb, u16byte1, basisbits1);
+
+    for (unsigned i = 0; i < 8; ++i) {
+        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits0[i]);
+    }
+    for (unsigned i = 0; i < 8; ++i) {
+        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i + 8), blockOffsetPhi, basisbits1[i]);
+    }
+
+    Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
+    BasicBlock * const processBlockExit = kb->GetInsertBlock();
+    blockOffsetPhi->addIncoming(nextBlk, processBlockExit);
+    Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
+    kb->CreateCondBr(moreToDo, processBlock, s2pDone);
+    kb->SetInsertPoint(s2pDone);
+}
+//S2P_16 kernel 
+
 S2P_PabloKernel::S2P_PabloKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
 : PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitStream->getFieldWidth()),
 // input
