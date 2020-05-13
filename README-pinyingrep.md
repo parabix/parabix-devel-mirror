@@ -18,7 +18,6 @@ Inputs Latin alphabets and returns all corresponding lines of Chinese characters
 ```
 Input: 
 	wan le
-
 Output:
 	玩乐都没时间
 	写完了去睡觉
@@ -30,7 +29,6 @@ Input Latin alphabets followed by a number (`1`, `2`, `3`, `4`), and returns all
 ```
 Input: 
 	zhong1 yao4
-
 Output:
 	喝中药一定要吃山楂饼
 ```
@@ -41,7 +39,6 @@ Input Latin alphabets marked with the tone (`ˉ`, `ˊ`, `ˇ`, `ˋ`), and returns
 ```
 Input: 
 	wán
-
 Output:
 	玩乐都没时间
 	写完了去睡觉
@@ -54,7 +51,6 @@ Input a regular expression, and return all corresponding lines of Chinese charac
 ```
 Input: 
 	m.ng
-
 Output:
 	这几天太忙了，
 	睡眠不足，没有梦想。
