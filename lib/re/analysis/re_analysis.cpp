@@ -196,9 +196,10 @@ std::pair<int, int> getLengthRange(const RE * re, const cc::Alphabet * indexAlph
         }
         if (isa<cc::CodeUnitAlphabet>(alphabet)) return std::make_pair(1, 1);
         if (indexAlphabet == alphabet) return std::make_pair(1, 1);
-        if ((indexAlphabet == &cc::UTF8) && (alphabet == &cc::Unicode)) {
-            return std::make_pair(UTF<8>::encoded_length(lo_codepoint(cc->front())),
-                                  UTF<8>::encoded_length(hi_codepoint(cc->back())));
+        //modified to run in UTF16 default
+        if ((indexAlphabet == &cc::UTF16) && (alphabet == &cc::Unicode)) {
+            return std::make_pair(UTF<16>::encoded_length(lo_codepoint(cc->front())),
+                                  UTF<16>::encoded_length(hi_codepoint(cc->back())));
         }
         return std::make_pair(0, INT_MAX);
     } else if (const Name * n = dyn_cast<Name>(re)) {

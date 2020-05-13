@@ -449,18 +449,18 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
             options->addExternal("\\b{g}", iGCB_stream, 1);
         }
     }
-    if (hasComponent(mExternalComponents, Component::UTF8index)) {
+    if (hasComponent(mExternalComponents, Component::UTF16index)) {
         if (indexMask == nullptr) {
-            options->addExternal("UTF8_index", mU8index);
+            options->addExternal("UTF16_index", mU8index);
         }
     }
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         if (indexMask == nullptr) {
-            options->addExternal("UTF8_LB", mLineBreakStream);
+            options->addExternal("UTF16_LB", mLineBreakStream);
         } else {
             StreamSet * iU8_LB = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mLineBreakStream, iU8_LB);
-            options->addExternal("UTF8_LB", iU8_LB, 1);
+            options->addExternal("UTF16_LB", iU8_LB, 1);
         }
     }
 }
@@ -836,11 +836,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, /*invert = */ true);
         //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
 
-        StreamSet * FilteredBasis = E->CreateStreamSet(8, 1);
-        E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
+        StreamSet * FilteredBasis = E->CreateStreamSet(16, 1); //modified to run in UT16 default
+        E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis); //modified to run in UT16 default
 
         // Baais bit streams expanded with 0 bits for each string to be inserted.
-        StreamSet * ExpandedBasis = E->CreateStreamSet(8);
+        StreamSet * ExpandedBasis = E->CreateStreamSet(16); //modified to run in UT16 default
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
         //E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
 
@@ -848,11 +848,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * ExpandedMarks = E->CreateStreamSet(2);
         SpreadByMask(E, SpreadMask, InsertMarks, ExpandedMarks);
 
-        StreamSet * ColorizedBasis = E->CreateStreamSet(8);
+        StreamSet * ColorizedBasis = E->CreateStreamSet(16); //modified to run in UT16 default
         E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
 
-        StreamSet * ColorizedBytes  = E->CreateStreamSet(1, 8);
-        E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
+        StreamSet * ColorizedBytes  = E->CreateStreamSet(1, 16); //modified to run in UT16 default
+        E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes); //modified to run in UT16 default
 
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
         E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
