@@ -380,6 +380,7 @@ inline Attribute ZeroExtended() {
 }
 
 inline Attribute LookAhead(const unsigned k) {
+    assert (k < 1024);
     return Attribute(Attribute::KindId::LookAhead, k);
 }
 

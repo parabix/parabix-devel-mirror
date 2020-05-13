@@ -537,7 +537,8 @@ MemorySourceKernel::MemorySourceKernel(BuilderRef b, Scalar * fileSource, Scalar
 {}) {
     addAttribute(MustExplicitlyTerminate());
     setStride(codegen::SegmentSize);
-    addInternalScalar(fileSource->getType(), "ancillaryBuffer");
+    PointerType * const ptrTy = b->getIntNTy(outputStream->getFieldWidth())->getPointerTo();
+    addInternalScalar(ptrTy, "ancillaryBuffer");
 }
 
 }

@@ -569,6 +569,11 @@ void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::R
     addExternalStreams(P, options, re);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
+        auto len = lengths.first;
+        // TODO: the len here is used for a lookahead.
+        if (LLVM_UNLIKELY(len == INT_MAX)) {
+            len = 1;
+        }
         P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, Results);
     }
 }

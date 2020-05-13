@@ -247,10 +247,11 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 //        b->CreateAssert(b->CreateICmpEQ(A, B), "InputStream is not contiguous");
 //    }
 
-    auto argi = dispatcher->arg_begin();
-    const auto matchRecNumArg = &*(argi++);
-    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
+    auto arg = dispatcher->arg_begin();
+    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, (++arg)->getType());
+    Value * const startAddr = b->CreatePointerCast(startPtr, (++arg)->getType());
+    Value * const endAddr = b->CreatePointerCast(endPtr, (++arg)->getType());
+    b->CreateCall(dispatcher, {accumulator, matchRecNum, startAddr, endAddr});
 
     //  We've dealt with the match, now prepare for the next one, if any.
     // There may be more matches in the current word.
@@ -291,9 +292,12 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     b->CreateCondBr(b->isFinal(), callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
-    Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    Function * const finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    auto farg = finalizer->arg_begin();
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
-    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    Value * const bufferEndPtr = b->CreatePointerCast(bufferEnd, (++farg)->getType());
+    b->CreateCall(finalizer, {accumulator, bufferEndPtr});
+
     b->CreateBr(scanReturn);
 
     b->SetInsertPoint(scanReturn);
@@ -567,10 +571,11 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 //        b->CreateAssert(b->CreateICmpEQ(A, B), "InputStream is not contiguous");
 //    }
 
-    auto argi = dispatcher->arg_begin();
-    const auto matchRecNumArg = &*(argi++);
-    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
+    auto arg = dispatcher->arg_begin();
+    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, (++arg)->getType());
+    Value * const startAddr = b->CreatePointerCast(startPtr, (++arg)->getType());
+    Value * const endAddr = b->CreatePointerCast(endPtr, (++arg)->getType());
+    b->CreateCall(dispatcher, {accumulator, matchRecNum, startAddr, endAddr});
 
     //  We've dealt with the match, now prepare for the next one, if any.
     // There may be more matches in the current word.
@@ -612,8 +617,10 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 
     b->SetInsertPoint(callFinalizeScan);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    auto farg = finalizer->arg_begin();
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
-    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    Value * const bufferEndPtr = b->CreatePointerCast(bufferEnd, (++farg)->getType());
+    b->CreateCall(finalizer, {accumulator, bufferEndPtr});
     b->CreateBr(scanReturn);
 
     b->SetInsertPoint(scanReturn);
@@ -947,10 +954,11 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
     Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
-    auto argi = dispatcher->arg_begin();
-    const auto matchRecNumArg = &*(argi++);
-    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
+    auto arg = dispatcher->arg_begin();
+    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, (++arg)->getType());
+    Value * const startAddr = b->CreatePointerCast(startPtr, (++arg)->getType());
+    Value * const endAddr = b->CreatePointerCast(endPtr, (++arg)->getType());
+    b->CreateCall(dispatcher, {accumulator, matchRecNum, startAddr, endAddr});
     Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
     phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
     b->CreateCondBr(haveMoreMatches, processMatchCoordinates, coordinatesDone);
@@ -962,8 +970,11 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
     b->SetInsertPoint(callFinalizeScan);
     b->setProcessedItemCount("InputStream", avail);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    auto farg = finalizer->arg_begin();
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
     b->CreateCall(finalizer, {accumulator, bufferEnd});
+    Value * const bufferEndPtr = b->CreatePointerCast(bufferEnd, (++farg)->getType());
+    b->CreateCall(finalizer, {accumulator, bufferEndPtr});
     b->CreateBr(scanReturn);
 
     b->SetInsertPoint(scanReturn);
@@ -1249,10 +1260,11 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
     Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
-    auto argi = dispatcher->arg_begin();
-    const auto matchRecNumArg = &*(argi++);
-    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
+    auto arg = dispatcher->arg_begin();
+    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, (++arg)->getType());
+    Value * const startAddr = b->CreatePointerCast(startPtr, (++arg)->getType());
+    Value * const endAddr = b->CreatePointerCast(endPtr, (++arg)->getType());
+    b->CreateCall(dispatcher, {accumulator, matchRecNum, startAddr, endAddr});
     Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
     phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
     b->CreateCondBr(haveMoreMatches, processMatchCoordinates, coordinatesDone);
@@ -1264,8 +1276,10 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     b->SetInsertPoint(callFinalizeScan);
     b->setProcessedItemCount("InputStream", avail);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    auto farg = finalizer->arg_begin();
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
-    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    Value * const bufferEndPtr = b->CreatePointerCast(bufferEnd, (++farg)->getType());
+    b->CreateCall(finalizer, {accumulator, bufferEndPtr});
     b->CreateBr(scanReturn);
 
     b->SetInsertPoint(scanReturn);

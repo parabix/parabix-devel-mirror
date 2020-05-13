@@ -45,7 +45,17 @@ Value * KernelBuilder::getScalarField(const StringRef fieldName) {
  * @brief setScalarField
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelBuilder::setScalarField(const StringRef fieldName, Value * const value) {
-    CreateStore(value, getScalarFieldPtr(fieldName));
+    Value * const ptr = getScalarFieldPtr(fieldName);
+    if (LLVM_UNLIKELY(ptr->getType()->getPointerElementType() != value->getType())) {
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << "setScalarField for " << getKernelName() << "." << fieldName << " was given ";
+        value->getType()->print(out);
+        out << " but expected a ";
+        ptr->getType()->getPointerElementType()->print(out);
+        report_fatal_error(out.str());
+    }
+    CreateStore(value, ptr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
