@@ -131,7 +131,8 @@ P2S16Kernel::P2S16Kernel(BuilderRef b, StreamSets & inputSets, StreamSet * u16st
 {Binding{"i16Stream", u16stream}},
 {}, {}, {}), mByteNumbering(numbering) {
     for (unsigned i = 0; i < inputSets.size(); i++) {
-        mInputStreamSets.emplace_back("basisBits_" + std::to_string(i), inputSets[i]);
+        mInputStreamSets.emplace_back("basisBits" + std::to_string(i), inputSets[i]);
+        //fixed to work with single StreamSet
     }
 }
 
@@ -142,7 +143,8 @@ void P2S16Kernel::generateDoBlockMethod(BuilderRef b) {
     for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
         const auto m = getInputStreamSet(i)->getNumElements();
         for (unsigned j = 0; j < m; j++) {
-            Value * bitBlock = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j));
+            Value * bitBlock = b->loadInputStreamBlock("basisBits" + std::to_string(i), b->getInt32(j));              
+            //fixed to work with single StreamSet
             if (k < 8) {
                 lo_input[k] = bitBlock;
             } else {
