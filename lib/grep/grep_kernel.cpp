@@ -148,6 +148,46 @@ UTF8_index::UTF8_index(BuilderRef kb, StreamSet * Source, StreamSet * u8index)
 
 }
 
+//=UTF-16 indexing kernel=
+void UTF16_index::generatePabloMethod() {
+    PabloBuilder pb_u16(getEntryScope());
+    std::unique_ptr<cc::CC_Compiler> ccc_u16;
+    bool useDirectCC_u16 = getInput(0)->getType()->getArrayNumElements() == 1;
+    if (useDirectCC_u16) {
+        ccc_u16 = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb_u16.createExtract(getInput(0), pb_u16.getInteger(0)));
+    } else {
+        ccc_u16 = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
+    }
+
+    Zeroes * const ZEROES = pb_u16.createZeroes();
+    PabloAST * const u16_2bytes = ccc_u16->compileCC(makeCC(0, 0xFFFF));
+
+    auto it = pb_u16.createScope();
+    pb_u16.createIf(u16_2bytes, it);
+    PabloAST * const u16_2bytes_valid = ccc_u16->compileCC(makeCC(0, 0xFFFF), it);
+
+    Var * const nonFinal = pb_u16.createVar("nonFinal", u16_2bytes);
+    Var * const anyscope = it.createVar("anyscope", ZEROES);
+    auto it2 = it.createScope();
+    it.createIf(u16_2bytes_valid, it2);
+    it2.createAssign(nonFinal, it2.createAdvance(u16_2bytes_valid, 1));
+
+    //output
+    Var * const u16index = getOutputStreamVar("u16index");
+    PabloAST * u16final = pb_u16.createInFile(pb_u16.createNot(nonFinal));
+    pb_u16.createAssign(pb_u16.createExtract(u16index, pb_u16.getInteger(0)), u16final);
+}
+
+UTF16_index::UTF16_index(BuilderRef kb, StreamSet * Source, StreamSet * u16index)
+: PabloKernel(kb, "UTF16_index_" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
+// input
+{Binding{"source", Source}},
+// output
+{Binding{"u16index", u16index}}) {
+
+}
+//=UTF-16 indexing kernel=
+
 void GrepKernelOptions::setIndexingTransformer(EncodingTransformer * encodingTransformer, StreamSet * idx) {
     mEncodingTransformer = encodingTransformer;
     mIndexStream = idx;

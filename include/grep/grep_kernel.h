@@ -23,6 +23,14 @@ protected:
     void generatePabloMethod() override;
 };
 
+//define class for UTF16 index kernel
+class UTF16_index : public pablo::PabloKernel {
+public:
+    UTF16_index(BuilderRef kb, StreamSet * Source, StreamSet * u16index);
+protected:
+    void generatePabloMethod() override;
+};
+
 enum class GrepCombiningType {None, Exclude, Include};
 class GrepKernelOptions {
     friend class ICGrepKernel;
