@@ -379,10 +379,10 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
     }
     mLineBreakStream = P->CreateStreamSet(1, 1);
     mU8index = P->CreateStreamSet(1, 1);
+    StreamSet * mU8index_Unicode = P->CreateStreamSet(1,1);
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
-         P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
-        UnicodeLinesLogic(P, SourceStream, mLineBreakStream, mU8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
+        UnicodeLinesLogic(P, SourceStream, mLineBreakStream, mU8index_Unicode, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
     }
     else {
         /*if (hasComponent(mExternalComponents, Component::UTF8index)) {
@@ -758,6 +758,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
+    E->CreateKernelCall<DebugDisplayKernel> ("Matches", Matches);
     if (MatchResultsBufs.size() > 1) {
         StreamSet * const MergedMatches = E->CreateStreamSet();
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
@@ -811,7 +812,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * MatchedLineStarts = E->CreateStreamSet(1, 1);
         SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);
 
-        StreamSet * Filtered = E->CreateStreamSet(1, 8);
+        StreamSet * Filtered = E->CreateStreamSet(1, 16); //modified to run in UTF16 default
         E->CreateKernelCall<MatchFilterKernel>(MatchedLineStarts, mLineBreakStream, ByteStream, Filtered);
 
         StreamSet * MatchedLineSpans = E->CreateStreamSet(1, 1);
@@ -823,7 +824,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
 
         std::string ESC = "\x1B";
-        std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
+        std::vector<std::string> colorEscapes = {ESC + "[01;34m" + ESC + "[K", ESC + "[m"};
         unsigned insertLengthBits = 4;
 
         StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
@@ -1255,7 +1256,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     E->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
     E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
-    StreamSet * u8index = E->CreateStreamSet();
+    StreamSet * u8index = E->CreateStreamSet(1, 1);
     E->CreateKernelCall<UTF16_index>(BasisBits, u8index);
 
     StreamSet * MatchResults = E->CreateStreamSet();
