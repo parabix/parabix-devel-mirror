@@ -100,6 +100,7 @@ public:
         , Repeat
         , PackH
         , PackL
+        , DebugPrint
         // Intrinsics
         , IntrinsicCall
     };

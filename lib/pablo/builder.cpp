@@ -12,6 +12,7 @@
 #include <pablo/pe_pack.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_debugprint.h>
 #include <pablo/pe_everynth.h>
 #include <pablo/pe_integer.h>
 #include <pablo/pe_string.h>
@@ -272,6 +273,19 @@ PabloAST * PabloBuilder::createPackH(not_null<Integer *> fieldWidth, PabloAST * 
     return MAKE_BINARY(PackH, fieldWidth.get(), value);
 }
 
+PabloAST * PabloBuilder::createDebugPrint(PabloAST * expr) {
+    if (LLVM_UNLIKELY(isa<DebugPrint>(expr) || isa<Zeroes>(expr))) {
+        return expr;
+    }
+    return MAKE_UNARY(DebugPrint, expr);
+}
+
+PabloAST * PabloBuilder::createDebugPrint(PabloAST * expr, const llvm::StringRef prefix) {
+    if (LLVM_UNLIKELY(isa<DebugPrint>(expr) || isa<Zeroes>(expr))) {
+        return expr;
+    }
+    return MAKE_NAMED_UNARY(DebugPrint, prefix, expr);
+}
 
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {

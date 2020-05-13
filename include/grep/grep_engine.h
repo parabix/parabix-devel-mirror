@@ -122,7 +122,8 @@ protected:
         MatchStarts = 8,
         GraphemeClusterBoundary = 16,
         //added new component
-        S2P_16 = 32
+        S2P_16 = 32,
+        UTF16index = 64
 
     };
     bool hasComponent(Component compon_set, Component c);

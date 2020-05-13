@@ -14,6 +14,7 @@
 #include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_debugprint.h>
 #include <pablo/pe_everynth.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_integer.h>
@@ -89,6 +90,11 @@ AtEOF * PabloBlock::createAtEOF(PabloAST * expr, const String * const name) {
 TerminateAt * PabloBlock::createTerminateAt(PabloAST * strm, Integer *  code, const String * const name) {
     assert (strm); assert(code);
     return insertAtInsertionPoint(new (mAllocator) TerminateAt(strm, code, name, mAllocator));
+}
+
+DebugPrint * PabloBlock::createDebugPrint(PabloAST * expr, const String * const name) {
+    assert (expr);
+    return insertAtInsertionPoint(new (mAllocator) DebugPrint(expr, name, mAllocator));
 }
 
 /// BINARY CREATE FUNCTIONS

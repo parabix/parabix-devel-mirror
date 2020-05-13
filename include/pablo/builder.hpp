@@ -161,6 +161,9 @@ public:
 
     PabloAST * createPackH(not_null<Integer *> fieldWidth, PabloAST * value);
 
+    PabloAST * createDebugPrint(PabloAST * expr);
+
+    PabloAST * createDebugPrint(PabloAST * expr, const llvm::StringRef prefix);
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 

@@ -23,6 +23,7 @@
 #include <pablo/pe_count.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_pack.h>
+#include <pablo/pe_debugprint.h>
 #include <re/adt/printer_re.h>
 #include <re/adt/re_cc.h>
 #include <re/adt/re_name.h>
@@ -169,16 +170,16 @@ void UTF16_index::generatePabloMethod() {
     PabloAST * const u16lo = ccc_u16_lo->compileCC(makeByte(0x0, 0xFF));
     //mark valid surrogate pair
     PabloAST * const u16_sur = pb.createOr(u16sur_1, u16sur_2);
-    pb.createDebugPrint(u16_sur, "u16sur");
+    //pb.createDebugPrint(u16_sur, "u16sur");
     //mark the prefix of valid surrogate pair
     PabloAST * const u16sur_final = pb.createAnd(u16_sur, u16sur_1);
-    pb.createDebugPrint(u16sur_final, "u16sur_final");
+    //pb.createDebugPrint(u16sur_final, "u16sur_final");
     
     PabloAST * const u16valid = pb.createNot(u16sur_final, "u16prefix");
-    pb.createDebugPrint(u16valid, "u16prefix");
+    //pb.createDebugPrint(u16valid, "u16prefix");
     //mark all 2 byte code units and final code unit of valid surrogare pairs
     PabloAST * const u16valid_final = pb.createAnd(u16lo, u16valid);
-    pb.createDebugPrint(u16valid_final, "u16valid_final");
+    //pb.createDebugPrint(u16valid_final, "u16valid_final");
 
     //output
     Var * const u16index = getOutputStreamVar("u16index");

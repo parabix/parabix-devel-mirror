@@ -14,6 +14,7 @@
 #include <pablo/pablo_kernel.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_debugprint.h>
 #include <pablo/pe_everynth.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_integer.h>
@@ -180,6 +181,10 @@ static void PrintStatement(Statement const * stmt, raw_ostream & out, const bool
             PrintExpression(p->getFieldWidth(), out);
             out << ", ";
             PrintExpression(p->getValue(), out);
+            out << ")";
+        } else if (const DebugPrint * e = dyn_cast<DebugPrint>(stmt)) {
+            out << "DebugPrint(";
+            PrintExpression(e->getExpr(), out);
             out << ")";
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
             out << "InFile(";
