@@ -535,7 +535,7 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
         options->setResults(Results);
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
-        options->setIndexingTransformer(&mUTF8_Transformer, mU8index);
+        options->setIndexingTransformer(&mUTF8_Transformer, mU8index); 
         if (mSuffixRE != nullptr) {
             options->setPrefixRE(mPrefixRE);
             options->setRE(mSuffixRE);

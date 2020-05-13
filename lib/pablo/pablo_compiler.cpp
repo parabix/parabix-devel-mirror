@@ -12,6 +12,7 @@
 #include <pablo/branch.h>
 #include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
+#include <pablo/pe_debugprint.h>
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_scanthru.h>
@@ -710,6 +711,16 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
                 }
                 b->CreateStore(P, b->CreateGEP(value, {ZERO, b->getInt32(i)}));
             }
+        } else if (const DebugPrint * const d = dyn_cast<DebugPrint>(stmt)) {
+          SmallVector<char, 64> tmp;
+          raw_svector_ostream name(tmp);
+          value = compileExpression(b, stmt->getOperand(0));
+          stmt->print(name);
+          if (value->getType()->isVectorTy()) {
+              b->CallPrintRegister(name.str(), value);
+          } else if (value->getType()->isIntegerTy()) {
+              b->CallPrintInt(name.str(), value);
+          }
         } else if (isa<Ternary>(stmt)) {
             unsigned char const mask = cast<Integer>(stmt->getOperand(0))->value();
             Value * const op0 = compileExpression(b, stmt->getOperand(1));

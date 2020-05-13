@@ -38,6 +38,7 @@ namespace pablo { class Or; }
 namespace pablo { class PabloKernel; }
 namespace pablo { class PackH; }
 namespace pablo { class PackL; }
+namespace pablo { class DebugPrint; }
 namespace pablo { class ScanThru; }
 namespace pablo { class ScanTo; }
 namespace pablo { class Sel; }
@@ -319,6 +320,12 @@ public:
     IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, const llvm::StringRef prefix) {
         return createIntrinsicCall(intrinsic, std::move(argv), makeName(prefix));
     }
+
+    DebugPrint * createDebugPrint(PabloAST * expr, const llvm::StringRef prefix) {
+        return createDebugPrint(expr, makeName(prefix));
+    }
+
+    DebugPrint * createDebugPrint(PabloAST * expr, const String * const name = nullptr);
 
     IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, const String * name = nullptr) {
         assert (argv.size() > 0);

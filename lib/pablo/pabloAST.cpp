@@ -7,6 +7,7 @@
 #include <pablo/pabloAST.h>
 #include <pablo/arithmetic.h>
 #include <pablo/codegenstate.h>
+#include <pablo/pe_debugprint.h>
 #include <pablo/pe_var.h>
 #include <pablo/boolean.h>
 #include <pablo/pablo_intrinsic.h>
@@ -48,6 +49,8 @@ bool equals(const PabloAST * const expr1, const PabloAST * const expr2) noexcept
                 return equals(cast<Not>(expr1)->getOperand(0), cast<Not>(expr2)->getOperand(0));
             } else if (isa<InFile>(expr1)) {
                 return equals(cast<InFile>(expr1)->getOperand(0), cast<InFile>(expr2)->getOperand(0));
+            } else if (isa<DebugPrint>(expr1)) {
+                return equals(cast<DebugPrint>(expr1)->getOperand(0), cast<DebugPrint>(expr2)->getOperand(0));
             } else if (isa<AtEOF>(expr1)) {
                 return equals(cast<AtEOF>(expr1)->getOperand(0), cast<AtEOF>(expr2)->getOperand(0));
             } else if (isa<And>(expr1) || isa<Or>(expr1) || isa<Xor>(expr1)) {
@@ -182,6 +185,7 @@ const String & Statement::getName() const {
             MAKE_PREFIX(Repeat, "repeat");
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
+            MAKE_PREFIX(DebugPrint, "DebugPrint");
             MAKE_PREFIX(Ternary, "ternary");
             case ClassTypeId::IntrinsicCall:
                 {

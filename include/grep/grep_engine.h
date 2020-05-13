@@ -121,7 +121,8 @@ protected:
         MoveMatchesToEOL = 4,
         MatchStarts = 8,
         GraphemeClusterBoundary = 16,
-        WordBoundary = 32
+        WordBoundary = 32,
+        S2P_16 = 64
     };
     bool hasComponent(Component compon_set, Component c);
     void setComponent(Component & compon_set, Component c);

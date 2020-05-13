@@ -23,6 +23,7 @@
 #include <pablo/pe_count.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_pack.h>
+#include <pablo/pe_debugprint.h>
 #include <re/adt/printer_re.h>
 #include <re/adt/re_cc.h>
 #include <re/adt/re_name.h>

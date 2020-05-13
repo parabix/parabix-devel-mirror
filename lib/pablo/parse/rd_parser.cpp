@@ -864,6 +864,11 @@ static inline void lazyInitializeFunctionGenMap() {
         return pb->createPackH(llvm::cast<Integer>(args[0]), args[1]);
     });
 
+    FUNC_GEN_DEF("DebugPrint", {
+        ASSERT_ARG_NUM(1);
+        return pb->createDebugPrint(args[0]);
+    });
+
     FUNC_GEN_DEF("MatchStar", {
         ASSERT_ARG_NUM(2);
         return pb->createMatchStar(args[0], args[1]);
