@@ -120,7 +120,7 @@ public:
                                  r = regular_expression_passes(r);
                                  r = re::exclude_CC(r, breakCC);
                                  r = resolveAnchors(r, breakCC);
-                                 r = toUTF8(r);
+                                 r = toUTF16(r);
 
                                  options->setRE(r);
                                  options->setSource(BasisBits);

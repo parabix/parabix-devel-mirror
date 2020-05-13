@@ -187,7 +187,7 @@ protected:
     kernel::StreamSet * mLineBreakStream;
     kernel::StreamSet * mU8index;
     kernel::StreamSet * mGCB_stream;
-    re::UTF8_Transformer mUTF8_Transformer;
+    re::UTF16_Transformer mUTF16_Transformer;
     pthread_t mEngineThread;
 };
 

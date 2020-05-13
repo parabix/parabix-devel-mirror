@@ -38,6 +38,18 @@ protected:
 };
 
 RE * toUTF8(RE * r, bool convertName = false);
-}
+
+class UTF16_Transformer : public EncodingTransformer
+{
+public:
+    UTF16_Transformer(NameTransformationMode m = NameTransformationMode::None);
+
+protected:
+    RE *transformCC(CC *cc) override;
+};
+
+RE *toUTF16(RE *r, bool convertName = true);
+
+} // namespace re
 
 #endif // TO_UTF8_H

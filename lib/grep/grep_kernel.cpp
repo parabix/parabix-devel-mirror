@@ -568,7 +568,7 @@ void ContextSpan::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("contextStream"), pb.getInteger(0)), pb.createInFile(consecutive));
 }
 
-void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF8_Transformer * t,
+void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF16_Transformer * t,
                           StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream) {
 
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
@@ -585,6 +585,6 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
     options->setSource(GCB_Classes);
     options->addAlphabet(GCB_mpx, GCB_Classes);
     options->setResults(GCBstream);
-    options->addExternal("UTF8_index", U8index);
+    options->addExternal("UTF16_index", U8index);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
 }

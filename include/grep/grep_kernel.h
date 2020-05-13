@@ -132,7 +132,7 @@ private:
 };
 
 void GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
-                          re::UTF8_Transformer * t,
+                          re::UTF16_Transformer * t,
                           StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream);
 
 }

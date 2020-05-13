@@ -138,7 +138,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mLineBreakStream(nullptr),
     mU8index(nullptr),
     mGCB_stream(nullptr),
-    mUTF8_Transformer(re::NameTransformationMode::None),
+    mUTF16_Transformer(re::NameTransformationMode::None),
     mEngineThread(pthread_self()) {}
 
 GrepEngine::~GrepEngine() { }
@@ -315,7 +315,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
-        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), toUTF8(mBreakCC));
+        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), toUTF16(mBreakCC));
         for (unsigned i = 0; i < mREs.size(); ++i) {
             if (!hasEndAnchor(mREs[i])) {
                 mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
@@ -398,7 +398,7 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
 void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
     if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
         mGCB_stream = P->CreateStreamSet(1, 1);
-        GraphemeClusterLogic(P, &mUTF8_Transformer, SourceStream, mU8index, mGCB_stream);
+        GraphemeClusterLogic(P, &mUTF16_Transformer, SourceStream, mU8index, mGCB_stream);
     }
     if (PropertyKernels) {
         for (auto e : mExternalNames) {
@@ -505,7 +505,7 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
         options->setResults(Results);
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
-        options->setIndexingTransformer(&mUTF8_Transformer, mU8index);
+        options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
         if (mSuffixRE != nullptr) {
             options->setPrefixRE(mPrefixRE);
             options->setRE(mSuffixRE);
@@ -514,10 +514,10 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
         }
     } else {
         if (mSuffixRE != nullptr) {
-            options->setPrefixRE(toUTF8(mPrefixRE));
-            options->setRE(toUTF8(mSuffixRE));
+            options->setPrefixRE(toUTF16(mPrefixRE));
+            options->setRE(toUTF16(mSuffixRE));
         } else {
-            options->setRE(toUTF8(re));
+            options->setRE(toUTF16(re));
         }
     }
     addExternalStreams(P, options, re);
@@ -1191,7 +1191,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     matchingRE = regular_expression_passes(matchingRE);
     matchingRE = re::exclude_CC(matchingRE, breakCC);
     matchingRE = resolveAnchors(matchingRE, breakCC);
-    matchingRE = toUTF8(matchingRE);
+    matchingRE = toUTF16(matchingRE);
 
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
                                        Binding{idb->getSizeTy(), "length"},
@@ -1298,7 +1298,7 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
         r = regular_expression_passes(r);
         r = re::exclude_CC(r, breakCC);
         r = resolveAnchors(r, breakCC);
-        r = toUTF8(r);
+        r = toUTF16(r);
 
         options->setRE(r);
         options->setSource(BasisBits);
