@@ -298,7 +298,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (UnicodeIndexing) {
-        setComponent(mExternalComponents, Component::S2P);
+        setComponent(mExternalComponents, Component::S2P_16);
         setComponent(mExternalComponents, Component::UTF16index);
     }
     if ((mEngineKind == EngineKind::EmitMatches) && mColoring && !mInvertMatches) {
@@ -331,7 +331,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     // can bypass transposition and use the Direct CC compiler.
     mPrefixRE = nullptr;
     mSuffixRE = nullptr;
-    if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
+    /*if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
         mExternalNames.empty() && !UnicodeIndexing) {
         if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
             return;  // skip transposition
@@ -340,9 +340,10 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         } else {
             setComponent(mExternalComponents, Component::S2P_16);
         }
-    } else {
+    } else {*/
+    //can directCC compiler be modified to support UTF16 encoding?
         setComponent(mExternalComponents, Component::S2P_16);
-    }
+    //}
     if (!mExternalNames.empty()) {
         setComponent(mExternalComponents, Component::UTF16index);
     }
@@ -379,18 +380,19 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
     mLineBreakStream = P->CreateStreamSet(1, 1);
     mU8index = P->CreateStreamSet(1, 1);
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
+        P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
          P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
         UnicodeLinesLogic(P, SourceStream, mLineBreakStream, mU8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
     }
     else {
-        if (hasComponent(mExternalComponents, Component::UTF8index)) {
+        /*if (hasComponent(mExternalComponents, Component::UTF8index)) {
             P->CreateKernelCall<UTF8_index>(SourceStream, mU8index);
-        } //run in UTF-8 mode - have the marker stream mark at the end of every byte of UTF-8 data
+        }*/ //run in UTF-8 mode - have the marker stream mark at the end of every byte of UTF-8 data
 
         //if statement to invoke UTF-16 index kernel
-        if (hasComponent(mExternalComponents, Component::UTF16index)) {
-            P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
-        } //run in UTF-16 mode - have the marker stream mark at the end of final code unit of every UTF-16 sequence*/
+       // if (hasComponent(mExternalComponents, Component::UTF16index)) {
+            P->CreateKernelCall<UTF16_index>(SourceStream, mU8index); //invoke only UTF16 kernel
+       // } //run in UTF-16 mode - have the marker stream mark at the end of final code unit of every UTF-16 sequence*/
 
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
             Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
@@ -836,11 +838,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, /*invert = */ true);
         //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
 
-        StreamSet * FilteredBasis = E->CreateStreamSet(16, 1); //modified to run in UT16 default
-        E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis); //modified to run in UT16 default
+        StreamSet * FilteredBasis = E->CreateStreamSet(16, 1); //modified to run in UTF16 default
+        E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis); //modified to run in UTF16 default
 
         // Baais bit streams expanded with 0 bits for each string to be inserted.
-        StreamSet * ExpandedBasis = E->CreateStreamSet(16); //modified to run in UT16 default
+        StreamSet * ExpandedBasis = E->CreateStreamSet(16); //modified to run in UTF16 default
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
         //E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
 
@@ -848,11 +850,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * ExpandedMarks = E->CreateStreamSet(2);
         SpreadByMask(E, SpreadMask, InsertMarks, ExpandedMarks);
 
-        StreamSet * ColorizedBasis = E->CreateStreamSet(16); //modified to run in UT16 default
+        StreamSet * ColorizedBasis = E->CreateStreamSet(16); //modified to run in UTF16 default
         E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
 
-        StreamSet * ColorizedBytes  = E->CreateStreamSet(1, 16); //modified to run in UT16 default
-        E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes); //modified to run in UT16 default
+        StreamSet * ColorizedBytes  = E->CreateStreamSet(1, 16); //modified to run in UTF16 default
+        E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes); //modified to run in UTF16 default
 
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
         E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);

@@ -120,7 +120,7 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod(BuilderRef b) {
 
 P2S16Kernel::P2S16Kernel(BuilderRef b, StreamSet *u16bits, StreamSet * u16stream, cc::ByteNumbering numbering)
 : BlockOrientedKernel(b, "p2s_16" + cc::numberingSuffix(numbering),
-{Binding{"basisBits", u16bits}},
+{Binding{"basisBits0", u16bits}},
 {Binding{"i16Stream", u16stream}},
 {}, {}, {}), mByteNumbering(numbering) {
 }
@@ -132,7 +132,6 @@ P2S16Kernel::P2S16Kernel(BuilderRef b, StreamSets & inputSets, StreamSet * u16st
 {}, {}, {}), mByteNumbering(numbering) {
     for (unsigned i = 0; i < inputSets.size(); i++) {
         mInputStreamSets.emplace_back("basisBits" + std::to_string(i), inputSets[i]);
-        //fixed to work with single StreamSet
     }
 }
 
@@ -144,7 +143,7 @@ void P2S16Kernel::generateDoBlockMethod(BuilderRef b) {
         const auto m = getInputStreamSet(i)->getNumElements();
         for (unsigned j = 0; j < m; j++) {
             Value * bitBlock = b->loadInputStreamBlock("basisBits" + std::to_string(i), b->getInt32(j));              
-            //fixed to work with single StreamSet
+            //fixed to work with single and multiple StreamSets
             if (k < 8) {
                 lo_input[k] = bitBlock;
             } else {

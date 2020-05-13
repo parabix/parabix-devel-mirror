@@ -995,6 +995,9 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Constant * sz_ONE = b->getSize(1);
     Type * sizeTy = b->getSizeTy();
 
+    const auto fw = b->getInputStreamSet("InputStream")->getFieldWidth();
+    Constant * factor = b->getSize(fw / 8);
+
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
     BasicBlock * const stridePrecomputation = b->CreateBasicBlock("stridePrecomputation");
@@ -1109,6 +1112,8 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * lineLength = b->CreateAdd(b->CreateSub(matchEndPos, matchPos), sz_ONE);
     Value * const matchStartPtr = b->getRawInputPointer("InputStream", matchPos);
     Value * const outputPtr = b->getRawOutputPointer("Output", producedPosPhi);
+    Value * const byteLength = b->CreateMul(lineLength, factor);
+
     b->CreateMemCpy(outputPtr, matchStartPtr, lineLength, 1);
     Value * nextProducedPos = b->CreateAdd(producedPosPhi, lineLength);
 
@@ -1136,6 +1141,8 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * initialLineLgth = b->CreateAdd(b->CreateSub(break1Pos, stridePos), sz_ONE);
     Value * const strideStartPtr = b->getRawInputPointer("InputStream", stridePos);
     Value * const outputPtr1 = b->getRawOutputPointer("Output", strideProducedPhi);
+    Value * const byteLength2 = b->CreateMul(initialLineLgth, factor);
+
     b->CreateMemCpy(outputPtr1, strideStartPtr, initialLineLgth, 1);
     Value * producedPos1 = b->CreateAdd(strideProducedPhi, initialLineLgth);
     matchMaskPhi->addIncoming(matchMask, strideInitialMatch);
@@ -1153,6 +1160,8 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * partialLineBytes = b->CreateSub(sz_STRIDE, b->CreateSub(partialLineStart, stridePos));
     Value * const partialLineStartPtr = b->getRawInputPointer("InputStream", partialLineStart);
     Value * const partialLineOutputPtr = b->getRawOutputPointer("Output", partialProducedPhi);
+    Value * const byteLength3 = b->CreateMul(partialLineBytes, factor);
+    
     b->CreateMemCpy(partialLineOutputPtr, partialLineStartPtr, partialLineBytes, 1);
     Value * partialProducedPos = b->CreateAdd(partialProducedPhi, partialLineBytes, "partialProducedPos");
     strideNo->addIncoming(nextStrideNo, strideEndMatch);
