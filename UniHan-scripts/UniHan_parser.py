@@ -84,6 +84,7 @@ def parse_fields(fields):
     return res_list
 
 KPY_Pattern = re.compile(r"U\+(\w+?)\s+kHanyuPinyin\s+(.+)")
+KXHC_Pattern = re.compile(r"U\+(\w+?)\s+kXHC1983\s+(.+)")
 
 def parse_Reading_txt(f, property_code):
     # replace the utility of property object
@@ -93,13 +94,17 @@ def parse_Reading_txt(f, property_code):
     value_map = {} # value_map is from value name to corresponding unicode set
                    # each key match a value or value array
     lines = f.readlines()
-    if(property_code == 'kpy'):
+    if(property_code == 'kpy' or property_code == 'kxhc'):
         # parse KHanyuPinyin
         # prop_values contains all syllable without tones
         # value map use syllable without tones as keys, 
         # and corresponding values are 5-element lists from 0(no tone) to 4
         for line in lines:
-            match_obj = KPY_Pattern.match(line)
+            match_obj = None
+            if(property_code == 'kpy'):
+                match_obj = KPY_Pattern.match(line)
+            else:
+                match_obj = KXHC_Pattern.match(line)
             if(match_obj is not None):
                 parsed_property = {}
                 codepoint = match_obj.group(1)
@@ -136,7 +141,7 @@ def parse_property_file(filename_root, property_code):
                    # each key match a value or value array
     f = open(UniHan_config.UniHan_src_dir + '/' + filename_root + '.txt')
 
-    if(property_code == "kpy"):
+    if(property_code == "kpy" or property_code == "kxhc"):
         prop_values, independent_prop_values, value_map = parse_Reading_txt(f, property_code)
     
     return (prop_values, independent_prop_values, value_map)
