@@ -56,6 +56,7 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<Input File>")
 
 std::vector<fs::path> allFiles;
 
+typedef std::pair<std::string, std::string> input_radical;
 typedef uint64_t (*UCountFunctionType)(uint32_t fd);
 
 //
@@ -104,7 +105,52 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
     return reinterpret_cast<UCountFunctionType>(P->compile());
 }
 
-//
+input_radical parse_input(std::string CC_expr)
+{
+    input_radical result("","");
+    std::string temp;
+    int p1, p2;
+    std::regex regex_pattern("([0-9]*\.[0-9]+|[0-9]+)"); //need to find a better regex
+    
+    p1=CC_expr.find_first_of("_");  //find first position of "_", and return the index
+    p2=CC_expr.find_last_of("_");   //find last position of "_", and return the index
+
+    temp=CC_expr.substr(0,p1);
+    result.first=temp;
+    int setNum = std::stoi(result.first);
+    
+    //check if input is an integer in [1,214]
+    if (!std::regex_match(result.first, regex_pattern)) {
+        report_fatal_error("Enter a integer in [1,214], followed by _. (unsupported format,1)");
+    } else {
+        if (setNum < 1 || setNum > 214) {
+            report_fatal_error("Enter a integer in [1,214], followed by _. (out of bounds, 1)");
+        }
+    }
+    
+    if (p1 == p2) { //if input is only one radical, set the other half to 0
+        result.second = "0"; //we use 0 as a flag to mark that the program is only processing one radical
+    } else { //two radicals in input
+        temp=CC_expr.substr(p1+1,p2-p1-1);
+        result.second=temp;
+        setNum = std::stoi(result.second);
+        if (!std::regex_match(result.second, regex_pattern)) {
+        report_fatal_error("Enter a integer in [1,214], followed by _. (unsupported format, 2)");
+        } else if (setNum < 1 || setNum > 214) {
+            report_fatal_error("Enter a integer in [1,214], followed by _. (out of bounds,2)");
+        }
+    }
+
+    return result;
+}
+
+UCountFunctionType radicalcount1(std::string radical,CPUDriver & pxDriver, UCountFunctionType uCountFunctionPtr) {
+    UCD::KRS_ns::radSet = BS::ucd_radical.get_uset(radical);
+    re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::radSet)));
+    UCountFunctionType FunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
+    return FunctionPtr;
+}
+
 //  Given a compiled pipeline program for counting  the characters of a class,
 //  as well as an index into the global vector of inputFiles,  open the
 //  given file and execute the compiled program to produce the count result.
@@ -141,48 +187,60 @@ int main(int argc, char *argv[]) {
     }
     CPUDriver pxDriver("wc");
 
+    input_radical ci = parse_input(CC_expr);
+    //std::cout << "ci: " << ci.first << " " << ci.second << std::endl;
+
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     const auto fileCount = allFiles.size();
 
-    UCountFunctionType uCountFunctionPtr = nullptr;
-    
-    //Check if inputted radical index is an integer from [1,214]
-    std::regex regex_pattern("(-?[0-9]+.?[0-9]+)");
-    if (std::regex_match(CC_expr, regex_pattern)) { 
-        UCD::KRS_ns::radSet = BS::ucd_radical.get_uset(CC_expr);
-        int setNum = std::stoi(CC_expr);
-        if (setNum >= 1 && setNum <= 214) {
-            re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::radSet)));
-            uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
-        } else {
-            llvm::report_fatal_error("Input Error: Enter a integer from 1 to 214.");
-        }
-    } else {
-        llvm::report_fatal_error("Input Error: Enter a integer from 1 to 214.");
+    UCountFunctionType uCountFunctionPtr1 = nullptr;
+    UCountFunctionType uCountFunctionPtr2 = nullptr;
+    int flag = 0;
+
+    if (ci.second == "0") { //single char e.g. 85_ or 85
+        uCountFunctionPtr1 = radicalcount1(ci.first, pxDriver, uCountFunctionPtr1);
+    } else if (ci.second != "0") { // e.g. 85_142_
+        uCountFunctionPtr1 = radicalcount1(ci.first, pxDriver, uCountFunctionPtr1);
+        uCountFunctionPtr2 = radicalcount1(ci.second, pxDriver, uCountFunctionPtr2);
+        flag = 1;
     }
 
-    std::vector<uint64_t> theCounts;
+    std::vector<uint64_t> theCounts1;
+    std::vector<uint64_t> theCounts2;
     
-    theCounts.resize(fileCount);
-    uint64_t totalCount = 0;
+    theCounts1.resize(fileCount);
+    theCounts2.resize(fileCount);
+    uint64_t totalCount1 = 0;
+    uint64_t totalCount2 = 0;
 
+    //count number of occurences in each file
     for (unsigned i = 0; i < fileCount; ++i) {
-        theCounts[i] = ucount1(uCountFunctionPtr, i);
-        totalCount += theCounts[i];
+        theCounts1[i] = ucount1(uCountFunctionPtr1, i);
+        totalCount1 += theCounts1[i];
+        if (flag) {
+            theCounts2[i] = ucount1(uCountFunctionPtr2, i);
+            totalCount2 += theCounts2[i];
+        }
     }
     
     const int defaultDisplayColumnWidth = 7;
-    int displayColumnWidth = std::to_string(totalCount).size() + 1;
+    int displayColumnWidth = std::to_string(totalCount1).size() + 1;
     if (displayColumnWidth < defaultDisplayColumnWidth) displayColumnWidth = defaultDisplayColumnWidth;
-
+    
+    //output
     for (unsigned i = 0; i < fileCount; ++i) {
         std::cout << std::setw(displayColumnWidth);
-        std::cout << theCounts[i] << std::setw(displayColumnWidth);
+        std::cout << theCounts1[i] << std::setw(displayColumnWidth);
         std::cout << " " << allFiles[i].string() << std::endl;
-    }
+        if (flag) {
+            std::cout << std::setw(displayColumnWidth);
+            std::cout << theCounts2[i] << std::setw(displayColumnWidth);
+            std::cout << " " << allFiles[i].string() << std::endl;           
+        }
+    } //multi-file input
     if (inputFiles.size() > 1) {
         std::cout << std::setw(displayColumnWidth-1);
-        std::cout << totalCount;
+        std::cout << totalCount1;
         std::cout << " total" << std::endl;
     }
 
