@@ -23,6 +23,7 @@
 #include <re/parse/parser.h>
 #include <re/toolchain/toolchain.h>
 #include <unicode/data/KHanyuPinyin.h>
+#include <unicode/data/KXHC1983.h>
 
 namespace PY{
     using std::vector;
@@ -185,15 +186,16 @@ namespace PY{
     // mapping pairs of a syllable and its tone
     // to corresponding UnicodeSet predefined in KHanyuPinyin.h
     class UnicodeSetTable{
+    private:
+        static map<std::pair<string, int>, const UCD::UnicodeSet*> _kpy_unicodeset_table;
+        static map<std::pair<string, int>, const UCD::UnicodeSet*> _kxhc_unicodeset_table;
     public:
         static const UCD::UnicodeSet&& get_uset(string syllable, int tone){
-            if(_unicodeset_table.find(make_pair(syllable, tone)) != _unicodeset_table.end()) 
-                return std::move(*_unicodeset_table[make_pair(syllable, tone)]);
+            if(_kxhc_unicodeset_table.find(make_pair(syllable, tone)) != _kxhc_unicodeset_table.end()) 
+                return std::move(*_kxhc_unicodeset_table[make_pair(syllable, tone)]);
             else 
                 return std::move(UCD::UnicodeSet());
         }
-    private:
-        static map<std::pair<string, int>, const UCD::UnicodeSet*> _unicodeset_table;
     };
 }
 

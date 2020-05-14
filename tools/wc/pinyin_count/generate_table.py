@@ -1,10 +1,10 @@
 #generate all possible syllables+tone
 from legal_syllables import legal
 
-output=open("unicodeset_table.txt","w+")
+output=open("kpy_unicodeset_table.txt","w+")
 lines=[]
 
-khanyu_path='/home/wendy/parabix-devel/include/unicode/data/KHanyuPinyin.h'
+khanyu_path='../../../include/unicode/data/KHanyuPinyin.h'
 f=open(khanyu_path,"r")
 for line in f:
     lines.append(line)
