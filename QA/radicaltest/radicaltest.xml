@@ -19,6 +19,17 @@
 每“部”第一个字就是“部首”
 可见，部首也是偏旁，是用来作为排列和检索汉字依据的特殊“偏旁”
 </datafile>
-<grepcase regexp= "氵_子 _" datafile = "test2" greplines = "4 5 8"/>
+<grepcase regexp= "氵_子_" datafile = "test2" greplines = "4 5 8"/>
 <grepcase regexp= "扌_刂_ " datafile = "test2" greplines = "6 8"/>
+
+<datafile id = "test3">
+這是一個簡單的例子
+以下是一些關於部首分類的信息
+部首分類也是使用漢字之文化圈少數的共通點
+中國大陸的國標碼使用漢語拼音排列
+部首檢字也有其局限性，許多漢字難以歸部
+</datafile>
+<grepcase regexp= "亻_心_" datafile = "test3" greplines = "3"/>
+<grepcase regexp= "氵_子_" datafile = "test3" greplines = "4 6"/>
+<grepcase regexp= "扌_刂_ " datafile = "test3" greplines = "5"/>
 </greptest>
