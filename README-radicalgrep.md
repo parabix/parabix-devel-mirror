@@ -42,6 +42,9 @@ In the second iteration, Radical Grep takes input of the form of Kangxi radical 
 
     Input: ./radicalcount 9_61_ ../QA/radicaltest/testfiles/test1
     Output: 以下是一些关于部首分类的**信息** 
+    
+    Input: ./radicalcount 85_85_ ../QA/radicaltest/testfiles/test1
+    Output: Can not find the results!
 
 ###### ** output is in a different color. **
 ## Radical Count
