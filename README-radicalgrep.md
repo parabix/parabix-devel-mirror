@@ -71,8 +71,8 @@ Radical Grep takes input of the form of Kangxi radical indices (e.g. "85_85_"), 
 Add the output line when there is no phrase with correspondings radicals.
 ###### version 2.2.0
 Perform the search using the actual radicals and not the Kangxi index.
-###### version 2.2.1(iteration 2 final version)
-Add the mode when search for single radical.
+###### version 2.2.1 (iteration 2 final version)
+Add the mode which can search for single radical.
 
 ## How to Run Radical Grep (version 2.2.1)
 
@@ -103,6 +103,6 @@ Build the program by typing `make radicalgrep` into the terminal. Go into the bi
 
 Future Improvements Include:
 
-1. Can use two modes to search, one is searched by kangxi radical indice and the other is searched by actual kangxi radical
-2. Add more functions to use this radicalgrep
+1. Can use two modes to search, one is searched by kangxi radical indices and the other is searched by actual kangxi radical.
+2. Add more functions to use this radicalgrep.
 
