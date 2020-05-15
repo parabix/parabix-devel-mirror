@@ -55,6 +55,7 @@ namespace BS
             void parse_input(string input_radical);
         private:
             std::vector<string> radical_list;
+            int radical_num;
     };
 }
 

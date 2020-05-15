@@ -7,8 +7,9 @@
 部首检字也有其局限性，许多汉字难以归部
 </datafile>
 <grepcase regexp= "亻_心_" datafile = "test1" greplines = "3"/>
-<grepcase regexp= "氵_子 _" datafile = "test1" greplines = "4 6"/>
+<grepcase regexp= "氵_子_" datafile = "test1" greplines = "4 6"/>
 <grepcase regexp= "扌_刂_ " datafile = "test1" greplines = "5"/>
+<grepcase regexp= "子_ " datafile = "test1" greplines = "2 4 6"/>
 
 <datafile id = "test2">
 偏旁是从造字构形的角度定义的

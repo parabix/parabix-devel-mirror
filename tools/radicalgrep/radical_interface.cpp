@@ -14,24 +14,42 @@ namespace BS
         std::vector<re::RE*> temp2;
         temp1.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[0]))));
         REs.push_back(re::makeAlt(temp1.begin(),temp1.end()));
-        temp2.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[1]))));
-        REs.push_back(re::makeAlt(temp2.begin(),temp2.end()));
+        //cout<<radical_num<<endl;
+        if(radical_num==2)
+        {
+            temp2.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[1]))));
+            REs.push_back(re::makeAlt(temp2.begin(),temp2.end()));
+        }
+       
         return std::vector<re::RE*>(1,re::makeSeq(REs.begin(),REs.end()));
     }
     void RadicalValuesEnumerator::parse_input(string input_radical)
     {
-            string temp;
-            int p1,p2;
+        string temp;
+        int p1,p2;
+        int num=0;
+        for(int i=0;i<=input_radical.length();i++)
+        {
+            if(input_radical[i]=='_')
+            {
+                num++;
+            }
+        }
+        radical_num=num;
+        //cout<<radical_num<<endl;
+        p1=input_radical.find_first_of("_");
+        if(num==2)
+        p2=input_radical.find_last_of("_");
             
-            p1=input_radical.find_first_of("_");
-            p2=input_radical.find_last_of("_");
-            
-            temp=input_radical.substr(0,p1);
-            radical_list.push_back(temp);
-            
+        temp=input_radical.substr(0,p1);
+        radical_list.push_back(temp);
+        
+        if(num==2)
+        {
             temp=input_radical.substr(p1+1,p2-p1-1);
             radical_list.push_back(temp);
-            
+        }
+        
     }
                         
 }
