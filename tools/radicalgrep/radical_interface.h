@@ -31,13 +31,19 @@ namespace BS
         public:
             const UCD::UnicodeSet&& get_uset(string radical)
             {
-                if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
+                /*if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                     return std::move(*_unicodeset_radical_table[radical]);
                 else
+                    return std::move(UCD::UnicodeSet());*/
+                if(radical_table.find(radical) != radical_table.end())
+                    return std::move(*radical_table[radical]);
+                else
                     return std::move(UCD::UnicodeSet());
+                
             }
         private:
             static map<string, const UCD::UnicodeSet*> _unicodeset_radical_table;
+            static map<string, const UCD::UnicodeSet*> radical_table;
     };
 
     static UnicodeSetTable ucd_radical;

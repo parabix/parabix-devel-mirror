@@ -75,4 +75,9 @@ namespace BS
         {"211",&_211_Set},                   {"212",&_212_Set},                   {"213",&_213_Set},                   {"214",&_214_Set}
     };
 
+BS::map<string, const UCD::UnicodeSet*> UnicodeSetTable::radical_table {
+    {"一",&_1_Set},                    {"丨",&_2_Set},                    {"丶",&_3_Set},                     {"丿",&_4_Set},                    {"乀",&_4_Set},                    {"乁",&_4_Set},                    
+    {"乙",&_5_Set},                    {"乚",&_5_Set},                    {"乛",&_5_Set},                     {"亅",&_6_Set}  
+};
+
 
