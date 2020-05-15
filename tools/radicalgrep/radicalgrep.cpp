@@ -79,7 +79,8 @@ int main(int argc, char* argv[])
     grep->initREs(radicalREs);
     grep->grepCodeGen();
     const bool matchFound=grep->searchAllFiles();
-
+    if(matchFound==false)
+        cout<<"Can not find the results!"<<endl;
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
 }
 
