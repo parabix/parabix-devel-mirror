@@ -34,11 +34,16 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 ## Iteration 2: Grep Implementation & Radical Count
 
-Plans for iteration 2 include:
-* Implement icgrep 
-* Use the Kangxi radical indices as input 
-* Output the characters instead of the sentence, with the corresponding radicals 
+In the second iteration, Radical Grep takes input of the form of Kangxi radical indices (e.g. "85_" or "85_85_") and returns the phrase with the correspondings radicals. The matching radicals in the phrase are highlighted in a different colour.
 
+    Input: ./radicalgrep 85_39_ ../QA/radicaltest/testfiles
+    Output: 部首分类也是使用**汉字**之文化圈少数的共通点
+            部首检字也有其局限性，许多**汉字**难以归部
+
+    Input: ./radicalcount 9_61_ ../QA/radicaltest/testfiles/test1
+    Output: 以下是一些关于部首分类的**信息** 
+
+###### ** output is in a different color. **
 ## Radical Count
 Radical Count is a program built based off of `ucount`. Given a filepath and the index(s) of a radical, it counts the occurences of characters with the corresponding radical in the input file.
 
