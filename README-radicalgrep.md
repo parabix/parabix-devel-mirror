@@ -28,45 +28,81 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
     Output: 以下是一些关于部首分类的信息
 
 ## Example 2
+
     Input: ./radicalgrep 氵_宀 _ ../QA/radicaltest/testfiles/test1
     Output: 这是采用“两分法”对汉字进行结构分析得出的认识
 
 
-## Iteration 2: Grep Implementation & Radical Count
+## Iteration 2: Radical Count & Grep Implement 
 
-In the second iteration, Radical Grep takes input of the form of Kangxi radical indices (e.g. "85_" or "85_85_") and returns the phrase with the correspondings radicals. The matching radicals in the phrase are highlighted in a different colour.
+In the second iteration, Radical Grep takes input of the form of actual Kangxi radical (e.g. "子_" or " 氵_子 _") and returns the phrase with the correspondings radicals. The matching radicals in the phrase are highlighted in a different colour.
+To implement grep, we first implement radical count:
 
-    Input: ./radicalgrep 85_39_ ../QA/radicaltest/testfiles/test1
-    Output: 部首分类也是使用**汉字**之文化圈少数的共通点
-            部首检字也有其局限性，许多**汉字**难以归部
-
-    Input: ./radicalgrep 9_61_ ../QA/radicaltest/testfiles/test1
-    Output: 以下是一些关于部首分类的**信息** 
-    
-    Input: ./radicalgrep 85_85_ ../QA/radicaltest/testfiles/test1
-    Output: Can not find the results!
-
-###### ** output is in a different color. **
 ## Radical Count
+
 Radical Count is a program built based off of `ucount`. Given a filepath and the index(s) of a radical, it counts the occurences of characters with the corresponding radical in the input file.
 
 ## How to Run Radical Count
+
 Build the program by typing `make radicalcount` into the terminal. Go into the bin diretory and run the following commands.
 
     ./radicalcount <Radical Expression> <Path of Input File>
 
 ## Example 1
+
     Input: ./radicalcount 85_ ../QA/radicaltest/testfiles/test1
     Output: 3       ../QA/radicaltest/testfiles/test1
 
 ## Example 2
+
     Input: ./radicalcount 9_61_ ../QA/radicaltest/testfiles/test1
     Output:       6       ../QA/radicaltest/testfiles/test1
                   2       ../QA/radicaltest/testfiles/test1
     
 ###### *Inputs of 2 radicals returns the count of each radical, and not the number of consecutive occurences (i.e. phrases).
 
+## Grep Implement (Radicalgrep)
+
+Software Log:
+
+###### version 2.1.0 
+Radical Grep takes input of the form of Kangxi radical indices (e.g. "85_85_"), and returns the phrase with the correspondings radicals. The matching radicals in the phrase are highlighted in a different colour.
+###### version 2.1.1
+Add the output line when there is no phrase with correspondings radicals.
+###### version 2.2.0
+Perform the search using the actual radicals and not the Kangxi index.
+###### version 2.2.1(iteration 2 final version)
+Add the mode when search for single radical.
+
+## How to Run Radical Grep (version 2.2.1)
+
+Build the program by typing `make radicalgrep` into the terminal. Go into the bin diretory and run the following commands.
+
+    ./radicalgrep <Radical Expression> <Path of Input File>
+
+## Example 1
+
+    Input: ./radicalgrep 子_ ../QA/radicaltest/testfiles/test1
+    Output: 这是一个简单的例**子**
+    部首分类也是使用汉**字**之文化圈少数的共通点
+    部首检字也有其局限性，许多汉**字**难以归部
+    
+## Example 2
+
+    Input: ./radicalgrep 氵_子_ ../QA/radicaltest/testfiles/test1
+    Output: 部首分类也是使用**汉字**之文化圈少数的共通点
+    部首检字也有其局限性，许多**汉字**难以归部
+   
+## Example 3
+
+    Input: ./radicalgrep 子_子_ ../QA/radicaltest/testfiles/test1
+    Output: Can not find the results!
+
+###### ** output is in a different color. **
+
+
 Future Improvements Include:
 
-1. Perform the search using the actual radicals and not the Kangxi index.
+1. Can use two modes to search, one is searched by kangxi radical indice and the other is searched by actual kangxi radical
+2. Add more functions to use this radicalgrep
 
