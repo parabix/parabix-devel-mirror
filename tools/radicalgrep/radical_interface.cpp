@@ -27,10 +27,10 @@ namespace BS
             p2=input_radical.find_last_of("_");
             
             temp=input_radical.substr(0,p1);
-            radical_list[0]=temp;
+            radical_list.push_back(temp);
             
             temp=input_radical.substr(p1+1,p2-p1-1);
-            radical_list[1]=temp;
+            radical_list.push_back(temp);
             
     }
                         

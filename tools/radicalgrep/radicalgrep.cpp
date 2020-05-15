@@ -30,6 +30,7 @@
 #include <grep/grep_engine.h>
 #include <toolchain/toolchain.h>
 #include <fileselect/file_select.h>
+#include <llvm/ADT/STLExtras.h> //for make_unique
 #include <fcntl.h>
 #include <iomanip>
 #include <iostream>
@@ -70,7 +71,8 @@ int main(int argc, char* argv[])
     allfiles=argv::getFullFileList(pxDriver, inputfiles);
     const auto filecount=allfiles.size();
     
-    std::unique_ptr<grep::GrepEngine> grep=make_unique<grep::EmitMatchesEngine>(pxDriver);
+    std::unique_ptr<grep::GrepEngine> grep;
+    grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto radicalREs=generateREs(input_radical);
     grep->setColoring();
     grep->initREs(radicalREs);
@@ -87,3 +89,4 @@ std::vector<re::RE*> generateREs(std::string input_radical)
     en_rad.parse_input(input_radical);
     return en_rad.createREs();
 }
+
