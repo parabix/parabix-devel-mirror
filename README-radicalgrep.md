@@ -36,7 +36,7 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 In the second iteration, Radical Grep takes input of the form of Kangxi radical indices (e.g. "85_" or "85_85_") and returns the phrase with the correspondings radicals. The matching radicals in the phrase are highlighted in a different colour.
 
-    Input: ./radicalgrep 85_39_ ../QA/radicaltest/testfiles
+    Input: ./radicalgrep 85_39_ ../QA/radicaltest/testfiles/test1
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
             部首检字也有其局限性，许多**汉字**难以归部
 
