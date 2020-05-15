@@ -30,10 +30,6 @@ bool resolvePropertyDefinition(Name * const property) {
         const std::string value = property->getName();
         const std::string ns = property -> getNamespace();
         auto propit = alias_map.find(ns);
-        if (ns == "kangxi") {
-            property->setDefinition(makeName(ns, value, Name::Type::UnicodeProperty));
-            return true;
-        }
         if (propit == alias_map.end()) {
             UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead.");
         }
@@ -84,7 +80,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             prop = canonicalize_value_name(prop);
             auto propit = alias_map.find(prop);
             if (propit == alias_map.end()) {
-                UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
+                
             }
             auto theprop = static_cast<UCD::property_t>(propit->second);
             auto propObj = getPropertyObject(theprop);
