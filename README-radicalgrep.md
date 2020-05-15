@@ -69,4 +69,4 @@ Build the program by typing `make radicalcount` into the terminal. Go into the b
 Future Improvements Include:
 
 1. Perform the search using the actual radicals and not the Kangxi index.
-2. Search for consecutive occurences (phrases) when two radicals are inputted.
+
