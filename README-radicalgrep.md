@@ -44,18 +44,18 @@ Radical Count is a program built based off of `ucount`. Given a filepath and the
 
 ## How to Run Radical Count
 
-Build the program by typing `make radicalcount` into the terminal. Go into the bin diretory and run the following commands.
+Build the program by typing `make radicalcount` into the terminal. Go into the build diretory and run the following commands.
 
-    ./radicalcount <Radical Expression> <Path of Input File>
+    bin/radicalcount <Radical Expression> <Path of Input File>
 
 ## Example 1
 
-    Input: ./radicalcount 85_ ../QA/radicaltest/testfiles/test1
+    Input: bin/radicalcount 85_ ../QA/radicaltest/testfiles/test1
     Output: 3       ../QA/radicaltest/testfiles/test1
 
 ## Example 2
 
-    Input: ./radicalcount 9_61_ ../QA/radicaltest/testfiles/test1
+    Input: bin/radicalcount 9_61_ ../QA/radicaltest/testfiles/test1
     Output:       6       ../QA/radicaltest/testfiles/test1
                   2       ../QA/radicaltest/testfiles/test1
     
@@ -76,26 +76,26 @@ Add the mode which can search for single radical.
 
 ## How to Run Radical Grep (version 2.2.1)
 
-Build the program by typing `make radicalgrep` into the terminal. Go into the bin diretory and run the following commands.
+Build the program by typing `make radicalgrep` into the terminal. Go into the build diretory and run the following commands.
 
-    ./radicalgrep <Radical Expression> <Path of Input File>
+    bin/radicalgrep <Radical Expression> <Path of Input File>
 
 ## Example 1
 
-    Input: ./radicalgrep 子_ ../QA/radicaltest/testfiles/test1
+    Input: bin/radicalgrep 子_ ../QA/radicaltest/testfiles/test1
     Output: 这是一个简单的例**子**
     部首分类也是使用汉**字**之文化圈少数的共通点
     部首检字也有其局限性，许多汉**字**难以归部
     
 ## Example 2
 
-    Input: ./radicalgrep 氵_子_ ../QA/radicaltest/testfiles/test1
+    Input: bin/radicalgrep 氵_子_ ../QA/radicaltest/testfiles/test1
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
     部首检字也有其局限性，许多**汉字**难以归部
    
 ## Example 3
 
-    Input: ./radicalgrep 子_子_ ../QA/radicaltest/testfiles/test1
+    Input: bin/radicalgrep 子_子_ ../QA/radicaltest/testfiles/test1
     Output: Can not find the results!
 
 ###### ** output is in a different color. **
