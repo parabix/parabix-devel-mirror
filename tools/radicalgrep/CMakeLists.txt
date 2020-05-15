@@ -12,8 +12,8 @@ DEPS
     fileselect
     grep
     toolchain
-    kernel.basis
     kernel.io
+    kernel.basis
     re.cc
     re.parse
 )
