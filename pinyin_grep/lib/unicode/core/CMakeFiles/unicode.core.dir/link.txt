@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_unicode_core.a  CMakeFiles/unicode.core.dir/unicode_set.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_unicode_core.a

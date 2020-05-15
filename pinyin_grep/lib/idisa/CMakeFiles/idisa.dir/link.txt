@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_idisa.a  CMakeFiles/idisa.dir/idisa_avx_builder.cpp.o CMakeFiles/idisa.dir/idisa_builder.cpp.o CMakeFiles/idisa.dir/idisa_i64_builder.cpp.o CMakeFiles/idisa.dir/idisa_sse_builder.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_idisa.a

@@ -1,0 +1,16 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/kevinq/Downloads/parabix-devel/tools/pinyin_grep/pinyingrep.cpp
+iostream
+-
+string
+-
+fstream
+-
+

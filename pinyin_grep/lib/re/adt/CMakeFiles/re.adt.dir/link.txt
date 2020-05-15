@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_re_adt.a  CMakeFiles/re.adt.dir/printer_re.cpp.o CMakeFiles/re.adt.dir/re_assertion.cpp.o CMakeFiles/re.adt.dir/re_cc.cpp.o CMakeFiles/re.adt.dir/re_diff.cpp.o CMakeFiles/re.adt.dir/re_empty_set.cpp.o CMakeFiles/re.adt.dir/re_intersect.cpp.o CMakeFiles/re.adt.dir/re_range.cpp.o CMakeFiles/re.adt.dir/re_re.cpp.o CMakeFiles/re.adt.dir/re_rep.cpp.o CMakeFiles/re.adt.dir/memoization.cpp.o CMakeFiles/re.adt.dir/re_utility.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_re_adt.a

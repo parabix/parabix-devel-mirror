@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_grep.a  CMakeFiles/grep.dir/grep_engine.cpp.o CMakeFiles/grep.dir/grep_kernel.cpp.o CMakeFiles/grep.dir/grep_name_resolve.cpp.o CMakeFiles/grep.dir/grep_toolchain.cpp.o CMakeFiles/grep.dir/nested_grep_engine.cpp.o CMakeFiles/grep.dir/resolve_properties.cpp.o CMakeFiles/grep.dir/regex_passes.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_grep.a

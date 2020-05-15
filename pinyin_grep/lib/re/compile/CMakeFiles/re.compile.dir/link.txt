@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_re_compile.a  CMakeFiles/re.compile.dir/re_compiler.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_re_compile.a

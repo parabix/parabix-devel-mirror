@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_codegen.a  CMakeFiles/codegen.dir/CBuilder.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_codegen.a

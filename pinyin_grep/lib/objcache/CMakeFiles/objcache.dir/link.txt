@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_objcache.a  CMakeFiles/objcache.dir/object_cache.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_objcache.a

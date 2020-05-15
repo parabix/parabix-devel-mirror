@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_kernel_unicode.a  CMakeFiles/kernel.unicode.dir/charclasses.cpp.o CMakeFiles/kernel.unicode.dir/grapheme_kernel.cpp.o CMakeFiles/kernel.unicode.dir/UCD_property_kernel.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_kernel_unicode.a

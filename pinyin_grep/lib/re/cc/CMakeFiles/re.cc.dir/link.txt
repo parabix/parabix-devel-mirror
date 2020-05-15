@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_re_cc.a  CMakeFiles/re.cc.dir/cc_compiler_target.cpp.o CMakeFiles/re.cc.dir/cc_compiler.cpp.o CMakeFiles/re.cc.dir/cc_kernel.cpp.o CMakeFiles/re.cc.dir/GB_18030_data.cpp.o CMakeFiles/re.cc.dir/multiplex_CCs.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_re_cc.a

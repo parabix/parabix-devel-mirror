@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_pablo_bixnum.a  CMakeFiles/pablo.bixnum.dir/bixnum.cpp.o CMakeFiles/pablo.bixnum.dir/utf8gen.cpp.o CMakeFiles/pablo.bixnum.dir/utf16gen.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_pablo_bixnum.a

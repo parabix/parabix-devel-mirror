@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_re_toolchain.a  CMakeFiles/re.toolchain.dir/toolchain.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_re_toolchain.a

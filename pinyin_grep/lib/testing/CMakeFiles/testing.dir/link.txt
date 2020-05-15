@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_testing.a  CMakeFiles/testing.dir/assert.cpp.o CMakeFiles/testing.dir/runtime.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_testing.a

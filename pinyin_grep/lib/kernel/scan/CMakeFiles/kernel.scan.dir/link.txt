@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_kernel_scan.a  CMakeFiles/kernel.scan.dir/base.cpp.o CMakeFiles/kernel.scan.dir/index_generator.cpp.o CMakeFiles/kernel.scan.dir/line_number_generator.cpp.o CMakeFiles/kernel.scan.dir/line_span_generator.cpp.o CMakeFiles/kernel.scan.dir/reader.cpp.o CMakeFiles/kernel.scan.dir/scanmatchgen.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_kernel_scan.a

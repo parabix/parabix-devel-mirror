@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_fileselect.a  CMakeFiles/fileselect.dir/file_select.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_fileselect.a
