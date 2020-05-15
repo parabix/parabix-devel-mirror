@@ -34,7 +34,7 @@ def det_syl(syl):
             if not s2 : s2 = None
         else:
             s2 = syl
-    return(s1, s2)
+    return (s1, s2)
 
 def det_tone(word):
     flag = 0
@@ -64,6 +64,15 @@ def equivalent(word):
                 word = word.replace(key, equivalent(key))
     return word
 
+khy_pattern = re.compile(r"U\+(\w+?)\s+kHanyuPinyin\s+(.+)")
 
-if __name__ == "__main__":
+def parse_property(filename, prop):
+    val = None
+    i_val = None
+    val_dict = {}
+    file = open(uniHan_config.UniHan_src_dir + '/' + filename + '.txt')
+    if prop == 'kpy':
+
+
+
 
