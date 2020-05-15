@@ -14,6 +14,7 @@ namespace BS
         std::vector<re::RE*> temp2;
         temp1.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[0]))));
         REs.push_back(re::makeAlt(temp1.begin(),temp1.end()));
+        
         //cout<<radical_num<<endl;
         if(radical_num==2)
         {
@@ -36,6 +37,7 @@ namespace BS
             }
         }
         radical_num=num;
+        
         //cout<<radical_num<<endl;
         p1=input_radical.find_first_of("_");
         if(num==2)
