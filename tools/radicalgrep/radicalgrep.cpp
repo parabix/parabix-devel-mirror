@@ -75,9 +75,9 @@ int main(int argc, char* argv[])
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto radicalREs=generateREs(input_radical);
     grep->setColoring();
+    grep->initFileResult(allfiles);
     grep->initREs(radicalREs);
     grep->grepCodeGen();
-    grep->initFileResult(allfiles);
     const bool matchFound=grep->searchAllFiles();
 
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
