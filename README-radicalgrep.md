@@ -40,10 +40,10 @@ In the second iteration, Radical Grep takes input of the form of Kangxi radical 
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
             部首检字也有其局限性，许多**汉字**难以归部
 
-    Input: ./radicalcount 9_61_ ../QA/radicaltest/testfiles/test1
+    Input: ./radicalgrep 9_61_ ../QA/radicaltest/testfiles/test1
     Output: 以下是一些关于部首分类的**信息** 
     
-    Input: ./radicalcount 85_85_ ../QA/radicaltest/testfiles/test1
+    Input: ./radicalgrep 85_85_ ../QA/radicaltest/testfiles/test1
     Output: Can not find the results!
 
 ###### ** output is in a different color. **
