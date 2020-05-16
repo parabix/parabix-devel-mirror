@@ -46,7 +46,7 @@ using namespace kernel;
 //  counts the number of occurrences of characters with the corresponding radical in that class 
 //  within the given input file.
 
-static cl::OptionCategory ucFlags("Command Flags", "ucount options");
+static cl::OptionCategory ucFlags("Command Flags", "Radical Count options");
 
 static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical Expression>"), cl::Required, cl::cat(ucFlags));
 
@@ -107,11 +107,14 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
 
 input_radical parse_input(std::string CC_expr)
 {
+    /*The code has been commented out is for radical index input (e.g. 85_).
+    It will be re-implemented in a future iteration.*/
+
     input_radical result("","");
     std::string temp;
     int p1, p2;
-    //std::regex regex_pattern("([0-9]*\.[0-9]+|[0-9]+)"); //need to find a better regex
-    
+    //std::regex regex_pattern("([0-9]*\.[0-9]+|[0-9]+)");
+
     p1=CC_expr.find_first_of("_");  //find first position of "_", and return the index
     p2=CC_expr.find_last_of("_");   //find last position of "_", and return the index
 
@@ -188,7 +191,6 @@ int main(int argc, char *argv[]) {
     CPUDriver pxDriver("wc");
 
     input_radical ci = parse_input(CC_expr);
-    //std::cout << "ci: " << ci.first << " " << ci.second << std::endl;
 
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     const auto fileCount = allFiles.size();
@@ -197,9 +199,9 @@ int main(int argc, char *argv[]) {
     UCountFunctionType uCountFunctionPtr2 = nullptr;
     int flag = 0;
 
-    if (ci.second == "0") { //single char e.g. 85_ or 85
+    if (ci.second == "0") { //single char e.g. 氵_
         uCountFunctionPtr1 = radicalcount1(ci.first, pxDriver, uCountFunctionPtr1);
-    } else if (ci.second != "0") { // e.g. 85_142_
+    } else if (ci.second != "0") { // e.g. 氵_子_
         uCountFunctionPtr1 = radicalcount1(ci.first, pxDriver, uCountFunctionPtr1);
         uCountFunctionPtr2 = radicalcount1(ci.second, pxDriver, uCountFunctionPtr2);
         flag = 1;
@@ -229,19 +231,26 @@ int main(int argc, char *argv[]) {
     
     //output
     for (unsigned i = 0; i < fileCount; ++i) {
+        if (fileCount != 1) std::cout << "File " << i << ":" << std::endl;
         std::cout << std::setw(displayColumnWidth);
-        std::cout << theCounts1[i] << std::setw(displayColumnWidth);
+        std::cout << ci.first << ": " << theCounts1[i] << std::setw(displayColumnWidth);
         std::cout << " " << allFiles[i].string() << std::endl;
         if (flag) {
             std::cout << std::setw(displayColumnWidth);
-            std::cout << theCounts2[i] << std::setw(displayColumnWidth);
+            std::cout << ci.second << ": " << theCounts2[i] << std::setw(displayColumnWidth);
             std::cout << " " << allFiles[i].string() << std::endl;           
         }
-    } //multi-file input
+    } 
+
+    //multi-file input
     if (inputFiles.size() > 1) {
+        std::cout << std::endl;
         std::cout << std::setw(displayColumnWidth-1);
-        std::cout << totalCount1;
-        std::cout << " total" << std::endl;
+        std::cout << "Total Count of " << ci.first << ": " << totalCount1 << std::endl;
+        if (flag) {
+            std::cout << std::setw(displayColumnWidth-1);
+            std::cout << "Total Count of " << ci.second << ": " << totalCount2 << std::endl;
+        }
     }
 
     return 0;

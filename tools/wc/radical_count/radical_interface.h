@@ -23,7 +23,8 @@ namespace BS
     {   
         public:
             const UCD::UnicodeSet&& get_uset(string radical)
-            {
+            {   
+                //For radical index input (e.g. 85_)
                 /*if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                     return std::move(*_unicodeset_radical_table[radical]);
                 else
