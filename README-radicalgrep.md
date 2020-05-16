@@ -75,7 +75,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 ## **Iteration 3: Adding New Features**
 Plans for iteration 3 include:
 
-1. Implement two search modes; kangxi radical indices and actual kangxi radical.
+1. Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.
 2. Add more functions/command line flags.
 
 
