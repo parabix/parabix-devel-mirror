@@ -110,14 +110,14 @@ input_radical parse_input(std::string CC_expr)
     input_radical result("","");
     std::string temp;
     int p1, p2;
-    std::regex regex_pattern("([0-9]*\.[0-9]+|[0-9]+)"); //need to find a better regex
+    //std::regex regex_pattern("([0-9]*\.[0-9]+|[0-9]+)"); //need to find a better regex
     
     p1=CC_expr.find_first_of("_");  //find first position of "_", and return the index
     p2=CC_expr.find_last_of("_");   //find last position of "_", and return the index
 
     temp=CC_expr.substr(0,p1);
     result.first=temp;
-    int setNum = std::stoi(result.first);
+    /*int setNum = std::stoi(result.first);
     
     //check if input is an integer in [1,214]
     if (!std::regex_match(result.first, regex_pattern)) {
@@ -126,19 +126,19 @@ input_radical parse_input(std::string CC_expr)
         if (setNum < 1 || setNum > 214) {
             report_fatal_error("Enter a integer in [1,214], followed by _. (out of bounds, 1)");
         }
-    }
+    }*/
     
     if (p1 == p2) { //if input is only one radical, set the other half to 0
         result.second = "0"; //we use 0 as a flag to mark that the program is only processing one radical
     } else { //two radicals in input
         temp=CC_expr.substr(p1+1,p2-p1-1);
         result.second=temp;
-        setNum = std::stoi(result.second);
+        /*setNum = std::stoi(result.second);
         if (!std::regex_match(result.second, regex_pattern)) {
         report_fatal_error("Enter a integer in [1,214], followed by _. (unsupported format, 2)");
         } else if (setNum < 1 || setNum > 214) {
             report_fatal_error("Enter a integer in [1,214], followed by _. (out of bounds,2)");
-        }
+        }*/
     }
 
     return result;
