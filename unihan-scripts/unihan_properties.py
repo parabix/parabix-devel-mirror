@@ -22,25 +22,24 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
     f.write("\n        }};"
             "\n    }\n")
 
+def sum_bytes(value_map):
+    sum = 0
+    for i in value_map.keys():
+        sum += value_map[i].bytes()
+    return sum
+
+def get_property_full_name(property_code):
+    name = None
+    if property_code == "kpy":
+        name = "KHanyuPinyin"
+    return name 
 class unihan_generator():
     def __init__(self):
-	self.parsed_map = []
+        self.parsed_map = []
         self.supported_props = []
         self.property_data_headers = []
 
-    def sum_bytes(value_map):
-        sum = 0
-        for i in value_map.keys():
-            sum += value_map[i].bytes()
-        return sum
-
-    def get_property_full_name(property_code):
-        name = None
-        if property_code == "kpy":
-            name = "KHanyuPinyin"
-        return name 
-
-    def emit_property(self, f, property_code, independent_prop_values, prop_values, value_map):
+    def emit_property(self, f, property_code, prop_values, independent_prop_values, value_map):
         full_name = get_property_full_name(property_code)
         emit_enumerated_property(f, property_code, independent_prop_values, prop_values, value_map)
         print("%s: %s bytes" % (full_name, sum_bytes(value_map)))
@@ -50,7 +49,7 @@ class unihan_generator():
         prop_values, independent_prop_values, value_map = parse_property_file(filename_root, property_code)
         prop_name = get_property_full_name(property_code)
         f = cformat.open_header_file_for_write(prop_name)
-        cformat.write_imports(f, ['<array>', '"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code, prop_values, independent_prop_values, value_map)
         f.write("}\n")
@@ -58,8 +57,8 @@ class unihan_generator():
         self.property_data_headers.append(prop_name)
 
 def unihan_main():
-	unihan = unihan_generator()
-        unihan.generate_property_value_file('unihan_pinyin', 'kpy')
+    unihan = unihan_generator()
+    unihan.generate_property_value_file('Unihan_Readings', 'kpy')
 
 if __name__ == "__main__":
   unihan_main()

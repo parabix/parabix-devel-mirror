@@ -1,6 +1,6 @@
 # generates cpp header files 
 
-import UniHan_config, sys, time, re
+import unihan_config, sys, time, re
 from datetime import date
 
 header_template = r"""#ifndef %s
@@ -29,7 +29,7 @@ cpp_template = r"""
 
 def open_header_file_for_write(filename):
     generator_name = sys.argv[0]
-    f = open(UniHan_config.UniHan_output_dir + '/' + filename + '.h', 'w')
+    f = open(unihan_config.unihan_output_dir + '/' + filename + '.h', 'w')
     substitute_name_char_re = re.compile('[-\s]')
     hname = substitute_name_char_re.sub('_', filename.upper()) + '_H'
     f.write(header_template % (hname, hname, date.today().year, generator_name))
@@ -38,7 +38,7 @@ def open_header_file_for_write(filename):
 def open_cpp_file_for_write(filename):
    generator_name = sys.argv[0]
 
-   f = open(UniHan_config.UniHan_output_dir + '/' + filename + '.cpp', 'w')
+   f = open(unihan_config.unihan_output_dir + '/' + filename + '.cpp', 'w')
    hname = filename.upper() + '_H'
    f.write(cpp_template % (date.today().year, generator_name, filename))
    return f

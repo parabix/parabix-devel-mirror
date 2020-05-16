@@ -1,8 +1,8 @@
 # config for unihan
 
-UCD_src_dir = "Unihan"
+unihan_src_dir = "Unihan"
 
-UCD_output_dir = "generated_pinyin"
+unihan_output_dir = "generated_pinyin"
 
 version = "Unknown"
 

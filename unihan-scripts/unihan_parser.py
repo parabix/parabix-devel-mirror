@@ -28,7 +28,7 @@ def det_syl(syl):
         s1 = syl[:2]
         s2 = syl[2:]
     else:
-        if s1(syl[0]):
+        if phono(syl[0]):
             s1 = syl[0]
             s2 = syl[1:]
             if not s2 : s2 = None
@@ -44,24 +44,24 @@ def det_tone(word):
         pos_tones = d_tones[key]
         t_num = 0
         for num in pos_tones:
-            tnum += 1
+            t_num += 1
             if num in word:
                 flag = 1
-                py = word.replace(pos_tones, key)
+                py = word.replace(num, key)
                 break
-    if flag == 1 : break
+        if flag == 1 : break
     return py, t_num
 
 def equivalent(word):
     dict_equal = {
         'ü' : 'v'
     }
-    for key in equivalent.keys():
+    for key in dict_equal.keys():
         if key not in word:
-            if equivalent[key] not in word:
+            if dict_equal[key] not in word:
                 word = word.replace(key, '')
             else:
-                word = word.replace(key, equivalent(key))
+                word = word.replace(key, dict_equal[key])
     return word
 
 def parse_pinyin(word):
@@ -87,9 +87,10 @@ khy_pattern = re.compile(r"U\+(\w+?)\s+kHanyuPinyin\s+(.+)")
 def parse_fields(f):
     f += ' '
     f_list = f_pattern.findall(f)
+    pinyin_list = []
     for i_f in f_list:
-        pinyin_list.extend(parse_pinyin(f))
-    return [x for y, x in enumerate(f_list) if x not in f_list[:y]]
+        pinyin_list.extend(parse_pinyin(i_f))
+    return [x for y, x in enumerate(pinyin_list) if x not in pinyin_list[:y]]
 
 def parse_pinyin_txt(file, property_code):
     val = []
@@ -108,12 +109,17 @@ def parse_pinyin_txt(file, property_code):
                     tone = ele["tone"]
                     if syl not in val:
                         val.append(syl)
+                        '''
                         val_map[syl] = [None, None, None, None, None]
                         val_map[syl][tone] = singleton_uset(int(codepoint,16))
                     elif val_map[syl][tone] == None:
                         val_map[syl][tone] = singleton_uset(int(codepoint,16))
                     else:
                         val_map[syl][tone] = uset_union(val_map[syl][tone], singleton_uset(int(codepoint, 16))) 
+                        '''
+                        val_map[syl] = singleton_uset(int(codepoint,16))
+                    else:
+                        val_map[syl] = uset_union(val_map[syl], singleton_uset(int(codepoint,16)))
     i_val = len(val)
     return val, i_val, val_map
 
@@ -121,7 +127,7 @@ def parse_property_file(filename, property_code):
     val = None
     i_val = None
     val_map = {}
-    file = open(unihan_config.UniHan_src_dir + '/' + filename + '.txt')
+    file = open(unihan_config.unihan_src_dir + '/' + filename + '.txt')
     if property_code == 'kpy':
         val, i_val, val_map = parse_pinyin_txt(file, property_code)
     return val, i_val, val_map
