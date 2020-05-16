@@ -6,9 +6,7 @@ For more information on the Kangxi Radical System, please visit: https://en.wiki
 
 ## **Installation**
 
-To build radical grep, the working environment needs to have all requirements of the icgrep build met. icgrep must also be built beforehand.
-
-After the above has been done, run  `make`  and `make check` on the terminal to build the software and run the test suite.
+To build radical grep, the working environment needs to have all requirements of the icgrep build met. This can be done with the `make` command on the terminal.
 
 To build only Radical Grep and it's dependencies, run `make radicalgrep`.
 
@@ -31,20 +29,21 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 ## Example 2
 
-    Input:  氵_宀 _ ../QA/radicaltest/testfiles/test1
+    Input:  氵_宀_ ../QA/radicaltest/testfiles/test1
     Output: 这是采用“两分法”对汉字进行结构分析得出的认识
 
 
 ## **Iteration 2: Radical Count & Grep Implementation**
 
-In the second iteration, Radical Grep takes actual Kangxi radical(s) as input (e.g. "子_" or " 氵_子 _"). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
+In the second iteration, Radical Grep takes actual Kangxi radical(s) as input (e.g. "子_" or " 氵_子_"). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
 
 Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found in `parabix-devel/tools/wc/radical_count`.
 
 ## Iteration 2 Milestones
 
 ### Radical Grep Version 2.1.0 
-* Radical Grep takes the Kangxi radical indices (e.g. "85_85_" as 氵_氵_) as input. Radical grep Supports multi-file search.
+* Radical Grep takes the Kangxi radical indices (e.g. "85_85_" as 氵_氵_) as input. 
+* Radical Grep supports multi-file search.
 ### Radical Grep Version 2.1.1
 * Output added for the case where no match is found.
 ### Radical Grep Version 2.2.0
