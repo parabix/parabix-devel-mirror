@@ -6,17 +6,11 @@ For more information on the Kangxi Radical System, please visit: https://en.wiki
 
 ## **Installation**
 
-To build radical grep, the working environment needs to have all requirements of the icgrep build met. icgrep must also be built beforehand.
-
-After the above has been done, run  `make`  and `make check` on the terminal to build the software and run the test suite.
-
-To build only Radical Grep and it's dependencies, run `make radicalcount`.
-
-After everything passes, you are ready to run Radical Count.
+To build Radical Count, type `make radicalcount` into the terminal.
 
 ## **How to Run Radical Count**
 
-Build the program by typing `make radicalcount` into the terminal. Go into the bin diretory and run the following command to use Radical Count.
+ Go into the bin diretory and run the following command to use Radical Count.
 
     ./radicalcount <Radical Expression> <Path(s) of Input File(s)>
 
