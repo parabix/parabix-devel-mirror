@@ -340,6 +340,7 @@ add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
 add_subdirectory(tools/util)
 add_subdirectory(tools/pinyin_grep)
+add_subdirectory(tools/wc/pinyincount)
 
 # Kernel Tests
 add_subdirectory(tests)
