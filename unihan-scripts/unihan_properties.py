@@ -17,14 +17,14 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
             for i in range(len(value_map[v])):
                 if value_map[v][i] is None:
                     continue
-                f.write("    /** Code Point Ranges for %s\n    " % v)
-                f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 4))
+                f.write("    /** Code Point Ranges for %s%d\n    " % (v, i))
+                f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v][i])], ',', 4))
                 f.write("**/\n\n")
-                f.write(value_map[v].generate(v.lower() + "_Set", 4))
+                f.write(value_map[v][i].generate(v.lower() + "%d_Set" % i, 4, "arr"))
             if array:
                 f.write(arr_format(v.lower(), value_map[v], 4))
     if not independant:
-        set_list = ['&%s_Set' % v.lower() for v in prop_values]
+        set_list = ['&%s_Set' % (v.lower(), i) for v in prop_values for i in range(5)]
         f.write("    static EnumeratedPropertyObject property_object\n")
         f.write("        {%s,\n" % property_code)
         f.write("        %s_ns::independent_prop_values,\n" % property_code.upper())
@@ -38,16 +38,16 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
 
 
 
-def arr_format(pr_val, arr, sp):
-    R_arr = ' '*sp + "\n\n" + ' '*sp + "const static std::array<UnicodeSet, 5> %s_Set = {\n" % pr_val
+def arr_format(pr_val, arr, indent):
+    R_arr = ' ' * indent + "\n\n" + ' ' * indent + "const static std::array<UnicodeSet, 5> %s_Set = {\n" % pr_val
     for pos, n in enumerate(arr):
         if pos != 0:
             R_arr += ",\n"
         if n is not None:
-            R_arr += (' '*2*sp + "UnicodeSet(const_cast<UnicodeSet::run_t*>(__%s_runs), %i, 0, const_cast<UnicodeSet::bitquad_t *>(__%s_quads), %i, 0)" % (pr_val + "%d_Set" % pos, len(n.runs), pr_val + "%d_Set" % pos, len(n.quads))
+            R_arr += (' ' * 2 * indent) + "UnicodeSet(const_cast<UnicodeSet::run_t*>(__%s_runs), %i, 0, const_cast<UnicodeSet::bitquad_t *>(__%s_quads), %i, 0)" % (pr_val + "%d_Set" % pos, len(n.runs), pr_val + "%d_Set" % pos, len(n.quads))
         else:
-            R_arr += (' '*2*sp) + "UnicodeSet()"
-    R_arr += "\n" + (' '*2*sp) + '}\n\n'
+            R_arr += (' ' * 2 * indent) + "UnicodeSet()"
+    R_arr += "\n" + (' ' * 2 * indent) + '};\n\n'
     return R_arr
 
 def sum_bytes(value_map, type):
@@ -56,8 +56,8 @@ def sum_bytes(value_map, type):
         for i in value_map.keys():
             sum += value_map[i].bytes()
     elif type == 'arr':
-        for i in range(len(value_map)):
-            for j in range(len(value_map)):
+        for i in value_map.keys():
+            for j in range(len(value_map[i])):
                 if value_map[i][j] is not None:
                     sum += value_map[i][j].bytes()
     return sum

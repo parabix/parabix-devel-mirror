@@ -7,6 +7,7 @@
 #
 # Licensed under Open Software License 3.0.
 import cformat
+import unihan_config
 import re
 
 #
@@ -61,7 +62,7 @@ class UCset:
             self.quads.append(q)
 
     # printing
-    def generate(self, propertyName, indent=4):
+    def generate(self, propertyName, indent=4, type='reg'):
         hex_specifier = "%%#0%ix" % (int(quad_bits / 4) + 2)
         runtype = {-1: "Full", 0: "Empty", 1: "Mixed"}
 
@@ -82,12 +83,14 @@ class UCset:
         # modifications are made, they first test the run/quad capacity and will observe that they 0 length
         # and allocate heap memory to make any changes
 
-        str += (" " * indent) + "}\n\n" + \
-               (" " * indent) + \
-               "const static UnicodeSet %s{const_cast<UnicodeSet::run_t *>(__%s_runs), %i, 0, " \
-               "const_cast<UnicodeSet::bitquad_t *>(__%s_quads), %i, 0};\n\n" \
-               % (propertyName, propertyName, len(self.runs), propertyName, len(self.quads))
-
+        if type != 'arr' and arr:
+            str += (" " * indent) + "}\n\n" + \
+                (" " * indent) + \
+                "const static UnicodeSet %s{const_cast<UnicodeSet::run_t *>(__%s_runs), %i, 0, " \
+                "const_cast<UnicodeSet::bitquad_t *>(__%s_quads), %i, 0};\n\n" \
+                % (propertyName, propertyName, len(self.runs), propertyName, len(self.quads))
+        else:
+            str += (" " * indent) + "}\n\n"
         return str
 
     def bytes(self):
