@@ -8,8 +8,8 @@
 </datafile>
 <grepcase regexp= "亻_心_" datafile = "test1" greplines = "3"/>
 <grepcase regexp= "氵_子_" datafile = "test1" greplines = "4 6"/>
-<grepcase regexp= "扌_刂_ " datafile = "test1" greplines = "5"/>
-<grepcase regexp= "子_ " datafile = "test1" greplines = "2 4 6"/>
+<grepcase regexp= "扌_刂_" datafile = "test1" greplines = "5"/>
+<grepcase regexp= "子_" datafile = "test1" greplines = "2 4 6"/>
 
 <datafile id = "test2">
 偏旁是从造字构形的角度定义的
@@ -21,7 +21,7 @@
 可见，部首也是偏旁，是用来作为排列和检索汉字依据的特殊“偏旁”
 </datafile>
 <grepcase regexp= "氵_子_" datafile = "test2" greplines = "4 5 8"/>
-<grepcase regexp= "扌_刂_ " datafile = "test2" greplines = "6 8"/>
+<grepcase regexp= "扌_刂_" datafile = "test2" greplines = "6 8"/>
 
 <datafile id = "test3">
 這是一個簡單的例子
@@ -32,5 +32,5 @@
 </datafile>
 <grepcase regexp= "亻_心_" datafile = "test3" greplines = "3"/>
 <grepcase regexp= "氵_子_" datafile = "test3" greplines = "4 6"/>
-<grepcase regexp= "扌_刂_ " datafile = "test3" greplines = "5"/>
+<grepcase regexp= "扌_刂_" datafile = "test3" greplines = "5"/>
 </greptest>
