@@ -10,8 +10,6 @@ To build radical grep, the working environment needs to have all requirements of
 
 To build only Radical Grep and it's dependencies, run `make radicalgrep`.
 
-After everything passes, you are ready to run Radical Grep.
-
 ## **How to Run Radical Grep**
 
 To run Radical Grep, run the following commands in the bin directory:
@@ -37,7 +35,7 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 In the second iteration, Radical Grep takes actual Kangxi radical(s) as input (e.g. "子_" or " 氵_子_"). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
 
-Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found in `parabix-devel/tools/wc/radical_count`.
+Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/tools/wc/radical_count/README-radicalcount.md "README-radical-count").
 
 ## Iteration 2 Milestones
 
