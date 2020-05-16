@@ -109,17 +109,13 @@ def parse_pinyin_txt(file, property_code):
                     tone = ele["tone"]
                     if syl not in val:
                         val.append(syl)
-                        '''
+                        
                         val_map[syl] = [None, None, None, None, None]
                         val_map[syl][tone] = singleton_uset(int(codepoint,16))
                     elif val_map[syl][tone] == None:
                         val_map[syl][tone] = singleton_uset(int(codepoint,16))
                     else:
                         val_map[syl][tone] = uset_union(val_map[syl][tone], singleton_uset(int(codepoint, 16))) 
-                        '''
-                        val_map[syl] = singleton_uset(int(codepoint,16))
-                    else:
-                        val_map[syl] = uset_union(val_map[syl], singleton_uset(int(codepoint,16)))
     i_val = len(val)
     return val, i_val, val_map
 
