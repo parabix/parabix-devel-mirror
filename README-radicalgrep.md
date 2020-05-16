@@ -10,7 +10,7 @@ To build radical grep, the working environment needs to have all requirements of
 
 After the above has been done, run  `make`  and `make check` on the terminal to build the software and run the test suite.
 
-To build only Radical Grep and it's dependencies, run `make radicalgrep` and `make radicalgrep check`.
+To build only Radical Grep and it's dependencies, run `make radicalgrep`.
 
 After everything passes, you are ready to run Radical Grep.
 
@@ -71,42 +71,6 @@ Another program, `Radical Count` was implemented in this iteration. The program 
     Output: Can not find the results!
 
 ###### ** Output is printed in red on the terminal. ** 
-
-## **Radical Count**
-
-Radical Count is a program built based off of `ucount`. Given a filepath and the Kangxi radical(s), it counts the occurences of characters with the corresponding radical in the input file.
-
-## **How to Run Radical Count**
-
-Build the program by typing `make radicalcount` into the terminal. Go into the bin diretory and run the following command to use Radical Count.
-
-    ./radicalcount <Radical Expression> <Path(s) of Input File(s)>
-
-## Example 1
-
-    Input: 氵_ ../QA/radicaltest/testfiles/test1
-    Output: 氵: 3       ../QA/radicaltest/testfiles/test1
-
-## Example 2
-
-    Input: 氵_子_ ../QA/radicaltest/testfiles/test1
-    Output:     氵: 3       ../QA/radicaltest/testfiles/test1
-                子: 4       ../QA/radicaltest/testfiles/test1
-
-## Example 3
-
-    Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test2
-    Output: File 0:
-                氵: 3       ../QA/radicaltest/testfiles/test1
-                子: 4       ../QA/radicaltest/testfiles/test1
-            File 1:
-                氵: 7       ../QA/radicaltest/testfiles/test2
-                子: 7       ../QA/radicaltest/testfiles/test2
-
-            Total Count of 氵: 10
-            Total Count of 子: 11
-    
-###### *Inputs of 2 radicals returns the count of each radical, and not the number of consecutive occurences (i.e. phrases).
 
 ## **Iteration 3: Adding New Features**
 Plans for iteration 3 include:
