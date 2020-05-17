@@ -1,0 +1,12 @@
+parabix_add_executable(
+NAME
+    pinyincount
+SRC
+    pinyincount.cpp
+DEPS
+    fileselect
+    kernel.basis
+    kernel.io
+    re.cc
+    re.parse
+)

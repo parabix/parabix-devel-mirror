@@ -9,6 +9,7 @@
 #include <set>
 #include <regex>
 #include <iostream>
+#include<unicode/data/KHanyuPinyin.h>
 
 namespace PinyinPattern{
     using namespace std;
