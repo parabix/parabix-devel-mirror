@@ -79,7 +79,7 @@ class RE_Compiler {
     };
 
     RE_Compiler(pablo::PabloBlock * scope,
-                const cc::Alphabet * codeUnitAlphabet = &cc::UTF16); //compile RE as UTF16 default
+                const cc::Alphabet * codeUnitAlphabet = &cc::UTF8);
 
     void addIndexingAlphabet(EncodingTransformer * indexingTransformer, pablo::PabloAST * idxStream);
     

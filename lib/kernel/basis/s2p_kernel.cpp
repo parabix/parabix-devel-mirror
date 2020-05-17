@@ -366,7 +366,7 @@ void S2P_16Kernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlo
         //Those low and high Values were again passed through hsimd_packh/hsimd_packl operations to get parallel bit streams of column of text from the input file (Ref notes)
 
          u16byte0[i] = kb->hsimd_packl(16, UTF16units[0], UTF16units[1]);   //consider every 16 bits and concatenate the low 8 bits
-	       u16byte1[i] = kb->hsimd_packh(16,  UTF16units[0], UTF16units[1]);   //consider every 16 bits and concatenate the high 8 bits
+	     u16byte1[i] = kb->hsimd_packh(16, UTF16units[0], UTF16units[1]);   //consider every 16 bits and concatenate the high 8 bits
     }
     Value * basisbits0[8];
     Value * basisbits1[8];

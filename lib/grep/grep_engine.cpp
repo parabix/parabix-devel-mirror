@@ -270,7 +270,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::Name * anchorName = re::makeName("UTF16_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
-        setComponent(mExternalComponents, Component::UTF16index);
+        //setComponent(mExternalComponents, Component::UTF16index);
         mExternalNames.insert(anchorName);
     }
 
@@ -290,7 +290,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
-            setComponent(mExternalComponents, Component::UTF16index);
+            //setComponent(mExternalComponents, Component::UTF16index);
             if (mColoring) {
                 UnicodeIndexing = true;
             }
@@ -345,7 +345,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         setComponent(mExternalComponents, Component::S2P_16);
     //}
     if (!mExternalNames.empty()) {
-        setComponent(mExternalComponents, Component::UTF16index);
+        //setComponent(mExternalComponents, Component::UTF16index);
     }
 }
 
@@ -391,10 +391,11 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
 
         //if statement to invoke UTF-16 index kernel
        // if (hasComponent(mExternalComponents, Component::UTF16index)) {
-            P->CreateKernelCall<UTF16_index>(SourceStream, mU8index); //invoke only UTF16 kernel
+       // P->CreateKernelCall<UTF16_index>(SourceStream, mU8index); //invoke only UTF16 kernel
        // } //run in UTF-16 mode - have the marker stream mark at the end of final code unit of every UTF-16 sequence*/
 
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
+            P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
             Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
             if (mNullMode == NullCharMode::Abort) {
                 k->link("signal_dispatcher", kernel::signal_dispatcher);
@@ -574,7 +575,7 @@ void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::R
         if (LLVM_UNLIKELY(len == INT_MAX)) {
             len = 1;
         }
-        P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, Results);
+        P->CreateKernelCall<FixedMatchPairsKernel>(len, MatchResults, Results);
     }
 }
 
@@ -763,7 +764,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
-    E->CreateKernelCall<DebugDisplayKernel> ("Matches", Matches);
+    //E->CreateKernelCall<DebugDisplayKernel> ("Matches", Matches);
     if (MatchResultsBufs.size() > 1) {
         StreamSet * const MergedMatches = E->CreateStreamSet();
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
@@ -1243,7 +1244,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     matchingRE = regular_expression_passes(matchingRE);
     matchingRE = re::exclude_CC(matchingRE, breakCC);
     matchingRE = resolveAnchors(matchingRE, breakCC);
-    matchingRE = toUTF16(matchingRE);
+    matchingRE = toUTF8(matchingRE);
 
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
                                        Binding{idb->getSizeTy(), "length"},
@@ -1253,23 +1254,21 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);
     Scalar * const callbackObject = E->getInputScalar(2);
-    StreamSet * ByteStream = E->CreateStreamSet(1, 16); //modified to 16 to default to UTF16 input
+    StreamSet * ByteStream = E->CreateStreamSet(1, 8); 
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
-    StreamSet * BasisBits = E->CreateStreamSet(16); //modified to 16 to default to UTF16 input
-    E->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
+    StreamSet * BasisBits = E->CreateStreamSet(8); 
+    E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
     E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
-    StreamSet * u8index = E->CreateStreamSet(1, 1);
-    E->CreateKernelCall<UTF16_index>(BasisBits, u8index);
-
+    StreamSet * u8index = E->CreateStreamSet();
+    E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
     StreamSet * MatchResults = E->CreateStreamSet();
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF16);
-    options->setRE(matchingRE);
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF8);
+    options->setRE(matchingRE); 
     options->setSource(BasisBits);
     options->setResults(MatchResults);
-    options->addExternal("UTF16_index", u8index);
     E->CreateKernelCall<ICGrepKernel>(std::move(options));
     StreamSet * MatchingRecords = E->CreateStreamSet();
     E->CreateKernelCall<MatchedLinesKernel>(MatchResults, RecordBreakStream, MatchingRecords);
@@ -1326,16 +1325,16 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);
     Scalar * const callbackObject = E->getInputScalar(2);
-    StreamSet * ByteStream = E->CreateStreamSet(1, 16); //modified to 16 to default to UTF16 input
+    StreamSet * ByteStream = E->CreateStreamSet(1, 8); 
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
-    StreamSet * BasisBits = E->CreateStreamSet(16); //modified to 16 to default to UTF16 input
-    E->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
+    StreamSet * BasisBits = E->CreateStreamSet(8); 
+    E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
     E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
     StreamSet * u8index = E->CreateStreamSet();
-    E->CreateKernelCall<UTF16_index>(BasisBits, u8index);
+    E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
 
     StreamSet * resultsSoFar = RecordBreakStream;
 
@@ -1350,7 +1349,7 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
         r = regular_expression_passes(r);
         r = re::exclude_CC(r, breakCC);
         r = resolveAnchors(r, breakCC);
-        r = toUTF16(r);
+        r = toUTF8(r);
 
         options->setRE(r);
         options->setSource(BasisBits);
@@ -1359,7 +1358,7 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
         if (i != 0 || !isExclude) {
             options->setCombiningStream(isExclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultsSoFar);
         }
-        options->addExternal("UTF16_index", u8index);
+        options->addExternal("UTF8_index", u8index);
         E->CreateKernelCall<ICGrepKernel>(std::move(options));
         resultsSoFar = MatchResults;
     }

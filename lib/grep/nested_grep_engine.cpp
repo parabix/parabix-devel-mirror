@@ -130,7 +130,7 @@ public:
                                  if (i || outerKernel || exclude) {
                                      options->setCombiningStream(exclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultSoFar);
                                  }
-                                 options->addExternal("UTF8_index", u8index);
+                                 options->addExternal("UTF16_index", u8index);
                                  Kernel * const matcher = new ICGrepKernel(driver.getBuilder(), std::move(options));
                                  assert (matcher->hasFamilyName());
                                  driver.addKernel(matcher);

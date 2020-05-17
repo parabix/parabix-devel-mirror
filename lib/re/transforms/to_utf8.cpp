@@ -79,22 +79,18 @@ static RE *rangeCodeUnitsU16(codepoint_t lo, codepoint_t hi, unsigned index,
     if (index == lgth) {
         return makeCC(lunit, hunit, &cc::UTF16);
     } else if (hunit == lunit) {
-        return makeSeq({makeCC(hunit, &cc::UTF16),
-                        rangeCodeUnitsU16(lo, hi, index + 1, lgth)});
+        return makeSeq({makeCC(hunit, &cc::UTF16), rangeCodeUnitsU16(lo, hi, index + 1, lgth)});
     } else {
         const unsigned suffix_mask =
             (static_cast<unsigned>(1) << ((lgth - index) * 6)) - 1;
         if ((hi & suffix_mask) != suffix_mask) {
             const unsigned hi_floor = (~suffix_mask) & hi;
-            return makeAlt({rangeCodeUnitsU16(hi_floor, hi, index, lgth),
-                            rangeCodeUnitsU16(lo, hi_floor - 1, index, lgth)});
+            return makeAlt({rangeCodeUnitsU16(hi_floor, hi, index, lgth), rangeCodeUnitsU16(lo, hi_floor - 1, index, lgth)});
         } else if ((lo & suffix_mask) != 0) {
             const unsigned low_ceil = lo | suffix_mask;
-            return makeAlt({rangeCodeUnitsU16(low_ceil + 1, hi, index, lgth),
-                            rangeCodeUnitsU16(lo, low_ceil, index, lgth)});
+            return makeAlt({rangeCodeUnitsU16(low_ceil + 1, hi, index, lgth), rangeCodeUnitsU16(lo, low_ceil, index, lgth)});
         } else {
-            return makeSeq({makeCC(lunit, hunit, &cc::UTF16),
-                            rangeCodeUnitsU16(lo, hi, index + 1, lgth)});
+            return makeSeq({makeCC(lunit, hunit, &cc::UTF16), rangeCodeUnitsU16(lo, hi, index + 1, lgth)});
         }
     }
 }
@@ -106,8 +102,7 @@ static RE *rangeToUTF16(codepoint_t lo, codepoint_t hi) {
         const auto m = UTF<16>::max_codepoint_of_length(min_lgth16);
         return makeAlt({rangeToUTF16(lo, m), rangeToUTF16(m + 1, hi)});
     } else {
-        return rangeCodeUnitsU16(lo, hi, 1,
-                              max_lgth16); 
+        return rangeCodeUnitsU16(lo, hi, 1, max_lgth16); 
     }
 }
 
@@ -128,5 +123,4 @@ RE *toUTF16(RE *r, bool convertName) {
                                   : NameTransformationMode::None;
     return UTF16_Transformer(mode).transformRE(r);
 }
-
 }
