@@ -40,6 +40,7 @@
 #include <map>
 
 #include<pinyin.h>
+#include<unicode/data/KHanyuPinyin.h>
 namespace fs = boost::filesystem;
 
 using namespace llvm;
