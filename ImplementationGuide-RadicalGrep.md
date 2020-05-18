@@ -16,15 +16,18 @@ It is used to define the corresponding functions and variables related to radica
 **class**:  `UnicodeSetTable`, `RadicalValuesEnumerator`
 
 
-* UnicodeSetTable:   
+* UnicodeSetTable:  
+
 **Data Structure**   
 static map&lt;string, const UCD::UnicodeSet*&gt; radical_table  
 The map list all kinds of radicals and their corresponding UnicodeSet prodefined in kRSKangXi.h  
+
  **Function**  
 const UCD::UnicodeSet&& get_uset(string radical)   
 Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
  
 * RadicalValuesEnumerator:  
+
 **Data Structure**  
 1. std::vector&lt;<string&gt;> radical_list    
    Store the input radical(s)  
