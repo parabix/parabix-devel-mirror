@@ -43,10 +43,10 @@ Search for the results
 ### radicalgrep.cpp  
 
 #### This file is the top-level running file, the running process is:  
-        Get the input and the file you want to search ->
-        Analyze the input to get the corresponding radical UnicodeSet -> 
-        Search the result in each file -> 
-        Output and highlight the result     
+            1. Get the input and the file you want to search  
+            2. Analyze the input to get the corresponding radical UnicodeSet  
+            3. Search the result in each file   
+            4. Output and highlight the result     
 
 **Data Structure**  
 1. static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options")  
