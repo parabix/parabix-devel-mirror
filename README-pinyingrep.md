@@ -13,7 +13,7 @@ To test pinyingrep, `cd` the directory `QA` and run the following commends on yo
 python greptest.py -v -t pinyintest.xml ../build/bin/pinyingrep
 ```
 Also, `make check` is ready for testing all modules including pinyingrep.
-
+## Iteration History
 First Iteration
 ---------------
 In the first iteration, the pinyin grep is supposed to handle pinyin inputs of English letters with possible tones and regular-expression-like features. It is implemented in a dummy way, simply to pass all test cases.
@@ -23,20 +23,47 @@ Second Iteration
 ----------------
 In the second iteration, we will implement **pinyingrep** version 1.0 with input parsing. In this version, **pinyingrep** is supposed to handle general regex-like pinyin syllables as input. The implementation of grep functionality is based on grep engine provided by parabix framework. We specified the requirement of our second iteration as follows:
 ### Functionality
-**Pinyingrep** version 1.0 supports:
-1. Pinyin syllables without tones specified, e.g. `zhong`
-2. Pinyin syllables with tones specified by numbers, e.g. `zhong1` or `zho1ng`
-3. Pinyin syllables with tones specified by toned characters in unicode, e.g. `xuǎn`
-4. Regular-expression-like pinyin syllables with `.` e.g. `zh.ng`
-5. Regular-expression-like pinyin syllables with `?` after "g" e.g. `zhang?`
-6. Sequences of pinyin syllables above, e.g. `zhong yao4`
+#### Pinyin syllables without tones specified
+**Pinyingrep** supports pinyin syllables in alphabetic characters without tones sepcified.
+> e.g. `zhong` or `gao`
+>
+As an exception of alphabetic characters in pinyin representation, `ü` is also supported as non-toned characters. `v` and `ü` are considered equivalent as un-toned input.
 
-**Pinyingrep** version 1.0  removes support of:
-1. Extra empty space between sequences of pinyin syllables(in this version, pinyingrep considers one or more empty space to be equivalent separator).
+With such a form of input syllables, pinyingrep will 'grep' lines with Chinese characters with
+readings specified by the pinyin syllables in all five tones(Tone `1-4` as well as Qingsheng/Soft/Neutral)
+For instance, the result of grepping `zhong` is equivalent to those of grepping `zhong0`(Qingsheng), `zhong1`, `zhong2`, `zhong3` and `zhong4`.
 
-**Pinyingrep** version 1.1 is currently working on:
-1. CommandLine flag to switch on coloring of grep results.
-2. CommandLine option to choose different pinyin database.
+#### Pinyin syllables with tones specified by numbers
+**Pinyingrep** supports pinyin syllables with tones specified by Arabic numbers(`0-4`).
+> e.g. `zhong1` or `zho1ng`
+>
+We define that`0` indicates the reading is in `Qingsheng`.
+#### Pinyin syllables with tones specified by toned characters in unicode
+**Pinyingrep** supports pinyin syllables with tones specified by toned characters in unicode, 
+more specifically, latin characters like `ǎ` or `ō`.
+> e.g. `xuǎn` or `xiōng`
+>
+Toned unicode syllables like `xuǎn` is equivalent to corresponding syllables with tones specified by Arabic numbers.
+#### Regular-expression-like pinyin syllables with `.`
+**Pinyingrep** supports regular-expression-like pinyin syllables with `.`.
+> e.g. `zh.ng` or `x..ng`
+>
+Similar to normal regular expressions, `.` represent arbitrary **alphabetic** characters.
+But only legal pinyin syllables in the database will be considered by **pinyingrep**. 
+> e.g. `x..ng` to `xiong`, `xiang`, and etc.
+>
+#### Regular-expression-like pinyin syllables with `?` after "g"
+**Pinyingrep** supports pinyin syllables with `?` after alphabetic character `g`.
+> e.g. `zhang?`
+>
+The question mark indicates that both readings with `g` and without `g` are wanted as input.
+
+#### Sequences of pinyin syllables mentioned above
+**Pinyingrep** supports sequences of the above legal syllables of arbitrary length.
+> e.g. `zh.ng yao4` 
+>
+Any sequence of Chinese characters with readings matching the input sequences will be in result.
+
 ### Testcases
 The following testcases give example about the functionality of **pinyingrep**.
 #### 1. Simple Pinyin Inputs 
@@ -93,13 +120,31 @@ The following testcases give example about the functionality of **pinyingrep**.
     虽然他们不能康复，但可以变更好。
 ```
 
-### Work Assignments
+## Version History
+
+#### Version 1.1(coming soon)
+**Pinyingrep** version 1.1 is currently working on:
+1. CommandLine flag to switch on coloring of grep results.
+2. CommandLine option to choose different pinyin database.
+#### Version 1.0
+**Pinyingrep** version 1.0 supports:
+1. Pinyin syllables without tones specified, e.g. `zhong`
+2. Pinyin syllables with tones specified by numbers, e.g. `zhong1` or `zho1ng`
+3. Pinyin syllables with tones specified by toned characters in unicode, e.g. `xuǎn`
+4. Regular-expression-like pinyin syllables with `.` e.g. `zh.ng`
+5. Regular-expression-like pinyin syllables with `?` after "g" e.g. `zhang?`
+6. Sequences of pinyin syllables above, e.g. `zhong yao4`
+
+**Pinyingrep** version 1.0  removes support of:
+1. Extra empty space between sequences of pinyin syllables(in this version, pinyingrep considers one or more empty space to be equivalent separator).
+
+## Work Assignments
 The following lists the work assignments of iteration 2:
 
 Yanwen: Program Structure Design, Database Header File Generation, `PinyinValuesParser` Implementation, `Pinyingrep.cpp` Implementation
 
-Huke: Implementing Methods of `PinyinValuesTable`, Testing **Pinyingrep** thoroughly
+Huke: Implementing Methods of `PinyinValuesTable` in `pinyin_interface.cpp`, Testing **Pinyingrep** thoroughly
 
-Kirby: `PinyinValuesEnumerator` Implementation, Adding CommandLine flags
+Kirby: `PinyinValuesEnumerator` Implementation in `pinyin_interface.cpp`, Adding CommandLine flags
 
-Wendy: Generating static member initialization of `PinyinValuesTable` and `UnicodeSetTable`, Adding CommandLine flags
+Wendy: Generating static member initialization of `PinyinValuesTable` and `UnicodeSetTable` in `kpy_unicodeset_table.cpp` and `kxhc_unicodeset_table.cpp`, Adding CommandLine flags
