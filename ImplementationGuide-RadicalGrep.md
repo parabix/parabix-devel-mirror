@@ -40,9 +40,10 @@ Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
 ### radicalgrep.cpp  
 
 #### This file is the top-level running file, the running process is:  
-    Get the input and the file you want to search -> Analyze the input to get the
-    corresponding radical UnicodeSet -> Search the result in each file -> Output and
-    highlight the result     
+    Get the input and the file you want to search ->
+    Analyze the input to get the corresponding radical UnicodeSet -> 
+    Search the result in each file -> 
+    Output and highlight the result     
 
 **Data Structure**  
 1. static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options")  
@@ -53,16 +54,16 @@ The input  radical(s)
 The files you want to search   
 4. std::vector<fs::path> allfiles  
 Store all path of files  
-  **Function**  
-   1. std::vector<re::RE*> generateREs(std::string input_radical)  
-   This function parse the input and get the results  
-   2. setColoring()  
-   Defined in file grep_engine, Get result highlight  
-    3. initFileResult(allfiles) 
-   Defined in file grep_engine, Initialize results of each file  
-   4. grep->initREs(radicalREs) 
-  Defined in file grep_engine, Initialize the output  
-   5. grepCodeGen() 
-   Return the number of the result  
-  6. searchAllFiles()
-   Return if there have found any result, if yes, return true, else return false  
+**Function**  
+1. std::vector<re::RE*> generateREs(std::string input_radical)  
+This function parse the input and get the results  
+2. setColoring()  
+Defined in file grep_engine, Get result highlight  
+3. initFileResult(allfiles) 
+Defined in file grep_engine, Initialize results of each file  
+4. initREs(radicalREs) 
+Defined in file grep_engine, Initialize the output  
+5. grepCodeGen() 
+Return the number of the result  
+6. searchAllFiles()
+Return if there have found any result, if yes, return true, else return false  
