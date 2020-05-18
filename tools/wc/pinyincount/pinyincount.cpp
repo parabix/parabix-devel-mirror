@@ -39,8 +39,8 @@
 #include <vector>
 #include <map>
 
-#include<pinyin.h>
-#include<unicode/data/KHanyuPinyin.h>
+#include "pinyin.h"
+#include <unicode/data/KHanyuPinyin.h>
 namespace fs = boost::filesystem;
 
 using namespace llvm;

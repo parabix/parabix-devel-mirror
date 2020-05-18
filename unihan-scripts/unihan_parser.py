@@ -9,7 +9,6 @@ def phono(syl):
     res = cons.split().count(syl)
     return res != 0
 
-
 def get_tones():
     dict_tones = {
         'a' : ['ā','á','ǎ','à'],
@@ -17,7 +16,9 @@ def get_tones():
         'e' : ['ē','é','ě','è'],
         'i' : ['ī','í','ǐ','ì'],
         'u' : ['ū','ú','ǔ','ù'],
-        'v' : ['ǜ','ǘ','ǚ','ǜ']
+        'v' : ['ǜ','ǘ','ǚ','ǜ'],
+        'm' : ['m̄','ḿ','None','m̀'],
+        'n' : ['None','ń','ň','ǹ']
     }
     return dict_tones
 
@@ -52,24 +53,14 @@ def det_tone(word):
         if flag == 1 : break
     return py, t_num
 
-def equivalent(word):
-    dict_equal = {
-        'ü' : 'v'
-    }
-    for key in dict_equal.keys():
-        if key not in word:
-            if dict_equal[key] not in word:
-                word = word.replace(key, '')
-            else:
-                word = word.replace(key, dict_equal[key])
-    return word
 
 def parse_pinyin(word):
     pinyin_list = []
     pinyin = filter(None, word.split(','))
     for pos in pinyin:
         syl, tone = det_tone(pos)
-        syl = equivalent(syl)
+        if 'ü' in syl:
+            syl = syl.replace('ü', 'v')
         s1, s2 = det_syl(syl)
         pinyin_list.append(
             {
