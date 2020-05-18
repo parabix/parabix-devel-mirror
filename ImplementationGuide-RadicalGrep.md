@@ -1,7 +1,7 @@
 # Radical Grep Implementation Guide
 ## All Source Files
 #### FilePath
-              parabix-devel/tools/radicalgrep
+        parabix-devel/tools/radicalgrep
 #### Files
 		radical_interface.h
 		radical_interface.cpp
