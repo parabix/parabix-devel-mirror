@@ -56,15 +56,15 @@ The files you want to search
 Store all path of files  
 
 **Function**  
-1. std::vector&lt;re::RE*&gt; generateREs(std::string input_radical)  
+1. std::vector&lt;re::RE*&gt; generateREs(std::string input_radical)   
 This function parse the input and get the results  
 2. setColoring()  
 Defined in file grep_engine, Get result highlight  
-3. initFileResult(allfiles) 
+3. initFileResult(allfiles)  
 Defined in file grep_engine, Initialize results of each file  
-4. initREs(radicalREs) 
+4. initREs(radicalREs)  
 Defined in file grep_engine, Initialize the output  
-5. grepCodeGen() 
+5. grepCodeGen()  
 Return the number of the result  
-6. searchAllFiles()
+6. searchAllFiles()  
 Return if there have found any result, if yes, return true, else return false  
