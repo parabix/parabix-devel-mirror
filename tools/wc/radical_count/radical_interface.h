@@ -11,6 +11,8 @@
 #include <iostream>
 #include <unicode/data/kRSKangXi.h>
 
+typedef std::pair<std::string, std::string> input_radical;
+
 namespace BS
 {
     using std::vector;
@@ -42,5 +44,7 @@ namespace BS
 
     static UnicodeSetTable ucd_radical;
 }
+
+input_radical parse_input(std::string CC_expr);
 
 #endif /* radical_interface_h */
