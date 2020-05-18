@@ -56,7 +56,7 @@ static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options
 
 static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags));
 static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));
-
+//search for multiple input files are supported
 std::vector<fs::path> allfiles;
 
 std::vector<re::RE*> generateREs(std::string input_radical);
@@ -74,13 +74,13 @@ int main(int argc, char* argv[])
     
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
-    auto radicalREs=generateREs(input_radical);
-    grep->setColoring();
+    auto radicalREs=generateREs(input_radical); //get the results
+    grep->setColoring();    //highlight the result
     grep->initFileResult(allfiles);
     grep->initREs(radicalREs);
     grep->grepCodeGen();
     const bool matchFound=grep->searchAllFiles();
-    if(matchFound==false)
+    if(matchFound==false)   //if there does not exist any results
         cout<<"Can not find the results!"<<endl;
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
 }
