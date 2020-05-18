@@ -9,14 +9,14 @@
 		CMakeLists.txt
 ## Important Data Structure and Algorithm
 ### radical_interface.h & radical_interface.cpp
-**namespace**:  `BS`  
+**namespace:**  `BS`  
 It is used to define the corresponding functions and variables related to radical grep.
 
 
-**class**:  `UnicodeSetTable`, `RadicalValuesEnumerator`
+**class:**  `UnicodeSetTable`, `RadicalValuesEnumerator`
 
 
-* **UnicodeSetTable**:  
+* **UnicodeSetTable:**  
 
 **Data Structure**   
 static map&lt;string, const UCD::UnicodeSet*&gt; radical_table  
@@ -26,7 +26,7 @@ The map list all kinds of radicals and their corresponding UnicodeSet prodefined
 const UCD::UnicodeSet&& get_uset(string radical)   
 Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
  
-* **RadicalValuesEnumerator**:  
+ * **RadicalValuesEnumerator:**  
 
 **Data Structure**  
 1. std::vector&lt;<string&gt;> radical_list    
@@ -43,10 +43,10 @@ Search for the results
 ### radicalgrep.cpp  
 
 #### This file is the top-level running file, the running process is:  
-    Get the input and the file you want to search ->
-    Analyze the input to get the corresponding radical UnicodeSet -> 
-    Search the result in each file -> 
-    Output and highlight the result     
+        Get the input and the file you want to search ->
+        Analyze the input to get the corresponding radical UnicodeSet -> 
+        Search the result in each file -> 
+        Output and highlight the result     
 
 **Data Structure**  
 1. static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options")  
