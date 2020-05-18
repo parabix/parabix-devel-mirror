@@ -40,18 +40,20 @@ Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
 ### radicalgrep.cpp  
 
 #### This file is the top-level running file, the running process is:  
-    Get the input and the file you want to search -> Analyze the input to get the   corresponding radical UnicodeSet -> Search the result in each file -> Output and   highlight the result   
+    Get the input and the file you want to search -> Analyze the input to get the
+    corresponding radical UnicodeSet -> Search the result in each file -> Output and
+    highlight the result     
 
 **Data Structure**  
-   1. static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options")  
-   The command line  
-   2. static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags))  
-   The input  radical(s)  
-   3. static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags))  
-   The files you want to search   
-   4. std::vector<fs::path> allfiles  
-   Store all path of files  
-   **Function** 
+1. static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options")  
+The command line  
+2. static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags))  
+The input  radical(s)  
+3. static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags))  
+The files you want to search   
+4. std::vector<fs::path> allfiles  
+Store all path of files  
+  **Function**  
    1. std::vector<re::RE*> generateREs(std::string input_radical)  
    This function parse the input and get the results  
    2. setColoring()  
