@@ -18,7 +18,7 @@ It is used to define the corresponding functions and variables related to radica
 
 * UnicodeSetTable:   
 **Data Structure**   
-static map&lt;<string, const UCD::UnicodeSet*&gt;> radical_table  
+static map&lt;string, const UCD::UnicodeSet*&gt; radical_table  
 The map list all kinds of radicals and their corresponding UnicodeSet prodefined in kRSKangXi.h  
  **Function**  
 const UCD::UnicodeSet&& get_uset(string radical)   
@@ -31,11 +31,11 @@ Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
 2. int radical_num 
   Store the number of input radical(s)  
 
-	**Function**  
-    1.   void parse_input(string input_radical)  
-    Parse the input "r1_r2_" or "r0_", disassemble the input radical(s) and store it (them) in vector  
-    2. std::vector&lt;<re::RE*&gt;> createREs()  
-    Search for the results
+**Function**  
+1.   void parse_input(string input_radical)  
+Parse the input "r1_r2_" or "r0_", disassemble the input radical(s) and store it (them) in vector  
+2. std::vector&lt;re::RE*&gt; createREs()  
+Search for the results
 
 ### radicalgrep.cpp  
 
@@ -48,15 +48,15 @@ Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
 **Data Structure**  
 1. static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options")  
 The command line  
-2. static cl::opt&lt;<std::string&gt;> input_radical(cl::Positional, cl::desc("&lt;<Radical Index&gt;>"), cl::Required, cl::cat(radicalgrepFlags))  
+2. static cl::opt&lt;std::string&gt; input_radical(cl::Positional, cl::desc("&lt;Radical Index&gt;"), cl::Required, cl::cat(radicalgrepFlags))  
 The input  radical(s)  
-3. static cl::list&lt;<std::string&gt;> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags))  
+3. static cl::list&lt;std::string&gt; inputfiles(cl::Positional, cl::desc("&lt;Input File&gt;"), cl::OneOrMore, cl::cat(radicalgrepFlags))  
 The files you want to search   
-4. std::vector&lt;<fs::path&gt;> allfiles  
+4. std::vector&lt;fs::path&gt; allfiles  
 Store all path of files  
 
 **Function**  
-1. std::vector&lt;<re::RE*&gt;> generateREs(std::string input_radical)  
+1. std::vector&lt;re::RE*&gt; generateREs(std::string input_radical)  
 This function parse the input and get the results  
 2. setColoring()  
 Defined in file grep_engine, Get result highlight  
