@@ -1,6 +1,6 @@
 # README-radicalgrep
 
-Radical Grep is a tool built off of the icgrep engine. It searches for the given Chinese radicals, and returns the phrase(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
+Radical Grep is a tool built off of the icgrep. It searches for the given Chinese radicals, and returns the phrase(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
 
 For more information on the Kangxi Radical System, please visit: https://en.wikipedia.org/wiki/Kangxi_radical or https://www.yellowbridge.com/chinese/radicals.php
 
@@ -35,11 +35,11 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 ## **Iteration 2: Radical Count & Grep Implementation**
 
-In the second iteration, Radical Grep takes actual Kangxi radical(s) as input (e.g. 子_ or 氵_子_). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
+In the second iteration, Radical Grep can take Kangxi radical character(s) as input (e.g. 子_ or 氵_子_). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
 
 Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/tools/wc/radical_count/README-radicalcount.md "README-radical-count").
 
-## Iteration 2 Milestones
+## Changelog
 
 ### Radical Grep Version 2.1.0 
 * Radical Grep takes the Kangxi radical indices (e.g. 85_85_ as 氵_氵_) as input. 
