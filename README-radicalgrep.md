@@ -1,6 +1,6 @@
 # README-radicalgrep
 
-Radical Grep is a tool built off of the icgrep. It searches for the given Chinese radicals, and returns the phrase(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
+Radical Grep is a tool built off of the icgrep. It searches for the given Chinese radicals, and returns the sentence(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
 
 For more information on the Kangxi Radical System, please visit: https://en.wikipedia.org/wiki/Kangxi_radical or https://www.yellowbridge.com/chinese/radicals.php
 
@@ -20,7 +20,7 @@ For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.
 
 ## **Iteration 1: Hard-Coding the Testcases into the Program**
 
-In the first iteration, Radical Grep takes in pre-programmed inputs and returns the phrase with the corresponding radicals.
+In the first iteration, Radical Grep takes in pre-programmed inputs and returns the sentence(s) with the corresponding pattern.
 
  ## Example 1
 
