@@ -7,6 +7,8 @@
 		radical_interface.cpp
 		radicalgrep.cpp
 		CMakeLists.txt
+#### kRSKangXi.h
+We generate this header file by `unihan_properties.py` in [unihan-scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/delta-radicalgrep/unihan-scripts) . Also, `unihan_parser.py`, `unihan_config`, `cformat.py`, `unicode_set.py` are all needed.  
 ## Important Data Structure and Algorithm
 ### radical_interface.h & radical_interface.cpp
 **namespace:**  `BS`  
