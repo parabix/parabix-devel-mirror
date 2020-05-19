@@ -76,6 +76,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
     部首分类也是使用汉**字**之文化圈少数的共通点
     部首检**字**也有其局限性，许多汉**字**难以归部
     偏旁是从造**字**构形的角度定义的
+
     这是采用“两分法”对汉**字**进行结构分析得出的认识
     由于汉**字**结构复杂，许多汉**字**并不是左右结构的
     排列在一起，并把这种排**字**方法叫做“分别部居”
@@ -87,6 +88,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test3
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
     部首检字也有其局限性，许多**汉字**难以归部
+
     部首分類也是使用**漢字**之文化圈少數的共通點
     部首檢字也有其局限性，許多**漢字**難以歸部
     
@@ -99,6 +101,11 @@ Plans for iteration 3 include:
 2. Add more functions/command line flags.
 3. Given a radical pattern consisting of traditional radicals and a file in simplified Chinese, make Radical Grep find the equivalent characters.  
 
+
+## **References**
+* [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
+* Unihan Database (Unihan.zip)
+* [UCD-Scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/UCD-scripts) was used in [unihan-scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/delta-radicalgrep/unihan-scripts)
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
