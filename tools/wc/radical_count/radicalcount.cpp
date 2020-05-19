@@ -48,6 +48,7 @@ using namespace kernel;
 
 static cl::OptionCategory ucFlags("Command Flags", "Radical Count options");
 
+//CC_expr is the radical expression used and is parsed later on.
 static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical Expression>"), cl::Required, cl::cat(ucFlags));
 
 //  Multiple input files are allowed on the command line; counts are produced
@@ -56,6 +57,7 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<Input File>")
 
 std::vector<fs::path> allFiles;
 
+//input_radical is a variable type that holds the parsed CC_expr later on.
 typedef std::pair<std::string, std::string> input_radical;
 typedef uint64_t (*UCountFunctionType)(uint32_t fd);
 
@@ -105,6 +107,9 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
     return reinterpret_cast<UCountFunctionType>(P->compile());
 }
 
+/* radicalcount1() finds the unicode set for the radical and makes a character class from it.
+A pipeline is generated with pipelineGen(), which is used later in the ucount1() function.dfg*/
+
 UCountFunctionType radicalcount1(std::string radical,CPUDriver & pxDriver, UCountFunctionType uCountFunctionPtr) {
     UCD::KRS_ns::radSet = BS::ucd_radical.get_uset(radical);
     re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::radSet)));
@@ -148,6 +153,7 @@ int main(int argc, char *argv[]) {
     }
     CPUDriver pxDriver("wc");
 
+    /*parse_input() parses CC_expr into a pair data structure, ci.*/
     input_radical ci = parse_input(CC_expr);
 
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
@@ -155,8 +161,10 @@ int main(int argc, char *argv[]) {
 
     UCountFunctionType uCountFunctionPtr1 = nullptr;
     UCountFunctionType uCountFunctionPtr2 = nullptr;
-    int flag = 0;
+    int flag = 0; //A flag is used to mark whether the program is counting for one radical, or two radicals.
 
+    /*If the program is only counting one radical, the second item of the pair is set to 0.
+    In the Kangxi system, there exists no radical with index 0.*/
     if (ci.second == "0") { //single char e.g. 氵_
         uCountFunctionPtr1 = radicalcount1(ci.first, pxDriver, uCountFunctionPtr1);
     } else if (ci.second != "0") { // e.g. 氵_子_
@@ -165,11 +173,14 @@ int main(int argc, char *argv[]) {
         flag = 1;
     }
 
+    //theCounts1 & 2 will hold the count for radical one and radical two, for each file. 
     std::vector<uint64_t> theCounts1;
     std::vector<uint64_t> theCounts2;
     
     theCounts1.resize(fileCount);
     theCounts2.resize(fileCount);
+
+    //totalCount1 & 2 adds up the occurences from each file in theCounts1 & 2.
     uint64_t totalCount1 = 0;
     uint64_t totalCount2 = 0;
 
@@ -183,24 +194,25 @@ int main(int argc, char *argv[]) {
         }
     }
     
+    //These lines are just for formatting output.
     const int defaultDisplayColumnWidth = 7;
     int displayColumnWidth = std::to_string(totalCount1).size() + 1;
     if (displayColumnWidth < defaultDisplayColumnWidth) displayColumnWidth = defaultDisplayColumnWidth;
     
-    //output
+    //Printing out the output.
     for (unsigned i = 0; i < fileCount; ++i) {
         if (fileCount != 1) std::cout << "File " << i << ":" << std::endl;
         std::cout << std::setw(displayColumnWidth);
         std::cout << ci.first << ": " << theCounts1[i] << std::setw(displayColumnWidth);
         std::cout << " " << allFiles[i].string() << std::endl;
-        if (flag) {
+        if (flag) { //Print the count of the second radical, if flag.
             std::cout << std::setw(displayColumnWidth);
             std::cout << ci.second << ": " << theCounts2[i] << std::setw(displayColumnWidth);
             std::cout << " " << allFiles[i].string() << std::endl;           
         }
     } 
 
-    //multi-file input
+    //If more than one filepath was provided, then the program will provide the total count for each radical.
     if (inputFiles.size() > 1) {
         std::cout << std::endl;
         std::cout << std::setw(displayColumnWidth-1);

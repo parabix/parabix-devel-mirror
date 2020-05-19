@@ -52,4 +52,7 @@ This function finds the requested unicode set for the inputted radical, from `ra
 `parse_input()`:
 This function parses the inputted radical expression (e.g. 氵_ or 氵_子_ ) and stores it in a variable of type `input_radical`, which is predefined to represent a pair data structure. In `radicalcount.cpp`, `ci` is used to hold the parsed expression.
 
+**Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
+
+**Last Updated:** 2020/05/18
 

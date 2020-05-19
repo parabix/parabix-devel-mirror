@@ -24,9 +24,12 @@ namespace BS
     class UnicodeSetTable
     {   
         public:
+        /*get_set() finds the requested unicode set for the inputted radical.*/
             const UCD::UnicodeSet&& get_uset(string radical)
             {   
-                //For radical index input (e.g. 85_)
+                /*The code below is for using the Kangxi radical indices.
+                 It will be re-implemented in a future iteration.*/
+
                 /*if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                     return std::move(*_unicodeset_radical_table[radical]);
                 else
@@ -38,10 +41,13 @@ namespace BS
                     return std::move(UCD::UnicodeSet());
             }
         private:
+        /*These maps contain the parsed radical expression key, which is mapped to their respective unicode set.
+        _unicodeset_radical_table uses the index number as the key, while radical_table uses the radical character.*/
             static map<string, const UCD::UnicodeSet*> _unicodeset_radical_table;
             static map<string, const UCD::UnicodeSet*> radical_table;
     };
 
+    //ucd_radical is a functor. It is used to invoke get_uset() in radicalcount1().
     static UnicodeSetTable ucd_radical;
 }
 
