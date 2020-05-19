@@ -52,14 +52,14 @@ using namespace pablo;
 using namespace kernel;
 using namespace codegen;
 
-static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options");
+static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options"); //The command line
 
-static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags));
+static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags));    //The input  radical(s)
 static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));
 //search for multiple input files are supported
-std::vector<fs::path> allfiles;
+std::vector<fs::path> allfiles; //Store all path of files
 
-std::vector<re::RE*> generateREs(std::string input_radical);
+std::vector<re::RE*> generateREs(std::string input_radical);    //This function parse the input and get the results
 
 int main(int argc, char* argv[])
 {
@@ -75,11 +75,11 @@ int main(int argc, char* argv[])
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto radicalREs=generateREs(input_radical); //get the results
-    grep->setColoring();    //highlight the result
-    grep->initFileResult(allfiles);
-    grep->initREs(radicalREs);
-    grep->grepCodeGen();
-    const bool matchFound=grep->searchAllFiles();
+    grep->setColoring();    //Defined in file grep_engine, Get result highlight
+    grep->initFileResult(allfiles); //Defined in file grep_engine, Initialize results of each file
+    grep->initREs(radicalREs);  //Defined in file grep_engine, Initialize the output
+    grep->grepCodeGen();    //Return the number of the result
+    const bool matchFound=grep->searchAllFiles();   //Return if there have found any result, if yes, return true, else return false
     if(matchFound==false)   //if there does not exist any results
         cout<<"Can not find the results!"<<endl;
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
 std::vector<re::RE*> generateREs(std::string input_radical)
 {
     BS::RadicalValuesEnumerator en_rad;
-    en_rad.parse_input(input_radical);
+    en_rad.parse_input(input_radical);  //parse the input 
     return en_rad.createREs();
 }
 

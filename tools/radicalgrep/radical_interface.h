@@ -29,7 +29,7 @@ namespace BS
     class UnicodeSetTable
     {   
         public:
-            const UCD::UnicodeSet&& get_uset(string radical)
+            const UCD::UnicodeSet&& get_uset(string radical)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
             {
                 /*if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                     return std::move(*_unicodeset_radical_table[radical]);
@@ -43,7 +43,7 @@ namespace BS
             }
         private:
             static map<string, const UCD::UnicodeSet*> _unicodeset_radical_table;
-            static map<string, const UCD::UnicodeSet*> radical_table;
+            static map<string, const UCD::UnicodeSet*> radical_table;   //The map list all kinds of radicals and their corresponding UnicodeSet prodefined in kRSKangXi.h
     };
 
     static UnicodeSetTable ucd_radical;
@@ -51,11 +51,11 @@ namespace BS
     class RadicalValuesEnumerator
     {
         public:
-            std::vector<re::RE*> createREs();
-            void parse_input(string input_radical);
+            std::vector<re::RE*> createREs();   //Search for the results
+            void parse_input(string input_radical); //Parse the input "r1_r2_" or "r0_", disassemble the input radical(s) and store it (them) in vector
         private:
-            std::vector<string> radical_list;
-            int radical_num;
+            std::vector<string> radical_list;   //Store the input radical(s)
+            int radical_num;    //Store the number of input radical(s)
     };
 }
 
