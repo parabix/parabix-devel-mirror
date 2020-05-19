@@ -1,8 +1,8 @@
 Pinyin Grep
 ===========
-This is a grep tool, using Chinese pinyin to "grep" corresponding Chinese characters/phases.  
+This is a grep tool, using Chinese pinyin to "grep" lines with corresponding Chinese characters/phases in a list of files.  
 It can also support simple regular-expression-like features, like:
-`pinyingrep <regex> <file>`
+`pinyingrep <regex> <file list>`
 See below for more examples.  
 
 How to Test Pinyin Grep
@@ -23,7 +23,7 @@ Second Iteration
 ----------------
 In the second iteration, we will implement **pinyingrep** version 1.0 with input parsing. In this version, **pinyingrep** is supposed to handle general regex-like pinyin syllables as input. The implementation of grep functionality is based on grep engine provided by parabix framework. We specified the requirement of our second iteration as follows:
 ### Functionality
-#### Pinyin syllables without tones specified
+#### 1. Pinyin syllables without tones specified
 **Pinyingrep** supports pinyin syllables in alphabetic characters without tones sepcified.
 > e.g. `zhong` or `gao`
 >
@@ -33,18 +33,18 @@ With such a form of input syllables, pinyingrep will 'grep' lines with Chinese c
 readings specified by the pinyin syllables in all five tones(Tone `1-4` as well as Qingsheng/Soft/Neutral)
 For instance, the result of grepping `zhong` is equivalent to those of grepping `zhong0`(Qingsheng), `zhong1`, `zhong2`, `zhong3` and `zhong4`.
 
-#### Pinyin syllables with tones specified by numbers
+#### 2. Pinyin syllables with tones specified by numbers
 **Pinyingrep** supports pinyin syllables with tones specified by Arabic numbers(`0-4`).
 > e.g. `zhong1` or `zho1ng`
 >
 We define that`0` indicates the reading is in `Qingsheng`.
-#### Pinyin syllables with tones specified by toned characters in unicode
+#### 3. Pinyin syllables with tones specified by toned characters in unicode
 **Pinyingrep** supports pinyin syllables with tones specified by toned characters in unicode, 
 more specifically, latin characters like `ǎ` or `ō`.
 > e.g. `xuǎn` or `xiōng`
 >
 Toned unicode syllables like `xuǎn` is equivalent to corresponding syllables with tones specified by Arabic numbers.
-#### Regular-expression-like pinyin syllables with `.`
+#### 4. Regular-expression-like pinyin syllables with `.`
 **Pinyingrep** supports regular-expression-like pinyin syllables with `.`.
 > e.g. `zh.ng` or `x..ng`
 >
@@ -52,18 +52,19 @@ Similar to normal regular expressions, `.` represent arbitrary **alphabetic** ch
 But only legal pinyin syllables in the database will be considered by **pinyingrep**. 
 > e.g. `x..ng` to `xiong`, `xiang`, and etc.
 >
-#### Regular-expression-like pinyin syllables with `?` after "g"
+#### 5. Regular-expression-like pinyin syllables with `?` after "g"
 **Pinyingrep** supports pinyin syllables with `?` after alphabetic character `g`.
 > e.g. `zhang?`
 >
 The question mark indicates that both readings with `g` and without `g` are wanted as input.
 
-#### Sequences of pinyin syllables mentioned above
+#### 6. Sequences of pinyin syllables mentioned above
 **Pinyingrep** supports sequences of the above legal syllables of arbitrary length.
 > e.g. `zh.ng yao4` 
 >
 Any sequence of Chinese characters with readings matching the input sequences will be in result.
-
+#### 7. Grep from a list of files
+**Pinyingrep** supports one or more files as source files to grep from.
 ### Testcases
 The following testcases give example about the functionality of **pinyingrep**.
 #### 1. Simple Pinyin Inputs 
@@ -134,6 +135,7 @@ The following testcases give example about the functionality of **pinyingrep**.
 4. Regular-expression-like pinyin syllables with `.` e.g. `zh.ng`
 5. Regular-expression-like pinyin syllables with `?` after "g" e.g. `zhang?`
 6. Sequences of pinyin syllables above, e.g. `zhong yao4`
+7. Grep from a list of files
 
 **Pinyingrep** version 1.0  removes support of:
 1. Extra empty space between sequences of pinyin syllables(in this version, pinyingrep considers one or more empty space to be equivalent separator).
