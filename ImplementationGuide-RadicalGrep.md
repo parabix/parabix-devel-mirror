@@ -71,3 +71,7 @@ Defined in file grep_engine, Initialize the output
 Return the number of the result  
 6. searchAllFiles()  
 Return if there have found any result, if yes, return true, else return false  
+
+**Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
+
+**Last Updated:** 2020/05/15
