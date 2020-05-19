@@ -29,7 +29,7 @@ Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
  * **RadicalValuesEnumerator:**  
 
 **Data Structure**  
-1. std::vector&lt;<string&gt;> radical_list    
+1. std::vector&lt;string&gt; radical_list    
    Store the input radical(s)  
 2. int radical_num 
   Store the number of input radical(s)  
