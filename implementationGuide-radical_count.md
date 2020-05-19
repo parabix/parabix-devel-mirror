@@ -41,7 +41,7 @@ The `radical_interface` files defines the namespace `BS` and its members, which 
 Members of class `UnicodeSetTable`:
 
 * `map<string, const UCD::UnicodeSet*> _unicodeset_radical_table`: 
-This map lists all 214 Kangxi radical sets and their respective keys. The key of each set is the Kangxi radical index, and the value is the corresponding unicode set. This is not used in the current iteration, but will be implemented later on.
+This map lists all 214 Kangxi radical sets and their respective keys. The key of each set is the Kangxi radical index, and the value is the corresponding unicode set (retrieved from [kRSKangXi.h](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/include/unicode/data/kRSKangXi.h)). This is not used in the current iteration, but will be implemented later on. 
 
 * `map<string, const UCD::UnicodeSet*> radical_table`:
 Instead of using a numeric key, the actual Kangxi radical is used and mapped to their corresponding values. Note that one unicode set may belong to different radicals (e.g. 水 and 氵both map to set 85).
