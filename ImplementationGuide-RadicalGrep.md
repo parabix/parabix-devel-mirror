@@ -74,4 +74,4 @@ Return if there have found any result, if yes, return true, else return false
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/15
+**Last Updated:** 2020/05/18
