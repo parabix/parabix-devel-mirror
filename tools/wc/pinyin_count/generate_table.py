@@ -17,9 +17,9 @@ for syllable in legal:
         test="    const static UnicodeSet::run_t __"+syllable+x+"_Set_runs[] = {\n"
         if test in lines:
             #< <jing,1>, &jing_Set[1] >
-            temp=('{make_pair("'+syllable+'",'+x+"),&"+syllable+"_Set["+x+"]}")
+            temp=('{make_pair("'+syllable+'",'+x+"),&KPY::"+syllable+"_Set["+x+"]}")
             temp+=","
-            table.append(temp.ljust(40))
+            table.append(temp.ljust(45))
 
 #get rid of last comma
 table[-1]=table[-1].strip(' ')
@@ -27,6 +27,8 @@ table[-1]=table[-1][:-1]
 
 
 count=0
+indent = " " * 4
+output.write(indent)
 for entry in table:
     if entry==table[-1]:
         output.write(entry)
@@ -34,7 +36,7 @@ for entry in table:
     output.write(entry)
     count+=1
     if (count>=6):
-        output.write('\n')
+        output.write('\n'+indent)
         count=0
 
 output.close()
