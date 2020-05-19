@@ -2,6 +2,10 @@
 
 Radical Grep is a tool built off of the icgrep. It searches for the given Chinese radicals, and returns the sentence(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
 
+
+## **Introduction**
+The 214 Kangxi radicals are sorted in increasing order by stroke count. Originally introduced in 1615, many modern Chinese dictionaries still use the Kangxi system. In our program, we used the Unihan `kRSKangxi` property to generate Unicode sets for all 214 radicals. One important key to note is that some radicals may have the same index. For instance, characters 火 and 灬 are both the 86th radical of the dictionary and would map to the same Unicode set. Thus, 灯 and 点 would be characters in the same set.
+
 For more information on the Kangxi Radical System, please visit: https://en.wikipedia.org/wiki/Kangxi_radical or https://www.yellowbridge.com/chinese/radicals.php
 
 ## **Installation**
@@ -25,11 +29,13 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
  ## Example 1
 
     Input:  亻_心_ ../QA/radicaltest/testfiles/test1
+    
     Output: 以下是一些关于部首分类的信息
 
 ## Example 2
 
     Input:  氵_宀_ ../QA/radicaltest/testfiles/test1
+    
     Output: 这是采用“两分法”对汉字进行结构分析得出的认识
 
 
@@ -54,6 +60,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 ## Example 1: Single Radical Input
 
     Input: 子_ ../QA/radicaltest/testfiles/test1
+    
     Output: 这是一个简单的例**子**
     部首分类也是使用汉**字**之文化圈少数的共通点
     部首检字也有其局限性，许多汉**字**难以归部
@@ -61,17 +68,20 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 ## Example 2: Radical Phrase Input
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1
+    
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
     部首检字也有其局限性，许多**汉字**难以归部
    
 ## Example 3: Radical Pattern Not Found in File 
 
     Input: 子_子_ ../QA/radicaltest/testfiles/test1
+    
     Output: Can not find the results!
     
 ## Example 4: Single Radical Input in Multiple Files
 
     Input: 子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test2
+    
     Output: 这是一个简单的例**子**
     部首分类也是使用汉**字**之文化圈少数的共通点
     部首检**字**也有其局限性，许多汉**字**难以归部
@@ -86,6 +96,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 ## Example 5: Radical Phrase Input in in Multiple Files
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test3
+    
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
     部首检字也有其局限性，许多**汉字**难以归部
 
@@ -109,4 +120,4 @@ Plans for iteration 3 include:
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/18
+**Last Updated:** 2020/05/19
