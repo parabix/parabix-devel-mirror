@@ -16,6 +16,8 @@ To run Radical Grep, run the following commands in the bin directory:
 
     ./radicalgrep <Radical Expression> <Path of Input File>
 
+For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/QA/radicaltest/radicaltest.xml).
+
 ## **Iteration 1: Hard-Coding the Testcases into the Program**
 
 In the first iteration, Radical Grep takes in pre-programmed inputs and returns the phrase with the corresponding radicals.
@@ -33,41 +35,41 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 ## **Iteration 2: Radical Count & Grep Implementation**
 
-In the second iteration, Radical Grep takes actual Kangxi radical(s) as input (e.g. "子_" or " 氵_子_"). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
+In the second iteration, Radical Grep takes actual Kangxi radical(s) as input (e.g. 子_ or 氵_子_). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
 
 Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/tools/wc/radical_count/README-radicalcount.md "README-radical-count").
 
 ## Iteration 2 Milestones
 
 ### Radical Grep Version 2.1.0 
-* Radical Grep takes the Kangxi radical indices (e.g. "85_85_" as 氵_氵_) as input. 
+* Radical Grep takes the Kangxi radical indices (e.g. 85_85_ as 氵_氵_) as input. 
 * Radical Grep supports multi-file search.
 ### Radical Grep Version 2.1.1
 * Output added for the case where no match is found.
 ### Radical Grep Version 2.2.0
-* Functionality to perform the search using the actual radicals (e.g. "氵_氵_") and not the Kangxi indices is added. 
+* Functionality to perform the search using the actual radicals (e.g. 氵_氵_) and not the Kangxi indices is added. 
 ### Radical Grep Version 2.2.1 
-* Functionality for single radicals (e.g. "氵_") is now supported.
+* Functionality for single radicals (e.g. 氵_) is now supported.
 
-## Example 1
+## Example 1: Single Radical Input
 
     Input: 子_ ../QA/radicaltest/testfiles/test1
     Output: 这是一个简单的例**子**
     部首分类也是使用汉**字**之文化圈少数的共通点
     部首检字也有其局限性，许多汉**字**难以归部
     
-## Example 2
+## Example 2: Radical Phrase Input
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
     部首检字也有其局限性，许多**汉字**难以归部
    
-## Example 3
+## Example 3: Radical Pattern Not Found in File 
 
     Input: 子_子_ ../QA/radicaltest/testfiles/test1
     Output: Can not find the results!
     
-## Example 4
+## Example 4: Single Radical Input in Multiple Files
 
     Input: 子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test2
     Output: 这是一个简单的例**子**
@@ -80,7 +82,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
     每“部”第一个**字**就是“部首”
     可见，部首也是偏旁，是用来作为排列和检索汉**字**依据的特殊“偏旁”
 
-## Example 5
+## Example 5: Radical Phrase Input in in Multiple Files
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test3
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
@@ -95,8 +97,9 @@ Plans for iteration 3 include:
 
 1. Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.
 2. Add more functions/command line flags.
+3. Given a radical pattern consisting of traditional radicals and a file in simplified Chinese, make Radical Grep find the equivalent characters.  
 
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/15
+**Last Updated:** 2020/05/18
