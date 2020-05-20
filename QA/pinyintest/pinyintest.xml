@@ -10,38 +10,53 @@
 种药的人觉得现在卖不出好价钱，
 所以把筐子中要卖的药都烧了。
 我是练习时长两年半的练习生cxk，
-我喜欢唱，跳，rap，篮球，music！
+不喜欢绿色，
+我喜欢旅行,唱，跳，rap，篮球，music！
 </datafile>
 
 <grepcase regexp="zhong wen" datafile="simple_pinyin" greplines="3 4"/>
 <grepcase regexp="zhong yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
 <grepcase regexp="lian xi" datafile="simple_pinyin" greplines="8 11"/>
 
-
 <grepcase regexp="zhong1 yao4" datafile="simple_pinyin" greplines="6 10"/>
-<grepcase regexp="zhong4 yao4" datafile="simple_pinyin" greplines="5 9"/>
+<grepcase regexp="zho4ng yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
 <grepcase regexp="zhōng" datafile="simple_pinyin" greplines="3 4 6 10"/>
-<grepcase regexp="zhòng" datafile="simple_pinyin" greplines="5 7 9"/>
+<grepcase regexp="zhòng" datafile="simple_pinyin" greplines="3 4 5 6 7 9 10"/>
+
+<grepcase regexp="lü" datafile="simple_pinyin" greplines="12 13"/>
+<grepcase regexp="lǜ" datafile="simple_pinyin" greplines="12"/>
+<grepcase regexp="lv" datafile="simple_pinyin" greplines="12 13"/>
+<grepcase regexp="lv3" datafile="simple_pinyin" greplines="13"/>
 
 
 <datafile id = "test2">
 我名字叫小明,家里在上海。
 今年十二岁。
 我的叔叔是盲的，今天我要忙着带他去看医生。
-我家里有一只猫。
-它一秒会发喵喵的声音，一秒会睡觉。
-明天我会去打篮球。
+我家里有一只猫很矜持也很凶。
+它一秒会发喵喵的声音，一秒会睡觉，真是惊人。
+饿死了，明天我想去打篮球。
 我有个梦想做医生。
-看了我叔叔收到的歧视，我想帮盲人。
-不仅是我的亲人。
+看了我叔叔受到的歧视，我想帮盲人。
+不仅是选择我的亲人。
 虽然他们不能康复，但可以变更好。
+我会给他们买花,
+也会个他们钱花，
+可惜他们乱用钱呼啊呼啊的。
 </datafile>
 
 <grepcase regexp="m.ng" datafile="test2" greplines="2 4 7 8 9"/>
-<grepcase regexp="sh.ng" datafile="test2" greplines="2 4 8"/>
+<grepcase regexp="sh.ng" datafile="test2" greplines="2 4 6 8"/>
 <grepcase regexp="b.ng" datafile="test2" greplines="9"/>
-<grepcase regexp="qing?" datafile="test2" greplines="10"/>
-<grepcase regexp="kang?" datafile="test2" greplines="9 11"/>
-<grepcase regexp="meng?" datafile="test2" greplines="8 11"/>
+<grepcase regexp="x..ng" datafile="test2" greplines="5 7 8 9"/>
+
+<grepcase regexp="qing?" datafile="test2" greplines="5 10"/>
+<grepcase regexp="kang?" datafile="test2" greplines="4 9 11"/>
+<grepcase regexp="jing?" datafile="test2" greplines="3 4 5 6 10"/>
+
+<grepcase regexp="xuǎn" datafile="test2" greplines="10"/>
+<grepcase regexp="hu a" datafile="test2" greplines="14"/>
+<grepcase regexp="hua" datafile="test2" greplines="12 13"/>
+<grepcase regexp="e" datafile="test2" greplines="7"/>
 
 </greptest>
