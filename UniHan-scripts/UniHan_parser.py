@@ -69,13 +69,16 @@ def parse_pinyins(pinyins):
     return pinyin_list   
 
 Field_Pattern = re.compile(r"\d*\.\d*:(.*?)\s")
-def parse_fields(fields):
+def parse_fields(fields, field_name):
     fields = fields + " " # make re work properly for all fields
     pinyin_list = []
-    field_list = Field_Pattern.findall(fields)
-    for field in field_list:
-        pinyin_list.extend(parse_pinyins(field))
-
+    if(field_name == "kHanyuPinyin" or field_name == "kXHC1983"):
+        field_list = Field_Pattern.findall(fields)
+        for field in field_list:
+            pinyin_list.extend(parse_pinyins(field))
+    else:
+        # kMandarin
+        pinyin_list.extend(parse_pinyins(fields.strip())) 
     # remove duplicated ones
     res_list = []
     for syllable_dict in pinyin_list:
@@ -83,7 +86,9 @@ def parse_fields(fields):
             res_list.append(syllable_dict)
     return res_list
 
-KPY_Pattern = re.compile(r"U\+(\w+?)\s+kHanyuPinyin\s+(.+)")
+KPY_Pattern = re.compile(r"U\+(\w+?)\s+(kHanyuPinyin)\s+(.+)")
+KXHC_Pattern = re.compile(r"U\+(\w+?)\s+(kXHC1983)\s+(.+)")
+KMandarin_Pattern = re.compile(r"U\+(\w+?)\s+(kMandarin)\s+(.+)")
 
 def parse_Reading_txt(f, property_code):
     # replace the utility of property object
@@ -93,18 +98,26 @@ def parse_Reading_txt(f, property_code):
     value_map = {} # value_map is from value name to corresponding unicode set
                    # each key match a value or value array
     lines = f.readlines()
-    if(property_code == 'kpy'):
+    if(property_code == 'kpy' or property_code == 'kxhc'):
         # parse KHanyuPinyin
         # prop_values contains all syllable without tones
         # value map use syllable without tones as keys, 
         # and corresponding values are 5-element lists from 0(no tone) to 4
         for line in lines:
-            match_obj = KPY_Pattern.match(line)
+            match_obj = None
+            if(property_code == 'kpy'):
+                match_obj = KPY_Pattern.match(line)
+                # kHanyuPinyin need to work with kMandarin
+                if(match_obj is None):
+                    match_obj = KMandarin_Pattern.match(line)
+            else:
+                match_obj = KXHC_Pattern.match(line)
             if(match_obj is not None):
                 parsed_property = {}
                 codepoint = match_obj.group(1)
-                fields = match_obj.group(2)
-                pinyin_list = parse_fields(fields)
+                field_name = match_obj.group(2)
+                fields = match_obj.group(3)
+                pinyin_list = parse_fields(fields, field_name)
 
                 parsed_property["codepoint"] = codepoint
                 parsed_property["pinyin"] = pinyin_list
@@ -122,7 +135,7 @@ def parse_Reading_txt(f, property_code):
                         value_map[syllable][tone] = singleton_uset(int(codepoint, 16))
                     else:
                         value_map[syllable][tone] = uset_union(value_map[syllable][tone],
-                                                                singleton_uset(int(codepoint, 16)))
+                                                              singleton_uset(int(codepoint, 16)))
 
     independent_prop_values = len(prop_values)
     return (prop_values, independent_prop_values, value_map)
@@ -136,7 +149,7 @@ def parse_property_file(filename_root, property_code):
                    # each key match a value or value array
     f = open(UniHan_config.UniHan_src_dir + '/' + filename_root + '.txt')
 
-    if(property_code == "kpy"):
+    if(property_code == "kpy" or property_code == "kxhc"):
         prop_values, independent_prop_values, value_map = parse_Reading_txt(f, property_code)
     
     return (prop_values, independent_prop_values, value_map)

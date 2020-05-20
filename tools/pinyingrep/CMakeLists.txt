@@ -6,6 +6,15 @@ parabix_add_executable(
 NAME
     pinyingrep
 SRC
+    kpy_unicodeset_table.cpp 
+    kxhc_unicodeset_table.cpp
     pinyingrep.cpp
-
+    pinyin_interface.cpp
+DEPS 
+    fileselect
+    grep
+    kernel.basis
+    kernel.io
+    re.cc
+    re.parse
 )
