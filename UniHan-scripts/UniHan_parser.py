@@ -78,7 +78,7 @@ def parse_fields(fields, field_name):
             pinyin_list.extend(parse_pinyins(field))
     else:
         # kMandarin
-        pinyin_list.extend(parse_pinyins(fields.strip())) 
+        pinyin_list.extend(parse_pinyins(fields.strip().split(" ")[0])) 
     # remove duplicated ones
     res_list = []
     for syllable_dict in pinyin_list:

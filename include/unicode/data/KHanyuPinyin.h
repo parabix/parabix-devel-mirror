@@ -16,7 +16,7 @@
 
 namespace UCD {
   namespace KPY_ns {
-    const unsigned independent_prop_values = 460;
+    const unsigned independent_prop_values = 424;
     /** Code Point Ranges for qiu1
     [3400, 3400], [36b1, 36b1], [3ccb, 3ccb], [418b, 418b], [4410, 4410],
     [4813, 4813], [4a02, 4a02], [4c78, 4c78], [4ca1, 4ca1], [4e18, 4e18],
@@ -5406,20 +5406,20 @@ namespace UCD {
 
     /** Code Point Ranges for feng3
     [47ea, 47ea], [4a6c, 4a6c], [552a, 552a], [6cdb, 6cdb], [8982, 8982],
-    [8af7, 8af7], [98a8, 98a8], [221eb, 221eb], [269c1, 269c1],
-    [292ee, 292ee], [2a403, 2a403]**/
+    [8af7, 8af7], [8bbd, 8bbd], [98a8, 98a8], [221eb, 221eb],
+    [269c1, 269c1], [292ee, 292ee], [2a403, 2a403]**/
 
 
     namespace {
     const static UnicodeSet::run_t __feng3_Set_runs[] = {
     {Empty, 575}, {Mixed, 1}, {Empty, 19}, {Mixed, 1}, {Empty, 85},
     {Mixed, 1}, {Empty, 188}, {Mixed, 1}, {Empty, 229}, {Mixed, 1},
-    {Empty, 10}, {Mixed, 1}, {Empty, 109}, {Mixed, 1}, {Empty, 3145},
-    {Mixed, 1}, {Empty, 574}, {Mixed, 1}, {Empty, 328}, {Mixed, 1},
-    {Empty, 136}, {Mixed, 1}, {Empty, 29407}};
+    {Empty, 10}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 103},
+    {Mixed, 1}, {Empty, 3145}, {Mixed, 1}, {Empty, 574}, {Mixed, 1},
+    {Empty, 328}, {Mixed, 1}, {Empty, 136}, {Mixed, 1}, {Empty, 29407}};
     const static UnicodeSet::bitquad_t  __feng3_Set_quads[] = {
     0x00000400, 0x00001000, 0x00000400, 0x08000000, 0x00000004, 0x00800000,
-    0x00000100, 0x00000800, 0x00000002, 0x00004000, 0x00000008};
+    0x20000000, 0x00000100, 0x00000800, 0x00000002, 0x00004000, 0x00000008};
     }
 
     /** Code Point Ranges for feng4
@@ -5457,7 +5457,7 @@ namespace UCD {
         UnicodeSet(),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__feng1_Set_runs), 143, 0, const_cast<UnicodeSet::bitquad_t *>(__feng1_Set_quads), 77, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__feng2_Set_runs), 55, 0, const_cast<UnicodeSet::bitquad_t *>(__feng2_Set_quads), 29, 0),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__feng3_Set_runs), 23, 0, const_cast<UnicodeSet::bitquad_t *>(__feng3_Set_quads), 11, 0),
+        UnicodeSet(const_cast<UnicodeSet::run_t *>(__feng3_Set_runs), 25, 0, const_cast<UnicodeSet::bitquad_t *>(__feng3_Set_quads), 12, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__feng4_Set_runs), 47, 0, const_cast<UnicodeSet::bitquad_t *>(__feng4_Set_quads), 25, 0)
         };
 
@@ -10238,8 +10238,8 @@ namespace UCD {
     [286d1, 286d1], [28712, 28712], [288b5, 288b5], [288e7, 288e7],
     [294ee, 294ee], [2978a, 2978a], [29949, 29949], [299f1, 299f1],
     [29a5b, 29a5b], [29bf0, 29bf0], [29f04, 29f04], [29f1a, 29f1a],
-    [2a135, 2a135], [2a286, 2a286], [2a625, 2a625], [2cda8, 2cda8],
-    [2cdad, 2cdad]**/
+    [2a135, 2a135], [2a286, 2a286], [2a625, 2a625], [2a7dd, 2a7dd],
+    [2cda8, 2cda8], [2cdad, 2cdad]**/
 
 
     namespace {
@@ -10311,8 +10311,8 @@ namespace UCD {
     {Mixed, 1}, {Empty, 20}, {Mixed, 1}, {Empty, 13}, {Mixed, 1},
     {Empty, 4}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 12}, {Mixed, 1},
     {Empty, 24}, {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 10},
-    {Mixed, 1}, {Empty, 28}, {Mixed, 1}, {Empty, 315}, {Mixed, 1},
-    {Empty, 29074}};
+    {Mixed, 1}, {Empty, 28}, {Mixed, 1}, {Empty, 12}, {Mixed, 1},
+    {Empty, 302}, {Mixed, 1}, {Empty, 29074}};
     const static UnicodeSet::bitquad_t  __ji4_Set_quads[] = {
     0x00000080, 0x00000800, 0x02000000, 0x00000100, 0x00000008, 0x00020000,
     0x00002000, 0x00000020, 0x00002000, 0x00080000, 0x00000100, 0x80000000,
@@ -10351,7 +10351,8 @@ namespace UCD {
     0x10000000, 0x00000200, 0x00008000, 0x40000000, 0x80000008, 0x00000080,
     0x10000000, 0x20000000, 0x00400000, 0x00020200, 0x00040000, 0x00200000,
     0x00000080, 0x00004000, 0x00000400, 0x00000200, 0x00020000, 0x08000000,
-    0x00010000, 0x04000010, 0x00200000, 0x00000040, 0x00000020, 0x00002100};
+    0x00010000, 0x04000010, 0x00200000, 0x00000040, 0x00000020, 0x20000000,
+    0x00002100};
     }
 
     
@@ -10361,7 +10362,7 @@ namespace UCD {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__ji1_Set_runs), 345, 0, const_cast<UnicodeSet::bitquad_t *>(__ji1_Set_quads), 196, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__ji2_Set_runs), 359, 0, const_cast<UnicodeSet::bitquad_t *>(__ji2_Set_quads), 202, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__ji3_Set_runs), 97, 0, const_cast<UnicodeSet::bitquad_t *>(__ji3_Set_quads), 52, 0),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__ji4_Set_runs), 391, 0, const_cast<UnicodeSet::bitquad_t *>(__ji4_Set_quads), 228, 0)
+        UnicodeSet(const_cast<UnicodeSet::run_t *>(__ji4_Set_runs), 393, 0, const_cast<UnicodeSet::bitquad_t *>(__ji4_Set_quads), 229, 0)
         };
 
     /** Code Point Ranges for yu0
@@ -14345,13 +14346,13 @@ namespace UCD {
     [694f, 694f], [6951, 6951], [6ac6, 6ac6], [6b78, 6b78], [72aa, 72aa],
     [777d, 777d], [8475, 8475], [85c8, 85c8], [8637, 8637], [8641, 8641],
     [8770, 8770], [8e29, 8e29], [8ea8, 8ea8], [9035, 9035], [9108, 9108],
-    [9368, 9368], [9377, 9377], [95cb, 95cb], [9804, 9804], [982f, 982f],
-    [9997, 9997], [9a24, 9a24], [9a99, 9a99], [9b41, 9b41], [9bad, 9bad],
-    [202be, 202be], [21324, 21324], [22333, 22333], [2273d, 2273d],
-    [24d6e, 24d6e], [25736, 25736], [26762, 26762], [2735c, 2735c],
-    [27866, 27866], [278a6, 278a6], [28f8e, 28f8e], [28f97, 28f97],
-    [2955c, 2955c], [2982e, 2982e], [29c85, 29c85], [29cb7, 29cb7],
-    [29d49, 29d49], [29e4d, 29e4d], [2a1b4, 2a1b4]**/
+    [9368, 9368], [9377, 9377], [95cb, 95cb], [9697, 9697], [9804, 9804],
+    [982f, 982f], [9997, 9997], [9a24, 9a24], [9a99, 9a99], [9b41, 9b41],
+    [9bad, 9bad], [202be, 202be], [21324, 21324], [22333, 22333],
+    [2273d, 2273d], [24d6e, 24d6e], [25736, 25736], [26762, 26762],
+    [2735c, 2735c], [27866, 27866], [278a6, 278a6], [28f8e, 28f8e],
+    [28f97, 28f97], [2955c, 2955c], [2982e, 2982e], [29c85, 29c85],
+    [29cb7, 29cb7], [29d49, 29d49], [29e4d, 29e4d], [2a1b4, 2a1b4]**/
 
 
     namespace {
@@ -14368,27 +14369,28 @@ namespace UCD {
     {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 8}, {Mixed, 1}, {Empty, 53},
     {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 6},
     {Mixed, 1}, {Empty, 18}, {Mixed, 1}, {Empty, 18}, {Mixed, 1},
-    {Empty, 17}, {Mixed, 2}, {Empty, 10}, {Mixed, 1}, {Empty, 4},
-    {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2},
-    {Mixed, 1}, {Empty, 2871}, {Mixed, 1}, {Empty, 131}, {Mixed, 1},
-    {Empty, 127}, {Mixed, 1}, {Empty, 31}, {Mixed, 1}, {Empty, 305},
-    {Mixed, 1}, {Empty, 77}, {Mixed, 1}, {Empty, 129}, {Mixed, 1},
-    {Empty, 94}, {Mixed, 1}, {Empty, 40}, {Mixed, 1}, {Empty, 1},
-    {Mixed, 1}, {Empty, 182}, {Mixed, 1}, {Empty, 45}, {Mixed, 1},
-    {Empty, 22}, {Mixed, 1}, {Empty, 34}, {Mixed, 2}, {Empty, 4},
-    {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 26}, {Mixed, 1},
-    {Empty, 29426}};
+    {Empty, 5}, {Mixed, 1}, {Empty, 11}, {Mixed, 2}, {Empty, 10},
+    {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 5},
+    {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2871}, {Mixed, 1},
+    {Empty, 131}, {Mixed, 1}, {Empty, 127}, {Mixed, 1}, {Empty, 31},
+    {Mixed, 1}, {Empty, 305}, {Mixed, 1}, {Empty, 77}, {Mixed, 1},
+    {Empty, 129}, {Mixed, 1}, {Empty, 94}, {Mixed, 1}, {Empty, 40},
+    {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 182}, {Mixed, 1},
+    {Empty, 45}, {Mixed, 1}, {Empty, 22}, {Mixed, 1}, {Empty, 34},
+    {Mixed, 2}, {Empty, 4}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 26},
+    {Mixed, 1}, {Empty, 29426}};
     const static UnicodeSet::bitquad_t  __kui2_Set_quads[] = {
     0x00080000, 0x04000000, 0x00000800, 0x00008000, 0x04000000, 0x01000000,
     0x00028000, 0x00000040, 0x00400000, 0x00100000, 0x00000800, 0x02000000,
     0x00100000, 0x00004000, 0x02000000, 0x00000008, 0x00000040, 0x00000040,
     0x00001000, 0x00028000, 0x00000040, 0x01000000, 0x00000400, 0x20000000,
     0x00200000, 0x00000100, 0x00800000, 0x00000002, 0x00010000, 0x00000200,
-    0x00000100, 0x00200000, 0x00000100, 0x00800100, 0x00000800, 0x00000010,
-    0x00008000, 0x00800000, 0x00000010, 0x02000000, 0x00000002, 0x00002000,
-    0x40000000, 0x00000010, 0x00080000, 0x20000000, 0x00004000, 0x00400000,
-    0x00000004, 0x10000000, 0x00000040, 0x00000040, 0x00804000, 0x10000000,
-    0x00004000, 0x00000020, 0x00800000, 0x00000200, 0x00002000, 0x00100000};
+    0x00000100, 0x00200000, 0x00000100, 0x00800100, 0x00000800, 0x00800000,
+    0x00000010, 0x00008000, 0x00800000, 0x00000010, 0x02000000, 0x00000002,
+    0x00002000, 0x40000000, 0x00000010, 0x00080000, 0x20000000, 0x00004000,
+    0x00400000, 0x00000004, 0x10000000, 0x00000040, 0x00000040, 0x00804000,
+    0x10000000, 0x00004000, 0x00000020, 0x00800000, 0x00000200, 0x00002000,
+    0x00100000};
     }
 
     /** Code Point Ranges for kui3
@@ -14478,7 +14480,7 @@ namespace UCD {
     const static std::array<UnicodeSet, 5> kui_Set = {
         UnicodeSet(),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__kui1_Set_runs), 47, 0, const_cast<UnicodeSet::bitquad_t *>(__kui1_Set_quads), 23, 0),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__kui2_Set_runs), 111, 0, const_cast<UnicodeSet::bitquad_t *>(__kui2_Set_quads), 60, 0),
+        UnicodeSet(const_cast<UnicodeSet::run_t *>(__kui2_Set_runs), 113, 0, const_cast<UnicodeSet::bitquad_t *>(__kui2_Set_quads), 61, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__kui3_Set_runs), 51, 0, const_cast<UnicodeSet::bitquad_t *>(__kui3_Set_quads), 25, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__kui4_Set_runs), 105, 0, const_cast<UnicodeSet::bitquad_t *>(__kui4_Set_quads), 58, 0)
         };
@@ -17829,14 +17831,14 @@ namespace UCD {
     [65f6, 65f6], [65f9, 65f9], [6642, 6642], [69af, 69af], [6c41, 6c41],
     [6e5c, 6e5c], [6ea1, 6ea1], [70bb, 70bb], [77f3, 77f3], [793a, 793a],
     [794f, 794f], [7acd, 7acd], [83b3, 83b3], [8494, 8494], [8680, 8680],
-    [8755, 8755], [8b58, 8b58], [8fbb, 8fbb], [9048, 9048], [9250, 9250],
-    [98df, 98e0], [9963, 9963], [9b96, 9b96], [9c23, 9c23], [9ca5, 9ca5],
-    [9f2b, 9f2b], [9f2d, 9f2d], [2097f, 2097f], [20a54, 20a54],
-    [20bf0, 20bf0], [20c34, 20c34], [21017, 21017], [216bc, 216bc],
-    [21af5, 21af5], [21e94, 21e94], [22a1d, 22a1d], [22ed8, 22ed8],
-    [233da, 233da], [239da, 239da], [24e24, 24e24], [251f2, 251f2],
-    [25418, 25418], [26502, 26502], [27139, 27139], [28669, 28669],
-    [2a2a2, 2a2a2]**/
+    [8755, 8755], [8b58, 8b58], [8bc6, 8bc6], [8fbb, 8fbb], [9048, 9048],
+    [9250, 9250], [98df, 98e0], [9963, 9963], [9b96, 9b96], [9c23, 9c23],
+    [9ca5, 9ca5], [9f2b, 9f2b], [9f2d, 9f2d], [2097f, 2097f],
+    [20a54, 20a54], [20bf0, 20bf0], [20c34, 20c34], [21017, 21017],
+    [216bc, 216bc], [21af5, 21af5], [21e94, 21e94], [22a1d, 22a1d],
+    [22ed8, 22ed8], [233da, 233da], [239da, 239da], [24e24, 24e24],
+    [251f2, 251f2], [25418, 25418], [26502, 26502], [27139, 27139],
+    [28669, 28669], [2a2a2, 2a2a2]**/
 
 
     namespace {
@@ -17854,18 +17856,19 @@ namespace UCD {
     {Mixed, 1}, {Empty, 15}, {Mixed, 1}, {Empty, 57}, {Mixed, 1},
     {Empty, 9}, {Mixed, 2}, {Empty, 11}, {Mixed, 1}, {Empty, 70},
     {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 15}, {Mixed, 1}, {Empty, 5},
-    {Mixed, 1}, {Empty, 31}, {Mixed, 1}, {Empty, 34}, {Mixed, 1},
-    {Empty, 4}, {Mixed, 1}, {Empty, 15}, {Mixed, 1}, {Empty, 51},
-    {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 4},
-    {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 19}, {Mixed, 1},
-    {Empty, 2897}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 12},
-    {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 30}, {Mixed, 1},
-    {Empty, 52}, {Mixed, 1}, {Empty, 33}, {Mixed, 1}, {Empty, 28},
-    {Mixed, 1}, {Empty, 91}, {Mixed, 1}, {Empty, 37}, {Mixed, 1},
-    {Empty, 39}, {Mixed, 1}, {Empty, 47}, {Mixed, 1}, {Empty, 162},
-    {Mixed, 1}, {Empty, 29}, {Mixed, 1}, {Empty, 16}, {Mixed, 1},
-    {Empty, 135}, {Mixed, 1}, {Empty, 96}, {Mixed, 1}, {Empty, 169},
-    {Mixed, 1}, {Empty, 225}, {Mixed, 1}, {Empty, 29418}};
+    {Mixed, 1}, {Empty, 31}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+    {Empty, 30}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 15},
+    {Mixed, 1}, {Empty, 51}, {Mixed, 2}, {Empty, 3}, {Mixed, 1},
+    {Empty, 16}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+    {Empty, 19}, {Mixed, 1}, {Empty, 2897}, {Mixed, 1}, {Empty, 6},
+    {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
+    {Empty, 30}, {Mixed, 1}, {Empty, 52}, {Mixed, 1}, {Empty, 33},
+    {Mixed, 1}, {Empty, 28}, {Mixed, 1}, {Empty, 91}, {Mixed, 1},
+    {Empty, 37}, {Mixed, 1}, {Empty, 39}, {Mixed, 1}, {Empty, 47},
+    {Mixed, 1}, {Empty, 162}, {Mixed, 1}, {Empty, 29}, {Mixed, 1},
+    {Empty, 16}, {Mixed, 1}, {Empty, 135}, {Mixed, 1}, {Empty, 96},
+    {Mixed, 1}, {Empty, 169}, {Mixed, 1}, {Empty, 225}, {Mixed, 1},
+    {Empty, 29418}};
     const static UnicodeSet::bitquad_t  __shi2_Set_quads[] = {
     0x00800000, 0x00020000, 0x00080000, 0x00400000, 0x00800000, 0x00200000,
     0x00000100, 0x02000000, 0x20000000, 0x00000002, 0x00002000, 0x00000001,
@@ -17873,12 +17876,12 @@ namespace UCD {
     0x00040000, 0x00100000, 0x00000040, 0x00200000, 0x00200000, 0x40000000,
     0x00010000, 0x02400000, 0x00000004, 0x00008000, 0x00000002, 0x10000000,
     0x00000002, 0x08000000, 0x00080000, 0x04000000, 0x00008000, 0x00002000,
-    0x00080000, 0x00100000, 0x00000001, 0x00200000, 0x01000000, 0x08000000,
-    0x00000100, 0x00010000, 0x80000000, 0x00000001, 0x00000008, 0x00400000,
-    0x00000008, 0x00000020, 0x00002800, 0x80000000, 0x00100000, 0x00010000,
-    0x00100000, 0x00800000, 0x10000000, 0x00200000, 0x00100000, 0x20000000,
-    0x01000000, 0x04000000, 0x04000000, 0x00000010, 0x00040000, 0x01000000,
-    0x00000004, 0x02000000, 0x00000200, 0x00000004};
+    0x00080000, 0x00100000, 0x00000001, 0x00200000, 0x01000000, 0x00000040,
+    0x08000000, 0x00000100, 0x00010000, 0x80000000, 0x00000001, 0x00000008,
+    0x00400000, 0x00000008, 0x00000020, 0x00002800, 0x80000000, 0x00100000,
+    0x00010000, 0x00100000, 0x00800000, 0x10000000, 0x00200000, 0x00100000,
+    0x20000000, 0x01000000, 0x04000000, 0x04000000, 0x00000010, 0x00040000,
+    0x01000000, 0x00000004, 0x02000000, 0x00000200, 0x00000004};
     }
 
     /** Code Point Ranges for shi3
@@ -18061,7 +18064,7 @@ namespace UCD {
     const static std::array<UnicodeSet, 5> shi_Set = {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__shi0_Set_runs), 11, 0, const_cast<UnicodeSet::bitquad_t *>(__shi0_Set_quads), 5, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__shi1_Set_runs), 147, 0, const_cast<UnicodeSet::bitquad_t *>(__shi1_Set_quads), 79, 0),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__shi2_Set_runs), 129, 0, const_cast<UnicodeSet::bitquad_t *>(__shi2_Set_quads), 70, 0),
+        UnicodeSet(const_cast<UnicodeSet::run_t *>(__shi2_Set_runs), 131, 0, const_cast<UnicodeSet::bitquad_t *>(__shi2_Set_quads), 71, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__shi3_Set_runs), 79, 0, const_cast<UnicodeSet::bitquad_t *>(__shi3_Set_quads), 40, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__shi4_Set_runs), 305, 0, const_cast<UnicodeSet::bitquad_t *>(__shi4_Set_quads), 172, 0)
         };
@@ -20066,13 +20069,13 @@ namespace UCD {
     [4021, 4021], [4a47, 4a47], [4f54, 4f54], [508e, 508e], [53a7, 53a7],
     [5d6e, 5d6e], [5dc5, 5dc5], [5dd3, 5dd4], [62c8, 62c8], [6382, 6382],
     [6527, 6527], [6541, 6541], [69c7, 69c7], [69d9, 69d9], [6ec7, 6ec7],
-    [73b7, 73b7], [7628, 7628], [766b, 766b], [7672, 7672], [8a40, 8a40],
-    [8e4e, 8e4e], [985a, 985b], [98a0, 98a0], [9f7b, 9f7b], [20458, 20458],
-    [20ac9, 20ac9], [20da7, 20da7], [21c47, 21c47], [225a9, 225a9],
-    [23a80, 23a80], [24836, 24836], [259d1, 259d1], [26552, 26552],
-    [2713a, 2713a], [27f4d, 27f4d], [28200, 28200], [29120, 29120],
-    [29944, 29944], [29a0b, 29a0b], [29b11, 29b11], [2a4fc, 2a4fc],
-    [2a59a, 2a59a]**/
+    [73b7, 73b7], [7538, 7538], [7628, 7628], [766b, 766b], [7672, 7672],
+    [8a40, 8a40], [8e4e, 8e4e], [985a, 985b], [98a0, 98a0], [9f7b, 9f7b],
+    [20458, 20458], [20ac9, 20ac9], [20da7, 20da7], [21c47, 21c47],
+    [225a9, 225a9], [23a80, 23a80], [24836, 24836], [259d1, 259d1],
+    [26552, 26552], [2713a, 2713a], [27f4d, 27f4d], [28200, 28200],
+    [29120, 29120], [29944, 29944], [29a0b, 29a0b], [29b11, 29b11],
+    [2a4fc, 2a4fc], [2a59a, 2a59a]**/
 
 
     namespace {
@@ -20082,25 +20085,25 @@ namespace UCD {
     {Empty, 77}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 39},
     {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 12}, {Mixed, 2},
     {Empty, 35}, {Mixed, 1}, {Empty, 39}, {Mixed, 1}, {Empty, 38},
-    {Mixed, 1}, {Empty, 19}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
-    {Empty, 158}, {Mixed, 1}, {Empty, 31}, {Mixed, 1}, {Empty, 79},
-    {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 53}, {Mixed, 1},
-    {Empty, 2854}, {Mixed, 1}, {Empty, 51}, {Mixed, 1}, {Empty, 22},
-    {Mixed, 1}, {Empty, 116}, {Mixed, 1}, {Empty, 74}, {Mixed, 1},
-    {Empty, 166}, {Mixed, 1}, {Empty, 108}, {Mixed, 1}, {Empty, 140},
-    {Mixed, 1}, {Empty, 91}, {Mixed, 1}, {Empty, 94}, {Mixed, 1},
-    {Empty, 112}, {Mixed, 1}, {Empty, 21}, {Mixed, 1}, {Empty, 120},
-    {Mixed, 1}, {Empty, 64}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 7},
-    {Mixed, 1}, {Empty, 78}, {Mixed, 1}, {Empty, 4}, {Mixed, 1},
-    {Empty, 29395}};
+    {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 1},
+    {Mixed, 1}, {Empty, 158}, {Mixed, 1}, {Empty, 31}, {Mixed, 1},
+    {Empty, 79}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 53},
+    {Mixed, 1}, {Empty, 2854}, {Mixed, 1}, {Empty, 51}, {Mixed, 1},
+    {Empty, 22}, {Mixed, 1}, {Empty, 116}, {Mixed, 1}, {Empty, 74},
+    {Mixed, 1}, {Empty, 166}, {Mixed, 1}, {Empty, 108}, {Mixed, 1},
+    {Empty, 140}, {Mixed, 1}, {Empty, 91}, {Mixed, 1}, {Empty, 94},
+    {Mixed, 1}, {Empty, 112}, {Mixed, 1}, {Empty, 21}, {Mixed, 1},
+    {Empty, 120}, {Mixed, 1}, {Empty, 64}, {Mixed, 1}, {Empty, 5},
+    {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 78}, {Mixed, 1}, {Empty, 4},
+    {Mixed, 1}, {Empty, 29395}};
     const static UnicodeSet::bitquad_t  __dian1_Set_quads[] = {
     0x00000002, 0x00000080, 0x00100000, 0x00004000, 0x00000080, 0x00004000,
     0x00180020, 0x00000100, 0x00000004, 0x00000080, 0x00000002, 0x02000080,
-    0x00000080, 0x00800000, 0x00000100, 0x00040800, 0x00000001, 0x00004000,
-    0x0c000000, 0x00000001, 0x08000000, 0x01000000, 0x00000200, 0x00000080,
-    0x00000080, 0x00000200, 0x00000001, 0x00400000, 0x00020000, 0x00040000,
-    0x04000000, 0x00002000, 0x00000001, 0x00000001, 0x00000010, 0x00000800,
-    0x00020000, 0x10000000, 0x04000000};
+    0x00000080, 0x00800000, 0x01000000, 0x00000100, 0x00040800, 0x00000001,
+    0x00004000, 0x0c000000, 0x00000001, 0x08000000, 0x01000000, 0x00000200,
+    0x00000080, 0x00000080, 0x00000200, 0x00000001, 0x00400000, 0x00020000,
+    0x00040000, 0x04000000, 0x00002000, 0x00000001, 0x00000001, 0x00000010,
+    0x00000800, 0x00020000, 0x10000000, 0x04000000};
     }
 
     /** Code Point Ranges for dian2
@@ -20206,7 +20209,7 @@ namespace UCD {
 
     const static std::array<UnicodeSet, 5> dian_Set = {
         UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__dian1_Set_runs), 77, 0, const_cast<UnicodeSet::bitquad_t *>(__dian1_Set_quads), 39, 0),
+        UnicodeSet(const_cast<UnicodeSet::run_t *>(__dian1_Set_runs), 79, 0, const_cast<UnicodeSet::bitquad_t *>(__dian1_Set_quads), 40, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__dian2_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__dian2_Set_quads), 1, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__dian3_Set_runs), 53, 0, const_cast<UnicodeSet::bitquad_t *>(__dian3_Set_quads), 26, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__dian4_Set_runs), 123, 0, const_cast<UnicodeSet::bitquad_t *>(__dian4_Set_quads), 66, 0)
@@ -20838,18 +20841,20 @@ namespace UCD {
 
     /** Code Point Ranges for bai1
     [34e6, 34e6], [39f3, 39f3], [480b, 480b], [4ab9, 4ab9], [6300, 6300],
-    [63b0, 63b0], [226de, 226de], [280c5, 280c5], [29462, 29462]**/
+    [63b0, 63b0], [64d8, 64d8], [226de, 226de], [280c5, 280c5],
+    [29462, 29462]**/
 
 
     namespace {
     const static UnicodeSet::run_t __bai1_Set_runs[] = {
     {Empty, 423}, {Mixed, 1}, {Empty, 39}, {Mixed, 1}, {Empty, 112},
     {Mixed, 1}, {Empty, 20}, {Mixed, 1}, {Empty, 194}, {Mixed, 1},
-    {Empty, 4}, {Mixed, 1}, {Empty, 3608}, {Mixed, 1}, {Empty, 719},
-    {Mixed, 1}, {Empty, 156}, {Mixed, 1}, {Empty, 29532}};
+    {Empty, 4}, {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 3599},
+    {Mixed, 1}, {Empty, 719}, {Mixed, 1}, {Empty, 156}, {Mixed, 1},
+    {Empty, 29532}};
     const static UnicodeSet::bitquad_t  __bai1_Set_quads[] = {
     0x00000040, 0x00080000, 0x00000800, 0x02000000, 0x00000001, 0x00010000,
-    0x40000000, 0x00000020, 0x00000004};
+    0x01000000, 0x40000000, 0x00000020, 0x00000004};
     }
 
     /** Code Point Ranges for bai2
@@ -20927,7 +20932,7 @@ namespace UCD {
 
     const static std::array<UnicodeSet, 5> bai_Set = {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai0_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bai0_Set_quads), 1, 0),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai1_Set_runs), 19, 0, const_cast<UnicodeSet::bitquad_t *>(__bai1_Set_quads), 9, 0),
+        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai1_Set_runs), 21, 0, const_cast<UnicodeSet::bitquad_t *>(__bai1_Set_quads), 10, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai2_Set_runs), 13, 0, const_cast<UnicodeSet::bitquad_t *>(__bai2_Set_quads), 6, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai3_Set_runs), 35, 0, const_cast<UnicodeSet::bitquad_t *>(__bai3_Set_quads), 17, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai4_Set_runs), 63, 0, const_cast<UnicodeSet::bitquad_t *>(__bai4_Set_quads), 36, 0)
@@ -31318,8 +31323,8 @@ namespace UCD {
     }
 
     /** Code Point Ranges for fa4
-    [36f2, 36f2], [73d0, 73d0], [743a, 743a], [855f, 855f], [9aee, 9aee],
-    [27b0b, 27b0b]**/
+    [36f2, 36f2], [73d0, 73d0], [743a, 743a], [855f, 855f], [9aea, 9aea],
+    [9aee, 9aee], [27b0b, 27b0b]**/
 
 
     namespace {
@@ -31328,7 +31333,7 @@ namespace UCD {
     {Mixed, 1}, {Empty, 136}, {Mixed, 1}, {Empty, 172}, {Mixed, 1},
     {Empty, 3840}, {Mixed, 1}, {Empty, 29735}};
     const static UnicodeSet::bitquad_t  __fa4_Set_quads[] = {
-    0x00040000, 0x00010000, 0x04000000, 0x80000000, 0x00004000, 0x00000800};
+    0x00040000, 0x00010000, 0x04000000, 0x80000000, 0x00004400, 0x00000800};
     }
 
     
@@ -39156,8 +39161,8 @@ namespace UCD {
     /** Code Point Ranges for bao2
     [3d61, 3d61], [3ffa, 3ffa], [420f, 420f], [4964, 4964], [4a0c, 4a0c],
     [4a14, 4a14], [4aa8, 4aa8], [5ad1, 5ad1], [7832, 7832], [7a87, 7a87],
-    [924b, 924b], [96f9, 96f9], [24fc8, 24fc8], [25b53, 25b53],
-    [26855, 26855], [2688a, 2688a], [27b64, 27b64]**/
+    [8584, 8584], [924b, 924b], [96f9, 96f9], [24fc8, 24fc8],
+    [25b53, 25b53], [26855, 26855], [2688a, 2688a], [27b64, 27b64]**/
 
 
     namespace {
@@ -39165,14 +39170,14 @@ namespace UCD {
     {Empty, 491}, {Mixed, 1}, {Empty, 19}, {Mixed, 1}, {Empty, 16},
     {Mixed, 1}, {Empty, 58}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 4},
     {Mixed, 1}, {Empty, 128}, {Mixed, 1}, {Empty, 234}, {Mixed, 1},
-    {Empty, 18}, {Mixed, 1}, {Empty, 189}, {Mixed, 1}, {Empty, 36},
-    {Mixed, 1}, {Empty, 3526}, {Mixed, 1}, {Empty, 91}, {Mixed, 1},
-    {Empty, 103}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 150},
-    {Mixed, 1}, {Empty, 29732}};
+    {Empty, 18}, {Mixed, 1}, {Empty, 87}, {Mixed, 1}, {Empty, 101},
+    {Mixed, 1}, {Empty, 36}, {Mixed, 1}, {Empty, 3526}, {Mixed, 1},
+    {Empty, 91}, {Mixed, 1}, {Empty, 103}, {Mixed, 1}, {Empty, 1},
+    {Mixed, 1}, {Empty, 150}, {Mixed, 1}, {Empty, 29732}};
     const static UnicodeSet::bitquad_t  __bao2_Set_quads[] = {
     0x00000002, 0x04000000, 0x00008000, 0x00000010, 0x00101000, 0x00000100,
-    0x00020000, 0x00040000, 0x00000080, 0x00000800, 0x02000000, 0x00000100,
-    0x00080000, 0x00200000, 0x00000400, 0x00000010};
+    0x00020000, 0x00040000, 0x00000080, 0x00000010, 0x00000800, 0x02000000,
+    0x00000100, 0x00080000, 0x00200000, 0x00000400, 0x00000010};
     }
 
     /** Code Point Ranges for bao3
@@ -39266,7 +39271,7 @@ namespace UCD {
     const static std::array<UnicodeSet, 5> bao_Set = {
         UnicodeSet(),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__bao1_Set_runs), 49, 0, const_cast<UnicodeSet::bitquad_t *>(__bao1_Set_quads), 26, 0),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bao2_Set_runs), 33, 0, const_cast<UnicodeSet::bitquad_t *>(__bao2_Set_quads), 16, 0),
+        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bao2_Set_runs), 35, 0, const_cast<UnicodeSet::bitquad_t *>(__bao2_Set_quads), 17, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__bao3_Set_runs), 63, 0, const_cast<UnicodeSet::bitquad_t *>(__bao3_Set_quads), 37, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__bao4_Set_runs), 99, 0, const_cast<UnicodeSet::bitquad_t *>(__bao4_Set_quads), 51, 0)
         };
@@ -54567,27 +54572,6 @@ namespace UCD {
         UnicodeSet()
         };
 
-    /** Code Point Ranges for wan mò4
-    [4e07, 4e07]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __wan mò4_Set_runs[] = {
-    {Empty, 624}, {Mixed, 1}, {Empty, 34191}};
-    const static UnicodeSet::bitquad_t  __wan mò4_Set_quads[] = {
-    0x00000080};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> wan mò_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__wan mò4_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__wan mò4_Set_quads), 1, 0)
-        };
-
     /** Code Point Ranges for diu1
     [4e1f, 4e1f], [4e22, 4e22], [92a9, 92a9], [94e5, 94e5], [98a9, 98a9],
     [20c8d, 20c8d], [2249d, 2249d]**/
@@ -54694,27 +54678,6 @@ namespace UCD {
         UnicodeSet()
         };
 
-    /** Code Point Ranges for bi bì3
-    [4ffe, 4ffe]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __bi bì3_Set_runs[] = {
-    {Empty, 639}, {Mixed, 1}, {Empty, 34176}};
-    const static UnicodeSet::bitquad_t  __bi bì3_Set_quads[] = {
-    0x40000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> bi bì_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bi bì3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bi bì3_Set_quads), 1, 0),
-        UnicodeSet()
-        };
-
     /** Code Point Ranges for kei1
     [523b, 523b], [524b, 524b]**/
 
@@ -54733,69 +54696,6 @@ namespace UCD {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__kei1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__kei1_Set_quads), 2, 0),
         UnicodeSet(),
         UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for pou pǒ1
-    [5256, 5256]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __pou pǒ1_Set_runs[] = {
-    {Empty, 658}, {Mixed, 1}, {Empty, 34157}};
-    const static UnicodeSet::bitquad_t  __pou pǒ1_Set_quads[] = {
-    0x00400000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> pou pǒ_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__pou pǒ1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__pou pǒ1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for piao piào1
-    [527d, 527d]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __piao piào1_Set_runs[] = {
-    {Empty, 659}, {Mixed, 1}, {Empty, 34156}};
-    const static UnicodeSet::bitquad_t  __piao piào1_Set_quads[] = {
-    0x20000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> piao piào_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__piao piào1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__piao piào1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for bo bu3
-    [535c, 535c]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __bo bu3_Set_runs[] = {
-    {Empty, 666}, {Mixed, 1}, {Empty, 34149}};
-    const static UnicodeSet::bitquad_t  __bo bu3_Set_quads[] = {
-    0x10000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> bo bu_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bo bu3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bo bu3_Set_quads), 1, 0),
         UnicodeSet()
         };
 
@@ -55167,48 +55067,6 @@ namespace UCD {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__miu4_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__miu4_Set_quads), 4, 0)
         };
 
-    /** Code Point Ranges for fu wu3
-    [5638, 5638]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __fu wu3_Set_runs[] = {
-    {Empty, 689}, {Mixed, 1}, {Empty, 34126}};
-    const static UnicodeSet::bitquad_t  __fu wu3_Set_quads[] = {
-    0x01000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> fu wu_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__fu wu3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__fu wu3_Set_quads), 1, 0),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for da dá1
-    [5660, 5660]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __da dá1_Set_runs[] = {
-    {Empty, 691}, {Mixed, 1}, {Empty, 34124}};
-    const static UnicodeSet::bitquad_t  __da dá1_Set_quads[] = {
-    0x00000001};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> da dá_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__da dá1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__da dá1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
     /** Code Point Ranges for hm0
     [5677, 5677]**/
 
@@ -55225,48 +55083,6 @@ namespace UCD {
     const static std::array<UnicodeSet, 5> hm_Set = {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__hm0_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__hm0_Set_quads), 1, 0),
         UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for de di4
-    [5730, 5730]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __de di4_Set_runs[] = {
-    {Empty, 697}, {Mixed, 1}, {Empty, 34118}};
-    const static UnicodeSet::bitquad_t  __de di4_Set_quads[] = {
-    0x00010000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> de di_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__de di4_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__de di4_Set_quads), 1, 0)
-        };
-
-    /** Code Point Ranges for di tí1
-    [5824, 5824], [9684, 9684]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __di tí1_Set_runs[] = {
-    {Empty, 705}, {Mixed, 1}, {Empty, 498}, {Mixed, 1}, {Empty, 33611}};
-    const static UnicodeSet::bitquad_t  __di tí1_Set_quads[] = {
-    0x00000010, 0x00000010};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> di tí_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__di tí1_Set_runs), 5, 0, const_cast<UnicodeSet::bitquad_t *>(__di tí1_Set_quads), 2, 0),
         UnicodeSet(),
         UnicodeSet(),
         UnicodeSet()
@@ -55347,48 +55163,6 @@ namespace UCD {
         UnicodeSet(),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__zhuai3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__zhuai3_Set_quads), 1, 0),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__zhuai4_Set_runs), 11, 0, const_cast<UnicodeSet::bitquad_t *>(__zhuai4_Set_quads), 5, 0)
-        };
-
-    /** Code Point Ranges for chà cha1
-    [5dee, 5dee]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __chà cha1_Set_runs[] = {
-    {Empty, 751}, {Mixed, 1}, {Empty, 34064}};
-    const static UnicodeSet::bitquad_t  __chà cha1_Set_quads[] = {
-    0x00004000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> chà cha_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__chà cha1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__chà cha1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for fan fán1
-    [5e06, 5e06]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __fan fán1_Set_runs[] = {
-    {Empty, 752}, {Mixed, 1}, {Empty, 34063}};
-    const static UnicodeSet::bitquad_t  __fan fán1_Set_quads[] = {
-    0x00000040};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> fan fán_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__fan fán1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__fan fán1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
         };
 
     /** Code Point Ranges for dei3
@@ -55499,90 +55273,6 @@ namespace UCD {
         UnicodeSet()
         };
 
-    /** Code Point Ranges for bai bò1
-    [64d8, 64d8]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __bai bò1_Set_runs[] = {
-    {Empty, 806}, {Mixed, 1}, {Empty, 34009}};
-    const static UnicodeSet::bitquad_t  __bai bò1_Set_quads[] = {
-    0x01000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> bai bò_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai bò1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bai bò1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for dòu dou3
-    [6597, 6597]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __dòu dou3_Set_runs[] = {
-    {Empty, 812}, {Mixed, 1}, {Empty, 34003}};
-    const static UnicodeSet::bitquad_t  __dòu dou3_Set_quads[] = {
-    0x00800000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> dòu dou_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__dòu dou3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__dòu dou3_Set_quads), 1, 0),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for biao sháo1
-    [6753, 6753]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __biao sháo1_Set_runs[] = {
-    {Empty, 826}, {Mixed, 1}, {Empty, 33989}};
-    const static UnicodeSet::bitquad_t  __biao sháo1_Set_quads[] = {
-    0x00080000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> biao sháo_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__biao sháo1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__biao sháo1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for bai bó3
-    [67cf, 67cf]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __bai bó3_Set_runs[] = {
-    {Empty, 830}, {Mixed, 1}, {Empty, 33985}};
-    const static UnicodeSet::bitquad_t  __bai bó3_Set_quads[] = {
-    0x00008000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> bai bó_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bai bó3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bai bó3_Set_quads), 1, 0),
-        UnicodeSet()
-        };
-
     /** Code Point Ranges for e_hat1
     [6b38, 6b38], [8a92, 8a92]**/
 
@@ -55681,48 +55371,6 @@ namespace UCD {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__ei4_Set_runs), 5, 0, const_cast<UnicodeSet::bitquad_t *>(__ei4_Set_quads), 2, 0)
         };
 
-    /** Code Point Ranges for da tà2
-    [6c93, 6c93]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __da tà2_Set_runs[] = {
-    {Empty, 868}, {Mixed, 1}, {Empty, 33947}};
-    const static UnicodeSet::bitquad_t  __da tà2_Set_quads[] = {
-    0x00080000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> da tà_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__da tà2_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__da tà2_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for dian diàn1
-    [7538, 7538]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __dian diàn1_Set_runs[] = {
-    {Empty, 937}, {Mixed, 1}, {Empty, 33878}};
-    const static UnicodeSet::bitquad_t  __dian diàn1_Set_quads[] = {
-    0x01000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> dian diàn_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__dian diàn1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__dian diàn1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
     /** Code Point Ranges for gei3
     [7d66, 7d66], [7ed9, 7ed9]**/
 
@@ -55741,90 +55389,6 @@ namespace UCD {
         UnicodeSet(),
         UnicodeSet(),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__gei3_Set_runs), 5, 0, const_cast<UnicodeSet::bitquad_t *>(__gei3_Set_quads), 2, 0),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for běng beng1
-    [7e43, 7e43]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __běng beng1_Set_runs[] = {
-    {Empty, 1010}, {Mixed, 1}, {Empty, 33805}};
-    const static UnicodeSet::bitquad_t  __běng beng1_Set_quads[] = {
-    0x00000008};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> běng beng_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__běng beng1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__běng beng1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for bà pa2
-    [8019, 8019]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __bà pa2_Set_runs[] = {
-    {Empty, 1024}, {Mixed, 1}, {Empty, 33791}};
-    const static UnicodeSet::bitquad_t  __bà pa2_Set_quads[] = {
-    0x02000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> bà pa_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bà pa2_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bà pa2_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for she shè3
-    [820d, 820d]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __she shè3_Set_runs[] = {
-    {Empty, 1040}, {Mixed, 1}, {Empty, 33775}};
-    const static UnicodeSet::bitquad_t  __she shè3_Set_quads[] = {
-    0x00002000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> she shè_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__she shè3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__she shè3_Set_quads), 1, 0),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for bao bó2
-    [8584, 8584]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __bao bó2_Set_runs[] = {
-    {Empty, 1068}, {Mixed, 1}, {Empty, 33747}};
-    const static UnicodeSet::bitquad_t  __bao bó2_Set_quads[] = {
-    0x00000010};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> bao bó_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bao bó2_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bao bó2_Set_quads), 1, 0),
-        UnicodeSet(),
         UnicodeSet()
         };
 
@@ -55870,153 +55434,6 @@ namespace UCD {
         UnicodeSet()
         };
 
-    /** Code Point Ranges for shuí shei2
-    [8ab0, 8ab0]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __shuí shei2_Set_runs[] = {
-    {Empty, 1109}, {Mixed, 1}, {Empty, 33706}};
-    const static UnicodeSet::bitquad_t  __shuí shei2_Set_quads[] = {
-    0x00010000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> shuí shei_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__shuí shei2_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__shuí shei2_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for piǎn pian2
-    [8ade, 8ade]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __piǎn pian2_Set_runs[] = {
-    {Empty, 1110}, {Mixed, 1}, {Empty, 33705}};
-    const static UnicodeSet::bitquad_t  __piǎn pian2_Set_quads[] = {
-    0x40000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> piǎn pian_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__piǎn pian2_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__piǎn pian2_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for feng fèng3
-    [8af7, 8af7], [8bbd, 8bbd]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __feng fèng3_Set_runs[] = {
-    {Empty, 1111}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 33698}};
-    const static UnicodeSet::bitquad_t  __feng fèng3_Set_quads[] = {
-    0x00800000, 0x20000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> feng fèng_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__feng fèng3_Set_runs), 5, 0, const_cast<UnicodeSet::bitquad_t *>(__feng fèng3_Set_quads), 2, 0),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for shi shì2
-    [8b58, 8b58], [8bc6, 8bc6]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __shi shì2_Set_runs[] = {
-    {Empty, 1114}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 33697}};
-    const static UnicodeSet::bitquad_t  __shi shì2_Set_quads[] = {
-    0x01000000, 0x00000040};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> shi shì_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__shi shì2_Set_runs), 5, 0, const_cast<UnicodeSet::bitquad_t *>(__shi shì2_Set_quads), 2, 0),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for die dié1
-    [8dcc, 8dcc]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __die dié1_Set_runs[] = {
-    {Empty, 1134}, {Mixed, 1}, {Empty, 33681}};
-    const static UnicodeSet::bitquad_t  __die dié1_Set_quads[] = {
-    0x00001000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> die dié_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__die dié1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__die dié1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for pan man2
-    [8e63, 8e63]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __pan man2_Set_runs[] = {
-    {Empty, 1139}, {Mixed, 1}, {Empty, 33676}};
-    const static UnicodeSet::bitquad_t  __pan man2_Set_quads[] = {
-    0x00000008};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> pan man_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__pan man2_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__pan man2_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for deng dèng1
-    [8e6c, 8e6c]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __deng dèng1_Set_runs[] = {
-    {Empty, 1139}, {Mixed, 1}, {Empty, 33676}};
-    const static UnicodeSet::bitquad_t  __deng dèng1_Set_quads[] = {
-    0x00001000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> deng dèng_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__deng dèng1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__deng dèng1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
     /** Code Point Ranges for zhei4
     [9019, 9019]**/
 
@@ -56038,90 +55455,6 @@ namespace UCD {
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__zhei4_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__zhei4_Set_quads), 1, 0)
         };
 
-    /** Code Point Ranges for dou dū1
-    [90fd, 90fd]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __dou dū1_Set_runs[] = {
-    {Empty, 1159}, {Mixed, 1}, {Empty, 33656}};
-    const static UnicodeSet::bitquad_t  __dou dū1_Set_quads[] = {
-    0x20000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> dou dū_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__dou dū1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__dou dū1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for fa pò1
-    [91b1, 91b1]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __fa pò1_Set_runs[] = {
-    {Empty, 1165}, {Mixed, 1}, {Empty, 33650}};
-    const static UnicodeSet::bitquad_t  __fa pò1_Set_quads[] = {
-    0x00020000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> fa pò_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__fa pò1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__fa pò1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for bei pí1
-    [9642, 9642]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __bei pí1_Set_runs[] = {
-    {Empty, 1202}, {Mixed, 1}, {Empty, 33613}};
-    const static UnicodeSet::bitquad_t  __bei pí1_Set_quads[] = {
-    0x00000004};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> bei pí_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__bei pí1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__bei pí1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for kuí wei3
-    [9697, 9697]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __kuí wei3_Set_runs[] = {
-    {Empty, 1204}, {Mixed, 1}, {Empty, 33611}};
-    const static UnicodeSet::bitquad_t  __kuí wei3_Set_quads[] = {
-    0x00800000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> kuí wei_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__kuí wei3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__kuí wei3_Set_quads), 1, 0),
-        UnicodeSet()
-        };
-
     /** Code Point Ranges for eng1
     [97a5, 97a5]**/
 
@@ -56138,69 +55471,6 @@ namespace UCD {
     const static std::array<UnicodeSet, 5> eng_Set = {
         UnicodeSet(),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__eng1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__eng1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for po pǒ1
-    [9817, 9817]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __po pǒ1_Set_runs[] = {
-    {Empty, 1216}, {Mixed, 1}, {Empty, 33599}};
-    const static UnicodeSet::bitquad_t  __po pǒ1_Set_quads[] = {
-    0x00800000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> po pǒ_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__po pǒ1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__po pǒ1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for fà fa3
-    [9aea, 9aea], [9aee, 9aee]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __fà fa3_Set_runs[] = {
-    {Empty, 1239}, {Mixed, 1}, {Empty, 33576}};
-    const static UnicodeSet::bitquad_t  __fà fa3_Set_quads[] = {
-    0x00004400};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> fà fa_Set = {
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__fà fa3_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__fà fa3_Set_quads), 1, 0),
-        UnicodeSet()
-        };
-
-    /** Code Point Ranges for páo biao1
-    [9e83, 9e83]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __páo biao1_Set_runs[] = {
-    {Empty, 1268}, {Mixed, 1}, {Empty, 33547}};
-    const static UnicodeSet::bitquad_t  __páo biao1_Set_quads[] = {
-    0x00000008};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> páo biao_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__páo biao1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__páo biao1_Set_quads), 1, 0),
         UnicodeSet(),
         UnicodeSet(),
         UnicodeSet()
@@ -56267,27 +55537,6 @@ namespace UCD {
         UnicodeSet(),
         UnicodeSet(),
         UnicodeSet(const_cast<UnicodeSet::run_t *>(__din4_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__din4_Set_quads), 1, 0)
-        };
-
-    /** Code Point Ranges for jì ji1
-    [2a7dd, 2a7dd]**/
-
-
-    namespace {
-    const static UnicodeSet::run_t __jì ji1_Set_runs[] = {
-    {Empty, 5438}, {Mixed, 1}, {Empty, 29377}};
-    const static UnicodeSet::bitquad_t  __jì ji1_Set_quads[] = {
-    0x20000000};
-    }
-
-    
-
-    const static std::array<UnicodeSet, 5> jì ji_Set = {
-        UnicodeSet(),
-        UnicodeSet(const_cast<UnicodeSet::run_t *>(__jì ji1_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__jì ji1_Set_quads), 1, 0),
-        UnicodeSet(),
-        UnicodeSet(),
-        UnicodeSet()
         };
 
     /** Code Point Ranges for biang2
