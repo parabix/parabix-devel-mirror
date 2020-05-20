@@ -100,7 +100,7 @@ void StringReplaceKernel::generatePabloMethod() {
         PabloAST * span = pb.createMatchStar(stringStart, runMask);
         insertSpans[i] = pb.createAnd(span, runMask);
     }
-    for (unsigned bit = 0; bit < 8; bit++) {
+    for (unsigned bit = 0; bit < 16; bit++) { //run for loop for 16 bits of basis stream
         PabloAST * updated = basis[bit];
         for (unsigned i = 0; i < mInsertStrings.size(); i++) {
             PabloAST * stringMarks = mMultiplexing ? bnc.EQ(insertSpans, i) : insertSpans[i];
