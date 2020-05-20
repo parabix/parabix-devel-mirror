@@ -1125,7 +1125,7 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * const outputPtr = b->getRawOutputPointer("Output", producedPosPhi);
     Value * const byteLength = b->CreateMul(lineLength, factor);
 
-    b->CreateMemCpy(outputPtr, matchStartPtr, lineLength, 1);
+    b->CreateMemCpy(outputPtr, matchStartPtr, byteLength, 1);
     Value * nextProducedPos = b->CreateAdd(producedPosPhi, lineLength);
 
     //  We've dealt with the match, now prepare for the next one, if any.
@@ -1154,7 +1154,7 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * const outputPtr1 = b->getRawOutputPointer("Output", strideProducedPhi);
     Value * const byteLength2 = b->CreateMul(initialLineLgth, factor);
 
-    b->CreateMemCpy(outputPtr1, strideStartPtr, initialLineLgth, 1);
+    b->CreateMemCpy(outputPtr1, strideStartPtr, byteLength2, 1);
     Value * producedPos1 = b->CreateAdd(strideProducedPhi, initialLineLgth);
     matchMaskPhi->addIncoming(matchMask, strideInitialMatch);
     matchWordPhi->addIncoming(sz_ZERO, strideInitialMatch);
@@ -1173,7 +1173,7 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * const partialLineOutputPtr = b->getRawOutputPointer("Output", partialProducedPhi);
     Value * const byteLength3 = b->CreateMul(partialLineBytes, factor);
     
-    b->CreateMemCpy(partialLineOutputPtr, partialLineStartPtr, partialLineBytes, 1);
+    b->CreateMemCpy(partialLineOutputPtr, partialLineStartPtr, byteLength3, 1);
     Value * partialProducedPos = b->CreateAdd(partialProducedPhi, partialLineBytes, "partialProducedPos");
     strideNo->addIncoming(nextStrideNo, strideEndMatch);
     pendingMatchPhi->addIncoming(ConstantInt::get(pendingMatch->getType(), 1), strideEndMatch);
