@@ -1,6 +1,6 @@
 # Implementation Guide-Radical Count
 
-This document provides an overview of the Radical Count implementation. Please review [README-radicalcount](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/tools/wc/radical_count/README-radicalcount.md) before reading on.
+This document provides an overview of the Radical Count implementation. Please review [README-radicalcount](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/README-radicalcount.md) before reading on.
 
 This guide only provides a simple explaination of the key concepts and data structures used. Please refer to the source code for more details and inline documentation as well.
 
@@ -10,7 +10,6 @@ To find the source code for Radical Count, go into `tools/wc/radical_count`. The
 ```
 radical_count
 ├── CMakeLists.txt
-├── README-radicalcount.md    
 │   
 └───radicalScripts
 │   ├── create_table.py
@@ -58,5 +57,5 @@ The Radical Count program uses the kRSKangxi property to distinguish all 214 rad
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/19
+**Last Updated:** 2020/05/20
 
