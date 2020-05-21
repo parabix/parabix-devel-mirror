@@ -101,7 +101,7 @@ int main(int argc, char* argv[]){
     engine.grepCodeGen(KangXiLinePattern);
 
     UnihanBuf = alloc.allocate(buf.R_size32(), 0);
-    std::memcpy(UnihanBuf, buf.R_fstring().data(), n);
+    std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
     std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
 
     engine.doGrep(UnihanBuf, buf.R_size32(), accum);
