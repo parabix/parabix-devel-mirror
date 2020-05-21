@@ -48,22 +48,29 @@ using namespace kernel;
 
 static cl::OptionCategory pygrepFlags("Command Flags", "pinyingrep options");
 
-static cl::opt<std::string> KangXiLinePattern(cl::Positional, cl::desc("<Unicode for pinyin>"), cl::Required, cl::cat(pygrepFlags));
+static cl::opt<std::string> KangXiLinePattern(cl::Positional, cl::desc("Pinyin Syllables"), cl::Required, cl::cat(pygrepFlags));
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
 
-std::vector<re::RE*> generateREs(std::string KangXiLinePattern){
-    PinyinPattern::Pattern_Parse parser;
-    parser.parse(KangXiLinePattern);
-    
-    PinyinPattern::Pattern_Enumerate enumerator;
-    enumerator.enumerate(parser);
-
-    return enumerator.createREs();
+std::vector<fs::path> allFiles;
+//step4
+re::RE* generateREs(vector<string> KangXiLinePattern){
+    std::vector<re::RE*> PinyinCC;
+    re::RE* PinyinCC_final;
+    for(int i= 0;i<KangXiLinePattern.size();i++)
+    {
+        re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, argv::RegexpSyntax, false);
+       //how to find this CC? 
+        PinyinCC.push_back(re::makeCC());
+    }
+    PinyinCC_final = re::makeSeq(PinyinCC.begin(),PinyinCC.end());
+    return PinyinCC_final;
 }
 
-
 int main(int argc, char* argv[]){
+    PinyinPattern::Buffer buf;
+    AlignedAllocator <char, 32> alloc;
+    char * UnihanBuf;
     codegen::ParseCommandLineOptions(argc, argv, {&pygrepFlags, codegen::codegen_flags()});
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
@@ -76,5 +83,11 @@ int main(int argc, char* argv[]){
 	grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     engine.grepCodeGen(KangXiLinePattern);
-    engine.doGrep(UnihanBuf, BufSize, accum);
+
+    UnihanBuf = alloc.allocate(buf.BufSize, 0);
+    std::memcpy(UnihanBuf, buf.fstring.data(), n);
+    std::memset(UnihanBuf + buf.size, 0, buf.diff);
+
+    engine.doGrep(UnihanBuf, size32.BufSize, accum);
+    alloc.deallocate(UnihanBuf, 0);
 }

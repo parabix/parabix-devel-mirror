@@ -9,7 +9,9 @@
 #include <set>
 #include <regex>
 #include <iostream>
-#include<unicode/data/KHanyuPinyin.h>
+#include <fstream>
+#include <unicode/data/KHanyuPinyin.h>
+#include "../../unihan-scripts/Unihan/Unihan_Readings.txt"
 
 namespace PinyinPattern{
     using namespace std;
@@ -43,13 +45,37 @@ namespace PinyinPattern{
         void Divide();
     };
 
-    class Pattern_Parse{
-
-    };
-
     class Pattern_Enumerate{
 
     };
 
+    class Buffer{
+        int rmd, fsize;
+        string str, name;
+        name = "Unihan_Readings.txt";
+        int find_size (string filename){
+            ifstream f(filename, ios::binary);
+            f.seekg(0, ios::end);
+            return int(f.tellg());
+        }
+        int set_size(string filename, int s){
+                rmd = s % 32;
+                if (!rmd){
+                    return s;
+                }
+            return s - rmd + 32;
+        }
+        ifstream file(name);
+        if (file) {
+            str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
+        }
+        
+        public:
+        const auto size, size32, diff;
+        string fstring = str;
+        size = find_size(name);
+        size32 = set_size(name, size);
+        diff = size32 - size;
+    };
 }
 #endif
