@@ -17,17 +17,20 @@ To build Radical Count, type `make radicalcount` into the terminal.
 ## Example 1: Single Radical Input
 
     Input: 氵_ ../QA/radicaltest/testfiles/test1
+    
     Output: 氵: 3       ../QA/radicaltest/testfiles/test1
 
 ## Example 2: Double Radical Input
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1
+    
     Output:     氵: 3       ../QA/radicaltest/testfiles/test1
                 子: 4       ../QA/radicaltest/testfiles/test1
 
 ## Example 3: Double Radical Input and Multiple Files
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test2
+    
     Output: File 0:
                 氵: 3       ../QA/radicaltest/testfiles/test1
                 子: 4       ../QA/radicaltest/testfiles/test1
