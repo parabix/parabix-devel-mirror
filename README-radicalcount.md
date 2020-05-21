@@ -25,7 +25,7 @@ To build Radical Count, type `make radicalcount` into the terminal.
     Output:     氵: 3       ../QA/radicaltest/testfiles/test1
                 子: 4       ../QA/radicaltest/testfiles/test1
 
-## Example 3: Double Radical Input in Multiple Files
+## Example 3: Double Radical Input and Multiple Files
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test2
     Output: File 0:
@@ -37,6 +37,31 @@ To build Radical Count, type `make radicalcount` into the terminal.
 
             Total Count of 氵: 10
             Total Count of 子: 11
+
+## Example 4: Radicals With the Same Index (火 and 灬)
+
+As mentioned before, it is possible to have more than one radical with the same index. In this example, 火 and 灬 are both radical 86 in the Kangxi dictionary. Similar cases include 氵and 水, as well as 忄and 心. These just get counted together.
+
+    Input: ./radicalcount 火_灬_ ../QA/radicaltest/testfiles/test4
+
+    Output:     火: 2       ../QA/radicaltest/testfiles/test4
+                灬: 2       ../QA/radicaltest/testfiles/test4
+
+## Example 5: Words that are Radicals Themselves
+
+Some characters such as 土, 火, 水, 木, and 金 are radicals themselves. They still fall into their respective set, and instead have no residual strokes.
+    
+    Input: 土_ ../QA/radicaltest/testfiles/test5
+
+    Output: 土: 8       ../QA/radicaltest/testfiles/test5
+
+## Example 8: Kangxi Radical Designation
+
+In the Kangxi dictionary, every Chinese character only has one desginated radical. For instance 伙 is composed of 亻and 火, which are two commonly seen radicals. According to the Kangxi dictionary, the official radical of 伙 is 亻. 伙 would only be counted when 亻is being searched for, and not when 火.
+
+    Input: 亻_ ../QA/radicaltest/testfiles/test6
+
+    Output: 亻: 1       ../QA/radicaltest/testfiles/test6
     
 ###### *Inputs of 2 radicals returns the count of each radical, and not the number of consecutive occurences (i.e. phrases).
 

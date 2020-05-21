@@ -62,15 +62,15 @@ Another program, `Radical Count` was implemented in this iteration. The program 
     Input: 子_ ../QA/radicaltest/testfiles/test1
     
     Output: 这是一个简单的例**子**
-    部首分类也是使用汉**字**之文化圈少数的共通点
-    部首检字也有其局限性，许多汉**字**难以归部
+            部首分类也是使用汉**字**之文化圈少数的共通点
+            部首检字也有其局限性，许多汉**字**难以归部
     
 ## Example 2: Radical Phrase Input
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1
     
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
-    部首检字也有其局限性，许多**汉字**难以归部
+            部首检字也有其局限性，许多**汉字**难以归部
    
 ## Example 3: Radical Pattern Not Found in File 
 
@@ -78,31 +78,73 @@ Another program, `Radical Count` was implemented in this iteration. The program 
     
     Output: Can not find the results!
     
-## Example 4: Single Radical Input in Multiple Files
+## Example 4: Single Radical Input and Multiple Files
 
     Input: 子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test2
     
     Output: 这是一个简单的例**子**
-    部首分类也是使用汉**字**之文化圈少数的共通点
-    部首检**字**也有其局限性，许多汉**字**难以归部
-    偏旁是从造**字**构形的角度定义的
+            部首分类也是使用汉**字**之文化圈少数的共通点
+            部首检**字**也有其局限性，许多汉**字**难以归部
+            偏旁是从造**字**构形的角度定义的
 
-    这是采用“两分法”对汉**字**进行结构分析得出的认识
-    由于汉**字**结构复杂，许多汉**字**并不是左右结构的
-    排列在一起，并把这种排**字**方法叫做“分别部居”
-    每“部”第一个**字**就是“部首”
-    可见，部首也是偏旁，是用来作为排列和检索汉**字**依据的特殊“偏旁”
+            这是采用“两分法”对汉**字**进行结构分析得出的认识
+            由于汉**字**结构复杂，许多汉**字**并不是左右结构的
+            排列在一起，并把这种排**字**方法叫做“分别部居”
+            每“部”第一个**字**就是“部首”
+            可见，部首也是偏旁，是用来作为排列和检索汉**字**依据的特殊“偏旁”
 
-## Example 5: Radical Phrase Input in in Multiple Files
+## Example 5: Radical Phrase Input and Multiple Files
 
     Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test3
     
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
-    部首检字也有其局限性，许多**汉字**难以归部
+            部首检字也有其局限性，许多**汉字**难以归部
 
-    部首分類也是使用**漢字**之文化圈少數的共通點
-    部首檢字也有其局限性，許多**漢字**難以歸部
-    
+            部首分類也是使用**漢字**之文化圈少數的共通點
+            部首檢字也有其局限性，許多**漢字**難以歸部
+
+## Example 6: Radicals With the Same Index (火 and 灬)
+
+As mentioned before, it is possible to have more than one radical with the same index. In this example, 火 and 灬 are both radical 86 in the Kangxi dictionary. Similar cases include 氵and 水, as well as 忄and 心.
+
+    Input: 火_灬_ ../QA/radicaltest/testfiles/test4
+
+    Output: 今天天气**炎热**
+
+    Input: 火_火_ ../QA/radicaltest/testfiles/test4
+
+    Output: 今天天气**炎热**
+
+## Example 7: Words that are Radicals Themselves
+
+Some characters such as 土, 火, 水, 木, and 金 are radicals themselves. They still fall into their respective set, and instead have no residual strokes.
+
+    Input: 土_ ../QA/radicaltest/testfiles/test5
+
+    Output: 古人把宇宙万物根据其特征划分成火、水、木、金、**土**五大类，统称“五行”
+            **在**中医学中，五行有着特殊含义
+            “金曰从革”，代表沉降、肃杀、收敛等性质，**在**人体为肺和大肠
+            “水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，**在**人体为肾和膀胱
+            “木曰曲直”，代表生长、升发、条达、舒畅的功能，**在**人体为肝和膽
+            “火曰炎上”，代表了温热、向上等性质，**在**人体为心和小肠
+            “土曰稼穑”，代表了生化、承载、受纳等性质，**在**人体为脾和胃
+
+## Example 8: Kangxi Radical Designation
+
+In the Kangxi dictionary, every Chinese character only has one desginated radical. For instance 伙 is composed of 亻and 火, which are two commonly seen radicals. According to the Kangxi dictionary, the official radical of 伙 is 亻.
+
+    Input: 亻_ ../QA/radicaltest/testfiles/test6
+
+    Output: **伙**
+
+    Input: 火_ ../QA/radicaltest/testfiles/test6
+
+    Output: **烛**
+
+    Input: 虫_ ../QA/radicaltest/testfiles/test6
+
+    Output: Can not find the results!
+
 ###### ** Output is printed in red on the terminal. ** 
 
 ## **Iteration 3: Adding New Features**
