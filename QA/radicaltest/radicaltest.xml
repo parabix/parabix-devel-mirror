@@ -34,7 +34,6 @@
 <grepcase regexp= "亻_心_" datafile = "test3" greplines = "3"/>
 <grepcase regexp= "氵_子_" datafile = "test3" greplines = "4 6"/>
 <grepcase regexp= "扌_刂_" datafile = "test3" greplines = "5"/>
-</greptest>
 
 <!--radicals like 火 and 灬 are regarded as the same radical accoding to KangXi dictionary-->
 <datafile id = "test4">
@@ -78,3 +77,4 @@
 <grepcase regexp = "亻_" datafile = "test6" greplines = "3"/>
 <grepcase regexp = "火_" datafile = "test6" greplines = "4"/>
 
+</greptest>
