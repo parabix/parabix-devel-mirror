@@ -44,34 +44,98 @@ namespace PinyinPattern{
         }
         void Divide();
     };
-
+    std::string& trim(std::string &s)
+    {
+        if(s.empty())
+        {
+            return s;
+        }
+        
+        s.erase(0,s.find_first_not_of(" "));
+        s.erase(s.find_last_not_of(" ") + 1);
+        return s;
+    }
+    std::string Add_Search_Prefix(string to_add)
+    {
+        std::string temp = to_add;
+        std::string prefix = "kHanyuPinyin.*";
+        temp = prefix + temp;
+        return temp;
+    }
+    std::vector<std::string> Before_Search(std::string Pinyin_syllables)
+    {
+        int pos = 0;
+        Pinyin_syllables = trim(Pinyin_syllables);
+        std::vector<std::string> Divided;
+        while(pos!=-1)
+        {
+            string temp;
+            pos = Pinyin_syllables.find_first_of(' ',pos);
+            temp = Pinyin_syllables.substr(0,pos);
+            Pinyin_syllables.erase(0,pos);
+            temp = trim(temp);
+            Divided.push_back(temp);
+            Pinyin_syllables = trim(Pinyin_syllables);
+        }
+        if(Pinyin_syllables!="")
+        {
+            Divided.push_back(Pinyin_syllables);
+        }
+        for(std::vector<std::string>::iterator iter = Divided.begin();iter!=Divided.end();iter++)
+        {
+            *iter = Add_Search_Prefix(*iter);
+        }
+        return Divided;
+    }
     class Buffer{
-        int rmd, fsize;
+        int rmd;
+        int size, size32, diff;
         string str, name;
-        name = "Unihan_Readings.txt";
+        string fstring;
+    public:
+        Buffer()
+        {
+            name = "Unihan_Readings.txt";
+            ifstream file(name);
+            if(file) {
+                str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
+            }
+            else{
+                std::cout << "Fatal Error, cannot open the file"<<endl;
+            }
+            size = find_size(name);
+            size32 = set_size(name, size);
+            diff = size32 - size;
+            fstring = str;
+        }
         int find_size (string filename){
             ifstream f(filename, ios::binary);
             f.seekg(0, ios::end);
             return int(f.tellg());
         }
         int set_size(string filename, int s){
-                rmd = s % 32;
-                if (!rmd){
-                    return s;
-                }
+            rmd = s % 32;
+            if (!rmd){
+                return s;
+            }
             return s - rmd + 32;
         }
-        ifstream file(name);
-        if (file) {
-            str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
+        int R_size()
+        {
+            return size;
         }
-
-        public:
-        const auto size, size32, diff;
-        string fstring = str;
-        size = find_size(name);
-        size32 = set_size(name, size);
-        diff = size32 - size;
+        int R_size32()
+        {
+            return size32;
+        }
+        int R_diff()
+        {
+            return diff;
+        }
+        string R_fstring()
+        {
+            return fstring;
+        }
     };
 
     class MatchAccumulator{

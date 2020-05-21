@@ -54,7 +54,7 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ..
 
 std::vector<fs::path> allFiles;
 //step4
-re::RE* generateREs(vector<string> KangXiLinePattern){
+std::vector<re::RE*> generateREs(vector<string> KangXiLinePattern){
     std::vector<re::RE*> PinyinCC;
     re::RE* PinyinCC_final;
     for(int i= 0;i<KangXiLinePattern.size();i++)
@@ -63,33 +63,47 @@ re::RE* generateREs(vector<string> KangXiLinePattern){
        //how to find this CC? 
         PinyinCC.push_back(re::makeCC());
     }
-    PinyinCC_final = re::makeSeq(PinyinCC.begin(),PinyinCC.end());
-    return PinyinCC_final;
+    return PinyinCC;
+    //PinyinCC_final = re::makeSeq(PinyinCC.begin(),PinyinCC.end());
+    //return PinyinCC_final;
 }
 
 int main(int argc, char* argv[]){
-    PinyinPattern::Buffer buf;
+    PY::Buffer buf;
     AlignedAllocator <char, 32> alloc;
     char * UnihanBuf;
+    
     codegen::ParseCommandLineOptions(argc, argv, {&pygrepFlags, codegen::codegen_flags()});
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
     }
-    CPUDriver pxDriver("pinyingrep");
+    
+    CPUDriver pxDriver("pygrep");
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     const auto fileCount = allFiles.size();
+    //step2
+    vector <string> KangXiLinePattern;
+    //string Search_Prefix = "kHanyuPinyin.*";
+    KangXiLinePattern = PY::Before_Search(PinyinPattern);
+    //here needs step3
 
-    auto KangXiLineREs = generateREs(KangXiLinePattern);
+    //step4
+    auto KangXilineREs = generateREs(KangXiLinePattern);
+    //step5 for each RE,use parabix internal search Engine to search
+    
+    // what is this driver it cannot be sepcified by the IDE
 	grep::InternalSearchEngine engine(driver);
+    //
+
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+    //cannot using this KangXiLinePatter, must use RE int the Vector KangXiLineREs, 
+    //do not kown what this function used to do
     engine.grepCodeGen(KangXiLinePattern);
 
-    UnihanBuf = alloc.allocate(buf.BufSize, 0);
-    std::memcpy(UnihanBuf, buf.fstring.data(), n);
-    std::memset(UnihanBuf + buf.size, 0, buf.diff);
+    UnihanBuf = alloc.allocate(buf.R_size32(), 0);
+    std::memcpy(UnihanBuf, buf.R_fstring().data(), n);
+    std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
 
-    PinyinPattern::MatchAccumulator accum(parsedValues);
-
-    engine.doGrep(UnihanBuf, size32.BufSize, accum);
+    engine.doGrep(UnihanBuf, buf.R_size32(), accum);
     alloc.deallocate(UnihanBuf, 0);
 }
