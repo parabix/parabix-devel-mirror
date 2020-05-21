@@ -88,6 +88,8 @@ int main(int argc, char* argv[]){
     std::memcpy(UnihanBuf, buf.fstring.data(), n);
     std::memset(UnihanBuf + buf.size, 0, buf.diff);
 
+    PinyinPattern::MatchAccumulator accum(parsedValues);
+
     engine.doGrep(UnihanBuf, size32.BufSize, accum);
     alloc.deallocate(UnihanBuf, 0);
 }

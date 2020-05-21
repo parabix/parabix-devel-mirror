@@ -45,10 +45,6 @@ namespace PinyinPattern{
         void Divide();
     };
 
-    class Pattern_Enumerate{
-
-    };
-
     class Buffer{
         int rmd, fsize;
         string str, name;
@@ -69,13 +65,23 @@ namespace PinyinPattern{
         if (file) {
             str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
         }
-        
+
         public:
         const auto size, size32, diff;
         string fstring = str;
         size = find_size(name);
         size32 = set_size(name, size);
         diff = size32 - size;
+    };
+
+    class MatchAccumulator{
+        vector<string> parsedvector;
+        public:
+        MatchAccumulator(vector<string> values):parsedvector(values) {};
+        void accumulate_match(int pos, char * start, char * end){
+            // add codepoint to UnicodeSet
+            parsedvector.emplace_back(start, end);
+        }
     };
 }
 #endif
