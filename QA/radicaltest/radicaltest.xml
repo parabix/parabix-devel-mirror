@@ -23,6 +23,7 @@
 <grepcase regexp= "氵_子_" datafile = "test2" greplines = "4 5 8"/>
 <grepcase regexp= "扌_刂_" datafile = "test2" greplines = "6 8"/>
 
+<!--not simplified Chinese-->
 <datafile id = "test3">
 這是一個簡單的例子
 以下是一些關於部首分類的信息
@@ -34,3 +35,46 @@
 <grepcase regexp= "氵_子_" datafile = "test3" greplines = "4 6"/>
 <grepcase regexp= "扌_刂_" datafile = "test3" greplines = "5"/>
 </greptest>
+
+<!--radicals like 火 and 灬 are regarded as the same radical accoding to KangXi dictionary-->
+<datafile id = "test4">
+今天天气炎热
+喝着汽水
+我们怀念起了旧时光
+</datafile>
+
+<grepcase regexp = "火_火_" datafile = "test4" greplines = "2"/>
+<grepcase regexp = "火_灬_" datafile = "test4" greplines = "2"/>
+<grepcase regexp = "水_水_" datafile = "test4" greplines = "3"/>
+<grepcase regexp = "氵_水_" datafile = "test4" greplines = "3"/>
+<grepcase regexp = "心_心" datafile = "test4" greplines = "4"/>
+<grepcase regexp = "忄_心" datafile = "test4" greplines = "4"/>
+
+<!--characters that are radicals themselves, for example 木 水(氵) 金(钅) -->
+
+<datafile id = "test5">
+古人把宇宙万物根据其特征划分成火、水、木、金、土五大类，统称“五行”
+在中医学中，五行有着特殊含义
+“金曰从革”，代表沉降、肃杀、收敛等性质，在人体为肺和大肠
+“水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
+“木曰曲直”，代表生长、升发、条达、舒畅的功能，在人体为肝和膽
+“火曰炎上”，代表了温热、向上等性质，在人体为心和小肠
+“土曰稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
+</datafile>
+<grepcase regexp = "金_" datafile = "test5" greplines = "2 4"/>
+<grepcase regexp = "水_" datafile = "test5" greplines = "2 4 5 7"/>
+<grepcase regexp = "木_" datafile = "test5" greplines = "2 6"/>
+<grepcase regexp = "火_" datafile = "test5" greplines = "2 7"/>
+<grepcase regexp = "土_" datafile = "test5" greplines = "2 7"/>
+
+<!--each character will only have 1 radical, according to KangXi dictionary. To avoid confusion, we only take 1 character per line to illustrate the point-->
+<datafile id = "test6">
+秋
+伙
+烛
+</datafile>
+
+<grepcase regexp = "禾_" datafile = "test6" greplines = "2"/>
+<grepcase regexp = "亻_" datafile = "test6" greplines = "3"/>
+<grepcase regexp = "火_" datafile = "test6" greplines = "4"/>
+
