@@ -331,9 +331,9 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     // can bypass transposition and use the Direct CC compiler.
     mPrefixRE = nullptr;
     mSuffixRE = nullptr;
-    /*if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
+    if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
         mExternalNames.empty() && !UnicodeIndexing) {
-        if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
+        /*if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
             return;  // skip transposition
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
             return;  // skip transposition and set mPrefixRE, mSuffixRE
@@ -343,9 +343,9 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     } else {*/
     //can directCC compiler be modified to support UTF16 encoding?
         setComponent(mExternalComponents, Component::S2P_16);
-    //}
+    }
     if (!mExternalNames.empty()) {
-        //setComponent(mExternalComponents, Component::UTF16index);
+        setComponent(mExternalComponents, Component::UTF16index);
     }
 }
 
@@ -363,7 +363,6 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
 }
 
 void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
-
     mLineBreakStream = nullptr;
     mU8index = nullptr;
     mGCB_stream = nullptr;
@@ -542,7 +541,7 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
 
 void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF16);
-    auto lengths = getLengthRange(re, &cc::UTF16);
+    auto lengths = getLengthRange(re, &cc::UTF16); 
     options->setSource(Source);
     StreamSet * MatchResults = nullptr;
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
@@ -554,10 +553,10 @@ void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::R
     if (hasComponent(mExternalComponents, Component::UTF16index)) {
         options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
         if (mSuffixRE != nullptr) {
-            options->setPrefixRE(mPrefixRE);
-            options->setRE(mSuffixRE);
+            options->setPrefixRE(toUTF16(mPrefixRE));
+            options->setRE(toUTF16(mSuffixRE));
         } else {
-            options->setRE(re);
+            options->setRE(toUTF16(re));
         }
     } else {
         if (mSuffixRE != nullptr) {
@@ -764,7 +763,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
-    //E->CreateKernelCall<DebugDisplayKernel> ("Matches", Matches);
+    
     if (MatchResultsBufs.size() > 1) {
         StreamSet * const MergedMatches = E->CreateStreamSet();
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
@@ -797,7 +796,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     }
 
     if (mColoring && !mInvertMatches) {
-
+        //TODO: add a LF at the end of matched lines
         StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
         FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);
 
@@ -830,7 +829,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
 
         std::string ESC = "\x1B";
-        std::vector<std::string> colorEscapes = {ESC + "[01;34m" + ESC + "[K", ESC + "[m"};
+        std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
         unsigned insertLengthBits = 4;
 
         StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
@@ -847,6 +846,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
 
         StreamSet * FilteredBasis = E->CreateStreamSet(16, 1); //modified to run in UTF16 default
         E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis); //modified to run in UTF16 default
+        //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
 
         // Baais bit streams expanded with 0 bits for each string to be inserted.
         StreamSet * ExpandedBasis = E->CreateStreamSet(16); //modified to run in UTF16 default
@@ -861,7 +861,8 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
 
         StreamSet * ColorizedBytes  = E->CreateStreamSet(1, 16); //modified to run in UTF16 default
-        E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes); //modified to run in UTF16 default
+        cc::ByteNumbering byteNumbering = cc::ByteNumbering::LittleEndian;
+        E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes, byteNumbering);
 
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
         E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
@@ -925,11 +926,11 @@ void EmitMatchesEngine::grepCodeGen() {
     Scalar * const useMMap = E1->getInputScalar("useMMap");
     Scalar * const fileDescriptor = E1->getInputScalar("fileDescriptor");
     StreamSet * const ByteStream = E1->CreateStreamSet(1, ENCODING_BITS_U16);
+    E1->CreateKernelCall<DebugDisplayKernel>("ByteStream", ByteStream);
     E1->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     grepPipeline(E1, ByteStream);
     E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
     mMainMethod = E1->compile();
-
     if (haveFileBatch()) {
         auto E2 = mGrepDriver.makePipeline(
                     // inputs
@@ -942,7 +943,8 @@ void EmitMatchesEngine::grepCodeGen() {
 
         Scalar * const buffer = E2->getInputScalar("buffer");
         Scalar * const length = E2->getInputScalar("length");
-        StreamSet * const InternalBytes = E2->CreateStreamSet(1, 16);  //modified to 16 to default to UTF16
+        StreamSet * const InternalBytes = E2->CreateStreamSet(1, 8); 
+        E2->CreateKernelCall<DebugDisplayKernel>("InternalBytes", InternalBytes);
         E2->CreateKernelCall<MemorySourceKernel>(buffer, length, InternalBytes);
         grepPipeline(E2, InternalBytes, /* BatchMode = */ true);
         E2->setOutputScalar("countResult", E2->CreateConstant(idb->getInt64(0)));
