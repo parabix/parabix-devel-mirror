@@ -36,6 +36,7 @@
 #include <map>
 #include "pinyin_interface.h"
 
+// Exit codes for grep
 const int MatchFoundExitCode = 0;
 const int MatchNotFoundExitCode = 1;
 
@@ -50,40 +51,54 @@ using namespace kernel;
 
 static cl::OptionCategory pygrepFlags("Command Flags", "pinyingrep options");
 
-
+// Regex-like pinyin syllables input
+// For more details about the support, please refer to README-pinyingrep.md in the root directory
 static cl::opt<std::string> pyregex(cl::Positional, cl::desc("<Regex-like Pinyin Syllables>"), cl::Required, cl::cat(pygrepFlags));
 
 //  Multiple input files are allowed on the command line; counts are produced
 //  for each file.
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
 
+// the source files to grep from
 std::vector<fs::path> allFiles;
 
 std::vector<re::RE*> generateREs(std::string pyregex){
+    // Separate the input string containing multiple pinyin syllables 
+    // into the sequence of individual syllable strings. 
+    // And for each individual syllable, it parse it into `<{Syllables}, {Tones}>` pairs.
     PY::PinyinValuesParser parser;
     parser.parse(pyregex);
     
+    // enumerate the pair of vector mentioned above 
+    // into `{<syllable, tone>,...}` a vector of pairs.
+    // for every individual syllable
     PY::PinyinValuesEnumerator enumerator;
     enumerator.enumerate(parser);
 
+    // Create re::REs from the enumerated result
+    // to initialize the grep engine of Parabix
     return enumerator.createREs();
 }
+// Reference: icgrep
 int main(int argc, char* argv[]){
+    // Built-in CommandLine Parser
     codegen::ParseCommandLineOptions(argc, argv, {&pygrepFlags, codegen::codegen_flags()});
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
     }
     CPUDriver pxDriver("pygrep");
+    // Parsed input files
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
-    const auto fileCount = allFiles.size();
 
-    std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver);
+    // Parabix grep engine
+    std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver); 
+    // generate REs to initialize the grep engine
     auto pinyinREs = generateREs(pyregex);
-    grep->setColoring();
-    grep->initREs(pinyinREs);
-    grep->grepCodeGen();
-    grep->initFileResult(allFiles);
-    const bool matchFound = grep->searchAllFiles();
+    //grep->setColoring();
+    grep->initREs(pinyinREs); // initialize REs
+    grep->grepCodeGen(); // generate pipeline
+    grep->initFileResult(allFiles); // initialize source files
+    const bool matchFound = grep->searchAllFiles(); // grep
 
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
 }
