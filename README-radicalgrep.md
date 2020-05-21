@@ -43,7 +43,7 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 In the second iteration, Radical Grep can take Kangxi radical character(s) as input (e.g. 子_ or 氵_子_). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
 
-Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/tools/wc/radical_count/README-radicalcount.md "README-radical-count").
+Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/README-radicalcount.md).
 
 ## Changelog
 
