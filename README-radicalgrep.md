@@ -150,10 +150,23 @@ In the Kangxi dictionary, every Chinese character only has one desginated radica
 ## **Iteration 3: Adding New Features**
 Plans for iteration 3 include:
 
-1. Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.
+1. ~~Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.~~ **(Done)**
 2. Add more functions/command line flags.
 3. Given a radical pattern consisting of traditional radicals and a file in simplified Chinese, make Radical Grep find the equivalent characters.  
 
+## Changelog
+
+### Radical Grep Version 3.0
+ * Radical Grep now supports both Kangxi radical index and radical characters for input. (i.e. 85_ and 氵_).
+ * The default searching mode is with the radical characters. To use the radical indices, include the option flag `-i` in your input.
+
+## Example 1
+
+    Input: -i 85_ ../QA/radicaltest/testfiles/test1
+
+    Output: 这是一个简单的例**子**
+            部首分类也是使用汉**字**之文化圈少数的共通点
+            部首检字也有其局限性，许多汉**字**难以归部
 
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
@@ -162,4 +175,4 @@ Plans for iteration 3 include:
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/19
+**Last Updated:** 2020/05/21
