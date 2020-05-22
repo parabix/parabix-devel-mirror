@@ -138,14 +138,24 @@ namespace PinyinPattern{
         }
     };
 
-    class MatchAccumulator{
-        vector<string> parsedvector;
+    class PinyinSetAccumulator : public grep::MatchAccumulator {
+        UCD::UnicodeSet mAccumSet;
+        UCD::UnicodeSet & valset;
+        vector<UCD::codepoint_t> & CodepointTable;
         public:
-        MatchAccumulator(vector<string> values):parsedvector(values) {};
-        void accumulate_match(int pos, char * start, char * end){
+        PinyinSetAccumulator(const std::vector<UCD::codepoint_t> & vcodepoint, const UCD::UnicodeSet & df_value):CodepointTable(vcodepoint), valset(df_value){}
+        UCD::UnicodeSet && getAccumulatedSet() {
+            return std::move(mAccumSet);
+        }        
+        void accumulate_match(int pos, char * start, char * end) override {
             // add codepoint to UnicodeSet
-            parsedvector.emplace_back(start, end);
-        }
+            if (pos >= CodepointTable.size()){
+                mAccumSet.insert(valset);
+            }
+            else{
+                mAccumSet.insert(CodepointTable[pos]);
+            }
+        }        
     };
 }
 #endif
