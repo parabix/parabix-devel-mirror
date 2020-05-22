@@ -138,24 +138,28 @@ namespace PinyinPattern{
         }
     };
 
-    class PinyinSetAccumulator : public grep::MatchAccumulator {
+        class PinyinSetAccumulator : public grep::MatchAccumulator {
         UCD::UnicodeSet mAccumSet;
-        UCD::UnicodeSet & valset;
+        UCD::codepoint_t parsed_codepoint, fileline;
         vector<UCD::codepoint_t> & CodepointTable;
+        int p1, p2;
         public:
-        PinyinSetAccumulator(const std::vector<UCD::codepoint_t> & vcodepoint, const UCD::UnicodeSet & df_value):CodepointTable(vcodepoint), valset(df_value){}
+        PinyinSetAccumulator() {}
         UCD::UnicodeSet && getAccumulatedSet() {
-            return std::move(mAccumSet);
-        }        
+            return move(mAccumSet);
+        }
         void accumulate_match(int pos, char * start, char * end) override {
             // add codepoint to UnicodeSet
-            if (pos >= CodepointTable.size()){
-                mAccumSet.insert(valset);
+            ifstream myfile("Unihan_Readings.txt");
+            while (getline(myfile, fileline))
+            {
+                CodepointTable.push_back(fileline);
             }
-            else{
-                mAccumSet.insert(CodepointTable[pos]);
-            }
-        }        
+            p1 = CodepointTable[pos-1].find('+');
+            p2 = CodepointTable[pos-1].find('\t');
+            parsed_codepoint = CodepointTable[pos-1].substr(p1+1, p2-p1);
+            mAccumSet.insert(parsed_codepoint);
+        }
     };
 }
 #endif

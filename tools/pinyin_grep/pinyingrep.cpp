@@ -94,7 +94,7 @@ int main(int argc, char* argv[]){
     auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
     //step5 for each RE,use parabix internal search Engine to search
     std::vector <UCD::codepoint_t> prop;
-    PinyinPattern::PinyinSetAccumulator accum(prop, KangXilineREs);
+    PinyinPattern::PinyinSetAccumulator accum(prop);
     
     // what is this driver it cannot be sepcified by the IDE
 	grep::InternalSearchEngine engine(pxDriver);
