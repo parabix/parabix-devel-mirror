@@ -92,13 +92,13 @@ int main(int argc, char* argv[]){
     //step5 for each RE,use parabix internal search Engine to search
     
     // what is this driver it cannot be sepcified by the IDE
-	grep::InternalSearchEngine engine(driver);
+	grep::InternalSearchEngine engine(pxDriver);
     //
 
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     //cannot using this KangXiLinePatter, must use RE int the Vector KangXiLineREs, 
     //do not kown what this function used to do
-    engine.grepCodeGen(KangXiLinePattern);
+    engine.grepCodeGen(KangXiLineREs);
 
     UnihanBuf = alloc.allocate(buf.R_size32(), 0);
     std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
