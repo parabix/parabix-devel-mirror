@@ -29,16 +29,19 @@ namespace BS
     class UnicodeSetTable
     {   
         public:
-            const UCD::UnicodeSet&& get_uset(string radical)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
+            const UCD::UnicodeSet&& get_uset(string radical, bool indexMode)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
             {
-                /*if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
-                    return std::move(*_unicodeset_radical_table[radical]);
-                else
-                    return std::move(UCD::UnicodeSet());*/
-                if(radical_table.find(radical) != radical_table.end())
-                    return std::move(*radical_table[radical]);
-                else
-                    return std::move(UCD::UnicodeSet());
+                if (indexMode) { //search using the index (e.g. 85_)
+                    if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
+                        return std::move(*_unicodeset_radical_table[radical]);
+                    else
+                        return std::move(UCD::UnicodeSet());
+                } else { //search using the actual radical (e.g. 氵_)
+                    if(radical_table.find(radical) != radical_table.end())
+                        return std::move(*radical_table[radical]);
+                    else
+                        return std::move(UCD::UnicodeSet());
+                }
                 
             }
         private:
@@ -51,7 +54,7 @@ namespace BS
     class RadicalValuesEnumerator
     {
         public:
-            std::vector<re::RE*> createREs();   //Search for the results
+            std::vector<re::RE*> createREs(bool indexMode);   //Search for the results
             void parse_input(string input_radical); //Parse the input "r1_r2_" or "r0_", disassemble the input radical(s) and store it (them) in vector
         private:
             std::vector<string> radical_list;   //Store the input radical(s)

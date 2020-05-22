@@ -8,18 +8,17 @@ using namespace UCD::KRS_ns;
 namespace BS
 {
     //Search for the results
-    std::vector<re::RE*> RadicalValuesEnumerator::createREs()
+    std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode)
     {
         std::vector<re::RE*> REs;
         std::vector<re::RE*> temp1;
         std::vector<re::RE*> temp2;
-        temp1.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[0]))));    //push the corresponding UnicodeSet predefined in kRSKangXi.h
+        temp1.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[0], indexMode))));    //push the corresponding UnicodeSet predefined in kRSKangXi.h
         REs.push_back(re::makeAlt(temp1.begin(),temp1.end()));  //push the result
         
-        //cout<<radical_num<<endl;
         if(radical_num==2)
         {
-            temp2.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[1]))));    //push the corresponding UnicodeSet predefined in kRSKangXi.h
+            temp2.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[1], indexMode))));    //push the corresponding UnicodeSet predefined in kRSKangXi.h
             REs.push_back(re::makeAlt(temp2.begin(),temp2.end()));  //push the result
         }
        

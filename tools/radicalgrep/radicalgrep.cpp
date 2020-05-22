@@ -52,11 +52,12 @@ using namespace pablo;
 using namespace kernel;
 using namespace codegen;
 
-static cl::OptionCategory radicalgrepFlags("Command Flags", "radicalgrep options"); //The command line
-
+static cl::OptionCategory radicalgrepFlags("Command Flags", "Options for Radical Grep"); //The command line
 static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags));    //The input  radical(s)
 static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));
 //search for multiple input files are supported
+static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search."), cl::init(false), cl::cat(radicalgrepFlags)); 
+
 std::vector<fs::path> allfiles; //Store all path of files
 
 std::vector<re::RE*> generateREs(std::string input_radical);    //This function parse the input and get the results
@@ -89,6 +90,6 @@ std::vector<re::RE*> generateREs(std::string input_radical)
 {
     BS::RadicalValuesEnumerator en_rad;
     en_rad.parse_input(input_radical);  //parse the input 
-    return en_rad.createREs();
+    return en_rad.createREs(indexMode);
 }
 
