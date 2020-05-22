@@ -60,8 +60,8 @@ std::vector<re::RE*> generateREs(vector<string> KangXiLinePattern){
     for(int i= 0;i<KangXiLinePattern.size();i++)
     {
         re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, argv::RegexpSyntax, false);
-       //how to find this CC? 
-        PinyinCC.push_back(re::makeCC());
+       //how to find the unicode? 
+        PinyinCC.push_back(PinyinRe);
     }
     return PinyinCC;
     //PinyinCC_final = re::makeSeq(PinyinCC.begin(),PinyinCC.end());
@@ -86,9 +86,12 @@ int main(int argc, char* argv[]){
     //string Search_Prefix = "kHanyuPinyin.*";
     KangXiLinePattern = PY::Before_Search(PinyinPattern);
     //here needs step3
-
+    UnihanBuf = alloc.allocate(buf.R_size32(), 0);
+    std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
+    std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
     //step4
     auto KangXilineREs = generateREs(KangXiLinePattern);
+    auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
     //step5 for each RE,use parabix internal search Engine to search
     
     // what is this driver it cannot be sepcified by the IDE
@@ -100,9 +103,7 @@ int main(int argc, char* argv[]){
     //do not kown what this function used to do
     engine.grepCodeGen(KangXiLineREs);
 
-    UnihanBuf = alloc.allocate(buf.R_size32(), 0);
-    std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
-    std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
+    
 
     engine.doGrep(UnihanBuf, buf.R_size32(), accum);
     alloc.deallocate(UnihanBuf, 0);
