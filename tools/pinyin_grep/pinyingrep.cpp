@@ -103,7 +103,7 @@ int main(int argc, char* argv[]){
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     //cannot using this KangXiLinePatter, must use RE int the Vector KangXiLineREs, 
     //do not kown what this function used to do
-    engine.grepCodeGen(KangXiLineREs);
+    engine.grepCodeGen(PinyinCC);
 
     
 
