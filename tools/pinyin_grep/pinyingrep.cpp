@@ -54,7 +54,7 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ..
 
 std::vector<fs::path> allFiles;
 //step4
-std::vector<re::RE*> generateREs(vector<string> KangXiLinePattern){
+std::vector<re::RE*> generateREs(std::vector<std::string> KangXiLinePattern){
     std::vector<re::RE*> PinyinCC;
     re::RE* PinyinCC_final;
     for(int i= 0;i<KangXiLinePattern.size();i++)
@@ -84,7 +84,7 @@ int main(int argc, char* argv[]){
     //step2
     std::vector <std::string> KangXiLinePattern;
     //string Search_Prefix = "kHanyuPinyin.*";
-    KangXiLinePattern = PinyinPattern::Before_Search(PinyinPattern);
+    KangXiLinePattern = PinyinPattern::Before_Search("Unihan_Readings.txt");
     //here needs step3
     UnihanBuf = alloc.allocate(buf.R_size32(), 0);
     std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
@@ -93,8 +93,8 @@ int main(int argc, char* argv[]){
     auto KangXilineREs = generateREs(KangXiLinePattern);
     auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
     //step5 for each RE,use parabix internal search Engine to search
-    std::vector <UCD::codepoint_t> prop;
-    PinyinPattern::PinyinSetAccumulator accum(prop);
+    //std::vector <unsigned int> prop;
+    PinyinPattern::PinyinSetAccumulator accum;
     
     // what is this driver it cannot be sepcified by the IDE
 	grep::InternalSearchEngine engine(pxDriver);

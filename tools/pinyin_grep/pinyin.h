@@ -10,8 +10,7 @@
 #include <regex>
 #include <iostream>
 #include <fstream>
-#include <unicode/data/KHanyuPinyin.h>
-#include "../../unihan-scripts/Unihan/Unihan_Readings.txt"
+#include <sstream>
 
 namespace PinyinPattern{
     using namespace std;
@@ -44,7 +43,7 @@ namespace PinyinPattern{
         }
         void Divide();
     };
-    std::string& trim(std::string &s)
+    string& trim(string &s)
     {
         if(s.empty())
         {
@@ -55,18 +54,27 @@ namespace PinyinPattern{
         s.erase(s.find_last_not_of(" ") + 1);
         return s;
     }
-    std::string Add_Search_Prefix(string to_add)
+    string Add_Search_Prefix(string to_add)
     {
-        std::string temp = to_add;
-        std::string prefix = "kHanyuPinyin.*";
+        string temp = to_add;
+        string prefix = "kHanyuPinyin.*";
         temp = prefix + temp;
         return temp;
     }
-    std::vector<std::string> Before_Search(std::string Pinyin_syllables)
+    vector<string> Before_Search(string name)
     {
+        string Pinyin_syllables;
+        ifstream file(name);
+        if(file) {
+            Pinyin_syllables.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
+        }
+        else{
+            cout << "Fatal Error, cannot open the file" << endl;
+        }
+
         int pos = 0;
         Pinyin_syllables = trim(Pinyin_syllables);
-        std::vector<std::string> Divided;
+        vector<string> Divided;
         while(pos!=-1)
         {
             string temp;
@@ -81,15 +89,15 @@ namespace PinyinPattern{
         {
             Divided.push_back(Pinyin_syllables);
         }
-        for(std::vector<std::string>::iterator iter = Divided.begin();iter!=Divided.end();iter++)
+        for(vector<string>::iterator iter = Divided.begin(); iter!=Divided.end(); iter++)
         {
             *iter = Add_Search_Prefix(*iter);
         }
         return Divided;
     }
     class Buffer{
-        int rmd;
-        int size, size32, diff;
+        size_t rmd;
+        size_t size, size32, diff;
         string str, name;
         string fstring;
     public:
@@ -101,34 +109,34 @@ namespace PinyinPattern{
                 str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
             }
             else{
-                std::cout << "Fatal Error, cannot open the file"<<endl;
+                cout << "Fatal Error, cannot open the file"<<endl;
             }
             size = find_size(name);
             size32 = set_size(name, size);
             diff = size32 - size;
             fstring = str;
         }
-        int find_size (string filename){
+        size_t find_size (string filename){
             ifstream f(filename, ios::binary);
             f.seekg(0, ios::end);
             return int(f.tellg());
         }
-        int set_size(string filename, int s){
+        size_t set_size(string filename, int s){
             rmd = s % 32;
             if (!rmd){
                 return s;
             }
             return s - rmd + 32;
         }
-        int R_size()
+        size_t R_size()
         {
             return size;
         }
-        int R_size32()
+        size_t R_size32()
         {
             return size32;
         }
-        int R_diff()
+        size_t R_diff()
         {
             return diff;
         }
@@ -140,24 +148,29 @@ namespace PinyinPattern{
 
         class PinyinSetAccumulator : public grep::MatchAccumulator {
         UCD::UnicodeSet mAccumSet;
-        UCD::codepoint_t parsed_codepoint, fileline;
-        vector<UCD::codepoint_t> & CodepointTable;
-        int p1, p2;
+        unsigned int parsed_codepoint;
+        string strcodepoint;
+        unsigned int conv_int(string h){
+            stringstream s;
+            unsigned int ret;
+            s << hex << h;
+            s >> ret;
+            return ret;
+        }
         public:
         PinyinSetAccumulator() {}
         UCD::UnicodeSet && getAccumulatedSet() {
             return move(mAccumSet);
         }
-        void accumulate_match(int pos, char * start, char * end) override {
+        void accumulate_match(const size_t pos, char * start, char * end) override {
             // add codepoint to UnicodeSet
-            ifstream myfile("Unihan_Readings.txt");
-            while (getline(myfile, fileline))
-            {
-                CodepointTable.push_back(fileline);
+            int i = 3;
+            strcodepoint.clear();
+            while(*(start+i) != '\t'){
+                strcodepoint += *(start+i);
+                i++;
             }
-            p1 = CodepointTable[pos-1].find('+');
-            p2 = CodepointTable[pos-1].find('\t');
-            parsed_codepoint = CodepointTable[pos-1].substr(p1+1, p2-p1);
+            parsed_codepoint = conv_int(strcodepoint);
             mAccumSet.insert(parsed_codepoint);
         }
     };
