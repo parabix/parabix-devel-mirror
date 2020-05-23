@@ -101,17 +101,13 @@ std::vector<fs::path> allFiles;
 //
 class CSV_parsing : public PabloKernel {
 public:
-    CSV_parsing(BuilderRef kb,  StreamSet * dquote, StreamSet * delimiter, StreamSet * cr,StreamSet * FieldStrats, StreamSet * FieldFollows, StreamSet * RecordStarts, StreamSet * RecordFollows, StreamSet * basis, StreamSet * target, Scalar * FieldNumber, Scalar * RecordNumber)   //modified
+    CSV_parsing(BuilderRef kb,  StreamSet * dquote, StreamSet * delimiter, StreamSet * cr,StreamSet * basis, StreamSet * target, StreamSet * FieldStarts, StreamSet * FieldFollows, StreamSet * RecordStarts, StreamSet * RecordFollows, Scalar * FieldNumber, Scalar * RecordNumber)   //modified
         : PabloKernel(kb, "CSV_parsing",
-                      {Binding{"dquote",dquote,FixedRate(),LookAhead(1)}},
-                      {Binding{"delimiter",dilimiter, FixedRate(), LookAhead(1)}},
-                      {Binding{"cr",cr,FixedRate(),LookAhead(1)}}
-                      {Binding{"FieldStrats", FieldStarts},//don't know what fixedrate() is used for
-                      {Binding{"FieldFollows",FieldFollows}},
-                      {Binding{"RecordStarts",RecordStarts}, Binding{"RecordFollows",RecordFollows},Binding{"basis",basis},Binding{"target",target}},///modified 
+                      {Binding{"dquote",dquote,FixedRate(),LookAhead(1)},Binding{"delimiter",dilimiter, FixedRate(), LookAhead(1)}, Binding{"cr",cr,FixedRate(),LookAhead(1)},
+                       Binding{"basis",basis}, Binding{"target",target}},
+                      {Binding{"FieldStarts",FieldStarts},Binding{"FieldFollows",FieldFollows},Binding{"RecordStarts",RecordStarts},Binding{"RecordFollows",RecordFollows}},
                       {},
-                      {},
-                      {Binding{"FieldNumber",FieldNumber},Binding{"RecordNumber", RecordNumber}}) {}
+                      {Binding{"FieldNumber",FieldNumber},Binding{"RecordNumber", RecordNumber}}) 
 protected:
     void generatePabloMethod() override;
 };
@@ -131,6 +127,7 @@ In this step, CSV syntax marks are removed from the input, to leave the raw CSV 
   3. realDelimiter
   4. cr(carriage return)   
 */
+
 void CSV_parsing::generatePabloMethod(){
     pablo::PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
@@ -138,7 +135,7 @@ void CSV_parsing::generatePabloMethod(){
     PabloAST * delimiter = getInputStreamSet("delimiter")[0];
     PabloAST * dquote = getInputStreamSet("dquote")[0];
     PabloAST * cr = getInputStreamSet("cr")[0];
-    PabloAST * target = getInputStreamSet("target")[0];
+    PabloAST * target = getInputStreamSet("target")[0];//linefeed LF
     
     PabloAST * dquote_odd = pb.createEveryNth(dquote, pb.getInteger(2));
     PabloAST * dquote_even = pb.createXor(dquote, dquote_odd);
@@ -157,8 +154,112 @@ void CSV_parsing::generatePabloMethod(){
     PabloAST * CSV_newlines = pb.createXor(target,literal_target);
     PabloAST * newline_count=pb.createCount(CSV_newlines);
 
-    PabloAST * ToBeDeletion = pb.creatOr3(dquote_sf,quote_eacape,realDelimiter);
-    ToBeDeletion = pb.createOr(ToBeDelition,cr);
+    PabloAST * ToBeDeleted = pb.creatOr3(dquote_sf,quote_eacape,realDelimiter);
+    ToBeDeleted = pb.createOr(ToBeDelition,cr);
+
+    PabloAST * FieldStarts = 
+    PabloAST * FieldFollows = pb.creatOR(RealDelimiter, CSV_newlines);
+    PabloAST * RecordStarts = 
+    PabloAST * RecordFollows = CSV_newlines;
+
 
 }
 
+typedef uint64_t (*CSVParsingFunctionType)(uint32_t fd);
+
+//
+//  This is the function that generates and compiles a Parabix pipeline to
+//  perform the character counting task on a single input file.   The program
+//  takes a re::Name object whose definition includes the UnicodeSet defining
+//  the character class.    The compiled pipeline program is returned.
+//
+//  The compiled pipeline may then be executed.   When executed, it must be given
+//  an integer "file descriptor" as its input, and will produce the count of
+//  the number of characters of the given character class as a result.
+//
+//CSVParsingFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
+CSVParsingFunctionType pipelineGen(CPUDriver & pxDriver) {
+    auto & B = pxDriver.getBuilder();
+
+    auto P = pxDriver.makePipeline(
+                {Binding{B->getInt32Ty(), "fileDescriptor"}},
+                {Binding{B->getInt64Ty(), "countResult"}});
+
+    Scalar *  fileDescriptor = P->getInputScalar("fileDescriptor");
+
+    //  Create a stream set consisting of a single stream of 8-bit units (bytes).
+    StreamSet *  ByteStream = P->CreateStreamSet(1, 8);
+
+    //  Read the file into the ByteStream.
+    P->CreateKernelCall<ReadSourceKernel>(fileDescriptor, ByteStream);
+
+    //  Create a set of 8 parallel streams of 1-bit units (bits).
+    StreamSet *  BasisBits = P->CreateStreamSet(8, 1);
+
+    //  Transpose the ByteSteam into parallel bit stream form.
+    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    ////modified///////////////////////////////////////////////
+    StreamSet * Dquote = P->CreateStreamSet(1);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x22)}, BasisBits, Dquote);//0x22 is ASCII for double quote"
+
+    StreamSet * delimiter = P->CreateStreamSet(1);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x2C)}, BasisBits, delimiter);//0x2c is ASCII for comma ,
+
+    StreamSet * cr =P->CreateStreamSet(1);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0D)}, BasisBits, cr);//0x0D is ASCII for carriage return
+
+    StreamSet * linefeed = P->CreateStreamSet(1);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0A)}, BasisBits, newlines);//0x0A is ASCII for linefeed 
+
+    P->CreateKernelCall<CSV_parsing>(Dquote,delimiter,cr,BasisBits,linefeed,FieldStarts,FieldFollows,RecordStarts,RecordFollows,P->getOutputScalar("FieldNumber"),P->getOutputScalar("RecordNumber"));
+ 
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////
+    return reinterpret_cast<CSVParsingFunctionType>(P->compile());
+}
+
+int main(int argc, char *argv[]) {
+    codegen::ParseCommandLineOptions(argc, argv, {&ucFlags,pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
+    /*
+    modified: taken out CC_expr
+    if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
+        argv::DirectoriesFlag = argv::Recurse;
+    }*/
+    CPUDriver pxDriver("wc");
+
+    allFiles = argv::getFullFileList(pxDriver, inputFiles);
+    const auto fileCount = allFiles.size();
+
+    CSVParsingFunctionType CSVParsingFunctionPtr = nullptr;
+    /*
+    modified: taken out CC_expr
+    re::RE * CC_re = re::RE_Parser::parse(CC_expr);
+    resolveUnicodeNames(CC_re);
+    if (re::Name * UCD_property_name = dyn_cast<re::Name>(CC_re)) {
+        CSVParsingFunctionPtr = pipelineGen(pxDriver, UCD_property_name);
+    } else if (re::CC * CC_ast = dyn_cast<re::CC>(CC_re)) {
+       CSVParsingFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
+    } else {
+        std::cerr << "Input expression must be a Unicode property or CC but found: " << CC_expr << " instead.\n";
+        exit(1);
+    }
+    */
+    CSVParsingFunctionPtr=pipelineGen(pxDriver);
+    
+    
+
+
+
+
+
+    ////////////////////////////////////////to be modified//////////////////////
+    return 0;
+}
