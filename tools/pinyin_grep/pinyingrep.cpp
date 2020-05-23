@@ -176,7 +176,7 @@ int main(int argc, char* argv[]){
     
     resolveUnicodeNames(PinyinCC);
     re::CC * CC_ast = dyn_cast<re::CC>(PinyinCC);
-    uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast);
+    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
     std::vector<uint64_t> theCounts;
     theCounts.resize(fileCount);
     uint64_t totalCount = 0;
