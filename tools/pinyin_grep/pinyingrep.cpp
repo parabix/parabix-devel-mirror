@@ -38,6 +38,7 @@
 #include <kernel/core/idisa_target.h>
 #include <boost/filesystem.hpp>
 #include <util/aligned_allocator.h>
+#include "../icgrep/grep_interface.h"
 #include "pinyin.h"
 
 namespace fs = boost::filesystem;
@@ -97,7 +98,7 @@ int main(int argc, char* argv[]){
     PinyinPattern::PinyinSetAccumulator accum;
     
     // what is this driver it cannot be sepcified by the IDE
-	grep::InternalSearchEngine engine(pxDriver);
+    grep::InternalSearchEngine engine(pxDriver);
     //
 
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);

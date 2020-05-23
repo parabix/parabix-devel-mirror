@@ -5,4 +5,11 @@ NAME
     pinyin_grep
 SRC
     pinyingrep.cpp
+DEPS
+    fileselect
+    grep
+    kernel.basis
+    kernel.io
+    re.cc
+    re.parse
 )
