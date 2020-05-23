@@ -28,7 +28,7 @@ The main function performs in the following order:
 
 ### 2. `pinyin.h`
 Declaration of Namespace `PinyinPattern`, as well as its associated classes and methods:
-#### - `Buffer`
+- `Buffer`
 Buffer is used to read in and store the file `"Unihan_Readings.txt"`.
-#### - `PinyinSetAccumulator`
+- `PinyinSetAccumulator`
 A subclass of `grep::MatchAccumulator`, it's purpose is to obtain the codepoints of the matched lines, store it as a `codepoint_t`(`int32`) in the UnicodeSet.
