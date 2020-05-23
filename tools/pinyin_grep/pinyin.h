@@ -61,17 +61,8 @@ namespace PinyinPattern{
         temp = prefix + temp;
         return temp;
     }
-    vector<string> Before_Search(string name)
+    vector<string> Before_Search(string Pinyin_syllables)
     {
-        string Pinyin_syllables;
-        ifstream file(name);
-        if(file) {
-            Pinyin_syllables.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
-        }
-        else{
-            cout << "Fatal Error, cannot open the file" << endl;
-        }
-
         int pos = 0;
         Pinyin_syllables = trim(Pinyin_syllables);
         vector<string> Divided;

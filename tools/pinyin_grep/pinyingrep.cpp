@@ -49,7 +49,7 @@ using namespace kernel;
 
 static cl::OptionCategory pygrepFlags("Command Flags", "pinyingrep options");
 
-static cl::opt<std::string> KangXiLinePattern(cl::Positional, cl::desc("Pinyin Syllables"), cl::Required, cl::cat(pygrepFlags));
+static cl::opt<std::string> PinyinLinePattern(cl::Positional, cl::desc("Pinyin Syllables"), cl::Required, cl::cat(pygrepFlags));
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
 
@@ -85,7 +85,7 @@ int main(int argc, char* argv[]){
     //step2
     std::vector <std::string> KangXiLinePattern;
     //string Search_Prefix = "kHanyuPinyin.*";
-    KangXiLinePattern = PinyinPattern::Before_Search("Unihan_Readings.txt");
+    KangXiLinePattern = PinyinPattern::Before_Search(PinyinLinePattern);
     //here needs step3
     UnihanBuf = alloc.allocate(buf.R_size32(), 0);
     std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
