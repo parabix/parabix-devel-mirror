@@ -60,7 +60,7 @@ std::vector<re::RE*> generateREs(std::vector<std::string> KangXiLinePattern){
     re::RE* PinyinCC_final;
     for(int i= 0;i<KangXiLinePattern.size();i++)
     {
-        re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, argv::RegexpSyntax, false);
+        re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, re::PCRE, false);
        //how to find the unicode? 
         PinyinCC.push_back(PinyinRe);
     }
