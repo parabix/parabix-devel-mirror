@@ -16,7 +16,7 @@ Project (Pinyin Grep)
 
 ```
 
-##File Utility 
+## File Utility 
 
 ### 1. `pinyingrep.cpp` 
 The main function performs in the following order:
