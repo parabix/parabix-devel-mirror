@@ -21,6 +21,7 @@
 #include <grep/grep_kernel.h>
 #include <fstream>
 #include <string>
+#include <map>
 #include <toolchain/toolchain.h>
 #include <toolchain/pablo_toolchain.h>
 #include <boost/filesystem.hpp>
@@ -54,6 +55,9 @@ static cl::opt<std::string> PinyinLinePattern(cl::Positional, cl::desc("Pinyin S
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
 
 std::vector<fs::path> allFiles;
+
+typedef uint64_t (*UCountFunctionType)(uint32_t fd);
+
 //step4
 std::vector<re::RE*> generateREs(std::vector<std::string> KangXiLinePattern){
     std::vector<re::RE*> PinyinCC;
@@ -67,6 +71,67 @@ std::vector<re::RE*> generateREs(std::vector<std::string> KangXiLinePattern){
     return PinyinCC;
     //PinyinCC_final = re::makeSeq(PinyinCC.begin(),PinyinCC.end());
     //return PinyinCC_final;
+}
+
+UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
+
+    auto & B = pxDriver.getBuilder();
+
+    auto P = pxDriver.makePipeline(
+                {Binding{B->getInt32Ty(), "fileDescriptor"}},
+                {Binding{B->getInt64Ty(), "countResult"}});
+
+    Scalar * const fileDescriptor = P->getInputScalar("fileDescriptor");
+
+    //  Create a stream set consisting of a single stream of 8-bit units (bytes).
+    StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
+
+    //  Read the file into the ByteStream.
+    P->CreateKernelCall<ReadSourceKernel>(fileDescriptor, ByteStream);
+
+    //  Create a set of 8 parallel streams of 1-bit units (bits).
+    StreamSet * const BasisBits = P->CreateStreamSet(8, 1);
+
+    //  Transpose the ByteSteam into parallel bit stream form.
+    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+
+    //  Create a character class bit stream.
+    StreamSet * CCstream = P->CreateStreamSet(1, 1);
+    
+    std::map<std::string, StreamSet *> propertyStreamMap;
+    auto nameString = CC_name->getFullName();
+    propertyStreamMap.emplace(nameString, CCstream);
+    P->CreateKernelCall<UnicodePropertyKernelBuilder>(CC_name, BasisBits, CCstream);
+
+    P->CreateKernelCall<PopcountKernel>(CCstream, P->getOutputScalar("countResult"));
+
+    return reinterpret_cast<UCountFunctionType>(P->compile());
+}
+
+uint64_t ucount1(UCountFunctionType fn_ptr, const uint32_t fileIdx) {
+    std::string fileName = allFiles[fileIdx].string();
+    struct stat sb;
+    const int fd = open(fileName.c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
+        if (errno == EACCES) {
+            std::cerr << "pinyincount: " << fileName << ": Permission denied.\n";
+        }
+        else if (errno == ENOENT) {
+            std::cerr << "pinyincount: " << fileName << ": No such file.\n";
+        }
+        else {
+            std::cerr << "pinyincount: " << fileName << ": Failed.\n";
+        }
+        return 0;
+    }
+    if (stat(fileName.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
+        std::cerr << "pinyincount: " << fileName << ": Is a directory.\n";
+        close(fd);
+        return 0;
+    }
+    uint64_t theCount = fn_ptr(fd);
+    close(fd);
+    return theCount;
 }
 
 int main(int argc, char* argv[]){
@@ -106,8 +171,33 @@ int main(int argc, char* argv[]){
     //do not kown what this function used to do
     engine.grepCodeGen(PinyinCC);
 
-    
-
     engine.doGrep(UnihanBuf, buf.R_size32(), accum);
     alloc.deallocate(UnihanBuf, 0);
+    
+    resolveUnicodeNames(PinyinCC);
+    re::CC * CC_ast = dyn_cast<re::CC>(PinyinCC);
+    uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast);
+    std::vector<uint64_t> theCounts;
+    theCounts.resize(fileCount);
+    uint64_t totalCount = 0;
+    for (unsigned i = 0; i < fileCount; ++i) {
+        theCounts[i] = ucount1(uCountFunctionPtr, i);
+        totalCount += theCounts[i];
+    }
+    
+    const int defaultDisplayColumnWidth = 7;
+    int displayColumnWidth = std::to_string(totalCount).size() + 1;
+    if (displayColumnWidth < defaultDisplayColumnWidth) displayColumnWidth = defaultDisplayColumnWidth;
+
+    for (unsigned i = 0; i < fileCount; ++i) {
+        std::cout << std::setw(displayColumnWidth);
+        std::cout << theCounts[i] << std::setw(displayColumnWidth);
+        std::cout << " " << allFiles[i].string() << std::endl;
+    }
+    if (inputFiles.size() > 1) {
+        std::cout << std::setw(displayColumnWidth-1);
+        std::cout << totalCount;
+        std::cout << " total" << std::endl;
+    }
+    return 0;
 }
