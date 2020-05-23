@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_re_unicode.a  CMakeFiles/re.unicode.dir/casing.cpp.o CMakeFiles/re.unicode.dir/decomposition.cpp.o CMakeFiles/re.unicode.dir/equivalence.cpp.o CMakeFiles/re.unicode.dir/grapheme_clusters.cpp.o CMakeFiles/re.unicode.dir/re_name_resolve.cpp.o CMakeFiles/re.unicode.dir/resolve_properties.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_re_unicode.a

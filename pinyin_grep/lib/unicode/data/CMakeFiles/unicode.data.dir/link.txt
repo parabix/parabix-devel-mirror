@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_unicode_data.a  CMakeFiles/unicode.data.dir/CaseFolding.cpp.o CMakeFiles/unicode.data.dir/Equivalence.cpp.o CMakeFiles/unicode.data.dir/PropertyObjects.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_unicode_data.a

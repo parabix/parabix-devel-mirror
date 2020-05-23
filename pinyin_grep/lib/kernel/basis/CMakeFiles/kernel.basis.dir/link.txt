@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_kernel_basis.a  CMakeFiles/kernel.basis.dir/p2s_kernel.cpp.o CMakeFiles/kernel.basis.dir/s2p_kernel.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_kernel_basis.a

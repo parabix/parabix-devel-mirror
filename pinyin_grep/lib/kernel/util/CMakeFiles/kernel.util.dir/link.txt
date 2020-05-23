@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_kernel_util.a  CMakeFiles/kernel.util.dir/bixhash.cpp.o CMakeFiles/kernel.util.dir/error_monitor_kernel.cpp.o CMakeFiles/kernel.util.dir/debug_display.cpp.o CMakeFiles/kernel.util.dir/hex_convert.cpp.o CMakeFiles/kernel.util.dir/linebreak_kernel.cpp.o CMakeFiles/kernel.util.dir/radix64.cpp.o CMakeFiles/kernel.util.dir/random_stream.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_kernel_util.a

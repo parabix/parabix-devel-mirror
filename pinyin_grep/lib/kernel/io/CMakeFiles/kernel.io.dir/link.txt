@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_kernel_io.a  CMakeFiles/kernel.io.dir/source_kernel.cpp.o CMakeFiles/kernel.io.dir/stdout_kernel.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_kernel_io.a

@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libparabix_unicode_utf.a  CMakeFiles/unicode.utf.dir/utf8_encoder.cpp.o CMakeFiles/unicode.utf.dir/utf16_encoder.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libparabix_unicode_utf.a
