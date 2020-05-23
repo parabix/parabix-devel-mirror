@@ -18,7 +18,8 @@ def get_tones():
         'u' : ['ū','ú','ǔ','ù'],
         'v' : ['ǜ','ǘ','ǚ','ǜ'],
         'm' : ['m̄','ḿ','None','m̀'],
-        'n' : ['None','ń','ň','ǹ']
+        'n' : ['None','ń','ň','ǹ'],
+        'ê': ['ê̄','ế','ê̌','ề']
     }
     return dict_tones
 
@@ -61,6 +62,8 @@ def parse_pinyin(word):
         syl, tone = det_tone(pos)
         if 'ü' in syl:
             syl = syl.replace('ü', 'v')
+        elif 'ê' in syl:
+            syl = syl.replace('ê', 'e_hat')
         s1, s2 = det_syl(syl)
         pinyin_list.append(
             {
