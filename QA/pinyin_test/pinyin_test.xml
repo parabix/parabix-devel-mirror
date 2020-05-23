@@ -14,12 +14,19 @@
 我听说明天会很晴朗，也许明天会更好。
 </datafile>
 
+<datafile id = "T3_pinyin">
+想要好成绩，
+需要努力进步。
+</datafile>
+
 <grepcase regexp = "zhong yao" datafile = "T1_pinyin" greplines = "2 3"/>
 <grepcase regexp = "wan le" datafile = "T1_pinyin" greplines = "4 5"/>
 
 <grepcase regexp = "zhong4 yao4" datafile = "T1_pinyin" greplines = "2"/>
 <grepcase regexp = "zhong1 yao4" datafile = "T1_pinyin" greplines = "3"/>
 <grepcase regexp = "wan2 le4" datafile = "T1_pinyin" greplines = "4"/>
+
+<grepcase regexp = "bu4" datafile = "T2_regex" greplines = "6"/>
 
 <grepcase regexp = "yào" datafile = "T1_pinyin" greplines = "2 3"/>
 <grepcase regexp = "wán" datafile = "T1_pinyin" greplines = "4 5"/>
@@ -28,5 +35,8 @@
 <grepcase regexp = "m.ng" datafile = "T2_regex" greplines = "2 5 6"/>
 <grepcase regexp = "mang?" datafile = "T2_regex" greplines = "2 3"/>
 <grepcase regexp = "qing?" datafile = "T2_regex" greplines = "4 6"/>
+
+<grepcase regexp = "yao4" datafile = "T3_pinyin" greplines = "2"/>
+<grepcase regexp = "bu4" datafile = "T3_pinyin" greplines = "3"/>
 
 </greptest>

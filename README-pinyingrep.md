@@ -12,7 +12,7 @@ After a successful run, it is complete.
 ## Iteration 1: Initial Prototype
 The program takes a specific pinyin input and outputs the corresponding Chinese characters according to previously made test cases.
 
-### Testcase 1 -- *Regular Romanisation*
+### Testcase 1.1 -- *Regular Romanisation*
 Inputs Latin alphabets and returns all corresponding lines of Chinese characters.
 
 ```
@@ -23,7 +23,7 @@ Output:
 	写完了去睡觉
 ```
 
-### Testcase 2 -- *Romanisation with Tone Numbers*
+### Testcase 1.2 -- *Romanisation with Tone Numbers*
 Input Latin alphabets followed by a number (`1`, `2`, `3`, `4`), and returns all corresponding lines of Chinese characters.
 
 ```
@@ -33,7 +33,7 @@ Output:
 	喝中药一定要吃山楂饼
 ```
 
-### Testcase 3 -- *Romanisation with Tone Marks*
+### Testcase 1.3 -- *Romanisation with Tone Marks*
 Input Latin alphabets marked with the tone (`ˉ`, `ˊ`, `ˇ`, `ˋ`), and returns all corresponding lines of Chinese characters.
 
 ```
@@ -44,7 +44,7 @@ Output:
 	写完了去睡觉
 ```
 
-### Testcase 4 -- *Regular Expression*
+### Testcase 1.4 -- *Regular Expression*
 Input a regular expression, and return all corresponding lines of Chinese characters.\
 `ch.ng` corresponds to `chang`, `cheng`, `ching`, and `chong`.
 
@@ -59,4 +59,17 @@ Output:
 
 
 ## Iteration 2: Enhanced Implementation 
+Iteration 2 is suppose to deliver enhanced implementation. Similar to the previous iteration, the program is suppose to be able to read an input and output the corresponding lines.
+
+### Testcase 2.1 -- *Multiple Files*
+Input the words, search through multiple files. 
+
+```
+Input: 
+	yao4 ../QA/pinyin_test/testfiles/T1_pinyin ../QA/pinyin_test/testfiles/T3_pinyin
+Output:
+	这列子可能是重要
+	想要好成绩，
+```
+
 
