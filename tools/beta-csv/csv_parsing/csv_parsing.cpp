@@ -103,8 +103,7 @@ class CSV_parsing : public PabloKernel {
 public:
     CSV_parsing(BuilderRef kb,  StreamSet * dquote, StreamSet * delimiter, StreamSet * cr,StreamSet * basis, StreamSet * target, StreamSet * FieldStarts, StreamSet * FieldFollows, StreamSet * RecordStarts, StreamSet * RecordFollows, Scalar * FieldNumber, Scalar * RecordNumber)   //modified
         : PabloKernel(kb, "CSV_parsing",
-                      {Binding{"dquote",dquote,FixedRate(),LookAhead(1)},Binding{"delimiter",dilimiter, FixedRate(), LookAhead(1)}, Binding{"cr",cr,FixedRate(),LookAhead(1)},
-                       Binding{"basis",basis}, Binding{"target",target}},
+                      {Binding{"dquote",dquote,FixedRate(),LookAhead(1)},Binding{"delimiter",dilimiter, FixedRate(), LookAhead(1)}, Binding{"cr",cr,FixedRate(),LookAhead(1)},Binding{"basis",basis}, Binding{"target",target}},
                       {Binding{"FieldStarts",FieldStarts},Binding{"FieldFollows",FieldFollows},Binding{"RecordStarts",RecordStarts},Binding{"RecordFollows",RecordFollows}},
                       {},
                       {Binding{"FieldNumber",FieldNumber},Binding{"RecordNumber", RecordNumber}}) 
