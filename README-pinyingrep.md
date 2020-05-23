@@ -5,7 +5,7 @@ Pinyin grep is a Chinese text grep built using the icgrep engine. The program ta
 In order to build pinyin grep, icgrep would have to be already built.\
 Then the following command could be used:
 ```
-python greptest.py -v -t pinyin_test.xml ../build/bin/pinyin_grep
+python greptest.py -t pinyin_test.xml ../build/bin/pinyin_grep
 ```
 After a successful run, it is complete.
 
@@ -17,7 +17,7 @@ Inputs Latin alphabets and returns all corresponding lines of Chinese characters
 
 ```
 Input: 
-	wan le
+	wan le ../QA/pinyin_test/testfiles/T1_pinyin
 Output:
 	玩乐都没时间
 	写完了去睡觉
@@ -62,7 +62,7 @@ Output:
 Iteration 2 is suppose to deliver enhanced implementation. Similar to the previous iteration, the program is suppose to be able to read an input and output the corresponding lines.
 
 ### Testcase 2.1 -- *Multiple Files*
-Input the words, search through multiple files. 
+Input pinyin and the intended files, then return all corresponding lines of Chinese Characters
 
 ```
 Input: 
