@@ -164,9 +164,9 @@ Plans for iteration 3 include:
 
     Input: -i 85_ ../QA/radicaltest/testfiles/test1
 
-    Output: 这是一个简单的例**子**
-            部首分类也是使用汉**字**之文化圈少数的共通点
-            部首检字也有其局限性，许多汉**字**难以归部
+    Output: 部首分类也是使用**汉**字之文化圈少数的共通点
+            中国大陆的国标码使用**汉**语拼音排列
+            部首检字也有其局限性，许多**汉**字难以归部
 
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
@@ -175,4 +175,4 @@ Plans for iteration 3 include:
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/21
+**Last Updated:** 2020/05/23

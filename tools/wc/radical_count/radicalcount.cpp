@@ -54,7 +54,7 @@ static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical Expressio
 //  Multiple input files are allowed on the command line; counts are produced
 //  for each file.
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(ucFlags));
-
+static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search."), cl::init(false), cl::cat(ucFlags)); 
 std::vector<fs::path> allFiles;
 
 //input_radical is a variable type that holds the parsed CC_expr later on.
@@ -111,7 +111,7 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
 A pipeline is generated with pipelineGen(), which is used later in the ucount1() function.dfg*/
 
 UCountFunctionType radicalcount1(std::string radical,CPUDriver & pxDriver, UCountFunctionType uCountFunctionPtr) {
-    UCD::KRS_ns::radSet = BS::ucd_radical.get_uset(radical);
+    UCD::KRS_ns::radSet = BS::ucd_radical.get_uset(radical, indexMode);
     re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::radSet)));
     UCountFunctionType FunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
     return FunctionPtr;

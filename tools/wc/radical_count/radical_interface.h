@@ -25,20 +25,19 @@ namespace BS
     {   
         public:
         /*get_set() finds the requested unicode set for the inputted radical.*/
-            const UCD::UnicodeSet&& get_uset(string radical)
+            const UCD::UnicodeSet&& get_uset(string radical, bool indexMode)
             {   
-                /*The code below is for using the Kangxi radical indices.
-                 It will be re-implemented in a future iteration.*/
-
-                /*if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
-                    return std::move(*_unicodeset_radical_table[radical]);
-                else
-                    return std::move(UCD::UnicodeSet());*/
-
-                if(radical_table.find(radical) != radical_table.end())
-                    return std::move(*radical_table[radical]);
-                else
-                    return std::move(UCD::UnicodeSet());
+                if (indexMode) { //search using the index (e.g. 85_)
+                    if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
+                        return std::move(*_unicodeset_radical_table[radical]);
+                    else
+                        return std::move(UCD::UnicodeSet());
+                } else { //search using the actual radical (e.g. 氵_)
+                    if(radical_table.find(radical) != radical_table.end())
+                        return std::move(*radical_table[radical]);
+                    else
+                        return std::move(UCD::UnicodeSet());
+                }
             }
         private:
         /*These maps contain the parsed radical expression key, which is mapped to their respective unicode set.
