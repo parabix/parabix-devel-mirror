@@ -101,10 +101,10 @@ std::vector<fs::path> allFiles;
 //
 class CSV_parsing : public PabloKernel {
 public:
-    CSV_parsing(BuilderRef kb,  StreamSet * dquote, StreamSet * delimiter, StreamSet * cr,StreamSet * basis, StreamSet * target, StreamSet * FieldStarts, StreamSet * FieldFollows, StreamSet * RecordStarts, StreamSet * RecordFollows, Scalar * FieldNumber, Scalar * RecordNumber)   //modified
+    CSV_parsing(BuilderRef kb,  StreamSet * dquote, StreamSet * delimiter, StreamSet * cr,StreamSet * basis, StreamSet * target, StreamSet * FilteredBasisBits, StreamSet * FieldStarts, StreamSet * FieldFollows, StreamSet * RecordStarts, StreamSet * RecordFollows, Scalar * FieldNumber, Scalar * RecordNumber)   //modified
         : PabloKernel(kb, "CSV_parsing",
                       {Binding{"dquote",dquote,FixedRate(),LookAhead(1)},Binding{"delimiter",dilimiter, FixedRate(), LookAhead(1)}, Binding{"cr",cr,FixedRate(),LookAhead(1)},Binding{"basis",basis}, Binding{"target",target}},
-                      {Binding{"FieldStarts",FieldStarts},Binding{"FieldFollows",FieldFollows},Binding{"RecordStarts",RecordStarts},Binding{"RecordFollows",RecordFollows}},
+                      {Bing{"FilteredBasisBits",FilteredBasisBits},Binding{"FieldStarts",FieldStarts},Binding{"FieldFollows",FieldFollows},Binding{"RecordStarts",RecordStarts},Binding{"RecordFollows",RecordFollows}},
                       {},
                       {Binding{"FieldNumber",FieldNumber},Binding{"RecordNumber", RecordNumber}}) 
 protected:
@@ -112,7 +112,7 @@ protected:
 };
 
 
-/* from WIKI~
+/* from WIKI
 In this step, CSV syntax marks are removed from the input, to leave the raw CSV data only.
 
 1.Double quotes surrounding fields are deleted.In general, double quotes will be added back during the expansion step (because they are in the expansion templates).
@@ -130,7 +130,7 @@ In this step, CSV syntax marks are removed from the input, to leave the raw CSV 
 void CSV_parsing::generatePabloMethod(){
     pablo::PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
-    //delimiter is used to delimit fields, such as commas
+    //delimiter is used to delimit fields, and it is defined as commas at present
     PabloAST * delimiter = getInputStreamSet("delimiter")[0];
     PabloAST * dquote = getInputStreamSet("dquote")[0];
     PabloAST * cr = getInputStreamSet("cr")[0];
@@ -155,9 +155,10 @@ void CSV_parsing::generatePabloMethod(){
 
     PabloAST * ToBeDeleted = pb.creatOr3(dquote_sf,quote_eacape,realDelimiter);
     ToBeDeleted = pb.createOr(ToBeDelition,cr);
-
+    PabloAST * CSV_data_mask = pb.createXor(ToBeDeleted);
+    
     PabloAST * FieldStarts = 
-    PabloAST * FieldFollows = pb.creatOR(RealDelimiter, CSV_newlines);
+    PabloAST * FieldFollows = pb.creatOr(RealDelimiter, CSV_newlines);
     PabloAST * RecordStarts = 
     PabloAST * RecordFollows = CSV_newlines;
 
@@ -182,13 +183,15 @@ CSVParsingFunctionType pipelineGen(CPUDriver & pxDriver) {
 
     auto P = pxDriver.makePipeline(
                 {Binding{B->getInt32Ty(), "fileDescriptor"}},
-                {Binding{B->getInt64Ty(), "countResult"}});
+                {Binding{B->getInt64Ty(), "FieldNnumber"},Binding{B->getInt64Ty(),"RecordNumber"}});
+
 
     Scalar *  fileDescriptor = P->getInputScalar("fileDescriptor");
 
     //  Create a stream set consisting of a single stream of 8-bit units (bytes).
     StreamSet *  ByteStream = P->CreateStreamSet(1, 8);
 
+    
     //  Read the file into the ByteStream.
     P->CreateKernelCall<ReadSourceKernel>(fileDescriptor, ByteStream);
 
@@ -217,6 +220,10 @@ CSVParsingFunctionType pipelineGen(CPUDriver & pxDriver) {
 
     P->CreateKernelCall<CSV_parsing>(Dquote,delimiter,cr,BasisBits,linefeed,FieldStarts,FieldFollows,RecordStarts,RecordFollows,P->getOutputScalar("FieldNumber"),P->getOutputScalar("RecordNumber"));
  
+    
+    StreamSet * FilteredBasisBits = FilterByMask(P,BasisBits,CSV_data_mask,FilteredBasisBits);
+
+
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
@@ -257,8 +264,8 @@ int main(int argc, char *argv[]) {
 
 
 
-
-
     ////////////////////////////////////////to be modified//////////////////////
     return 0;
 }
+
+
