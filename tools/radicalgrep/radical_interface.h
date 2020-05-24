@@ -32,6 +32,15 @@ namespace BS
             const UCD::UnicodeSet&& get_uset(string radical, bool indexMode)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
             {
                 if (indexMode) { //search using the index (e.g. 85_)
+                    try {
+                        int num = std::stoi(radical); //checks if the input is anything other than a number
+                        if (num < 1 || num > 214) { //if input is a number not in range [1,214]; terminate program
+                            llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
+                        }
+                    } catch (std::invalid_argument) { //if input not an integer, terminate program
+                        llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
+                    }
+
                     if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                         return std::move(*_unicodeset_radical_table[radical]);
                     else

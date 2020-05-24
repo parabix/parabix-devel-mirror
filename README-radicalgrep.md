@@ -28,13 +28,13 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
  ## Example 1
 
-    Input:  亻_心_ ../QA/radicaltest/testfiles/test1
+    Input:  亻_心_ ../../QA/radicaltest/testfiles/test1
     
     Output: 以下是一些关于部首分类的信息
 
 ## Example 2
 
-    Input:  氵_宀_ ../QA/radicaltest/testfiles/test1
+    Input:  氵_宀_ ../../QA/radicaltest/testfiles/test1
     
     Output: 这是采用“两分法”对汉字进行结构分析得出的认识
 
@@ -59,7 +59,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 
 ## Example 1: Single Radical Input
 
-    Input: 子_ ../QA/radicaltest/testfiles/test1
+    Input: 子_ ../../QA/radicaltest/testfiles/test1
     
     Output: 这是一个简单的例**子**
             部首分类也是使用汉**字**之文化圈少数的共通点
@@ -67,20 +67,20 @@ Another program, `Radical Count` was implemented in this iteration. The program 
     
 ## Example 2: Radical Phrase Input
 
-    Input: 氵_子_ ../QA/radicaltest/testfiles/test1
+    Input: 氵_子_ ../../QA/radicaltest/testfiles/test1
     
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
             部首检字也有其局限性，许多**汉字**难以归部
    
 ## Example 3: Radical Pattern Not Found in File 
 
-    Input: 子_子_ ../QA/radicaltest/testfiles/test1
+    Input: 子_子_ ../../QA/radicaltest/testfiles/test1
     
     Output: Can not find the results!
     
 ## Example 4: Single Radical Input and Multiple Files
 
-    Input: 子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test2
+    Input: 子_ ../../QA/radicaltest/testfiles/test1 ../../QA/radicaltest/testfiles/test2
     
     Output: 这是一个简单的例**子**
             部首分类也是使用汉**字**之文化圈少数的共通点
@@ -95,7 +95,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 
 ## Example 5: Radical Phrase Input and Multiple Files
 
-    Input: 氵_子_ ../QA/radicaltest/testfiles/test1 ../QA/radicaltest/testfiles/test3
+    Input: 氵_子_ ../../QA/radicaltest/testfiles/test1 ../../QA/radicaltest/testfiles/test3
     
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
             部首检字也有其局限性，许多**汉字**难以归部
@@ -107,11 +107,11 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 
 As mentioned before, it is possible to have more than one radical with the same index. In this example, 火 and 灬 are both radical 86 in the Kangxi dictionary. Similar cases include 氵and 水, as well as 忄and 心.
 
-    Input: 火_灬_ ../QA/radicaltest/testfiles/test4
+    Input: 火_灬_ ../../QA/radicaltest/testfiles/test4
 
     Output: 今天天气**炎热**
 
-    Input: 火_火_ ../QA/radicaltest/testfiles/test4
+    Input: 火_火_ ../../QA/radicaltest/testfiles/test4
 
     Output: 今天天气**炎热**
 
@@ -119,7 +119,7 @@ As mentioned before, it is possible to have more than one radical with the same 
 
 Some characters such as 土, 火, 水, 木, and 金 are radicals themselves. They still fall into their respective set, and instead have no residual strokes.
 
-    Input: 土_ ../QA/radicaltest/testfiles/test5
+    Input: 土_ ../../QA/radicaltest/testfiles/test5
 
     Output: 古人把宇宙万物根据其特征划分成火、水、木、金、**土**五大类，统称“五行”
             **在**中医学中，五行有着特殊含义
@@ -133,15 +133,15 @@ Some characters such as 土, 火, 水, 木, and 金 are radicals themselves. The
 
 In the Kangxi dictionary, every Chinese character only has one desginated radical. For instance 伙 is composed of 亻and 火, which are two commonly seen radicals. According to the Kangxi dictionary, the official radical of 伙 is 亻.
 
-    Input: 亻_ ../QA/radicaltest/testfiles/test6
+    Input: 亻_ ../../QA/radicaltest/testfiles/test6
 
     Output: **伙**
 
-    Input: 火_ ../QA/radicaltest/testfiles/test6
+    Input: 火_ ../../QA/radicaltest/testfiles/test6
 
     Output: **烛**
 
-    Input: 虫_ ../QA/radicaltest/testfiles/test6
+    Input: 虫_ ../../QA/radicaltest/testfiles/test6
 
     Output: Can not find the results!
 
@@ -159,14 +159,27 @@ Plans for iteration 3 include:
 ### Radical Grep Version 3.0
  * Radical Grep now supports both Kangxi radical index and radical characters for input. (i.e. 85_ and 氵_).
  * The default searching mode is with the radical characters. To use the radical indices, include the option flag `-i` in your input.
+ * Functionality added to catch all incorrect input (e.g. any non-numeric input or non-existing radical set).
 
-## Example 1
+## Example 1: Kangxi Radical Index Search Mode
 
-    Input: -i 85_ ../QA/radicaltest/testfiles/test1
+    Input: -i 85_ ../../QA/radicaltest/testfiles/test1
 
     Output: 部首分类也是使用**汉**字之文化圈少数的共通点
             中国大陆的国标码使用**汉**语拼音排列
             部首检字也有其局限性，许多**汉**字难以归部
+
+## Example 2: Incorrect Input
+
+    Input: -i a_ ../../QA/radicaltest/testfiles/test1
+
+    Output: LLVM ERROR: A radical set for this input does not exist.
+            Enter a integer in [1,214], followed by _.
+
+    Input: -i 1_215_ ../../QA/radicaltest/testfiles/test1
+
+    Output: LLVM ERROR: A radical set for this input does not exist.
+            Enter a integer in [1,214], followed by _.
 
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
@@ -175,4 +188,4 @@ Plans for iteration 3 include:
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/23
+**Last Updated:** 2020/05/24
