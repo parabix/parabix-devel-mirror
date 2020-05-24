@@ -270,7 +270,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::Name * anchorName = re::makeName("UTF16_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
-        //setComponent(mExternalComponents, Component::UTF16index);
+        setComponent(mExternalComponents, Component::UTF16index);
         mExternalNames.insert(anchorName);
     }
 
@@ -290,7 +290,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
-            //setComponent(mExternalComponents, Component::UTF16index);
+            setComponent(mExternalComponents, Component::UTF16index);
             if (mColoring) {
                 UnicodeIndexing = true;
             }
@@ -331,8 +331,8 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     // can bypass transposition and use the Direct CC compiler.
     mPrefixRE = nullptr;
     mSuffixRE = nullptr;
-    if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
-        mExternalNames.empty() && !UnicodeIndexing) {
+    //if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
+    //    mExternalNames.empty() && !UnicodeIndexing) {
         /*if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
             return;  // skip transposition
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
@@ -343,7 +343,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     } else {*/
     //can directCC compiler be modified to support UTF16 encoding?
         setComponent(mExternalComponents, Component::S2P_16);
-    }
+    //}
     if (!mExternalNames.empty()) {
         setComponent(mExternalComponents, Component::UTF16index);
     }
@@ -553,10 +553,10 @@ void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::R
     if (hasComponent(mExternalComponents, Component::UTF16index)) {
         options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
         if (mSuffixRE != nullptr) {
-            options->setPrefixRE(toUTF16(mPrefixRE));
-            options->setRE(toUTF16(mSuffixRE));
+            options->setPrefixRE(mPrefixRE);
+            options->setRE(mSuffixRE);
         } else {
-            options->setRE(toUTF16(re));
+            options->setRE(re);
         }
     } else {
         if (mSuffixRE != nullptr) {
@@ -926,7 +926,7 @@ void EmitMatchesEngine::grepCodeGen() {
     Scalar * const useMMap = E1->getInputScalar("useMMap");
     Scalar * const fileDescriptor = E1->getInputScalar("fileDescriptor");
     StreamSet * const ByteStream = E1->CreateStreamSet(1, ENCODING_BITS_U16);
-    E1->CreateKernelCall<DebugDisplayKernel>("ByteStream", ByteStream);
+    //E1->CreateKernelCall<DebugDisplayKernel>("ByteStream", ByteStream);
     E1->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     grepPipeline(E1, ByteStream);
     E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
