@@ -75,8 +75,11 @@ static RE *rangeCodeUnitsU16(codepoint_t lo, codepoint_t hi, unsigned index,
         UTF<16>::nthCodeUnit(hi, index);  
     const codepoint_t lunit =
         UTF<16>::nthCodeUnit(lo, index);  
-
+    
     if (index == lgth) {
+        if(hunit<lunit ) {
+            return makeCC(hunit, lunit, &cc::UTF16); //surrogate pair code points treated separately  
+        }
         return makeCC(lunit, hunit, &cc::UTF16);
     } else if (hunit == lunit) {
         return makeSeq({makeCC(hunit, &cc::UTF16), rangeCodeUnitsU16(lo, hi, index + 1, lgth)});
@@ -118,7 +121,7 @@ RE *UTF16_Transformer::transformCC(CC *cc) {
 UTF16_Transformer::UTF16_Transformer(NameTransformationMode m)
     : EncodingTransformer("ToUTF16", &cc::Unicode, &cc::UTF16, m) {}
 
-RE *toUTF16(RE *r, bool convertName) {
+RE * toUTF16(RE *r, bool convertName) {
     const auto mode = convertName ? NameTransformationMode::TransformDefinition
                                   : NameTransformationMode::None;
     return UTF16_Transformer(mode).transformRE(r);
