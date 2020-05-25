@@ -54,6 +54,7 @@ Another program, `Radical Count` was implemented in this iteration. The program 
 * Output added for the case where no match is found.
 ### Radical Grep Version 2.2.0
 * Functionality to perform the search using the actual radicals (e.g. 氵_氵_) and not the Kangxi indices is added. 
+* Functionality to use traditional radicals to search in a file with simplified characters and vice versa is added.
 ### Radical Grep Version 2.2.1 
 * Functionality for single radicals (e.g. 氵_) is now supported.
 
@@ -145,6 +146,20 @@ In the Kangxi dictionary, every Chinese character only has one desginated radica
 
     Output: Can not find the results!
 
+## Example 9: Search for Simplified Characters with Traditional Radicals (Vice Versa)
+
+If the file to be searched is written in simplified Chinese and the radical expression is in traditional Chinese, it will still return the corresponding characters. This works the other way around too.
+
+    Input: 言_ ../../QA/radicaltest/testfiles/test1
+
+    Output: 中国大陆的国标码使用汉**语**拼音排列
+            部首检字也有其局限性，**许**多汉字难以归部
+
+    Input: 讠_ ../../QA/radicaltest/testfiles/test3
+
+    Output: 中國大陸的國標碼使用漢**語**拼音排列
+            部首檢字也有其局限性，**許**多漢字難以歸部
+
 ###### ** Output is printed in red on the terminal. ** 
 
 ## **Iteration 3: Adding New Features**
@@ -152,7 +167,7 @@ Plans for iteration 3 include:
 
 1. ~~Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.~~ **(Done)**
 2. Add more functions/command line flags.
-3. Given a radical pattern consisting of traditional radicals and a file in simplified Chinese, make Radical Grep find the equivalent characters.  
+3. Graphical interface
 
 ## Changelog
 
