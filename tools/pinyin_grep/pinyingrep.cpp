@@ -73,7 +73,7 @@ std::vector<re::RE*> generateREs(std::vector<std::string> KangXiLinePattern){
     //return PinyinCC_final;
 }
 
-UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
+UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::RE * pinyinCC) {
 
     auto & B = pxDriver.getBuilder();
 
@@ -99,9 +99,9 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
     StreamSet * CCstream = P->CreateStreamSet(1, 1);
     
     std::map<std::string, StreamSet *> propertyStreamMap;
-    auto nameString = CC_name->getFullName();
+    auto nameString = "kHanyu:" + PinyinLinePattern;
     propertyStreamMap.emplace(nameString, CCstream);
-    P->CreateKernelCall<UnicodePropertyKernelBuilder>(CC_name, BasisBits, CCstream);
+    P->CreateKernelCall<UnicodePropertyKernelBuilder>(makeName(nameString, pinyinCC), BasisBits, CCstream);
 
     P->CreateKernelCall<PopcountKernel>(CCstream, P->getOutputScalar("countResult"));
 
@@ -157,7 +157,8 @@ int main(int argc, char* argv[]){
     std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
     //step4
     auto KangXilineREs = generateREs(KangXiLinePattern);
-    auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
+    //auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
+    auto PinyinRE = KangXilineREs[0];
     //step5 for each RE,use parabix internal search Engine to search
     //std::vector <unsigned int> prop;
     PinyinPattern::PinyinSetAccumulator accum;
@@ -169,14 +170,14 @@ int main(int argc, char* argv[]){
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     //cannot using this KangXiLinePatter, must use RE int the Vector KangXiLineREs, 
     //do not kown what this function used to do
-    engine.grepCodeGen(PinyinCC);
+    engine.grepCodeGen(PinyinRE);
 
     engine.doGrep(UnihanBuf, buf.R_size32(), accum);
     alloc.deallocate(UnihanBuf, 0);
     
-    resolveUnicodeNames(PinyinCC);
-    re::CC * CC_ast = dyn_cast<re::CC>(PinyinCC);
-    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
+    resolveUnicodeNames(PinyinRE);
+    re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
+    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
     std::vector<uint64_t> theCounts;
     theCounts.resize(fileCount);
     uint64_t totalCount = 0;
