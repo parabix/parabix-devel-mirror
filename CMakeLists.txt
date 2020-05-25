@@ -337,6 +337,8 @@ add_subdirectory(tools/transcoders)
 add_subdirectory(tools/wc)
 add_subdirectory(tools/beta-csv)
 add_subdirectory(tools/beta-csv/wc)
+add_subdirectory(tools/beta-csv/csv_parsing)
+
 
 # add_subdirectory(tools/wc/wc-pablo)
 add_subdirectory(tools/xml)
