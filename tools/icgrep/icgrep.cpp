@@ -31,6 +31,8 @@
 #include <fcntl.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <kernel/pipeline/driver/cpudriver.h>
+#include <locale>
+#include <langinfo.h>
 
 using namespace llvm;
 
@@ -111,6 +113,8 @@ std::vector<re::RE *> readExpressions() {
 namespace fs = boost::filesystem;
 
 int main(int argc, char *argv[]) {
+
+    setlocale(LC_ALL, "");
     llvm_shutdown_obj shutdown;
     argv::InitializeCommandLineInterface(argc, argv);
     CPUDriver driver("icgrep");

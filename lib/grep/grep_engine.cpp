@@ -270,7 +270,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::Name * anchorName = re::makeName("UTF16_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
-        setComponent(mExternalComponents, Component::UTF16index);
+        //setComponent(mExternalComponents, Component::UTF16index);
         mExternalNames.insert(anchorName);
     }
 
@@ -290,7 +290,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
-            setComponent(mExternalComponents, Component::UTF16index);
+            //setComponent(mExternalComponents, Component::UTF16index);
             if (mColoring) {
                 UnicodeIndexing = true;
             }
@@ -345,7 +345,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         setComponent(mExternalComponents, Component::S2P_16);
     //}
     if (!mExternalNames.empty()) {
-        setComponent(mExternalComponents, Component::UTF16index);
+        //setComponent(mExternalComponents, Component::UTF16index);
     }
 }
 
@@ -553,10 +553,10 @@ void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::R
     if (hasComponent(mExternalComponents, Component::UTF16index)) {
         options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
         if (mSuffixRE != nullptr) {
-            options->setPrefixRE(mPrefixRE);
-            options->setRE(mSuffixRE);
+            options->setPrefixRE(toUTF16(mPrefixRE));
+            options->setRE(toUTF16(mSuffixRE));
         } else {
-            options->setRE(re);
+            options->setRE(toUTF16(re));
         }
     } else {
         if (mSuffixRE != nullptr) {
