@@ -18,6 +18,8 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/Signals.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_zeroes.h>
@@ -60,9 +62,9 @@ static cl::opt<std::string> pyregex(cl::Positional, cl::desc("<Regex-like Pinyin
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
 
 //enable or disable coloring, disabled by default
-bool ColorFlag;
-static cl::opt<bool,false> ColorOption("color",cl::desc("set coloring of output"),cl::location(ColorFlag),cl::cat(pygrepFlags));
-static cl::alias ColorOptionAlias("colour",cl::desc("alias for color"),cl::aliasopt(ColorOption));
+static cl::opt<bool,false> pyColorOption("c",cl::desc("set coloring of output"),cl::cat(pygrepFlags));
+static cl::alias pyColorOptionAlias0("colour",cl::desc("alias for coloring -c"),cl::aliasopt(pyColorOption));
+
 // the source files to grep from
 std::vector<fs::path> allFiles;
 
@@ -98,7 +100,7 @@ int main(int argc, char* argv[]){
     std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver); 
     // generate REs to initialize the grep engine
     auto pinyinREs = generateREs(pyregex);
-    if(ColorFlag){
+    if(pyColorOption){
     	grep->setColoring();
     }
     grep->initREs(pinyinREs); // initialize REs
