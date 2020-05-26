@@ -59,6 +59,10 @@ static cl::opt<std::string> pyregex(cl::Positional, cl::desc("<Regex-like Pinyin
 //  for each file.
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
 
+//enable or disable coloring, disabled by default
+bool ColorFlag;
+static cl::opt<bool,false> ColorOption("color",cl::desc("set coloring of output"),cl::location(ColorFlag),cl::cat(pygrepFlags));
+static cl::alias ColorOptionAlias("colour",cl::desc("alias for color"),cl::aliasopt(ColorOption));
 // the source files to grep from
 std::vector<fs::path> allFiles;
 
@@ -94,7 +98,9 @@ int main(int argc, char* argv[]){
     std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver); 
     // generate REs to initialize the grep engine
     auto pinyinREs = generateREs(pyregex);
-    //grep->setColoring();
+    if(ColorFlag){
+    	grep->setColoring();
+    }
     grep->initREs(pinyinREs); // initialize REs
     grep->grepCodeGen(); // generate pipeline
     grep->initFileResult(allFiles); // initialize source files
