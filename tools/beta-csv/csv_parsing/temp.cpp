@@ -350,11 +350,13 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, vector<string>& 
     Our template vector is:
     ("\t{\n", "\n\t},\n", "\",\n", "\\", "\t\t\"group\": \"", "\t\t\"project\": \"", "\t\t\"number of members\": \"", "\t\t\"comment\": \"")
     
+    The first four template strings are common to all templateVectors. They are independant of the number of fields and field names.
+
     The vector contains 8 template strings. Let n be the length of the template vector.
     
     We declare:
 
-    StreamSet * InsertMarks = P->CreateStreamSet(n, 1);
+    StreamSet * InsertMarks = P->CreateStreamSet(numberOfFields+4, 1);
 
     InsertMarks[0] has a 1 at each position in FilteredBasis where templateVector[0] must be inserted.
     InsertMarks[1] has a 1 at each position in FilteredBasis where templateVector[1] must be inserted.
@@ -363,6 +365,12 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, vector<string>& 
     .
     InsertMarks[7] has a 1 at each position in FilteredBases where templateVector[7] must be inserted.
 
+    templateVector[0] (left curly bracket) must be inserted at each position where recordStarts has a 1. Thus, templateVector[0] is identical to recordStarts.
+    templateVector[1] (right curly bracket) must be inserted at each position where recordFollows has a 1 and recordStarts has a 1
+    templateVector[2] (field seperator comma) must be inserted at each position where fieldStarts has a 1 and fieldFollows has a 1
+    templateVector[3] (escape slash) must be inserted at each position where there is an escaped character
+
+    the final "}" can be inserted at the end of the file using standard c++ methods without affecting time complexity
     */
 
     //StreamSet * InsertMarks = P->CreateStreamSet(1);
