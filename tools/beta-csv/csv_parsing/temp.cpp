@@ -220,31 +220,43 @@ void CSV_Masking::generatePabloMethod() {
 }
 
 
-class CSV_BixNum : public PabloKernel {
+
+
+
+class CSV_Marks : public PabloKernel {
 public:
-    //int num_of_field = 3;
-    CSV_BixNum(BuilderRef kb, StreamSet * filtered_starts, StreamSet * filtered_start_marks)
-        : PabloKernel(kb, "CSV_BixNum",
-                      {Binding{"filtered_starts", filtered_starts}},
-                      {Binding{"filtered_start_marks", filtered_start_marks}}){ }
+    int num_of_field;
+    CSV_Marks(BuilderRef kb, StreamSet * field_starts, StreamSet * record_follows, StreamSet * escape, int n, StreamSet * marks) 
+        : PabloKernel(kb, "CSV_Marks",
+                      {Binding{"field_starts", field_starts},
+                      Binding{"record_follows", record_follows},
+                      Binding{"escape", escape}},
+                      {Binding{"marks", marks}},
+                      {},
+                      {}){num_of_field = n;}
 protected:
     void generatePabloMethod() override;
 };
 
 
-void CSV_BixNum::generatePabloMethod() {
+void CSV_Marks::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
-    PabloAST * starts = getInputStreamSet("filtered_starts")[0];
-    /*
-    for(int i=1;i<=3;i++){
-        for(int j=1;j<i;j++){
-            marks= pb.createAdd(marks,pb.createEveryNth(marks,pb.getInteger(i)));
-        }
+    PabloAST * field_starts = getInputStreamSet("field_starts")[0];
+    PabloAST * record_follows = getInputStreamSet("record_follows")[0];
+    PabloAST * escape = getInputStreamSet("escape")[0];
+
+    PabloAST * fields[num_of_field];
+    fields[0]=pb.createEveryNth(field_starts,pb.getInteger(num_of_field));
+
+    
+    Var * marksVar = getOutputStreamVar("marks");
+    pb.createAssign(pb.createExtract(marksVar, pb.getInteger(0)), fields[0]);
+    for (unsigned i = 1; i < num_of_field; i++) {
+        fields[i]=pb.createIndexedAdvance(fields[i-1],field_starts,pb.getInteger(1));
+        pb.createAssign(pb.createExtract(marksVar, pb.getInteger(i)), fields[i]);
     }
-    */
-    PabloAST * marks = pb.createAdd(starts,starts);
-    Var * marksVar = getOutputStreamVar("filtered_start_marks");
-    pb.createAssign(pb.createExtract(marksVar, pb.getInteger(0)),marks);
+    pb.createAssign(pb.createExtract(marksVar, pb.getInteger(num_of_field)), record_follows);
+    pb.createAssign(pb.createExtract(marksVar, pb.getInteger(num_of_field+1)), escape);
 }
 
 
@@ -252,7 +264,7 @@ void CSV_BixNum::generatePabloMethod() {
 
 typedef void (*CSVTranslateFunctionType)(uint32_t fd, const char *);
 
-CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, vector<string>& Header_Vec) {
+CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<string>& Header_Vec) {
     // A Parabix program is build as a set of kernel calls called a pipeline.
     // A pipeline is construction using a Parabix driver object.
     auto & b = pxDriver.getBuilder();
@@ -295,10 +307,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, vector<string>& 
     StreamSet * header = P->CreateStreamSet(1);
     P->CreateKernelCall<CSV_Masking>(Dquote, delimiter, newline, CR, BasisBits, TranslatedBasis, Dquote_surrounding, Field_starts, 
     Field_follows, Record_starts, Record_follows, CSV_data_mask, escapes, header);
-    /*
-        CSV_Masking(BuilderRef kb, dquote, delimiter, newline,  CR, basis, 
-    translatedBasis,  Dquote_surrounding,  field_starts,  field_follows, 
-      record_starts, record_follows,  mask, escapes)*/
     
     P->CreateKernelCall<DebugDisplayKernel>("Dquote", Dquote);
     P->CreateKernelCall<DebugDisplayKernel>("Dquote_surrounding", Dquote_surrounding);
@@ -315,14 +323,14 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, vector<string>& 
     P->CreateKernelCall<StdOutKernel>(original);
 
 
-    StreamSet * FilteredHeader = P->CreateStreamSet(8,1);
-    FilterByMask(P,CSV_data_mask,TranslatedBasis,FilteredHeader);
     StreamSet * FilteredBasis = P->CreateStreamSet(8,1);
     FilterByMask(P,CSV_data_mask,TranslatedBasis,FilteredBasis);
     StreamSet * Filtered_starts = P->CreateStreamSet(1);
     FilterByMask(P,CSV_data_mask,Field_starts,Filtered_starts);
     StreamSet * Filtered_escapes = P->CreateStreamSet(1);
     FilterByMask(P,CSV_data_mask,escapes,Filtered_escapes);
+    StreamSet * Filtered_record_follows = P->CreateStreamSet(1);
+    FilterByMask(P,CSV_data_mask,Record_follows,Filtered_record_follows);
 
     P->CreateKernelCall<DebugDisplayKernel>("Filtered_starts", Filtered_starts);
     P->CreateKernelCall<DebugDisplayKernel>("Filtered_escapes", Filtered_escapes);
@@ -334,36 +342,50 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, vector<string>& 
     cout<<Filtered->shapeString()<<endl;
     P->CreateKernelCall<StdOutKernel>(Filtered);
     
+
+
+    StreamSet * InsertMarks = P->CreateStreamSet(n+2);
+    P->CreateKernelCall<CSV_Marks>(Filtered_starts,Filtered_record_follows,Filtered_escapes,n,InsertMarks);
+    P->CreateKernelCall<DebugDisplayKernel>("InsertMarks", InsertMarks);
+    
+     
     unsigned insertLengthBits = 4;
 
     StreamSet * const InsertBixNum = P->CreateStreamSet(insertLengthBits,1);
+    P->CreateKernelCall<StringInsertBixNum>(Header_Vec, InsertMarks, InsertBixNum);
 
-    //StreamSet * InsertMarks = P->CreateStreamSet(1);
     
-    //P->CreateKernelCall<CSV_BixNum>(Filtered_starts,InsertMarks);
-    P->CreateKernelCall<StringInsertBixNum>(Header_Vec, Filtered_starts, InsertBixNum);
-    P->CreateKernelCall<DebugDisplayKernel>("InsertBixNum", InsertBixNum);
     StreamSet * const SpreadMask = InsertionSpreadMask(P, InsertBixNum, InsertPosition::Before);
-    P->CreateKernelCall<DebugDisplayKernel>("SpreadMask", SpreadMask);
-
     StreamSet * ExpandedBasis = P->CreateStreamSet(8);
     StreamSet * const InsertIndex = P->CreateStreamSet(insertLengthBits);
-    P->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, true); //invert =  true);
+   P->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, true);
+   //P->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
+    SpreadByMask(P, SpreadMask, FilteredBasis, ExpandedBasis); 
+    
 
-    SpreadByMask(P, SpreadMask, FilteredBasis, ExpandedBasis);
+    StreamSet * ExpandedMarks = P->CreateStreamSet(n+2);
+    SpreadByMask(P, SpreadMask, InsertMarks, ExpandedMarks);
 
-    StreamSet * ExpandedMarks = P->CreateStreamSet(3);
-    SpreadByMask(P, SpreadMask, Filtered_starts, ExpandedMarks);
 
 
     StreamSet * FilledBasis = P->CreateStreamSet(8);
-    P->CreateKernelCall<StringReplaceKernel>(Header_Vec, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, FilledBasis);
+    
+     P->CreateKernelCall<StringReplaceKernel>(Header_Vec, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, FilledBasis);
 
     StreamSet * FilledBytes  = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(FilledBasis, FilledBytes);
     P->CreateKernelCall<StdOutKernel>(FilledBytes);
-    //cout<<s<<endl;
     
+
+
+    //StreamSet * translatedBasis = P->CreateStreamSet(8);
+    //P->CreateKernelCall<CSV_Quote_Translate>(Dquote, BasisBits, translatedBasis);
+
+    // The computed output can be converted back to byte stream form by the
+    // P2S kernel (parallel-to-serial).
+    //StreamSet * translated = P->CreateStreamSet(1, 8);
+    //P->CreateKernelCall<P2SKernel>(translatedBasis, translated);
+
     
     //StreamSet * translatedBasis = P->CreateStreamSet(8);
     //P->CreateKernelCall<CSV_Quote_Translate>(Dquote, BasisBits, translatedBasis);
@@ -395,8 +417,12 @@ int main(int argc, char *argv[]) {
     vector<string> header;
     Get_Header(delimiter,inputFile.c_str(), header, n);
 
+    cout<<"size:"<<header.size()<<endl;
+    for(int i=0;i<header.size();i++){
+        cout<<header[i]<<endl;
+    }
     //  Build and compile the Parabix pipeline by calling the Pipeline function above.
-    CSVTranslateFunctionType fn = generatePipeline(driver,header);
+    CSVTranslateFunctionType fn = generatePipeline(driver,n,header);
     //  The compile function "fn"  can now be used.   It takes a file
     //  descriptor as an input, which is specified by the filename given by
     //  the inputFile command line option.
@@ -426,11 +452,7 @@ int Get_Field_Count(const char delimiter, const char* argv) {
 
 	int FieldNumber = 0;
     
-    									//In Windows, \r\n means carriage return and newline; while in Linux, \n does the same job.
-#ifdef _WIN32 							// _WIN32 stands for both Windows 32-bit and 64-bit
-#else									// If the operating system is not Windows, then \r should be discarded.
-		str = str.replace(str.find("\r\n"), 1, "\n");
-#endif
+
 
 		const char *mystart = str.c_str();    
 		bool instring{ false };
@@ -449,15 +471,17 @@ int Get_Field_Count(const char delimiter, const char* argv) {
 }
 
 
-void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n )
+void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
 {
     ifstream in(dir);
     string header;
     for(int i=0;i<n-1;i++){
         getline(in,header,delimiter);
-        v.push_back(header + ':');
+        if(i==0) v.push_back("{\"" + header + "\":\"");
+        else v.push_back("\",\"" + header + "\":\"");
     }
     getline(in,header);
-    v.push_back(header + ':');
-    cout<<" last header"<<header<<endl;
+    v.push_back("\",\"" + header + "\":\"");
+    v.push_back("\"},");
+    v.push_back("\\");
 }
