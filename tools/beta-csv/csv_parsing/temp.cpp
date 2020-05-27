@@ -342,7 +342,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     cout<<Filtered->shapeString()<<endl;
     P->CreateKernelCall<StdOutKernel>(Filtered);
     
-<<<<<<< HEAD
 
 
     StreamSet * InsertMarks = P->CreateStreamSet(n+2);
@@ -350,16 +349,12 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     P->CreateKernelCall<DebugDisplayKernel>("InsertMarks", InsertMarks);
     
      
-    unsigned insertLengthBits = 4;
-=======
+
     unsigned insertLengthBits = 4;  //needs to be changed later, will create problems if max field name length is greater than 15
->>>>>>> 13dd834644aa15b24da992b622ec55ee4e5b39d7
 
     StreamSet * const InsertBixNum = P->CreateStreamSet(insertLengthBits,1);
     P->CreateKernelCall<StringInsertBixNum>(Header_Vec, InsertMarks, InsertBixNum);
 
-<<<<<<< HEAD
-=======
     /*
 
     Suppose the header is:
@@ -396,7 +391,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     */
 
     //StreamSet * InsertMarks = P->CreateStreamSet(1);
->>>>>>> 13dd834644aa15b24da992b622ec55ee4e5b39d7
     
     StreamSet * const SpreadMask = InsertionSpreadMask(P, InsertBixNum, InsertPosition::Before);
     StreamSet * ExpandedBasis = P->CreateStreamSet(8);
