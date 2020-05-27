@@ -334,9 +334,36 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, vector<string>& 
     cout<<Filtered->shapeString()<<endl;
     P->CreateKernelCall<StdOutKernel>(Filtered);
     
-    unsigned insertLengthBits = 4;
+    unsigned insertLengthBits = 4;  //needs to be changed later, will create problems if max field name length is greater than 15
 
     StreamSet * const InsertBixNum = P->CreateStreamSet(insertLengthBits,1);
+
+    /*
+
+    Suppose the header is:
+    group,project,numer of members,comment
+    
+    We declare:
+
+    vector<string> templateVector;
+    
+    Our template vector is:
+    ("\t{\n", "\n\t},\n", "\",\n", "\\", "\t\t\"group\": \"", "\t\t\"project\": \"", "\t\t\"number of members\": \"", "\t\t\"comment\": \"")
+    
+    The vector contains 8 template strings. Let n be the length of the template vector.
+    
+    We declare:
+
+    StreamSet * InsertMarks = P->CreateStreamSet(n, 1);
+
+    InsertMarks[0] has a 1 at each position in FilteredBasis where templateVector[0] must be inserted.
+    InsertMarks[1] has a 1 at each position in FilteredBasis where templateVector[1] must be inserted.
+    .
+    .
+    .
+    InsertMarks[7] has a 1 at each position in FilteredBases where templateVector[7] must be inserted.
+
+    */
 
     //StreamSet * InsertMarks = P->CreateStreamSet(1);
     
