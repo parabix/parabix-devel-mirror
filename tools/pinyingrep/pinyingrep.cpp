@@ -65,6 +65,10 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ..
 static cl::opt<bool,false> pyColorOption("c",cl::desc("set coloring of output"),cl::cat(pygrepFlags));
 static cl::alias pyColorOptionAlias0("colour",cl::desc("alias for coloring -c"),cl::aliasopt(pyColorOption));
 
+//switch database to kpy, xhc database is enabled by default
+static cl::opt<bool,false> pyKPY("kpy",cl::desc("set database to kpy"),cl::cat(pygrepFlags));
+static cl::alias pyKPYAlias0("KPY_Database",cl::desc("alias for kpy database -kpy"),cl::aliasopt(pyKPY));
+
 // the source files to grep from
 std::vector<fs::path> allFiles;
 
@@ -83,7 +87,10 @@ std::vector<re::RE*> generateREs(std::string pyregex){
 
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
-    return enumerator.createREs();
+    if (pyKPY){
+        return enumerator.createREs(1);
+    }
+    return enumerator.createREs(0);
 }
 // Reference: icgrep
 int main(int argc, char* argv[]){

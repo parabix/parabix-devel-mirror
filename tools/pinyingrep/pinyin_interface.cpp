@@ -174,18 +174,23 @@ namespace PY{
         _enumerated = true;    
     }
 
-    std::vector<re::RE*> PinyinValuesEnumerator::createREs(){
+    std::vector<re::RE*> PinyinValuesEnumerator::createREs(int database){ //database=1 for kpy, database=0 for xhc
         std::vector<re::RE*> REs;
         for(auto iter = _half_enumerated_list.begin(); iter != _half_enumerated_list.end(); iter++){
             std::vector<re::RE*> components;
             for(auto inner = iter->begin(); inner != iter->end(); inner++){
-                components.push_back(re::makeCC(UCD::UnicodeSet(UST::get_uset(inner->first, inner->second))));
+                if (database==1){
+                    components.push_back(re::makeCC(UCD::UnicodeSet(UST::get_KPY(inner->first, inner->second))));
+                }
+                else{
+                    components.push_back(re::makeCC(UCD::UnicodeSet(UST::get_XHC(inner->first, inner->second))));
+                }
             }
             REs.push_back(re::makeAlt(components.begin(), components.end()));
         }
-        
         return std::vector<re::RE*>(1, re::makeSeq(REs.begin(), REs.end()));
     }
+
 
     // Methods in PinyinValuesTable
     

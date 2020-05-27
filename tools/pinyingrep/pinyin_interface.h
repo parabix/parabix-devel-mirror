@@ -79,7 +79,7 @@ namespace PY{
         // elimiate extra space in both ends of the string
         void eliminate_space(string& s);
 
-        vector<re::RE*> createREs();
+        vector<re::RE*> createREs(int database);
     };
 
     class ParserException : public std::exception{
@@ -110,9 +110,9 @@ namespace PY{
         // which contains all possible values of <syllable,tone> pairs
         void enumerate(PinyinValuesParser& parser);
 
-        // Method: createREs()
+        // Method: createREs(int dabase) ==1 for kpy, 0 for xhc
         // create a vector of RE* for grep engine
-        std::vector<re::RE*> createREs();
+        std::vector<re::RE*> createREs(int database);
     private:
         vector<vector<std::pair<string, int>>> _enumerated_list;
         // e.g.  (<,> for pair, and {} for vector)
@@ -190,9 +190,15 @@ namespace PY{
         static map<std::pair<string, int>, const UCD::UnicodeSet*> _kpy_unicodeset_table;
         static map<std::pair<string, int>, const UCD::UnicodeSet*> _kxhc_unicodeset_table;
     public:
-        static const UCD::UnicodeSet&& get_uset(string syllable, int tone){
+        static const UCD::UnicodeSet&& get_XHC(string syllable, int tone){
             if(_kxhc_unicodeset_table.find(make_pair(syllable, tone)) != _kxhc_unicodeset_table.end()) 
                 return std::move(*_kxhc_unicodeset_table[make_pair(syllable, tone)]);
+            else 
+                return std::move(UCD::UnicodeSet());
+        }
+        static const UCD::UnicodeSet&& get_KPY(string syllable, int tone){
+            if(_kpy_unicodeset_table.find(make_pair(syllable, tone)) != _kpy_unicodeset_table.end()) 
+                return std::move(*_kpy_unicodeset_table[make_pair(syllable, tone)]);
             else 
                 return std::move(UCD::UnicodeSet());
         }
