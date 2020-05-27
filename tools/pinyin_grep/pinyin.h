@@ -61,6 +61,8 @@ namespace PinyinPattern{
         temp = prefix + temp;
         return temp;
     }
+    //this function should be rewriten totally inorder to deal with multiple syllables since it has no space between two syllables
+    //should find a new way to divided the syllables by not using the space
     vector<string> Before_Search(string Pinyin_syllables)
     {
         int pos = 0;
@@ -80,6 +82,11 @@ namespace PinyinPattern{
         {
             Divided.push_back(Pinyin_syllables);
         }
+        //Task1
+        //one function need to be here to modify all the syllables as a normal form as hōng
+        //for example hong1 to hōng and hong to hōng......etc
+        
+        //adding the kHanyuPinyin.* to all the strings
         for(vector<string>::iterator iter = Divided.begin(); iter!=Divided.end(); iter++)
         {
             *iter = Add_Search_Prefix(*iter);
@@ -98,6 +105,8 @@ namespace PinyinPattern{
             ifstream file(name);
             if(file) {
                 str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
+                //test if it read the file
+                //std::cout<<str<<std::endl;
             }
             else{
                 cout << "Fatal Error, cannot open the file"<<endl;
