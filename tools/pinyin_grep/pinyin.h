@@ -94,13 +94,14 @@ namespace PinyinPattern{
     public:
         Buffer()
         {
-            name = "Unihan_Readings.txt";
+            name = "../../unihan-scripts/Unihan/Unihan_Readings.txt";
             ifstream file(name);
             if(file) {
                 str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
             }
             else{
                 cout << "Fatal Error, cannot open the file"<<endl;
+                cout << name << endl;
             }
             size = find_size(name);
             size32 = set_size(name, size);
