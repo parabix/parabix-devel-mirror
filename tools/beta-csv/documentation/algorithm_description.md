@@ -2,11 +2,17 @@
 
 The process of converting from CSV to JSON is broken down into steps:
 
-1. Parsing
-2. Compression
-3. Template Creation
-4. Expansion
-5. Replacement
+1. Reading
+2. Parsing
+3. Compression
+4. Template Creation
+5. Expansion
+6. Replacement
+7. Writing
+
+## Reading
+
+
 
 ## Parsing
 
@@ -33,6 +39,7 @@ The process of converting from CSV to JSON is broken down into steps:
 
 - **Basis Bits**
 - **Outer Quotes**, **Delimiters**, **Carriage Returns**, **Line Feeds**
+- **Escaped Characters**
 - **Field Starts**, **Field Ends**
 - **Record Starts**, **Record Ends**
 
@@ -43,26 +50,45 @@ The process of converting from CSV to JSON is broken down into steps:
 **Output Streams:**
 
 - **Compressed Basis Bits:** Stream set containing 8 1-bit data streams, representing the data in the CSV file with the syntactical characters removed.
-- **Compressed Field Starts:** Stream set containing a single 1-bit data stream, indicating the first character in each field in Compressed Basis Bits.
-- **Compressed Field Ends:** Stream set containing a single 1-bit data stream, indicating the last character in each field in Compressed Basis Bits.
-- **Compressed Record Starts: **Stream set containing a single 1-bit data stream, indicating the first character in each record in Compressed Basis Bits.
-- **Compressed Record Ends: **Stream set containing a single 1-bit data stream, indicating the last character in each record in Compressed Basis Bits.
+- **Insert Marks:**
 
 ## Template Creation
 
+**Input Streams:**
 
+**Output Streams:**
+
+- **Template Vector:**
 
 ## Expansion
 
 **Input Streams:**
 
 - **Compressed Basis Bits**
-- **Compressed Field Starts**, **Compressed Field Ends**
-- **Compressed Record Starts**, **Compressed Record Ends**
+- **Insert Marks**
+- **Template Vector**
 
 **Output Streams**:
 
-- **Expanded Basis Bits**
+- **Expanded Basis Bits:**
+- **Expanded Insert Marks:**
+- **Spread Mask:**
 
 ## Replacement
+
+**Input Streams:**
+
+- **Expanded Basis Bits**
+- **Expanded Insert Marks**
+- **Spread Mask**
+
+**Internal Streams:**
+
+- **Character Indices:**
+
+**Output Streams:**
+
+- **Translated Basis Bits**
+
+## Writing
 
