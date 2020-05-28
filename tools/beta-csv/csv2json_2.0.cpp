@@ -53,39 +53,33 @@ using namespace std;
 
 int Get_Field_Count(const char delimiter, const char* argv);
 void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n);
-//  These declarations are for command line processing.
+
+//  The declarations below are for command line processing.
 //  See the LLVM CommandLine 2.0 Library Manual https://llvm.org/docs/CommandLine.html
 static cl::OptionCategory CSV_Parsing_Options("Translation Options", "Translation Options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(CSV_Parsing_Options));
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::cat(CSV_Parsing_Options));
-//
-//  The Hexify Kernel is the logic that produces hexadecimal output
-//  from a source bit stream set called spreadBasis and the insertMask
-//  used to spread out the bits.
-//
 
 
-//
 class CSV_Masking : public PabloKernel {
-public:
-    CSV_Masking(BuilderRef kb, StreamSet * dquote, StreamSet * delimiter,  StreamSet * newline, StreamSet * CR, StreamSet * basis, 
-    StreamSet * translatedBasis, StreamSet * field_starts, StreamSet * mask, StreamSet * escapes)
-        : PabloKernel(kb, "CSV_Masking",
-                      {
-                          Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, 
-                          Binding{"basis", basis},
-                          Binding{"newline",newline},
-                          Binding{"delimiter",delimiter},
-                          Binding{"CR",CR}},
-                      {
-                          Binding{"translatedBasis",translatedBasis},
-                          Binding{"field_starts",field_starts},
-                          Binding{"mask",mask},
-                          Binding{"escapes",escapes}},
-                      {},
-                      {}) {}
-protected:
-    void generatePabloMethod() override;
+    public:
+        CSV_Masking(BuilderRef kb, StreamSet * dquote, StreamSet * delimiter,  StreamSet * newline, StreamSet * CR, StreamSet * basis, 
+        StreamSet * translatedBasis, StreamSet * field_starts, StreamSet * mask, StreamSet * escapes):
+        PabloKernel(kb, "CSV_Masking", {
+            Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, 
+            Binding{"basis", basis},
+            Binding{"newline",newline},
+            Binding{"delimiter",delimiter},
+            Binding{"CR",CR}
+        },
+        {
+            Binding{"translatedBasis",translatedBasis},
+            Binding{"field_starts",field_starts},
+            Binding{"mask",mask},
+            Binding{"escapes",escapes}
+        }, {}, {}){}
+    protected:
+        void generatePabloMethod() override;
 };
 
 void CSV_Masking::generatePabloMethod() {
