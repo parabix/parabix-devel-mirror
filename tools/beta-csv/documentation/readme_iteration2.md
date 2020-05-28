@@ -13,7 +13,7 @@ CSV2JSON is a tool that converts CSV files to JSON.
 CSV2JSON can be called from the parabix-devel directory using the following terminal command:
 
 ````
-build\bin\csv2json <filename>
+~/parabix-devel$ build\bin\csv2json <filename>
 ````
 
 
@@ -21,7 +21,7 @@ build\bin\csv2json <filename>
 For example:
 
 ````
-bin\csv2json ..\QA\csv2json\testcases\testcase_group.csv
+~/parabix-devel$ bin\csv2json ..\QA\csv2json\testcases\testcase_group.csv
 ````
 
 Should yield the following output:
