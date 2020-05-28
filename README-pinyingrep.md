@@ -21,7 +21,7 @@ In the first iteration, the pinyin grep is supposed to handle pinyin inputs of E
 
 Second Iteration
 ----------------
-In the second iteration, we will implement **pinyingrep** version 1.0 with input parsing. In this version, **pinyingrep** is supposed to handle general regex-like pinyin syllables as input. The implementation of grep functionality is based on grep engine provided by parabix framework. We specified the requirement of our second iteration as follows:
+In the second iteration, we have implemented **pinyingrep** version 1.0 with input parsing. In this version, **pinyingrep** is supposed to handle general regex-like pinyin syllables as input. The implementation of grep functionality is based on grep engine provided by parabix framework. We specified the requirement of our second iteration as follows:
 ### Functionality
 #### 1. Pinyin syllables without tones specified
 **Pinyingrep** supports pinyin syllables in alphabetic characters without tones sepcified.
@@ -73,7 +73,7 @@ The following testcases give example about the functionality of **pinyingrep**.
 ```
     Test
     Input: zhong wen
-    Output: 
+    Output:
     欢迎来到中文世界。
     在这里你可以感受中文的博大精深。
 ```
@@ -121,10 +121,14 @@ The following testcases give example about the functionality of **pinyingrep**.
     虽然他们不能康复，但可以变更好。
 ```
 
+Third Iteration(WIP)
+----------------
+In the third iteration, we will implement **pinyingrep** version 2.0 with additional functionalities. 
+
 ## Version History
 
-#### Version 1.1(coming soon)
-**Pinyingrep** version 1.1 is currently working on:
+#### Version 1.1
+**Pinyingrep** version 1.1 supports:
 1. CommandLine flag to switch on coloring of grep results.
 2. CommandLine option to choose different pinyin database.
 #### Version 1.0
