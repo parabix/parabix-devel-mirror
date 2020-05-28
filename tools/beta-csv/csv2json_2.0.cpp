@@ -41,6 +41,7 @@
 #include <fstream>
 #include <sstream>
 
+#include <kernel/streamutils/sentinel.h>
 #include <kernel/streamutils/string_insert.h>
 #include <kernel/streamutils/run_index.h>
 #include <pablo/parse/pablo_source_kernel.h> 
@@ -56,7 +57,7 @@ void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
 //  See the LLVM CommandLine 2.0 Library Manual https://llvm.org/docs/CommandLine.html
 static cl::OptionCategory CSV_Parsing_Options("Translation Options", "Translation Options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(CSV_Parsing_Options));
-//static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::cat(CSV_Parsing_Options));
+static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::cat(CSV_Parsing_Options));
 //
 //  The Hexify Kernel is the logic that produces hexadecimal output
 //  from a source bit stream set called spreadBasis and the insertMask
@@ -125,6 +126,8 @@ void CSV_Masking::generatePabloMethod() {
 
     PabloAST * escapes = pb.createOr(escaped_quote,literal_newlines);
     
+
+    
     //mask= pb.createXor(pb.createAnd(pb.createNot(header),mask),last);
     mask= pb.createAnd(pb.createNot(header),mask);
 
@@ -178,7 +181,7 @@ void CSV_Marks::generatePabloMethod() {
     PabloAST * field_starts = getInputStreamSet("field_starts")[0];
     PabloAST * escape = getInputStreamSet("escape")[0];
     PabloAST * first = pb.createNot(pb.createAdvance(pb.createOnes(),1));
-    PabloAST * eofBit = pb.createAtEOF(pb.createOnes());
+    PabloAST * eofBit = pb.createAtEOF(llvm::cast<PabloAST>(pb.createOnes()));
 
     Var * marksVar = getOutputStreamVar("marks");
     if(num_of_field>0){
@@ -205,14 +208,21 @@ public:
     CSV_end(BuilderRef kb, StreamSet * s1, StreamSet * out) 
         : PabloKernel(kb, "CSV_end",
                       {Binding{"s1", s1}},
-                      {Binding{"out", out}},
+                      {Binding{"out", out,FixedRate(),Add1()}},
                       {},
-                      {}){}
+                      {}){assert (s1->getNumElements() == out->getNumElements());}
 protected:
     void generatePabloMethod() override;
 };
 
-
+void CSV_end::generatePabloMethod() {
+    pablo::PabloBuilder pb(getEntryScope());
+    PabloAST * s1 = getInputStreamSet("s1")[0];
+    PabloAST * EOFbit = pb.createAtEOF(pb.createAdvance(pb.createOnes(), 1));
+    Var * out = getOutputStreamVar("out");
+    PabloAST * extended = pb.createOr(s1, EOFbit, "addSentinel");
+    pb.createAssign(pb.createExtract(out, pb.getInteger(0)), extended);
+}
 
 typedef void (*CSVTranslateFunctionType)(uint32_t fd);
 
@@ -344,7 +354,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     //output to file
     //Scalar * outputFileName = P->getInputScalar("outputFileName");
     //P->CreateKernelCall<FileSink>(outputFileName, FilledBytes);
-    P->CreateKernelCall<StdOutKernel>(FilledBytes);
+    P->CreateKernelCall<StdOutKernel>(FilledBytes);//)cout<<"\"}\n]";
     return reinterpret_cast<CSVTranslateFunctionType>(P->compile());
 }
 

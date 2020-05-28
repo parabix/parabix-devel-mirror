@@ -75,7 +75,7 @@ void ExecuteFiles(const string &spath,const string &dpath, const string &program
     {
         string dfile=dpath+files[i]+".json";
         string sfile=spath+files[i]+".csv";
-        string cmd=program+" "+sfile+" "+dfile;
+        string cmd=program+" "+sfile+">"+dfile;
         system(cmd.c_str());
     }
     closedir(folder);
