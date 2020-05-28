@@ -11,6 +11,8 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <grep/grep_engine.h>
+#include <grep/grep_kernel.h>
 
 namespace PinyinPattern{
     using namespace std;
@@ -68,7 +70,7 @@ namespace PinyinPattern{
         int pos = 0;
         Pinyin_syllables = trim(Pinyin_syllables);
         vector<string> Divided, FinalVec;
-        string temp;
+        string temp, temp2;
         while(pos!=-1)
         {
             string temp;
@@ -95,18 +97,25 @@ namespace PinyinPattern{
                                     {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
                                     {"m", "m̄", "ḿ", "m̀"},
                                     {"n", "ń", "ň", "ǹ"} };
-        int pos = 0;
         for(int i=0; i<Divided.size(); i++){
             string word = Divided[i];
-            if (word.find('.') != string::npos) // found
+            if (word.find('.') != string::npos) // found regex . 
             {   
                 for (int j=0; j<6; j++){
                     temp = word;
                     temp.replace(word.find('.'), 1, syl[j][0]);
                     Divided.push_back(temp);
                 }
-                Divided.erase(Divided.begin()+pos);
+                Divided.erase(Divided.begin()+i);
                 i--;
+            }
+            else if (word.find('?') != string::npos) // found regex ?
+            {
+                temp = temp2 = word;
+                temp.replace(word.find('?'), 1, "");
+                Divided.push_back(temp);
+                temp2.replace(word.find('?')-1, 2, "");
+                Divided.push_back(temp2);
             }
             else if (word.find('1') != string::npos || word.find('2') != string::npos|| word.find('3') != string::npos|| word.find('4') != string::npos)
             {
@@ -150,8 +159,8 @@ namespace PinyinPattern{
                     }
                 }
             }
-            pos++;
         }
+        Divided = vector <string>(); //deallocate unused vector 
 
         //adding the kHanyuPinyin.* to all the strings
         for(vector<string>::iterator iter = FinalVec.begin(); iter!=FinalVec.end(); iter++)
