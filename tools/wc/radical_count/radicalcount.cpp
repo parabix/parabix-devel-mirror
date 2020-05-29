@@ -117,7 +117,7 @@ UCountFunctionType radicalcount1(std::string radical,CPUDriver & pxDriver, UCoun
     return FunctionPtr;
 }
 
-//  Given a compiled pipeline program for counting  the characters of a class,
+//  Given a compiled pipeline program for counting the characters of a class,
 //  as well as an index into the global vector of inputFiles,  open the
 //  given file and execute the compiled program to produce the count result.
 uint64_t ucount1(UCountFunctionType fn_ptr, const uint32_t fileIdx) {

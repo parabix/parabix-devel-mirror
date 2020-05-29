@@ -1,6 +1,6 @@
 # README-radicalgrep
 
-Radical Grep is a tool built off of the icgrep. It searches for the given Chinese radicals, and returns the sentence(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
+Radical Grep is a tool built off of icgrep. It searches for the given Chinese radicals, and returns the sentence(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
 
 
 ## **Introduction**
@@ -186,6 +186,8 @@ Plans for iteration 3 include:
 
 ## Example 2: Incorrect Input
 
+If the user enters uses Radical Grep in index mode and searchs for index 0 or any number greater than 214, they will get an error message because these sets do not exist in the Kangxi dictionary.
+
     Input: -i a_ ../../QA/radicaltest/testfiles/test1
 
     Output: LLVM ERROR: A radical set for this input does not exist.
@@ -203,4 +205,4 @@ Plans for iteration 3 include:
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/24
+**Last Updated:** 2020/05/28
