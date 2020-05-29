@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <vector>
+#include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/PrettyStackTrace.h>
@@ -160,7 +161,6 @@ int main(int argc, char* argv[]){
     //auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
     auto PinyinRE = KangXilineREs[0];
     //step5 for each RE,use parabix internal search Engine to search
-    //std::vector <unsigned int> prop;
     PinyinPattern::PinyinSetAccumulator accum;
     
     // what is this driver it cannot be sepcified by the IDE
@@ -168,7 +168,7 @@ int main(int argc, char* argv[]){
     //
 
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    //cannot using this KangXiLinePatter, must use RE int the Vector KangXiLineREs, 
+    //cannot using this KangXiLinePattern, must use RE int the Vector KangXiLineREs, 
     //do not kown what this function used to do
     engine.grepCodeGen(PinyinRE);
 
@@ -176,8 +176,14 @@ int main(int argc, char* argv[]){
     alloc.deallocate(UnihanBuf, 0);
     
     resolveUnicodeNames(PinyinRE);
+    std::vector <re::RE*> * revector;
+    for (auto x : accum.getAccumulatedSet()){
+        revector.push_back(re::makeCC(x.first));
+        //std::cout << x.first << " " << x.second << std::endl;
+    }
     re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
-    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
+
+    /*UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
     std::vector<uint64_t> theCounts;
     theCounts.resize(fileCount);
     uint64_t totalCount = 0;
@@ -199,6 +205,12 @@ int main(int argc, char* argv[]){
         std::cout << std::setw(displayColumnWidth-1);
         std::cout << totalCount;
         std::cout << " total" << std::endl;
-    }
-    return 0;
+    }*/
+    std::unique_ptr<grep::GrepEngine> grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
+    grep->initREs(revector);
+    grep->grepCodeGen();
+    grep->initFileResult(allFiles);
+    const bool matchFound = grep->searchAllFiles();
+
+    return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
 }
