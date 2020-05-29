@@ -162,12 +162,15 @@ If the file to be searched is written in simplified Chinese and the radical expr
 
 ###### ** Output is printed in red on the terminal. ** 
 
-## **Iteration 3: Adding New Features**
+## **Iteration 3: Adding New Features & Final Iteration**
 Plans for iteration 3 include:
 
 1. ~~Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.~~ **(Done)**
 2. Add more functions/command line flags.
-3. Graphical interface
+3. Fix colorization issue.
+4. Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)
+5. Implement a search mode like this 水_{火/水}_. 
+6. Graphical interface (If time allows.)
 
 ## Changelog
 
