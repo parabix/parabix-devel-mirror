@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto radicalREs=generateREs(input_radical); //get the results
-    grep->setColoring();    //Defined in file grep_engine, Get result highlight
+    //grep->setColoring();    //Defined in file grep_engine, Get result highlight
     grep->initFileResult(allfiles); //Defined in file grep_engine, Initialize results of each file
     grep->initREs(radicalREs);  //Defined in file grep_engine, Initialize the output
     grep->grepCodeGen();    //Return the number of the result
