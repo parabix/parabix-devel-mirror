@@ -65,6 +65,15 @@ namespace PinyinPattern{
     }
     //this function should be rewriten totally inorder to deal with multiple syllables since it has no space between two syllables
     //should find a new way to divided the syllables by not using the space
+    bool all_alpha(string word)
+    {
+        for(int a=0; a<word.length(); a++){
+            if (!isalpha(word[a])){
+                return false;
+            }
+        }
+        return true;
+    }
     vector<string> Before_Search(string Pinyin_syllables)
     {
         int pos = 0;
@@ -145,7 +154,7 @@ namespace PinyinPattern{
                     }
                 }
             }
-            else
+            else if (all_alpha(word))
             {
                 for (int j=0; j<syl.size(); j++)
                 {
@@ -159,6 +168,11 @@ namespace PinyinPattern{
                     }
                 }
             }
+            else
+            {
+                FinalVec.push_back(word);
+            }
+            
         }
         Divided = vector <string>(); //deallocate unused vector 
 
