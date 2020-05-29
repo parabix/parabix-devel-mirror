@@ -10,6 +10,7 @@
 #include <regex>
 #include <iostream>
 #include <unicode/data/kRSKangXi.h>
+#include <llvm/Support/ErrorHandling.h>
 
 typedef std::pair<std::string, std::string> input_radical;
 

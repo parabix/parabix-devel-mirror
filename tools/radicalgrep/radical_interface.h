@@ -17,6 +17,7 @@
 #include <re/parse/parser.h>
 #include <re/toolchain/toolchain.h>
 #include <unicode/data/kRSKangXi.h>
+#include <llvm/Support/ErrorHandling.h>
 
 namespace BS
 {
