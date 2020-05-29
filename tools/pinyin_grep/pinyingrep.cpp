@@ -176,14 +176,13 @@ int main(int argc, char* argv[]){
     alloc.deallocate(UnihanBuf, 0);
     
     resolveUnicodeNames(PinyinRE);
-    std::vector <re::RE*> * revector;
-    for (auto x : accum.getAccumulatedSet()){
-        revector.push_back(re::makeCC(x.first));
-        //std::cout << x.first << " " << x.second << std::endl;
-    }
+    std::vector <re::RE*> VectorRE;
+    
     re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
+    VectorRE.push_back(CC_ast);
 
-    /*UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
+    /*
+    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
     std::vector<uint64_t> theCounts;
     theCounts.resize(fileCount);
     uint64_t totalCount = 0;
@@ -206,8 +205,9 @@ int main(int argc, char* argv[]){
         std::cout << totalCount;
         std::cout << " total" << std::endl;
     }*/
+    
     std::unique_ptr<grep::GrepEngine> grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
-    grep->initREs(revector);
+    grep->initREs(VectorRE);
     grep->grepCodeGen();
     grep->initFileResult(allFiles);
     const bool matchFound = grep->searchAllFiles();
