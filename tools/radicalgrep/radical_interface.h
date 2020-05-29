@@ -19,6 +19,9 @@
 #include <unicode/data/kRSKangXi.h>
 #include <llvm/Support/ErrorHandling.h>
 
+enum ColoringType {alwaysColor, autoColor, neverColor};
+extern ColoringType ColorFlag;
+
 namespace BS
 {
     using std::vector;

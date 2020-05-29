@@ -22,6 +22,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h> 
 #include <pablo/pablo_kernel.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_zeroes.h>
@@ -58,6 +59,16 @@ static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>")
 //search for multiple input files are supported
 static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search."), cl::init(false), cl::cat(radicalgrepFlags)); 
 
+//Adpated from grep_interface.cpp
+//static cl::OptionCategory colorization("Colorization Options", "Turn on or turn off colorization for output.");
+ColoringType ColorFlag;
+//options for colourization; (e.g. -c auto)
+static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of the output."),
+                                 cl::values(clEnumValN(alwaysColor, "always", "Turn on colorization when outputting to a file and terminal"),
+                                            clEnumValN(autoColor,   "auto", "Turn on colorization only when outputting to terminal"),
+                                            clEnumValN(neverColor,  "never", "Turn off output colorization")
+                                            CL_ENUM_VAL_SENTINEL), cl::cat(radicalgrepFlags), cl::location(ColorFlag), cl::init(neverColor));
+
 std::vector<fs::path> allfiles; //Store all path of files
 
 std::vector<re::RE*> generateREs(std::string input_radical);    //This function parse the input and get the results
@@ -65,18 +76,24 @@ std::vector<re::RE*> generateREs(std::string input_radical);    //This function 
 int main(int argc, char* argv[])
 {
    codegen::ParseCommandLineOptions(argc,argv,{&radicalgrepFlags,codegen::codegen_flags()});
+
     if (argv::RecursiveFlag||argv::DereferenceRecursiveFlag)
     {
         argv::DirectoriesFlag=argv::Recurse;
     }
     CPUDriver pxDriver("radicalgrep");
     allfiles=argv::getFullFileList(pxDriver, inputfiles);
-    const auto filecount=allfiles.size();
+    //const auto filecount=allfiles.size();
     
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto radicalREs=generateREs(input_radical); //get the results
-    //grep->setColoring();    //Defined in file grep_engine, Get result highlight
+
+    //turn on colorizartion if specified by user
+    if ((ColorFlag == alwaysColor) || ((ColorFlag == autoColor) && isatty(STDOUT_FILENO))) {
+        grep->setColoring();
+    }
+
     grep->initFileResult(allfiles); //Defined in file grep_engine, Initialize results of each file
     grep->initREs(radicalREs);  //Defined in file grep_engine, Initialize the output
     grep->grepCodeGen();    //Return the number of the result

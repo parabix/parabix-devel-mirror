@@ -167,7 +167,7 @@ Plans for iteration 3 include:
 
 1. ~~Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.~~ **(Done)**
 2. Add more functions/command line flags.
-3. Fix colorization issue.
+3. ~~Fix colorization issue.~~ **(Done)**
 4. Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)
 5. Implement a search mode like this 水_{火/水}_. 
 6. Graphical interface (If time allows.)
@@ -179,9 +179,12 @@ Plans for iteration 3 include:
  * The default searching mode is with the radical characters. To use the radical indices, include the option flag `-i` in your input.
  * Functionality added to catch all incorrect input (e.g. any non-numeric input or non-existing radical set).
 
-## Example 1: Kangxi Radical Index Search Mode
+### Radical Grep Version 3.1
+* Radical Grep's default output has colorization turned off. You can turn it back on by using the option flag `-c auto` in your input.
 
-    Input: -i 85_ ../../QA/radicaltest/testfiles/test1
+## Example 1: Kangxi Radical Index Search Mode and Colorization Turned On
+
+    Input: -i -c auto 85_ ../../QA/radicaltest/testfiles/test1
 
     Output: 部首分类也是使用**汉**字之文化圈少数的共通点
             中国大陆的国标码使用**汉**语拼音排列
@@ -205,7 +208,8 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
 * Unihan Database (Unihan.zip)
 * [UCD-Scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/UCD-scripts) was used in [unihan-scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/delta-radicalgrep/unihan-scripts)
+* [icgrep](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/tools/icgrep)
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/28
+**Last Updated:** 2020/05/29
