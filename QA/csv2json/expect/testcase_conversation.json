@@ -1,7 +1,7 @@
 [
- {"who": "professor Cameron","says": "Group Beta,\nwhy is your submission so late?","is a teacher": "yes","is a student": "no"},
- {"who": "Josie","says": "Because I am a bad procrastinator.","is a teacher": "no","is a student": "yes"},
- {"who": "Joshua","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
- {"who": "Vincent","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
- {"who": "Josie","says": "Yes, I \"really\" am.","is a teacher": "no","is a student": "yes"}
+{"who": "professor Cameron","says": "Group Beta,\nwhy is your submission so late?","is a teacher": "yes","is a student": "no"},
+{"who": "Josie","says": "Because I am a bad procrastinator.","is a teacher": "no","is a student": "yes"},
+{"who": "Joshua","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
+{"who": "Vincent","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
+{"who": "Josie","says": "Yes, I \"really\" am.","is a teacher": "no","is a student": "yes"}
 ]
