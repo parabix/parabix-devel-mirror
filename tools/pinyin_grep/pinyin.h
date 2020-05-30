@@ -60,6 +60,7 @@ namespace PinyinPattern{
         }
         
         s.erase(0,s.find_first_not_of(" "));
+        s.erase(0,s.find_first_not_of(","));
         s.erase(s.find_last_not_of(" ") + 1);
         return s;
     }
@@ -94,7 +95,7 @@ namespace PinyinPattern{
         while(pos!=-1)
         {
             string temp;
-            pos = Pinyin_syllables.find_first_of(' ',pos);
+            pos = Pinyin_syllables.find_first_of(',',pos);
             temp = Pinyin_syllables.substr(0,pos);
             Pinyin_syllables.erase(0,pos);
             temp = trim(temp);
