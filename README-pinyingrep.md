@@ -79,7 +79,7 @@ Output:
 	我听说明天会很晴朗，也许明天会更好。
 ```
 #### Testcase 5 -- *Multiple Files*
-Input pinyin and the intended files, then return all corresponding lines of Chinese Characters
+Input pinyin and the intended files, (`<file path 1>` `<file path 2>`),then return all corresponding lines of Chinese Characters
 
 ```
 Input: 
@@ -89,7 +89,7 @@ Output:
 	想要好成绩，
 ```
 #### Testcase 6 -- *Multiple Input*
-Input multiple pinyin, seperated by a comma, and the intended, then return all corresponding lines of Chinese Characters
+Input multiple pinyin, seperated by a comma, (`<word1>`,`<word2>`), and the intended, then return all corresponding lines of Chinese Characters
 
 ```
 Input: 
