@@ -100,18 +100,31 @@ Josie,"Yes, I ""really"" am.",no,yes
 
 ```json
 [
- {"who": "professor Cameron","says": "Group Beta,\nwhy is your submission so late?","is a teacher": "yes","is a student": "no"},
- {"who": "Josie","says": "Because I am a bad procrastinator.","is a teacher": "no","is a student": "yes"},
- {"who": "Joshua","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
- {"who": "Vincent","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
- {"who": "Josie","says": "Yes, I \"really\" am.","is a teacher": "no","is a student": "yes"}
+{"who": "professor Cameron","says": "Group Beta,\nwhy is your submission so late?","is a teacher": "yes","is a student": "no"},
+{"who": "Josie","says": "Because I am a bad procrastinator.","is a teacher": "no","is a student": "yes"},
+{"who": "Joshua","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
+{"who": "Vincent","says": "Yes, she is.","is a teacher": "no","is a student": "yes"},
+{"who": "Josie","says": "Yes, I \"really\" am.","is a teacher": "no","is a student": "yes"}
 ]
 ```
 
 
 
+#### Known bugs
+
+1. empty field right before a newline which looks like **,⏎**
+2. empty field represented as **,,**
+3. empty field represented as **,””,**
+4. Besides the above bugs, the program can only work properly the first time after it compiles.
+
++ bug 1 and bug 2 can be tested by testcase_group.
+
++ bug 3 can be tested by testcase_doublequote .
+
++ bug 4 can be tested by running the program with different testcases twice or more times.
+
 
 
 Authored by Group Beta: Joshua Malmberg, Vincent Chen, Josie Zhou
 
-Last Updated: May 28th, 2020
+Last Updated: May 30th, 2020
