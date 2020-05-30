@@ -59,15 +59,15 @@ namespace PinyinPattern{
     string Add_Search_Prefix(string to_add)
     {
         string temp = to_add;
-        string prefix = "kHanyuPinyin.*";
+        string prefix = "kHanyu.*"; 
         temp = prefix + temp;
         return temp;
     }
     //this function should be rewriten totally inorder to deal with multiple syllables since it has no space between two syllables
     //should find a new way to divided the syllables by not using the space
-    bool all_alpha(string word)
+    bool All_Alpha(string word)
     {
-        for(int a=0; a<word.length(); a++){
+        for(size_t a=0; a<word.length(); a++){
             if (!isalpha(word[a])){
                 return false;
             }
@@ -106,7 +106,7 @@ namespace PinyinPattern{
                                     {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
                                     {"m", "m̄", "ḿ", "m̀"},
                                     {"n", "ń", "ň", "ǹ"} };
-        for(int i=0; i<Divided.size(); i++){
+        for(size_t i=0; i<Divided.size(); i++){
             string word = Divided[i];
             if (word.find('.') != string::npos) // found regex . 
             {   
@@ -146,7 +146,7 @@ namespace PinyinPattern{
                     tone = 4;
                 }
                 word.replace(word.find(to_string(tone)), 1, "");
-                for (int j=0; j<syl.size(); j++){
+                for (size_t j=0; j<syl.size(); j++){
                     if (word.find(syl[j][0]) != string::npos){
                         word.replace(word.find(syl[j][0]), 1, syl[j][tone]);
                         FinalVec.push_back(word);
@@ -154,12 +154,12 @@ namespace PinyinPattern{
                     }
                 }
             }
-            else if (all_alpha(word))
+            else if (All_Alpha(word))
             {
-                for (int j=0; j<syl.size(); j++)
+                for (size_t j=0; j<syl.size(); j++)
                 {
                     if (Divided[i].find(syl[j][0]) != string::npos){
-                        for (int k=1; k<syl[j].size(); k++){
+                        for (size_t k=1; k<syl[j].size(); k++){
                             temp = word;
                             temp.replace(word.find(syl[j][0]), 1, syl[j][k]);
                             FinalVec.push_back(temp);;
@@ -181,6 +181,10 @@ namespace PinyinPattern{
         {
             *iter = Add_Search_Prefix(*iter);
         }
+        // for (auto x: FinalVec){
+        //     llvm::errs() << x << " ";
+        // }
+        // llvm::errs() << "\n";
         return FinalVec;
     }
     class Buffer{
@@ -191,7 +195,7 @@ namespace PinyinPattern{
     public:
         Buffer()
         {
-            name = "../../unihan-scripts/Unihan/Unihan_Readings.txt";
+            name = "Unihan_Readings.txt";
             ifstream file(name);
             if(file) {
                 str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
@@ -255,13 +259,16 @@ namespace PinyinPattern{
         }
         void accumulate_match(const size_t pos, char * start, char * end) override {
             // add codepoint to UnicodeSet
-            int i = 3;
+            int i = 2;
             strcodepoint.clear();
             while(*(start+i) != '\t'){
                 strcodepoint += *(start+i);
                 i++;
+                // llvm::errs() << "strcodepoint " << strcodepoint << "\n";
             }
+            // llvm::errs() << "strcodepoint " << strcodepoint << "\n";
             parsed_codepoint = conv_int(strcodepoint);
+            // llvm::errs() << "parsed_codepoint " << parsed_codepoint << "\n";
             mAccumSet.insert(parsed_codepoint);
         }
     };

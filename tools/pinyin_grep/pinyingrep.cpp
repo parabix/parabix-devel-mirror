@@ -62,8 +62,8 @@ typedef uint64_t (*UCountFunctionType)(uint32_t fd);
 //step4
 std::vector<re::RE*> generateREs(std::vector<std::string> KangXiLinePattern){
     std::vector<re::RE*> PinyinCC;
-    re::RE* PinyinCC_final;
-    for(int i= 0;i<KangXiLinePattern.size();i++)
+    //re::RE* PinyinCC_final;
+    for(size_t i= 0;i<KangXiLinePattern.size();i++)
     {
         re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, re::PCRE, false);
        //how to find the unicode? 
@@ -100,7 +100,7 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::RE * pinyinCC) {
     StreamSet * CCstream = P->CreateStreamSet(1, 1);
     
     std::map<std::string, StreamSet *> propertyStreamMap;
-    auto nameString = "kHanyu:" + PinyinLinePattern;
+    auto nameString = "kHanyuPinyin:" + PinyinLinePattern;
     propertyStreamMap.emplace(nameString, CCstream);
     P->CreateKernelCall<UnicodePropertyKernelBuilder>(makeName(nameString, pinyinCC), BasisBits, CCstream);
 
@@ -177,12 +177,12 @@ int main(int argc, char* argv[]){
     
     resolveUnicodeNames(PinyinRE);
     std::vector <re::RE*> VectorRE;
-    
+
     re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
     VectorRE.push_back(CC_ast);
 
-    /*
     UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
+    /*
     std::vector<uint64_t> theCounts;
     theCounts.resize(fileCount);
     uint64_t totalCount = 0;
@@ -205,11 +205,11 @@ int main(int argc, char* argv[]){
         std::cout << totalCount;
         std::cout << " total" << std::endl;
     }*/
-    
+
     std::unique_ptr<grep::GrepEngine> grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
+    grep->initFileResult(allFiles);
     grep->initREs(VectorRE);
     grep->grepCodeGen();
-    grep->initFileResult(allFiles);
     const bool matchFound = grep->searchAllFiles();
 
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
