@@ -207,7 +207,7 @@ namespace PinyinPattern{
     public:
         Buffer()
         {
-            name = "Unihan_Readings.txt";
+            name = "../tools/pinyin_grep/Unihan_Readings.txt";
             ifstream file(name);
             if(file) {
                 str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
