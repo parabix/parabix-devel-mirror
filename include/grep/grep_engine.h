@@ -193,6 +193,7 @@ protected:
     kernel::StreamSet * mU8index;
     kernel::StreamSet * mGCB_stream;
     re::UTF16_Transformer mUTF16_Transformer;
+    re::UTF8_Transformer mUTF8_Transformer;
     pthread_t mEngineThread;
 };
 

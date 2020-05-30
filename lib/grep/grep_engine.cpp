@@ -140,6 +140,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mU8index(nullptr),
     mGCB_stream(nullptr),
     mUTF16_Transformer(re::NameTransformationMode::None),
+    mUTF8_Transformer(re::NameTransformationMode::None),
     mEngineThread(pthread_self()) {}
 
 GrepEngine::~GrepEngine() { }
@@ -515,7 +516,7 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
         options->setResults(Results);
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
-        options->setIndexingTransformer(&mUTF16_Transformer, mU8index); 
+        options->setIndexingTransformer(&mUTF8_Transformer, mU8index); 
         //encoding transformer set to UTF16 temporarily
         if (mSuffixRE != nullptr) {
             options->setPrefixRE(mPrefixRE);
@@ -720,21 +721,20 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
         }
     }
 
-    const auto bytes = line_end - line_start + 1;
+    const auto bytes = line_end - line_start + 2;
     mResultStr->write(line_start, bytes);
     mLineCount++;
     mLineNum = lineNum;
     unsigned last_byte = *line_end;
-    mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
+    mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D); //second condition need to be changed?
     if (LLVM_UNLIKELY(!mTerminated)) {
         if (last_byte == 0x85) {  //  Possible NEL terminator.
-            mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0xC2);
+            mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x00); //NEL in UTF16 0085
         }
         else {
-            // Possible LS or PS terminators.
-            mTerminated = (bytes >= 3) && (static_cast<unsigned>(line_end[-2]) == 0xE2)
-                                       && (static_cast<unsigned>(line_end[-1]) == 0x80)
-                                       && ((last_byte == 0xA8) || (last_byte == 0xA9));
+            // Possible LS or PS terminators. - UTF16 - 0x2028 and 0x2029
+            mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x20)
+                                       && ((last_byte == 0x28) || (last_byte == 0x29));
         }
     }
 }
@@ -926,7 +926,6 @@ void EmitMatchesEngine::grepCodeGen() {
     Scalar * const useMMap = E1->getInputScalar("useMMap");
     Scalar * const fileDescriptor = E1->getInputScalar("fileDescriptor");
     StreamSet * const ByteStream = E1->CreateStreamSet(1, ENCODING_BITS_U16);
-    //E1->CreateKernelCall<DebugDisplayKernel>("ByteStream", ByteStream);
     E1->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     grepPipeline(E1, ByteStream);
     E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
@@ -944,7 +943,6 @@ void EmitMatchesEngine::grepCodeGen() {
         Scalar * const buffer = E2->getInputScalar("buffer");
         Scalar * const length = E2->getInputScalar("length");
         StreamSet * const InternalBytes = E2->CreateStreamSet(1, 8); 
-        E2->CreateKernelCall<DebugDisplayKernel>("InternalBytes", InternalBytes);
         E2->CreateKernelCall<MemorySourceKernel>(buffer, length, InternalBytes);
         grepPipeline(E2, InternalBytes, /* BatchMode = */ true);
         E2->setOutputScalar("countResult", E2->CreateConstant(idb->getInt64(0)));
