@@ -13,6 +13,13 @@
 #include <sstream>
 #include <grep/grep_engine.h>
 #include <grep/grep_kernel.h>
+#include <llvm/ADT/STLExtras.h>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/PrettyStackTrace.h>
+#include <llvm/Support/Signals.h>
+#include <llvm/Support/ManagedStatic.h>
+#include <llvm/Support/raw_ostream.h>
 
 namespace PinyinPattern{
     using namespace std;
@@ -59,7 +66,10 @@ namespace PinyinPattern{
     string Add_Search_Prefix(string to_add)
     {
         string temp = to_add;
-        string prefix = "kHanyu.*"; 
+        // string prefix = "(kHanyu.*"; 
+        // string suffix = ")(,|$)";
+        // temp = prefix + temp + suffix;
+        string prefix = "kHanyu.*";
         temp = prefix + temp;
         return temp;
     }
@@ -76,9 +86,10 @@ namespace PinyinPattern{
     }
     vector<string> Before_Search(string Pinyin_syllables)
     {
+        vector<string> Divided, FinalVec;
         int pos = 0;
         Pinyin_syllables = trim(Pinyin_syllables);
-        vector<string> Divided, FinalVec;
+        
         string temp, temp2;
         while(pos!=-1)
         {

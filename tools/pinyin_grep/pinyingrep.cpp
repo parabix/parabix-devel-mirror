@@ -29,7 +29,7 @@
 #include <fileselect/file_select.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <llvm/ADT/STLExtras.h> // for make_unique
+//#include <llvm/ADT/STLExtras.h> // for make_unique
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
@@ -159,6 +159,23 @@ int main(int argc, char* argv[]){
     //step4
     auto KangXilineREs = generateREs(KangXiLinePattern);
     //auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
+    PinyinPattern::PinyinSetAccumulator accum;
+    std::vector <re::RE*> VectorRE;
+    for (auto word: KangXilineREs){
+        auto PinyinRE = word;
+        grep::InternalSearchEngine engine(pxDriver);
+        engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+        engine.grepCodeGen(PinyinRE);
+        engine.doGrep(UnihanBuf, buf.R_size32(), accum); 
+        resolveUnicodeNames(PinyinRE);
+    }
+    
+    alloc.deallocate(UnihanBuf, 0);
+    re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
+    VectorRE.push_back(CC_ast);
+
+    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
+    /*
     auto PinyinRE = KangXilineREs[0];
     //step5 for each RE,use parabix internal search Engine to search
     PinyinPattern::PinyinSetAccumulator accum;
@@ -181,7 +198,7 @@ int main(int argc, char* argv[]){
     re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
     VectorRE.push_back(CC_ast);
 
-    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
+    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast); */
     /*
     std::vector<uint64_t> theCounts;
     theCounts.resize(fileCount);
