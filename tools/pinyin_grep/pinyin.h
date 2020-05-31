@@ -67,11 +67,11 @@ namespace PinyinPattern{
     string Add_Search_Prefix(string to_add)
     {
         string temp = to_add;
-        // string prefix = "(kHanyu.*"; 
-        // string suffix = ")(,|$)";
-        // temp = prefix + temp + suffix;
-        string prefix = "kHanyu.*";
-        temp = prefix + temp;
+        string prefix = "(kHanyuPinyin.*"; 
+        string suffix = ")(,|$)";
+        temp = prefix + temp + suffix;
+        // string prefix = "kHanyu.*";
+        // temp = prefix + temp;
         return temp;
     }
     //this function should be rewriten totally inorder to deal with multiple syllables since it has no space between two syllables
