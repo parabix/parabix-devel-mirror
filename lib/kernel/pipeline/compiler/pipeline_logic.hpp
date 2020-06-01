@@ -108,8 +108,8 @@ void PipelineCompiler::addPipelinePriorItemCountProperties(BuilderRef b) {
     // latter would be unaware of any computations performed by the former and (unless the
     // OptimizationBranch adjusted the item counts and the virtual base address of each stream)
     // and would try to redo the work, likely leading to invalid output. To handle it in a
-    // general way, the pipeline automatically increments all of the internal processed/
-    // produced counts of the
+    // general way, the pipeline automatically increments all of the internal processed,
+    // produced and consumed counts of the
 
 //    if (ExternallySynchronized) {
 
@@ -128,6 +128,57 @@ void PipelineCompiler::addPipelinePriorItemCountProperties(BuilderRef b) {
 //        }
 
 //    }
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readPipelineIOItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
+
+    // TODO: this needs to be considered more: if we have multiple consumers of a pipeline input and
+    // they process the input data at differing rates, how do we ensure that we always resume processing
+    // at the correct position? We can store the actual item counts / delta of the consumed count
+    // internally but this would be problematic for optimization branches as we may have processed data
+    // using the alternate path and any internally stored counts/deltas are irrelevant.
+
+    // Would a simple "reset" be enough?
+
+    mKernelId = PipelineInput;
+
+    ConstantInt * const ZERO = b->getSize(0);
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        mLocallyAvailableItems[streamSet] = ZERO;
+    }
+
+    // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const StreamSetPort inputPort = mBufferGraph[e].Port;
+        assert (inputPort.Type == PortType::Output);
+        Value * const available = getAvailableInputItems(inputPort.Number);
+        setLocallyAvailableItemCount(b, inputPort, available);
+        initializeConsumedItemCount(b, inputPort, available);
+    }
+
+//    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+
+//        const auto buffer = target(e, mBufferGraph);
+//        const StreamSetPort inputPort = mBufferGraph[e].Port;
+//        assert (inputPort.Type == PortType::Output);
+
+//        Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
+//        Value * const processed = b->CreateLoad(inPtr);
+//        for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
+//            const BufferPort & rd = mBufferGraph[e];
+//            const auto kernelIndex = target(e, mBufferGraph);
+//            const auto prefix = makeBufferName(kernelIndex, rd.Port);
+//            Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
+//            b->CreateStore(processed, ptr);
+//        }
+//    }
+
+    mKernelId = PipelineOutput;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -190,14 +241,26 @@ void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned 
         mTarget->addThreadLocalScalar(localStateTy, name + KERNEL_THREAD_LOCAL_SUFFIX, kernelId);
     }
 
+    auto reportDeferredStreamSet = [&](const Binding & binding) {
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << mTarget->getName() << "." << binding.getName() << " should not be marked as a Deferred output stream";
+        report_fatal_error(out.str());
+    };
+
     for (const auto e : make_iterator_range(in_edges(kernelId, mBufferGraph))) {
-//        const auto streamSet = source(e, mBufferGraph);
-//        const BufferNode & bn = mBufferGraph[streamSet];
-//        if (LLVM_UNLIKELY(bn.isExternal())) {
-//            continue;
-//        }
-//        assert (parent(streamSet, mBufferGraph) != PipelineInput);
         const BufferPort & br = mBufferGraph[e];
+        #ifndef STORE_EXTERNAL_PROCESSED_ITEM_COUNTS
+        const auto streamSet = source(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (LLVM_UNLIKELY(bn.isExternal())) {
+            if (LLVM_UNLIKELY(br.IsDeferred)) {
+                reportDeferredStreamSet(br.Binding);
+            }
+            continue;
+        }
+        #endif
+//        assert (parent(streamSet, mBufferGraph) != PipelineInput);        
         const auto prefix = makeBufferName(kernelId, br.Port);
         if (LLVM_UNLIKELY(br.IsDeferred)) {
             mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX, kernelId);
@@ -206,18 +269,21 @@ void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned 
     }
 
     for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {
-//        const auto streamSet = target(e, mBufferGraph);
-//        const BufferNode & bn = mBufferGraph[streamSet];
-//        if (LLVM_UNLIKELY(bn.isExternal())) {
-//            continue;
-//        }
-//        assert (parent(streamSet, mBufferGraph) != PipelineInput);
         const BufferPort & br = mBufferGraph[e];
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (LLVM_UNLIKELY(bn.isExternal())) {
+            if (LLVM_UNLIKELY(br.IsDeferred)) {
+                reportDeferredStreamSet(br.Binding);
+            }
+            continue;
+        }
         const auto prefix = makeBufferName(kernelId, br.Port);
         if (LLVM_UNLIKELY(br.IsDeferred)) {
             mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX, kernelId);
         }
         mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX, kernelId);
+
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {

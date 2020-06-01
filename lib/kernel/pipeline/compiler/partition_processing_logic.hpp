@@ -29,7 +29,6 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
             mPartitionStartTimePhi[i] = b->CreatePHI(sizeTy, PartitionCount, std::to_string(i) + ".startTimeCycleCounter");
         }
     }
-    initializePipelineInputConsumedPhiNodes(b);
     b->restoreIP(ip);
 
     mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
@@ -49,8 +48,9 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
 
     mKernelStartTime = startCycleCounter(b);
     acquireSynchronizationLock(b, FirstKernel);
-    updateInternalPipelineItemCount(b);
     updateCycleCounter(b, FirstKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
+    initializePipelineInputConsumedPhiNodes(b);
+    updateInternalPipelineItemCount(b);
 
 }
 
@@ -352,30 +352,38 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
     // can acquire the last consumer's lock but only release the locks that we end up skipping.
 
     auto firstKernelInTargetPartition = mKernelId;
-    auto lastConsumer = mKernelId;
+    auto toAcquire = mKernelId;
     for (; firstKernelInTargetPartition <= LastKernel; ++firstKernelInTargetPartition) {
         for (const auto e : make_iterator_range(out_edges(firstKernelInTargetPartition, mBufferGraph))) {
             const auto streamSet = target(e, mBufferGraph);
-            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-                const auto consumer = target(e, mBufferGraph);
-                lastConsumer = std::max<unsigned>(lastConsumer, consumer);
+            for (const auto output : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+                const auto consumer = target(output, mBufferGraph);
+                toAcquire = std::max<unsigned>(toAcquire, consumer);
             }
         }
         if (KernelPartitionId[firstKernelInTargetPartition] == partitionId) {
             break;
         }
     }
-    assert (firstKernelInTargetPartition > mKernelId);    
-    lastConsumer = std::min(lastConsumer, LastKernel);
+    assert (firstKernelInTargetPartition > mKernelId);
+    // It's possible the kernels between the current kernel and our target have no consumers.
+    // Make sure we have guarded for that situation.
+    toAcquire = std::max(toAcquire, firstKernelInTargetPartition);
+    // However, it is also possible that our target is actually the "fake" end of pipeline
+    // kernel. That one has no synchronization lock on its own.
+
+    toAcquire = std::min(toAcquire, LastKernel);
 
     // TODO: experiment with a mutex lock here.
     Value * const startTime = startCycleCounter(b);
-    acquireSynchronizationLock(b, lastConsumer);
+    acquireSynchronizationLock(b, toAcquire);
     updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
     for (auto kernel = mKernelId; kernel < firstKernelInTargetPartition; ++kernel) {
         releaseSynchronizationLock(b, kernel);
     }
-
+    if (firstKernelInTargetPartition < PipelineOutput) {
+        verifyAcquiredSynchronizationLock(b, firstKernelInTargetPartition);
+    }
     return startTime;
 }
 
@@ -384,11 +392,11 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
-    loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
-
     // create a temporary basic block to act a constant exit block of any phi nodes;
     // once we've determined the actual exit block of this portion of the program,
     // replace the phi catch with it.
+
+    assert (mIsPartitionRoot);
 
     if (mIsPartitionRoot) {
 
@@ -400,6 +408,8 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
         if (LLVM_LIKELY(nextPartitionId != jumpId)) {
 
             Value * const startTime = acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
+            loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
+
             mKernelInitiallyTerminatedExit = b->GetInsertBlock();
 
             if (LLVM_UNLIKELY(EnableCycleCounter)) {
@@ -439,6 +449,7 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
     } else { // if (!mIsPartitionRoot) {
 
         mKernelInitiallyTerminatedExit = b->GetInsertBlock();
+        loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
         updateKernelExitPhisAfterInitiallyTerminated(b);
         b->CreateBr(mKernelExit);
 

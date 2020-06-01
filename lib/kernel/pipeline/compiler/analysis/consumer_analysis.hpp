@@ -19,6 +19,7 @@ void PipelineAnalysis::makeConsumerGraph() {
     flat_set<unsigned> observedGlobalPortIds;
 
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+
         // copy the producing edge
         const auto pe = in_edge(streamSet, mBufferGraph);
         const BufferPort & br = mBufferGraph[pe];
@@ -31,7 +32,6 @@ void PipelineAnalysis::makeConsumerGraph() {
             continue;
         }
 
-
         auto lastConsumer = PipelineInput;
         auto index = 0U;
         // flag the production rate as ignorable by inserting it upfront
@@ -39,19 +39,18 @@ void PipelineAnalysis::makeConsumerGraph() {
         for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
             const BufferPort & br = mBufferGraph[ce];
             const auto consumer = target(ce, mBufferGraph);
-            // check if any consumer has a rate we have not yet observed
-            auto testConsumer = [&]() {
-                #ifndef TEST_ALL_CONSUMERS
-                return observedGlobalPortIds.insert(br.GlobalPortId).second;
-                #else
-                return true;
-                #endif
-            };
-
-            if (testConsumer()) {
-                lastConsumer = std::max<unsigned>(lastConsumer, consumer);
-                add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
+            if (LLVM_UNLIKELY(consumer == PipelineOutput && producer != PipelineInput)) {
+                continue;
             }
+            // check if any consumer has a rate we have not yet observed
+            lastConsumer = std::max<unsigned>(lastConsumer, consumer);
+            #ifndef TEST_ALL_CONSUMERS
+            if (observedGlobalPortIds.insert(br.GlobalPortId).second) {
+            #endif
+                add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
+            #ifndef TEST_ALL_CONSUMERS
+            }
+            #endif
         }
         observedGlobalPortIds.clear();
 
@@ -77,27 +76,11 @@ void PipelineAnalysis::makeConsumerGraph() {
         }
     }
 
-    // If this is a pipeline input, we want to update the count at the end of the loop.
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const auto streamSet = target(e, mBufferGraph);
-        ConsumerGraph::edge_descriptor f;
-        bool exists;
-        std::tie(f, exists) = edge(streamSet, PipelineOutput, mConsumerGraph);
-        const auto flags = ConsumerEdge::UpdateExternalCount;
-        if (exists) {
-            ConsumerEdge & cn = mConsumerGraph[f];
-            cn.Flags |= flags;
-        } else {
-            const BufferPort & br = mBufferGraph[e];
-            add_edge(streamSet, PipelineOutput, ConsumerEdge{br.Port, 0, flags}, mConsumerGraph);
-        }
-    }
-
 #if 0
 
     auto & out = errs();
 
-    out << "digraph \"ConsumerGraph\" {\n";
+    out << "digraph \"ConsumerGraph_" << mPipelineKernel->getName() << "\" {\n";
     for (auto v : make_iterator_range(vertices(mConsumerGraph))) {
         out << "v" << v << " [label=\"" << v << "\"];\n";
     }

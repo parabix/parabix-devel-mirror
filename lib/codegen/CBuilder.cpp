@@ -1010,6 +1010,14 @@ void __report_failure_v(const char * name, const char * fmt, const uintptr_t * t
         }
         out << "\nNo debug symbols loaded.\n";
     }
+    if (codegen::TaskThreads > 1 || codegen::SegmentThreads > 1) {
+        if (colourize) {
+            out.changeColor(raw_fd_ostream::BLUE, true);
+        }
+        out << " (Thread # ";
+        out.write_hex(pthread_self());
+        out << ")";
+    }
     if (colourize) {
         out.resetColor();
     }
@@ -1419,8 +1427,10 @@ LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine Name) 
 }
 
 StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
-    assert ("Ptr is not a pointer type for Val" &&
-            Ptr->getType()->isPointerTy() && Val->getType() == Ptr->getType()->getPointerElementType());
+    assert ("Ptr (Arg2) was expected to be a pointer type" &&
+            Ptr->getType()->isPointerTy());
+    assert ("Ptr (Arg2) is not a pointer type for Val (Arg1)" &&
+            Val->getType() == Ptr->getType()->getPointerElementType());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Val->getType()), "CreateStore");
     }
@@ -1830,9 +1840,14 @@ void CBuilder::CheckAddress(Value * const Ptr, Value * const Size, Constant * co
             #endif
         }
         Value * const addr = CreatePointerCast(Ptr, voidPtrTy);
-        Value * check = CreateCall(isPoisoned, { addr, CreateTrunc(Size, sizeTy) });
-        Value * const valid = CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy));
-        __CreateAssert(valid, "%s was given an unallocated %" PRIuMAX "-byte memory address 0x%" PRIxPTR, {Name, Size, Ptr});
+        Value * const firstPoisoned = CreateCall(isPoisoned, { addr, CreateTrunc(Size, sizeTy) });
+        Value * const valid = CreateICmpEQ(firstPoisoned, ConstantPointerNull::get(voidPtrTy));
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(firstPoisoned->getType()));
+        Value * const startInt = CreatePtrToInt(Ptr, intPtrTy);
+        Value * const firstPoisonedInt = CreatePtrToInt(firstPoisoned, intPtrTy);
+        Value * const offset = CreateSub(firstPoisonedInt, startInt);
+        __CreateAssert(valid, "%s was given an unallocated %" PRIuMAX "-byte memory address 0x%" PRIxPTR " (first poisoned=%" PRIuMAX ")", {Name, Size, Ptr, offset});
     }
     #endif
 }

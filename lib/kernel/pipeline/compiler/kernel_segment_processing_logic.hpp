@@ -104,7 +104,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     const auto nextPartitionId = mCurrentPartitionId + 1U;
     const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
     const auto canJumpToAnotherPartition = mIsPartitionRoot && (mIsBounded || nextPartitionId == jumpId);
-    const auto handleNoUpdateExit = mIsPartitionRoot || !canJumpToAnotherPartition;
+    const auto handleNoUpdateExit = mIsPartitionRoot; // || !canJumpToAnotherPartition;
     #else
     const auto canJumpToAnotherPartition = mIsPartitionRoot;
     const auto handleNoUpdateExit = mCheckIO;
@@ -504,11 +504,7 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     IntegerType * const boolTy = b->getInt1Ty();
     b->SetInsertPoint(mKernelLoopEntry);
 
-    if (mKernelLoopStart == nullptr) {
-        report_fatal_error("no loop start?");
-    }
-
-    assert (mKernelLoopStart);
+    assert ("no loop start?" && mKernelLoopStart);
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferPort & br = mBufferGraph[e];
@@ -877,9 +873,6 @@ void PipelineCompiler::end(BuilderRef b) {
         b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
     }
     b->SetInsertPoint(mPipelineEnd);
-
-    writeExternalConsumedItemCounts(b);
-    writeExternalProducedItemCounts(b);
     if (mCurrentThreadTerminationSignalPtr) {
         b->CreateStore(terminated, mCurrentThreadTerminationSignalPtr);
     }
@@ -903,18 +896,6 @@ void PipelineCompiler::end(BuilderRef b) {
     }
 
    // b->GetInsertBlock()->getParent()->print(errs());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeExternalProducedItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeExternalProducedItemCounts(BuilderRef b) {
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const BufferPort & external = mBufferGraph[e];
-        const auto streamSet = source(e, mBufferGraph);
-        Value * const ptr = getProducedOutputItemsPtr(external.Port.Number);
-        b->CreateStore(mLocallyAvailableItems[streamSet], ptr);
-    }
 }
 
 }

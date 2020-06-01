@@ -53,6 +53,7 @@ public:
         P.makeTerminationPropagationGraph();
 
         // Finish the buffer graph
+        P.identifyDirectUpdatesToStateObjects();
         P.addStreamSetsToBufferGraph(b);
 
         P.gatherInfo();
@@ -127,6 +128,7 @@ private:
     void identifyLinearBuffers();
     void identifyNonLocalBuffers();
     void identifyLocalPortIds();
+    void identifyDirectUpdatesToStateObjects();
 
     // consumer analysis functions
 
@@ -216,7 +218,7 @@ public:
 
     OwningVector<Kernel>            mInternalKernels;
     OwningVector<Binding>           mInternalBindings;
-    OwningVec<StreamSetBuffer>      mInternalBuffers;
+    OwningVector<StreamSetBuffer>   mInternalBuffers;
 };
 
 }

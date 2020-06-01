@@ -287,7 +287,13 @@ struct BufferPort {
     bool IsShared = false;
     bool IsManaged = false;
 
+    bool Countable = false;
+    bool Addressable = false;
+    bool DirectlyUpdatesInternalState = false;
+    bool StoreItemCount = false;
+
     int TransitiveAdd = 0;
+
 
     bool operator < (const BufferPort & rn) const {
         if (LLVM_LIKELY(Port.Type == rn.Port.Type)) {

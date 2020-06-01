@@ -159,10 +159,6 @@ private:
     FixedVector<T> mArray;
 };
 
-
-template <typename T>
-using OwningVec = std::vector<std::unique_ptr<T>>;
-
 #ifndef NDEBUG
 static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const bool allowNull = true) {
     if (value == nullptr) {

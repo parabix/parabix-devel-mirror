@@ -207,25 +207,22 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
         return isCountable(binding);
     };
 
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    Vec<Value *> finalProduced(numOfOutputs);
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        const StreamSetPort port (PortType::Output, i);
-        finalProduced[i] = mProducedItemCount[port];
-        if (isCountableType(mReturnedProducedItemCountPtr[port], getOutputBinding(port))) {
-            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr[port]);
-            #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, makeBufferName(mKernelId, port) +
-                       "_producedAfterAbnormalTermination = %" PRIu64, finalProduced[i]);
-            #endif
-        }
-    }
     BasicBlock * const exitBlock = b->GetInsertBlock();
 
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        const StreamSetPort port (PortType::Output, i);
-        mProducedAtTerminationPhi[port]->addIncoming(finalProduced[i], exitBlock);
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto & bp = mBufferGraph[e];
+        const auto port = bp.Port;
+        Value * finalProduced = mProducedItemCount[port];
+        if (isCountableType(mReturnedProducedItemCountPtr[port], bp.Binding)) {
+            finalProduced = b->CreateLoad(mReturnedProducedItemCountPtr[port]);
+            #ifdef PRINT_DEBUG_MESSAGES
+            Constant * const bufferName = b->GetString(makeBufferName(mKernelId, port));
+            debugPrint(b, "%s_producedAfterAbnormalTermination = %" PRIu64, bufferName, finalProduced);
+            #endif
+        }
+        mProducedAtTerminationPhi[port]->addIncoming(finalProduced, exitBlock);
     }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
