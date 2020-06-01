@@ -87,10 +87,12 @@ std::vector<re::RE*> generateREs(std::string pyregex){
 
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
-    if (pyKPY){
-        return enumerator.createREs(1);
-    }
-    return enumerator.createREs(0);
+    std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? 1 : 0));
+    re::ModeFlagSet InitialFlag = re::MULTILINE_MODE_FLAG;
+    re::RE_Syntax RegexpSyntax = re::RE_Syntax::PCRE;
+    bool ByteMode = false;
+    REs.push_back(re::RE_Parser::parse(pyregex, InitialFlag, RegexpSyntax, ByteMode));
+    return std::move(REs);
 }
 // Reference: icgrep
 int main(int argc, char* argv[]){
