@@ -108,4 +108,14 @@ xuǎn
 周公吐哺，天下歸心。
 </datafile>
 
+<grepcase regexp="bin" datafile="traditional-test" greplines="9" flags="-sim"/>
+<grepcase regexp="bin" datafile="traditional-test" greplines="9" flags="-sonly"/>
+<grepcase regexp="bin" datafile="traditional-test" greplines="26" flags="-trd"/>
+<grepcase regexp="bin" datafile="traditional-test" greplines="26" flags="-tonly"/>
+
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="9" flags="-sim"/>
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="" flags="-sonly"/>
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="26" flags="-trd"/>
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="" flags="-tonly"/>
+
 </greptest>
