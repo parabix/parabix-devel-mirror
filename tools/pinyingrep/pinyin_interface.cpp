@@ -21,13 +21,19 @@ namespace PY{
                 cout<<"start:"<<start<<endl;
             #endif
             s = s.substr(start);        // replace prefix empty space
+            #if DEBUG
+                cout<<"after s=s.substr(start): "<<s<<endl;
+            #endif
             end = s.find_first_of(' '); // find the end of the current syllable 
             if(end != s.npos){
                 #if DEBUG
                     cout<<"end:"<<end<<endl;
                 #endif
-                list.push_back(s.substr(start, end - start));
+                list.push_back(s.substr(0, end));
                 // erase the current syllable
+                #if DEBUG
+                    cout<<"s.substr(0, end): "<<s.substr(0, end)<<endl;
+                #endif
                 s = s.substr(end);  
                 start = s.find_first_not_of(' ');
             }
