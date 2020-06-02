@@ -69,23 +69,17 @@ RE * toUTF8(RE * r, bool convertName) {
     return UTF8_Transformer(mode).transformRE(r);
 }
 
-static RE *rangeCodeUnitsU16(codepoint_t lo, codepoint_t hi, unsigned index,
-                          const unsigned lgth) {
-    const codepoint_t hunit =
-        UTF<16>::nthCodeUnit(hi, index);  
-    const codepoint_t lunit =
-        UTF<16>::nthCodeUnit(lo, index);  
-    
+static RE *rangeCodeUnitsU16(codepoint_t lo, codepoint_t hi, unsigned index, const unsigned lgth) {
+    const codepoint_t hunit = UTF<16>::nthCodeUnit(hi, index);  
+    const codepoint_t lunit = UTF<16>::nthCodeUnit(lo, index);  
     if (index == lgth) {
-        if(hunit<lunit ) {
-            return makeCC(hunit, lunit, &cc::UTF16); //surrogate pair code points treated separately  
-        }
+        if(hunit<lunit )
+            return makeCC(hunit, lunit, &cc::UTF16); //surrogate pair code points treated separately 
         return makeCC(lunit, hunit, &cc::UTF16);
     } else if (hunit == lunit) {
         return makeSeq({makeCC(hunit, &cc::UTF16), rangeCodeUnitsU16(lo, hi, index + 1, lgth)});
     } else {
-        const unsigned suffix_mask =
-            (static_cast<unsigned>(1) << ((lgth - index) * 6)) - 1;
+        const unsigned suffix_mask = UTF<16>::suffixDataBits(index, lgth);
         if ((hi & suffix_mask) != suffix_mask) {
             const unsigned hi_floor = (~suffix_mask) & hi;
             return makeAlt({rangeCodeUnitsU16(hi_floor, hi, index, lgth), rangeCodeUnitsU16(lo, hi_floor - 1, index, lgth)});

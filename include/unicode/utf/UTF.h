@@ -17,6 +17,7 @@ public:
     static inline codepoint_t minCodePointWithCommonCodeUnits(codepoint_t cp, unsigned common);
     static inline codepoint_t maxCodePointWithCommonCodeUnits(codepoint_t cp, unsigned common);
     static inline unsigned nthCodeUnit(codepoint_t cp, unsigned n);
+    static inline unsigned suffixDataBits(unsigned index, const unsigned lgth);
 };
     
 template<> inline unsigned UTF<8>::encoded_length(codepoint_t cp) {
@@ -74,6 +75,12 @@ template<int Bits> inline bool UTF<Bits>::isHighCodePointAfterNthCodeUnit(codepo
     if (cp == 0x10FFFF) return true;
     else if (UTF<Bits>::encoded_length(cp + 1) > UTF<Bits>::encoded_length(cp)) return true;
     else return UTF<Bits>::nthCodeUnit(cp + 1, n) != UTF<Bits>::nthCodeUnit(cp, n);
+}
+
+template<int Bits> inline unsigned UTF<Bits>::suffixDataBits(unsigned index, const unsigned lgth) {
+    if (Bits == 8)
+        return (static_cast<unsigned>(1) << ((lgth - index) * Bits-2)) - 1;
+    return (static_cast<unsigned>(1) << ((lgth - index) * Bits-6)) - 1;
 }
 
 // UTF-16
