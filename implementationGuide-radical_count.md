@@ -46,7 +46,7 @@ This map lists all 214 Kangxi radical sets and their respective keys. The key of
 Instead of using a numeric key, the actual Kangxi radical is used and mapped to their corresponding values. Note that one unicode set may belong to different radicals (e.g. 水 and 氵both map to set 85).
 
 * `get_uset()`:
-This function finds the requested unicode set for the inputted radical, from `radical_table`. In `radicalcount.cpp`, this is invoked with the object `ucd_radical`.
+This function maps the inputted radical to the corresponding UnicodesSet predefined in `radical_table`. If the program is in index mode (`-i`), the function looks for the requested radical in `_unicodeset_radical_table` and checks if the input is valid. In the case of an invalid input, an error message will appear and terminate the program. In `radicalcount.cpp`, this function is invoked with the object `ucd_radical`.
 
 `parse_input()`:
 This function parses the inputted radical expression (e.g. 氵_ or 氵_子_ ) and stores it in a variable of type `input_radical`, which is predefined to represent a pair data structure. In `radicalcount.cpp`, `ci` is used to hold the parsed expression.
@@ -57,5 +57,5 @@ The Radical Count program uses the kRSKangxi property to distinguish all 214 rad
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/20
+**Last Updated:** 2020/06/01
 

@@ -55,12 +55,10 @@ using namespace codegen;
 
 static cl::OptionCategory radicalgrepFlags("Command Flags", "Options for Radical Grep"); //The command line
 static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags));    //The input  radical(s)
-static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));
-//search for multiple input files are supported
+static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));    //search for multiple input files is supported
 static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search."), cl::init(false), cl::cat(radicalgrepFlags)); 
 
 //Adpated from grep_interface.cpp
-//static cl::OptionCategory colorization("Colorization Options", "Turn on or turn off colorization for output.");
 ColoringType ColorFlag;
 //options for colourization; (e.g. -c auto)
 static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of the output."),
@@ -83,7 +81,6 @@ int main(int argc, char* argv[])
     }
     CPUDriver pxDriver("radicalgrep");
     allfiles=argv::getFullFileList(pxDriver, inputfiles);
-    //const auto filecount=allfiles.size();
     
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);

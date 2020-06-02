@@ -1,18 +1,20 @@
 # README-radicalcount
 
-Radical Count is a program built based off of `ucount`. Given file(s) and the Kangxi radical expression, it counts the occurences of characters with the corresponding radical in the input file(s).
+Radical Count is a program built based off of `ucount`. Given file(s) and the Kangxi radical expression, it counts the occurences of characters with the corresponding radical in the input file(s). If you are using the index mode, please refer to the "No." column of this [list](https://www.yellowbridge.com/chinese/radicals.php) for reference.
 
 For more information on the Kangxi Radical System, please visit: https://en.wikipedia.org/wiki/Kangxi_radical or https://www.yellowbridge.com/chinese/radicals.php
 
 ## **Installation**
 
-To build Radical Count, type `make radicalcount` into the terminal.
+To build Radical Count, run `make radicalcount` in the `build` directory.
 
 ## **How to Run Radical Count**
 
  Go into the bin diretory and run the following command to use Radical Count.
 
-    ./radicalcount <Radical Expression> <Path(s) of Input File(s)>
+    ./radicalcount [OPTIONS] <Radical Expression> <Path(s) of Input File(s)>
+
+For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/QA/radicaltest/radicaltest.xml).
 
 ## Example 1: Single Radical Input
 
@@ -22,7 +24,7 @@ To build Radical Count, type `make radicalcount` into the terminal.
 
 ## Example 2: Double Radical Input
 
-    Input: 氵_子_ ../QA/radicaltest/testfiles/test1
+    Input: 氵_子_ ../../QA/radicaltest/testfiles/test1
     
     Output:     氵: 3       ../../QA/radicaltest/testfiles/test1
                 子: 4       ../../QA/radicaltest/testfiles/test1
@@ -45,7 +47,7 @@ To build Radical Count, type `make radicalcount` into the terminal.
 
 As mentioned before, it is possible to have more than one radical with the same index. In this example, 火 and 灬 are both radical 86 in the Kangxi dictionary. Similar cases include 氵and 水, as well as 忄and 心. These just get counted together.
 
-    Input: ./radicalcount 火_灬_ ../QA/radicaltest/testfiles/test4
+    Input: ./radicalcount 火_灬_ ../../QA/radicaltest/testfiles/test4
 
     Output:     火: 2       ../../QA/radicaltest/testfiles/test4
                 灬: 2       ../../QA/radicaltest/testfiles/test4
@@ -88,4 +90,4 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/28
+**Last Updated:** 2020/06/01

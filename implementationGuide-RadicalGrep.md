@@ -33,7 +33,7 @@ This is a map that lists all 214 radicals and their corresponding Unicode set th
 Instead of using a numeric key, the actual Kangxi radical is used and mapped to their corresponding values. Note that one unicode set may belong to different radicals (e.g. 水 and 氵both map to set 85).
 
 * `get_uset()`:
-This function maps the inputted radical to the corresponding UnicodesSet predefined in [kRSKangXi.h](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/include/unicode/data/kRSKangXi.h).
+This function maps the inputted radical to the corresponding UnicodesSet predefined in `radical_table`. If the program is in index mode (`-i`), the function looks for the requested radical in `_unicodeset_radical_table` and checks if the input is valid. In the case of an invalid input, an error message will appear and terminate the program.
  
 Members of class `RadicalValuesEnumerator`:
 * `parse_input()`:
@@ -50,7 +50,7 @@ This file is the main framework of Radical Grep. The LLVM input parser takes in 
     1. Get the input and the file(s) to be searched. 
     2. Analyze the input to get the corresponding radical Unicode set(s).  
     3. Search each file. 
-    4. Recolour the matching words in the sentence and output the result.     
+    4. If colourization is on, recolour the matching words in the sentence and output the result. Else, just return the matching sentences as-is.   
 
 ### Variables
 * `input_radical`: The inputted radical expression.
@@ -58,6 +58,10 @@ This file is the main framework of Radical Grep. The LLVM input parser takes in 
 * `inputfiles`:  The file(s) that will be searched. 
 
 * `allfiles`: Stores the filepaths. When a file has finished being processed, it gets popped from the vector so that a new file can be looked at. 
+
+* `indexMode`: An optional command flag; indicates if radical indices are being used.
+
+* `color`: Command options for colourization.
 
 * `radicalREs`: Stores the return value of `generateREs()`.
 
@@ -77,4 +81,4 @@ This file is the main framework of Radical Grep. The LLVM input parser takes in 
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/20
+**Last Updated:** 2020/06/01

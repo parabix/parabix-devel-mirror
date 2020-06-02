@@ -1,7 +1,6 @@
 # README-radicalgrep
 
-Radical Grep is a tool built off of icgrep. It searches for the given Chinese radicals, and returns the sentence(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke indices.
-
+Radical Grep is a tool built off of icgrep. It searches for the given Chinese radicals, and returns the sentence(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke system. If you are using the index mode, please refer to the "No." column of this [list](https://www.yellowbridge.com/chinese/radicals.php) for reference.
 
 ## **Introduction**
 The 214 Kangxi radicals are sorted in increasing order by stroke count. Originally introduced in 1615, many modern Chinese dictionaries still use the Kangxi system. In our program, we used the Unihan `kRSKangxi` property to generate Unicode sets for all 214 radicals. One important key to note is that some radicals may have the same index. For instance, characters 火 and 灬 are both the 86th radical of the dictionary and would map to the same Unicode set. Thus, 灯 and 点 would be characters in the same set.
@@ -10,15 +9,13 @@ For more information on the Kangxi Radical System, please visit: https://en.wiki
 
 ## **Installation**
 
-To build radical grep, the working environment needs to have all requirements of the icgrep build met. This can be done with the `make` command on the terminal.
-
-To build only Radical Grep and it's dependencies, run `make radicalgrep`.
+To build only Radical Grep and it's dependencies, run `make radicalgrep` in the `build` directory.
 
 ## **How to Run Radical Grep**
 
-To run Radical Grep, run the following commands in the bin directory:
+To run Radical Grep, run the following commands in the build/bin directory:
 
-    ./radicalgrep <Radical Expression> <Path of Input File>
+    ./radicalgrep [OPTIONS] <Radical Expression> <Path(s) of Input File>
 
 For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/QA/radicaltest/radicaltest.xml).
 
@@ -43,7 +40,7 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 In the second iteration, Radical Grep can take Kangxi radical character(s) as input (e.g. 子_ or 氵_子_). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
 
-Another program, `Radical Count` was implemented in this iteration. The program and relevant documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/README-radicalcount.md).
+Another program, `Radical Count` was implemented in this iteration. The documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/README-radicalcount.md) and the program can found in parabix-devel/tools/wc/radical_count.
 
 ## Changelog
 
@@ -160,17 +157,16 @@ If the file to be searched is written in simplified Chinese and the radical expr
     Output: 中國大陸的國標碼使用漢**語**拼音排列
             部首檢字也有其局限性，**許**多漢字難以歸部
 
-###### ** Output is printed in red on the terminal. ** 
+###### ** Output is printed in red on the terminal. Colorization was turned on for this iteration.** 
 
 ## **Iteration 3: Adding New Features & Final Iteration**
 Plans for iteration 3 include:
 
 1. ~~Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.~~ **(Done)**
-2. Add more functions/command line flags.
-3. ~~Fix colorization issue.~~ **(Done)**
-4. Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)
-5. Implement a search mode like this 水_{火/水}_. 
-6. Graphical interface (If time allows.)
+2. ~~Fix colorization issue.~~ **(Done)**
+3. Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)
+4. Implement a search mode like this 水_{火/水}_. 
+5. Graphical interface (If time allows.)
 
 ## Changelog
 
@@ -207,9 +203,9 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
 * Unihan Database (Unihan.zip)
-* [UCD-Scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/UCD-scripts) was used in [unihan-scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/delta-radicalgrep/unihan-scripts)
+* [UCD-Scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/UCD-scripts)
 * [icgrep](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/tools/icgrep)
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/05/29
+**Last Updated:** 2020/06/01
