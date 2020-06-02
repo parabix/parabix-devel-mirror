@@ -69,6 +69,14 @@ static cl::alias pyColorOptionAlias0("colour",cl::desc("alias for coloring -c"),
 static cl::opt<bool,false> pyKPY("kpy",cl::desc("set database to kpy"),cl::cat(pygrepFlags));
 static cl::alias pyKPYAlias0("KPY_Database",cl::desc("alias for kpy database -kpy"),cl::aliasopt(pyKPY));
 
+cl::opt<OptTraditional, All> ChineseCharacterType(cl::desc("Choose Chinese Characters Type(Traditional or Simplified):"),
+  cl::values(
+    clEnumValN(All,         "all", "Default: grep all Chinese characters, both traditional and simplified."),
+    clEnumValN(Traditional, "trd", "Grep Chinese characters used in traditional Chinese."),
+    clEnumValN(Simplified,  "sim", "Grep Chinese characters used in simplified Chinese."),
+    clEnumValN(TraditionalOnly, "tonly", "Grep Chinese characters if they are only used in traditional Chinese."),
+    clEnumValN(SimplifiedOnly,  "sonly", "Grep Chinese characters if they are only used in simplified Chinese.")));
+
 // the source files to grep from
 std::vector<fs::path> allFiles;
 
@@ -87,7 +95,7 @@ std::vector<re::RE*> generateREs(std::string pyregex){
 
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
-    std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? 1 : 0));
+    std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? 1 : 0, ChineseCharacterType));
     re::ModeFlagSet InitialFlag = re::MULTILINE_MODE_FLAG;
     re::RE_Syntax RegexpSyntax = re::RE_Syntax::PCRE;
     bool ByteMode = false;

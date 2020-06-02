@@ -24,7 +24,12 @@
 #include <re/toolchain/toolchain.h>
 #include <unicode/data/KHanyuPinyin.h>
 #include <unicode/data/KXHC1983.h>
+#include <unicode/data/KTraditional.h>
 
+enum OptTraditional {
+  All, Traditional, Simplified, TraditionalOnly, SimplifiedOnly
+};
+typedef re::CC* (*OptTraditionalFunctionType)(const UCD::UnicodeSet&& );
 namespace PY{
     using std::vector;
     using std::array;
@@ -112,8 +117,12 @@ namespace PY{
 
         // Method: createREs(int dabase) ==1 for kpy, 0 for xhc
         // create a vector of RE* for grep engine
-        std::vector<re::RE*> createREs(int database);
+        std::vector<re::RE*> createREs(int database, OptTraditional opt);
     private:
+        // private method
+        re::CC* _intersect_character_type(const UCD::UnicodeSet&& uset, OptTraditional opt);
+
+
         vector<vector<std::pair<string, int>>> _enumerated_list;
         // e.g.  (<,> for pair, and {} for vector)
 	    // { {<jin, 0>, <rong, 0>}, {<jin,0>, <rong, 1>}, ... } for input ""jin rong"
@@ -201,6 +210,12 @@ namespace PY{
                 return std::move(*_kpy_unicodeset_table[make_pair(syllable, tone)]);
             else 
                 return std::move(UCD::UnicodeSet());
+        }
+        static const UCD::UnicodeSet&& get_traditional_only(){
+            return std::move(UCD::KTRD_ns::trd_only_Set);
+        }
+        static const UCD::UnicodeSet&& get_simplified_only(){
+            return std::move(UCD::KTRD_ns::sim_only_Set);
         }
     };
 }
