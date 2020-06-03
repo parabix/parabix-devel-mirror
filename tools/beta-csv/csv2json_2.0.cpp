@@ -105,7 +105,7 @@ void CSV_Masking::generatePabloMethod() {
     //newline
     PabloAST * literal_CRs = pb.createAnd(CRs,pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
     PabloAST * literal_newlines = pb.createAnd(pb.createXor(newlines,literal_CRs),pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
-    PabloAST * CSV_newlines = pb.createXor(newlines,pb.createOr(literal_CRs,literal_newlines));//newlines not in strings
+    PabloAST * CSV_newlines = pb.createXor(newlines,literal_newlines);//newlines not in strings
     PabloAST * double_newline_end = pb.createAdvance(pb.createAnd(newlines,pb.createLookahead(newlines,1)),1);
 
     //record start
@@ -119,7 +119,7 @@ void CSV_Masking::generatePabloMethod() {
     PabloAST * literal_delimiters = pb.createAnd(delimiters,pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
     PabloAST * CSV_delimiters = pb.createXor(delimiters,literal_delimiters);//delimiter not in strings
     
-    PabloAST *  toDelete = pb.createOr3(pb.createOr3(CSV_delimiters,surrandingDquotes,literal_CRs),quote_escape,double_newline_end);// to be deleted from csv data
+    PabloAST *  toDelete = pb.createOr3(pb.createOr3(CSV_delimiters,surrandingDquotes,literal_CRs),quote_escape,CRs);// to be deleted from csv data
    
     PabloAST * mask = pb.createNot(toDelete);
 
@@ -450,6 +450,9 @@ void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
         else v.push_back("\",\"" + header + "\":\"");
     }
     getline(in,header);
+    if (header.back() == '\r') {
+        header.pop_back();
+    }
     v.push_back("\",\"" + header + "\":\"");    //last header
     v.push_back("\\");                          //back slash
     v.push_back("\"},");                            //rec start
@@ -457,5 +460,5 @@ void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
         v.push_back("[");
     else
         v.push_back("[\n");
-    v.push_back("}\n]");
+    v.push_back("\"}\n]");
 }
