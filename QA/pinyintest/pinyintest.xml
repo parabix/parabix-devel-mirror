@@ -62,18 +62,6 @@
 <grepcase regexp="hua" datafile="test2" greplines="12 13"/>
 <grepcase regexp="e" datafile="test2" greplines="7"/>
 
-<datafile id = "exact-test">
-pin yin
-zhong1 wen2
-m.ng
-ming
-min
-xuǎn
-</datafile>
-<grepcase regexp="zhong1 wen2" datafile="exact-test" greplines="3"/>
-<grepcase regexp="pin yin" datafile="exact-test" greplines="2"/>
-<grepcase regexp="m.ng?" datafile="exact-test" greplines="4 5 6"/>
-<grepcase regexp="xuǎn" datafile="exact-test" greplines="7"/>
 
 <datafile id = "traditional-test">
 对酒当歌，人生几何！
