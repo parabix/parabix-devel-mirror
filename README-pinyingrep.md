@@ -143,8 +143,18 @@ In the third iteration, we will implement **pinyingrep** version 2.0 with additi
     * if switching to `HanyuPinyin` is wanted, 
 command line flag `-kpy` need to be in place.
 
+#### 10. Traditional/Simplified Options
+* **Pinyingrep** provides the user with options to specified the type of Chinese characters they want to grep:
+    1. `-all`(Default): grep all Chinese characters, in traditional and simplified Chinese 
+    2. `-trd`: grep Chinese characters used in traditional Chinese. Some of Chinese characters are used in both traditional and simplified Chinese, and this commandline option indicates that such characters are also wanted. 
+    3. `-sim`: grep Chinese characters used in simplified Chinese. Some of Chinese characters are used in both traditional and simplified Chinese, and this commandline option indicates that such characters are also wanted. 
+    4. `-tonly`: grep Chinese characters **only used** in traditional Chinese. This commandline option indicates that no Chinese characters that are used in simplified Chinese should be included.
+    5. `-sonly`: grep Chinese characters **only used** in simplified Chinese. This commandline option indicates that no Chinese characters that were once used in traditional Chinese should be included.
 ## Version History
 
+#### Version 1.2
+**Pinyingrep** version 1.2 supports:
+1. CommandLine options to grep **All/Traditional/Simplified** Chinese characters
 #### Version 1.1
 **Pinyingrep** version 1.1 supports:
 1. CommandLine flag to switch on coloring of grep results.
