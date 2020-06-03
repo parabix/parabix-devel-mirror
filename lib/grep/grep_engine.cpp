@@ -1187,10 +1187,10 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
         breakCC = re::makeCC(0x0A, &cc::Unicode);
     }
 
-    matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
-    matchingRE = regular_expression_passes(matchingRE);
     matchingRE = re::exclude_CC(matchingRE, breakCC);
     matchingRE = resolveAnchors(matchingRE, breakCC);
+    matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
+    matchingRE = regular_expression_passes(matchingRE);
     matchingRE = toUTF8(matchingRE);
 
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
@@ -1295,9 +1295,9 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
         auto options = make_unique<GrepKernelOptions>();
 
         auto r = resolveCaseInsensitiveMode(patterns[i].second, mCaseInsensitive);
-        r = regular_expression_passes(r);
         r = re::exclude_CC(r, breakCC);
         r = resolveAnchors(r, breakCC);
+        r = regular_expression_passes(r);
         r = toUTF8(r);
 
         options->setRE(r);
