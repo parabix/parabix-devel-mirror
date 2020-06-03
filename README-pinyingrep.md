@@ -124,6 +124,24 @@ The following testcases give example about the functionality of **pinyingrep**.
 Third Iteration(WIP)
 ----------------
 In the third iteration, we will implement **pinyingrep** version 2.0 with additional functionalities. 
+### New Features
+#### 8. Coloring with Command Line `-c`
+* Input: with command line flag `-c`
+* Coloring the matched Chinese characters or phrases in output
+> Input: "zhong wen" ... -c
+> 
+> 欢迎来到<font color=Red>中文</font>世界。 \
+> 在这里你可以感受<font color=Red>中文</font>的博大精深。
+>
+#### 9. Selecting different database
+* The database supported currently is:
+    * `XHC1983`: it is the data from the `kXHC1983` field of `Unihan_Reading.txt` in Unihan database
+    * `HanyuPinyin`: it is the combination of data from the `kHanyuPinyin` field and the `kMandarin` field of `Unihan_Reading.txt` in Unihan database
+    * Data differences:
+        * for example, `明` has a rare reading `meng4` in `HanyuPinyin`
+* the default database is `XHC1983`
+    * if switching to `HanyuPinyin` is wanted, 
+command line flag `-kpy` need to be in place.
 
 ## Version History
 
