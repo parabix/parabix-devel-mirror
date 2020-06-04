@@ -1,5 +1,8 @@
 #include "radical_interface.h"
 #include <unicode/data/kRSKangXi.h>
+#include <string>
+#include <iostream>
+#include <sstream> 
 
 using namespace std;
 using namespace BS;
