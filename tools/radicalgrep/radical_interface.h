@@ -68,10 +68,9 @@ namespace BS
     {
         public:
             std::vector<re::RE*> createREs(bool indexMode);   //Search for the results
-            void parse_input(string input_radical); //Parse the input "r1_r2_" or "r0_", disassemble the input radical(s) and store it (them) in vector
+            void parse_input(string input_radical); //Search for the results by making CCs of each radical and pushing them the vector REs
         private:
             std::vector<string> radical_list;   //Store the input radical(s)
-            int radical_num;    //Store the number of input radical(s)
     };
 }
 

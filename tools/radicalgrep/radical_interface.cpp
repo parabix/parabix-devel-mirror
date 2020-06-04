@@ -7,52 +7,29 @@ using namespace UCD::KRS_ns;
 
 namespace BS
 {
-    //Search for the results
+    //Search for the results by making CCs of each radical and pushing them the vector REs
     std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode)
     {
         std::vector<re::RE*> REs;
-        std::vector<re::RE*> temp1;
-        std::vector<re::RE*> temp2;
-        temp1.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[0], indexMode))));    //push the corresponding UnicodeSet predefined in kRSKangXi.h
-        REs.push_back(re::makeAlt(temp1.begin(),temp1.end()));  //push the result
-        
-        if(radical_num==2)
-        {
-            temp2.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[1], indexMode))));    //push the corresponding UnicodeSet predefined in kRSKangXi.h
-            REs.push_back(re::makeAlt(temp2.begin(),temp2.end()));  //push the result
+        std::vector<re::RE*> temp;
+
+        for (int i = 0; i < radical_list.size(); i++) {
+            temp .push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode))));
+            REs.push_back(re::makeAlt(temp.begin(),temp.end()));
         }
        
         return std::vector<re::RE*>(1,re::makeSeq(REs.begin(),REs.end()));
     }
-    //Parse the input "r1_r2_" or "r0_", disassemble the input radical(s) and store it (them) in vector
+
+    //Parse the input and store the radicals into the radical_list vector
     void RadicalValuesEnumerator::parse_input(string input_radical)
     {
+        stringstream ss(input_radical);
         string temp;
-        int p1,p2;
-        int num=0;
-        for(int i=0;i<=input_radical.length();i++)  //count the number of input radicals
-        {
-            if(input_radical[i]=='_')
-            {
-                num++;
-            }
-        }
-        radical_num=num;
-        
-        //cout<<radical_num<<endl;
-        p1=input_radical.find_first_of("_");    //search for the first position of "_"
-        if(num==2)
-        p2=input_radical.find_last_of("_");     //if input two radicals, search for the second position of "_"
-            
-        temp=input_radical.substr(0,p1);
-        radical_list.push_back(temp);
-        
-        if(num==2)
-        {
-            temp=input_radical.substr(p1+1,p2-p1-1);
+
+        while (getline(ss, temp, '_')) { //tokenize the input and store it in radical_list
             radical_list.push_back(temp);
         }
-        
     }
                         
 }
