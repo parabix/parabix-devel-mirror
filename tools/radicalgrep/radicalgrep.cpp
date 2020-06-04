@@ -40,6 +40,7 @@
 #include <sys/stat.h>
 #include <vector>
 #include <map>
+#include <sstream>  
 #include "radical_interface.h"
 
 namespace fs = boost::filesystem;
