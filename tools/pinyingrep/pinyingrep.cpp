@@ -117,6 +117,7 @@ int main(int argc, char* argv[]){
 
     // Parabix grep engine
     std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver); 
+    grep->initFileResult(allFiles); // initialize source files
     // generate REs to initialize the grep engine
     auto pinyinREs = generateREs(pyregex);
     if(pyColorOption){
@@ -124,7 +125,7 @@ int main(int argc, char* argv[]){
     }
     grep->initREs(pinyinREs); // initialize REs
     grep->grepCodeGen(); // generate pipeline
-    grep->initFileResult(allFiles); // initialize source files
+    
     const bool matchFound = grep->searchAllFiles(); // grep
 
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
