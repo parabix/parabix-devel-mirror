@@ -35,7 +35,6 @@ int main(int args, char* argv[])
     string sourcepath=string(argv[2]);
     string destpath=string(argv[3]);
     string expectpath=string(argv[4]);
-    int count=0;
     vector<string>files;
     string line;
     files = getAllFiles(sourcepath);
@@ -57,11 +56,13 @@ vector<string> getAllFiles(const string &path)
     }
     struct dirent* file = NULL;
     size_t index;
-    while(file=readdir(folder))
+    file=readdir(folder);
+    while(file)
     {
         string filename=file->d_name;
         if((index=filename.find(".csv"))!=filename.npos)
         files.push_back(filename.substr(0,index));
+        file=readdir(folder);
     }
     closedir(folder);
     return files;
@@ -71,12 +72,16 @@ void ExecuteFiles(const string &spath,const string &dpath, const string &program
 {
     DIR* folder=opendir(dpath.c_str());
     if(!folder)mkdir(dpath.c_str(),0777);
-    for(int i=0;i<files.size();i++)
+    int res;
+    for(unsigned i=0;i<files.size();i++)
     {
         string dfile=dpath+files[i]+".json";
         string sfile=spath+files[i]+".csv";
         string cmd=program+" "+sfile+">"+dfile;
-        system(cmd.c_str());
+        res=system(cmd.c_str());
+        if(res!=0){
+            cout<<"Command "+cmd+" has non-zero return value.\n";
+        }
     }
     closedir(folder);
 }
@@ -86,7 +91,7 @@ void CompareFiles(const string &epath, const string &dpath,const vector<string>&
     ifstream expect,out;
     string line1,line2;
     bool pass;
-    for(int i=0;i<files.size();i++)
+    for(unsigned i=0;i<files.size();i++)
     {
         pass=true;
         expect.open((epath+files[i]+".json").c_str());
