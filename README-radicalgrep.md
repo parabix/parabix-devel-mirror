@@ -1,11 +1,15 @@
 # README-radicalgrep
 
-Radical Grep is a tool built off of icgrep. It searches for the given Chinese radicals, and returns the sentence(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke system. If you are using the index mode, please refer to the "No." column of this [list](https://www.yellowbridge.com/chinese/radicals.php) for reference.
+Radical Grep is a tool built off of icgrep. It searches for the given Chinese radicals, and returns the line(s) that correspond with the input. Note that radicals will be processed according to the Kangxi Radical-Stroke system. If you are using the index mode, please refer to the "No." column of this [list](https://www.yellowbridge.com/chinese/radicals.php) for reference.
+
+**PEER REVIEWERS:** Please roll back to commit `681a6326` for review. You can do this by running `git reset --hard 681a6326`.
 
 ## **Introduction**
 The 214 Kangxi radicals are sorted in increasing order by stroke count. Originally introduced in 1615, many modern Chinese dictionaries still use the Kangxi system. In our program, we used the Unihan `kRSKangxi` property to generate Unicode sets for all 214 radicals. One important key to note is that some radicals may have the same index. For instance, characters 火 and 灬 are both the 86th radical of the dictionary and would map to the same Unicode set. Thus, 灯 and 点 would be characters in the same set.
 
 For more information on the Kangxi Radical System, please visit: https://en.wikipedia.org/wiki/Kangxi_radical or https://www.yellowbridge.com/chinese/radicals.php
+
+
 
 ## **Installation**
 
@@ -166,7 +170,8 @@ Plans for iteration 3 include:
 2. ~~Fix colorization issue.~~ **(Done)**
 3. Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)
 4. Implement a search mode like this 水_{火/水}_. 
-5. Graphical interface (If time allows.)
+5. Add support for input with >2 radicals.
+6. Graphical interface (If time allows.)
 
 ## Changelog
 
@@ -208,4 +213,4 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
 
-**Last Updated:** 2020/06/01
+**Last Updated:** 2020/06/03
