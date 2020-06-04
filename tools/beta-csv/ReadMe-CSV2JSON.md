@@ -1,3 +1,5 @@
+
+
 ## CSV to JSON Conversion
 
 This is a CSV to JSON conversion tool, which converts Comma Separated Value to JavaScript Object Notation. Specifically, it converts a input.csv file to a output.json file.
@@ -10,16 +12,16 @@ Each record in the CSV file is represented as an object in the JSON file. Each f
 
 ### How to use CSV2JSON?
 
-CSV2JSON can be called from the parabix-devel directory using the following terminal command:
+CSV2JSON can be called from the parabix-devel directory using the following terminal command from your build directory:
 
 ````
-~/parabix-devel$ build\bin\csv2json <filename>
+~/$ bin\csv2json <filename>
 ````
 
 For example:
 
 ````
-~/parabix-devel$ bin\csv2json ..\QA\csv2json\testcases\testcase_group.csv
+~/$ bin/csv2json ../QA/csv2json/testcases/testcase_group.csv
 ````
 
 Should yield the following output:
@@ -33,7 +35,23 @@ Should yield the following output:
 ]
 ~~~~
 
+To write the results of csv2json to a file, execute the following terminal command from your build directory:
 
+````
+~/$ bin\csv2json <source_filename> > <destination_filename>
+````
+
+For example:
+
+````
+bin/csv2json ../QA/csv2json/testcases/testcase_group.csv > ../QA/csv2json/outs/testcase_group.json
+````
+
+To run the test driver, execute the following terminal command from your build directory:
+
+````
+make csv2jsontest
+````
 
 ### Iteration 1
 
@@ -107,6 +125,19 @@ Josie,"Yes, I ""really"" am.",no,yes
 {"who": "Josie","says": "Yes, I \"really\" am.","is a teacher": "no","is a student": "yes"}
 ]
 ```
+
+
+
+**File Directory**
+
+| File Topic                        | File Name                                        |
+| --------------------------------- | ------------------------------------------------ |
+| Iteration 2 Source Code           | ~/beta-csv/csv2json_2.0.cpp                      |
+| Algorithm Process Description     | ~/beta-csv/documentation/implementation_guide.md |
+| CSV and JSON File Type Definition | ~/beta-csv/documentation/project_requirements.md |
+| Test Parameters Description       | ~/beta-csv/documentation/testsuite_design.md     |
+
+
 
 
 
