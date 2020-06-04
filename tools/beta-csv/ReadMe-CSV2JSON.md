@@ -136,23 +136,8 @@ Josie,"Yes, I ""really"" am.",no,yes
 | Algorithm Process Description     | ~/beta-csv/documentation/implementation_guide.md |
 | CSV and JSON File Type Definition | ~/beta-csv/documentation/project_requirements.md |
 | Test Parameters Description       | ~/beta-csv/documentation/testsuite_design.md     |
+| Bug Documentation                 | ~/beta-csv/documentation/bugs.md                 |
 
-
-
-
-
-#### Known bugs
-
-1. empty field right before a newline which looks like **,⏎**
-2. empty field represented as **,,**
-3. empty field represented as **,””,**
-4. Besides the above bugs, the program can only work properly the first time after it compiles.
-
-+ bug 1 and bug 2 can be tested by testcase_group.
-
-+ bug 3 can be tested by testcase_doublequote .
-
-+ bug 4 can be tested by running the program with different testcases twice or more times.
 
 
 
