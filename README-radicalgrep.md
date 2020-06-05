@@ -231,4 +231,4 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruonan),  Pan Chuwen
 
-**Last Updated:** 2020/06/04
+**Last Updated:** 2020/06/05
