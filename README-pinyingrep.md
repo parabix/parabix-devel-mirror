@@ -23,6 +23,8 @@ Second Iteration
 ----------------
 In the second iteration, we have implemented **pinyingrep** version 1.0 with input parsing. In this version, **pinyingrep** is supposed to handle general regex-like pinyin syllables as input. The implementation of grep functionality is based on grep engine provided by parabix framework. We specified the requirement of our second iteration as follows:
 ### Functionality
+**note:** for inputs that are multiple syllables long, the sequence must be put in quotations(" ").
+
 #### 1. Pinyin syllables without tones specified
 **Pinyingrep** supports pinyin syllables in alphabetic characters without tones sepcified.
 > e.g. `zhong` or `gao`
