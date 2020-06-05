@@ -170,7 +170,7 @@ Plans for iteration 3 include:
 2. ~~Fix colorization issue.~~ **(Done)**
 3. Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)
 4. Implement a search mode like this 水_{火/水}_. 
-5. Add support for input with >2 radicals.
+5. ~~Add support for input with >2 radicals.~~ **(Done)**
 6. Graphical interface (If time allows.)
 
 ## Changelog
@@ -182,6 +182,7 @@ Plans for iteration 3 include:
 
 ### Radical Grep Version 3.1
 * Radical Grep's default output has colorization turned off. You can turn it back on by using the option flag `-c auto` in your input.
+* Input with 3 or more radicals is now supported.
 
 ## Example 1: Kangxi Radical Index Search Mode and Colorization Turned On
 
@@ -205,12 +206,22 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
     Output: LLVM ERROR: A radical set for this input does not exist.
             Enter a integer in [1,214], followed by _.
 
+## Example 3: Input with more than 3 Radicals
+
+    Input: 禾_扌_子_ ../../QA/radicaltest/testfiles/*
+
+    Output: 排列在一起，并把这种排字方法叫做“分别部居”
+
+    Input: -i 115_64_39_ ../../QA/radicaltest/testfiles/*
+
+    Output: 排列在一起，并把这种排字方法叫做“分别部居”
+
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
 * Unihan Database (Unihan.zip)
 * [UCD-Scripts](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/UCD-scripts)
 * [icgrep](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/tree/master/tools/icgrep)
 
-**Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruo Nan),  Pan Chu Wen
+**Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruonan),  Pan Chuwen
 
-**Last Updated:** 2020/06/03
+**Last Updated:** 2020/06/04
