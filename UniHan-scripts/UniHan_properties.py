@@ -9,6 +9,7 @@ def is_property_array(property_code):
     is_property_array_map = {
         "kpy":  True, 
         "kxhc": True,
+        "ktrd": False,
     }
     if(property_code in is_property_array_map):
         return is_property_array_map[property_code]
@@ -32,8 +33,12 @@ def get_property_full_name(property_code):
     property_full_name = None
     if(property_code == "kpy"):
         property_full_name = "KHanyuPinyin"
-    if(property_code == "kxhc"):
+    elif(property_code == "kxhc"):
         property_full_name = "KXHC1983"
+    elif(property_code == "ktrd"):
+        property_full_name = "KTraditional"
+    else:
+        raise ValueError("No such property code as " + property_code)
     return property_full_name
 
 def write_array_format(propertyValue, uset_array, indent = 4 ):
@@ -120,8 +125,9 @@ class UniHan_generator():
 
 def UniHan_main():
     UniHan = UniHan_generator()
-    UniHan.generate_property_value_file('Unihan_Readings','kpy')
-    UniHan.generate_property_value_file('Unihan_Readings','kxhc')
+    #UniHan.generate_property_value_file('Unihan_Readings','kpy')
+    #UniHan.generate_property_value_file('Unihan_Readings','kxhc')
+    UniHan.generate_property_value_file('Unihan_Variants', 'ktrd')
 
 if __name__ == "__main__":
     UniHan_main()

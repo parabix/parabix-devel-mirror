@@ -126,9 +126,37 @@ The following testcases give example about the functionality of **pinyingrep**.
 Third Iteration(WIP)
 ----------------
 In the third iteration, we will implement **pinyingrep** version 2.0 with additional functionalities. 
+### New Features
+#### 8. Coloring with Command Line `-c`
+* Input: with command line flag `-c`
+* Coloring the matched Chinese characters or phrases in output
+> Input: "zhong wen" ... -c
+> 
+> 欢迎来到<font color=Red>中文</font>世界。 \
+> 在这里你可以感受<font color=Red>中文</font>的博大精深。
+>
+#### 9. Selecting different database
+* The database supported currently is:
+    * `XHC1983`: it is the data from the `kXHC1983` field of `Unihan_Reading.txt` in Unihan database
+    * `HanyuPinyin`: it is the combination of data from the `kHanyuPinyin` field and the `kMandarin` field of `Unihan_Reading.txt` in Unihan database
+    * Data differences:
+        * for example, `明` has a rare reading `meng4` in `HanyuPinyin`
+* the default database is `XHC1983`
+    * if switching to `HanyuPinyin` is wanted, 
+command line flag `-kpy` need to be in place.
 
+#### 10. Traditional/Simplified Options
+* **Pinyingrep** provides the user with options to specified the type of Chinese characters they want to grep:
+    1. `-all`(Default): grep all Chinese characters, in traditional and simplified Chinese 
+    2. `-trd`: grep Chinese characters used in traditional Chinese. Some of Chinese characters are used in both traditional and simplified Chinese, and this commandline option indicates that such characters are also wanted. 
+    3. `-sim`: grep Chinese characters used in simplified Chinese. Some of Chinese characters are used in both traditional and simplified Chinese, and this commandline option indicates that such characters are also wanted. 
+    4. `-tonly`: grep Chinese characters **only used** in traditional Chinese. This commandline option indicates that no Chinese characters that are used in simplified Chinese should be included.
+    5. `-sonly`: grep Chinese characters **only used** in simplified Chinese. This commandline option indicates that no Chinese characters that were once used in traditional Chinese should be included.
 ## Version History
 
+#### Version 1.2
+**Pinyingrep** version 1.2 supports:
+1. CommandLine options to grep **All/Traditional/Simplified** Chinese characters
 #### Version 1.1
 **Pinyingrep** version 1.1 supports:
 1. CommandLine flag to switch on coloring of grep results.

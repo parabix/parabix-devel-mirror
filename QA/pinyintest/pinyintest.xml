@@ -17,6 +17,9 @@
 <grepcase regexp="zhong wen" datafile="simple_pinyin" greplines="3 4"/>
 <grepcase regexp="zhong yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
 <grepcase regexp="lian xi" datafile="simple_pinyin" greplines="8 11"/>
+<grepcase regexp="huan ying" datafile="simple_pinyin" greplines="3"/>
+<grepcase regexp="lai dao" datafile="simple_pinyin" greplines="3"/>
+<grepcase regexp="huan ying lai dao" datafile="simple_pinyin" greplines="3"/>
 
 <grepcase regexp="zhong1 yao4" datafile="simple_pinyin" greplines="6 10"/>
 <grepcase regexp="zho4ng yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
@@ -58,5 +61,52 @@
 <grepcase regexp="hu a" datafile="test2" greplines="14"/>
 <grepcase regexp="hua" datafile="test2" greplines="12 13"/>
 <grepcase regexp="e" datafile="test2" greplines="7"/>
+
+
+<datafile id = "traditional-test">
+对酒当歌，人生几何！
+譬如朝露，去日苦多。
+慨当以慷，忧思难忘。
+何以解忧？唯有杜康。
+青青子衿，悠悠我心。
+但为君故，沉吟至今。
+呦呦鹿鸣，食野之苹。
+我有嘉宾，鼓瑟吹笙。
+明明如月，何时可掇？
+忧从中来，不可断绝。
+越陌度阡，枉用相存。
+契阔谈䜩，心念旧恩。
+月明星稀，乌鹊南飞。
+绕树三匝，何枝可依？
+山不厌高，海不厌深。
+周公吐哺，天下归心。
+
+對酒當歌，人生幾何！
+譬如朝露，去日苦多。
+慨當以慷，憂思難忘。
+何以解憂？唯有杜康。
+青青子衿，悠悠我心。
+但爲君故，沈吟至今。
+呦呦鹿鳴，食野之蘋。
+我有嘉賓，鼓瑟吹笙。
+明明如月，何時可掇？
+憂從中來，不可斷絕。
+越陌度阡，枉用相存。
+契闊談䜩，心念舊恩。
+月明星稀，烏鵲南飛。
+繞樹三匝，何枝可依？
+山不厭高，海不厭深。
+周公吐哺，天下歸心。
+</datafile>
+
+<grepcase regexp="bin" datafile="traditional-test" greplines="9" flags="-sim"/>
+<grepcase regexp="bin" datafile="traditional-test" greplines="9" flags="-sonly"/>
+<grepcase regexp="bin" datafile="traditional-test" greplines="26" flags="-trd"/>
+<grepcase regexp="bin" datafile="traditional-test" greplines="26" flags="-tonly"/>
+
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="9" flags="-sim"/>
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="" flags="-sonly"/>
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="26" flags="-trd"/>
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="" flags="-tonly"/>
 
 </greptest>

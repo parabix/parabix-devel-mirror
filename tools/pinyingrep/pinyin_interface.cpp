@@ -21,13 +21,19 @@ namespace PY{
                 cout<<"start:"<<start<<endl;
             #endif
             s = s.substr(start);        // replace prefix empty space
+            #if DEBUG
+                cout<<"after s=s.substr(start): "<<s<<endl;
+            #endif
             end = s.find_first_of(' '); // find the end of the current syllable 
             if(end != s.npos){
                 #if DEBUG
                     cout<<"end:"<<end<<endl;
                 #endif
-                list.push_back(s.substr(start, end - start));
+                list.push_back(s.substr(0, end));
                 // erase the current syllable
+                #if DEBUG
+                    cout<<"s.substr(0, end): "<<s.substr(0, end)<<endl;
+                #endif
                 s = s.substr(end);  
                 start = s.find_first_not_of(' ');
             }
@@ -174,16 +180,65 @@ namespace PY{
         _enumerated = true;    
     }
 
-    std::vector<re::RE*> PinyinValuesEnumerator::createREs(int database){ //database=1 for kpy, database=0 for xhc
+    re::CC* PinyinValuesEnumerator::_intersect_character_type(const UCD::UnicodeSet&& uset, OptTraditional opt){
+        static map<OptTraditional, OptTraditionalFunctionType> fmap{
+            //All, Traditional, Simplified, TraditionalOnly, SimplifiedOnly
+            {All, 
+            [](const UCD::UnicodeSet&& us){return re::makeCC(UCD::UnicodeSet(us));}},
+            {Traditional, 
+            [](const UCD::UnicodeSet&& us){
+                return re::subtractCC(
+                    re::makeCC(UCD::UnicodeSet(us)),
+                    re::makeCC(UCD::UnicodeSet(UST::get_simplified_only()))
+                    );
+                }
+            },
+            {Simplified, 
+            [](const UCD::UnicodeSet&& us){
+                return re::subtractCC(
+                    re::makeCC(UCD::UnicodeSet(us)),
+                    re::makeCC(UCD::UnicodeSet(UST::get_traditional_only()))
+                    );        
+                }
+            },
+            {TraditionalOnly, 
+            [](const UCD::UnicodeSet&& us){
+                return re::intersectCC(
+                    re::makeCC(UCD::UnicodeSet(us)),
+                    re::makeCC(UCD::UnicodeSet(UST::get_traditional_only()))
+                    ); 
+                }
+            },
+            {SimplifiedOnly, 
+            [](const UCD::UnicodeSet&& us){
+                return re::intersectCC(
+                    re::makeCC(UCD::UnicodeSet(us)),
+                    re::makeCC(UCD::UnicodeSet(UST::get_simplified_only()))
+                    );
+                }
+            }
+        };
+        return fmap[opt](std::move(uset));
+    }
+
+    std::vector<re::RE*> PinyinValuesEnumerator::createREs(int database, OptTraditional opt){ //database=1 for kpy, database=0 for xhc
         std::vector<re::RE*> REs;
         for(auto iter = _half_enumerated_list.begin(); iter != _half_enumerated_list.end(); iter++){
             std::vector<re::RE*> components;
             for(auto inner = iter->begin(); inner != iter->end(); inner++){
                 if (database==1){
-                    components.push_back(re::makeCC(UCD::UnicodeSet(UST::get_KPY(inner->first, inner->second))));
+                    components.push_back(
+                        _intersect_character_type(
+                            UST::get_KPY(inner->first, inner->second), opt
+                            )
+                        );
                 }
                 else{
-                    components.push_back(re::makeCC(UCD::UnicodeSet(UST::get_XHC(inner->first, inner->second))));
+                    components.push_back(
+                        _intersect_character_type(
+                            UST::get_XHC(inner->first, inner->second), opt
+                        )
+                    );
                 }
             }
             REs.push_back(re::makeAlt(components.begin(), components.end()));

@@ -69,6 +69,14 @@ static cl::alias pyColorOptionAlias0("colour",cl::desc("alias for coloring -c"),
 static cl::opt<bool,false> pyKPY("kpy",cl::desc("set database to kpy"),cl::cat(pygrepFlags));
 static cl::alias pyKPYAlias0("KPY_Database",cl::desc("alias for kpy database -kpy"),cl::aliasopt(pyKPY));
 
+cl::opt<OptTraditional, All> ChineseCharacterType(cl::desc("Choose Chinese Characters Type(Traditional or Simplified):"),
+  cl::values(
+    clEnumValN(All,         "all", "Default: grep all Chinese characters, both traditional and simplified."),
+    clEnumValN(Traditional, "trd", "Grep Chinese characters used in traditional Chinese."),
+    clEnumValN(Simplified,  "sim", "Grep Chinese characters used in simplified Chinese."),
+    clEnumValN(TraditionalOnly, "tonly", "Grep Chinese characters if they are only used in traditional Chinese."),
+    clEnumValN(SimplifiedOnly,  "sonly", "Grep Chinese characters if they are only used in simplified Chinese.")));
+
 // the source files to grep from
 std::vector<fs::path> allFiles;
 
@@ -87,10 +95,14 @@ std::vector<re::RE*> generateREs(std::string pyregex){
 
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
-    if (pyKPY){
-        return enumerator.createREs(1);
-    }
-    return enumerator.createREs(0);
+    std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? 1 : 0, ChineseCharacterType));
+    // Bug for Unknown Reason: 
+    //      crack out the coloring when doing exact match at the same time
+    // re::ModeFlagSet InitialFlag = re::MULTILINE_MODE_FLAG;
+    // re::RE_Syntax RegexpSyntax = re::RE_Syntax::PCRE;
+    // bool ByteMode = false;
+    // REs.push_back(re::RE_Parser::parse(pyregex, InitialFlag, RegexpSyntax, ByteMode));
+    return std::move(REs);
 }
 // Reference: icgrep
 int main(int argc, char* argv[]){
@@ -105,6 +117,7 @@ int main(int argc, char* argv[]){
 
     // Parabix grep engine
     std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver); 
+    grep->initFileResult(allFiles); // initialize source files
     // generate REs to initialize the grep engine
     auto pinyinREs = generateREs(pyregex);
     if(pyColorOption){
@@ -112,7 +125,7 @@ int main(int argc, char* argv[]){
     }
     grep->initREs(pinyinREs); // initialize REs
     grep->grepCodeGen(); // generate pipeline
-    grep->initFileResult(allFiles); // initialize source files
+    
     const bool matchFound = grep->searchAllFiles(); // grep
 
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;

@@ -140,6 +140,37 @@ def parse_Reading_txt(f, property_code):
     independent_prop_values = len(prop_values)
     return (prop_values, independent_prop_values, value_map)
 
+KTraditionalVariant_Pattern = re.compile(r"U\+(\w+?)\s+(kTraditionalVariant)\s+(.+)")
+KSimplifiedVariant_Pattern = re.compile(r"U\+(\w+?)\s+(kSimplifiedVariant)\s+(.+)")
+def parse_Variant_txt(f, property_code):
+     # replace the utility of property object
+    # return value (prop_values, independent_prop_values, value_map)
+    prop_values = []
+    independent_prop_values = None
+    value_map = {} # value_map is from value name to corresponding unicode set
+                   # each key match a value or value array
+    lines = f.readlines()
+    if(property_code == 'ktrd'):
+        have_traditional = empty_uset()
+        have_simplified = empty_uset()
+        prop_values.append('trd_only')
+        prop_values.append('sim_only')
+        independent_prop_values = 2
+        for line in lines:
+            match_obj = KTraditionalVariant_Pattern.match(line)
+            if(match_obj is not None):
+                codepoint = match_obj.group(1)
+                have_traditional = uset_union(have_traditional, singleton_uset(int(codepoint, 16)))
+
+            match_obj = KSimplifiedVariant_Pattern.match(line)
+            if(match_obj is not None):
+                codepoint = match_obj.group(1)
+                have_simplified = uset_union(have_simplified, singleton_uset(int(codepoint, 16)))
+        value_map['sim_only'] = uset_intersection(uset_complement(have_simplified), have_traditional)
+        value_map['trd_only'] = uset_intersection(uset_complement(have_traditional), have_simplified)
+    return (prop_values, independent_prop_values, value_map)
+
+
 def parse_property_file(filename_root, property_code):
     # replace the utility of property object
     # return value (prop_values, independent_prop_values, value_map)
@@ -151,6 +182,8 @@ def parse_property_file(filename_root, property_code):
 
     if(property_code == "kpy" or property_code == "kxhc"):
         prop_values, independent_prop_values, value_map = parse_Reading_txt(f, property_code)
+    elif(property_code == "ktrd"):
+        prop_values, independent_prop_values, value_map = parse_Variant_txt(f, property_code)
     
     return (prop_values, independent_prop_values, value_map)
 
