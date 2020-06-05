@@ -80,7 +80,7 @@ void ExecuteFiles(const string &spath,const string &dpath, const string &program
         string cmd=program+" "+sfile+">"+dfile;
         res=system(cmd.c_str());
         if(res!=0){
-            cout<<"Command "+cmd+" has non-zero return value.\n";
+            cout<<"Command "+cmd+" has non-zero return value. The return value is:\n"<<res<<endl;
         }
     }
     closedir(folder);
