@@ -168,7 +168,7 @@ Plans for iteration 3 include:
 
 1. ~~Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.~~ **(Done)**
 2. ~~Fix colorization issue.~~ **(Done)**
-3. Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)
+3. ~~Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)~~ **(Done)**
 4. Implement a search mode like this 水_{火/水}_. 
 5. ~~Add support for input with >2 radicals.~~ **(Done)**
 6. Graphical interface (If time allows.)
@@ -215,7 +215,14 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
     Input: -i 115_64_39_ ../../QA/radicaltest/testfiles/*
 
     Output: 排列在一起，并把这种排字方法叫做“分别部居”
+    
+## Example 4: Input with both radical characters and radical indices
 
+    Input: -m 禾_扌_39_ ../../QA/radicaltest/testfiles/*
+
+    Output: 排列在一起，并把这种排字方法叫做“分别部居”
+    
+    
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
 * Unihan Database (Unihan.zip)
