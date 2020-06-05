@@ -59,6 +59,8 @@ static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Ind
 static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));    //search for multiple input files is supported
 static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search."), cl::init(false), cl::cat(radicalgrepFlags)); 
 
+static cl::opt<bool> mixMode("m", cl::desc("Use both radical character and radical index to perform search."), cl::init(false), cl::cat(radicalgrepFlags));
+
 //Adpated from grep_interface.cpp
 ColoringType ColorFlag;
 //options for colourization; (e.g. -c auto)
@@ -105,6 +107,6 @@ std::vector<re::RE*> generateREs(std::string input_radical)
 {
     BS::RadicalValuesEnumerator en_rad;
     en_rad.parse_input(input_radical);  //parse the input 
-    return en_rad.createREs(indexMode);
+    return en_rad.createREs(indexMode, mixMode);
 }
 

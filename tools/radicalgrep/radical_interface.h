@@ -33,23 +33,36 @@ namespace BS
     class UnicodeSetTable
     {   
         public:
-            const UCD::UnicodeSet&& get_uset(string radical, bool indexMode)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
+            const UCD::UnicodeSet&& get_uset(string radical, bool indexMode, bool mixedMode)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
             {
-                if (indexMode) { //search using the index (e.g. 85_)
-                    try {
+                if (indexMode)
+                { //search using the index (e.g. 85_)
+                    try
+                    {
                         int num = std::stoi(radical); //checks if the input is anything other than a number
-                        if (num < 1 || num > 214) { //if input is a number not in range [1,214]; terminate program
+                        if (num < 1 || num > 214)
+                        { //if input is a number not in range [1,214]; terminate program
                             llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
                         }
-                    } catch (std::invalid_argument) { //if input not an integer, terminate program
+                    }
+                    catch (std::invalid_argument)
+                    { //if input not an integer, terminate program
                         llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
                     }
-
                     if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                         return std::move(*_unicodeset_radical_table[radical]);
                     else
                         return std::move(UCD::UnicodeSet());
-                } else { //search using the actual radical (e.g. 氵_)
+                }
+                else if (mixedMode)
+                {
+                    if(mixed_table.find(radical)!=mixed_table.end())
+                        return std::move(*mixed_table[radical]);
+                    else
+                        return std::move(UCD::UnicodeSet());
+                }
+                else
+                { //search using the actual radical (e.g. 氵_)
                     if(radical_table.find(radical) != radical_table.end())
                         return std::move(*radical_table[radical]);
                     else
@@ -60,6 +73,7 @@ namespace BS
         private:
             static map<string, const UCD::UnicodeSet*> _unicodeset_radical_table;
             static map<string, const UCD::UnicodeSet*> radical_table;   //The map list all kinds of radicals and their corresponding UnicodeSet prodefined in kRSKangXi.h
+            static map<string, const UCD::UnicodeSet*> mixed_table;
     };
 
     static UnicodeSetTable ucd_radical;
@@ -67,7 +81,7 @@ namespace BS
     class RadicalValuesEnumerator
     {
         public:
-            std::vector<re::RE*> createREs(bool indexMode);   //Search for the results
+            std::vector<re::RE*> createREs(bool indexMode, bool mixedMode);   //Search for the results
             void parse_input(string input_radical); //Search for the results by making CCs of each radical and pushing them the vector REs
         private:
             std::vector<string> radical_list;   //Store the input radical(s)
