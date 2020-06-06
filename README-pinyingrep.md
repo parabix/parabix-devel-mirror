@@ -54,8 +54,8 @@ Similar to normal regular expressions, `.` represent arbitrary **alphabetic** ch
 But only legal pinyin syllables in the database will be considered by **pinyingrep**. 
 > e.g. `x..ng` to `xiong`, `xiang`, and etc.
 >
-#### 5. Regular-expression-like pinyin syllables with `?` after "g"
-**Pinyingrep** supports pinyin syllables with `?` after alphabetic character `g`.
+#### 5. Regular-expression-like pinyin syllables with `?` after tailing "g"
+**Pinyingrep** supports pinyin syllables with `?` after alphabetic character `g`(only `g` after `n` is supported in this iteration).
 > e.g. `zhang?`
 >
 The question mark indicates that both readings with `g` and without `g` are wanted as input.
