@@ -5,6 +5,7 @@ NAME
     pinyin_grep
 SRC
     pinyingrep.cpp
+    pinyin.cpp
 DEPS
     fileselect
     grep
