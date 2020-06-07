@@ -109,4 +109,20 @@
 <grepcase regexp="jia bin" datafile="traditional-test" greplines="26" flags="-trd"/>
 <grepcase regexp="jia bin" datafile="traditional-test" greplines="" flags="-tonly"/>
 
+
+<datafile id = "exact-test">
+pin yin
+zhong1 wen2
+m.ng
+ming
+min
+xuǎn
+选择权很重要
+这是中文测试数据
+</datafile>
+<grepcase regexp="zhong1 wen2" datafile="exact-test" greplines="3 9" flags="-e"/>
+<grepcase regexp="pin yin" datafile="exact-test" greplines="2" flags="-e"/>
+<grepcase regexp="m.ng?" datafile="exact-test" greplines="4 5 6" flags="-e"/>
+<grepcase regexp="xuǎn" datafile="exact-test" greplines="7 8" flags="-e"/>
+
 </greptest>

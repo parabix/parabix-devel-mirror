@@ -65,6 +65,10 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ..
 static cl::opt<bool,false> pyColorOption("c",cl::desc("set coloring of output"),cl::cat(pygrepFlags));
 static cl::alias pyColorOptionAlias0("colour",cl::desc("alias for coloring -c"),cl::aliasopt(pyColorOption));
 
+// enable exact match together
+static cl::opt<bool, false> pyExactOption("e", cl::desc("enable exact match mode"), cl::cat(pygrepFlags));
+static cl::alias pyExactOptionAlias0("exact", cl::desc("alias for exact match mode -e"), cl::aliasopt(pyExactOption));
+
 //switch database to kpy, xhc database is enabled by default
 static cl::opt<bool,false> pyKPY("kpy",cl::desc("set database to kpy"),cl::cat(pygrepFlags));
 static cl::alias pyKPYAlias0("KPY_Database",cl::desc("alias for kpy database -kpy"),cl::aliasopt(pyKPY));
@@ -96,12 +100,12 @@ std::vector<re::RE*> generateREs(std::string pyregex){
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
     std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? 1 : 0, ChineseCharacterType));
-    // Bug for Unknown Reason: 
-    //      crack out the coloring when doing exact match at the same time
-    // re::ModeFlagSet InitialFlag = re::MULTILINE_MODE_FLAG;
-    // re::RE_Syntax RegexpSyntax = re::RE_Syntax::PCRE;
-    // bool ByteMode = false;
-    // REs.push_back(re::RE_Parser::parse(pyregex, InitialFlag, RegexpSyntax, ByteMode));
+    if(pyExactOption){
+        re::ModeFlagSet InitialFlag = re::MULTILINE_MODE_FLAG;
+        re::RE_Syntax RegexpSyntax = re::RE_Syntax::PCRE;
+        bool ByteMode = false;
+        REs.push_back(re::RE_Parser::parse(pyregex, InitialFlag, RegexpSyntax, ByteMode));
+    }
     return std::move(REs);
 }
 // Reference: icgrep
