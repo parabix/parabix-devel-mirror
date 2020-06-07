@@ -73,7 +73,7 @@ static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of 
 
 std::vector<fs::path> allfiles; //Store all path of files
 
-std::vector<re::RE*> generateREs(std::string input_radical);    //This function parse the input and get the results
+std::vector<re::RE*> generateREs(std::string input_radical, bool reMode);    //This function parse the input and get the results
 
 int main(int argc, char* argv[])
 {
@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
     
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
-    auto radicalREs=generateREs(input_radical); //get the results
+    auto radicalREs=generateREs(input_radical, reMode); //get the results
 
     //turn on colorizartion if specified by user
     if ((ColorFlag == alwaysColor) || ((ColorFlag == autoColor) && isatty(STDOUT_FILENO))) {
@@ -104,10 +104,10 @@ int main(int argc, char* argv[])
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
 }
 
-std::vector<re::RE*> generateREs(std::string input_radical)
+std::vector<re::RE*> generateREs(std::string input_radical, bool reMode)
 {
     BS::RadicalValuesEnumerator en_rad;
-    en_rad.parse_input(input_radical);  //parse the input 
-    return en_rad.createREs(indexMode, mixMode);
+    en_rad.parse_input(input_radical, reMode);  //parse the input 
+    return en_rad.createREs(indexMode, mixMode, reMode);
 }
 

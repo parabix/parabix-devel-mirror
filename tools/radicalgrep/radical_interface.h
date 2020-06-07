@@ -81,9 +81,9 @@ namespace BS
     class RadicalValuesEnumerator
     {
         public:
-            std::vector<re::RE*> createREs(bool indexMode, bool mixedMode);   //Search for the results
-            void parse_input(string input_radical); //Search for the results by making CCs of each radical and pushing them the vector REs
-            void reParse(string expr);
+            std::vector<re::RE*> createREs(bool indexMode, bool mixedMode, bool reMode);   //Search for the results
+            void parse_input(string input_radical, bool reMode); //Search for the results by making CCs of each radical and pushing them the vector REs
+            void reParse(string expr); //For -re mode; tokenizes {X/Y}
         private:
             std::vector<string> radical_list;   //Store the input radical(s)
             std::vector<string> reTemp; //For -re mode; stores the tokenized radicals in reParse()
