@@ -11,20 +11,89 @@ using namespace UCD::KRS_ns;
 namespace BS
 {
     //Search for the results by making CCs of each radical and pushing them the vector REs
+    /*std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode, bool mixMode, bool reMode)
+    {
+        std::vector<re::RE*> REs;
+        std::vector<re::RE*> temp;
+
+        if (reMode) {
+            for (int i = 0; i < reList.size(); i++) {
+                for (int j = 0; j < reList[i].size(); j++) {
+                    cout << reList[i][j] << endl; //FOR DEBUGGING: Prints out the radical expression to be grepped
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reList[i][j], indexMode, mixMode))));
+                }
+                cout << endl; //FOR DEBUGGING
+                REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+            }
+        } else {
+            for (int i = 0; i < radical_list.size(); i++) {
+                temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode, mixMode))));
+                REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+            }
+        }
+       
+        return std::vector<re::RE*>(1,re::makeSeq(REs.begin(),REs.end()));
+    }*/
+
     std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode, bool mixMode)
     {
         std::vector<re::RE*> REs;
         std::vector<re::RE*> temp;
 
         for (int i = 0; i < radical_list.size(); i++) {
-            temp .push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode, mixMode))));
+            temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode, mixMode))));
             REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+            temp.clear();
         }
        
         return std::vector<re::RE*>(1,re::makeSeq(REs.begin(),REs.end()));
     }
 
+
     //Parse the input and store the radicals into the radical_list vector
+
+    //SAMPLE CASES FOR reMODE:
+    //./radicalgrep -re -c auto {火/水}_曰_ ../../QA/radicaltest/testfiles/* *BUG*
+    // ./radicalgrep -re -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/* ./radicalgrep -re -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/* *WORKING TESTCASES*
+    // ./radicalgrep -re -c auto 亻_衣_{生/亅} ../../QA/radicaltest/testfiles/* *BUG*
+    /*void RadicalValuesEnumerator::parse_input(string input_radical, bool reMode)
+    {
+        stringstream ss(input_radical);
+        string temp;
+        
+        while (getline(ss, temp, '_')) { //tokenize the input 
+            if (reMode) {
+                if (temp[0] != '{') {
+                    zi.push_back(temp);
+                } else if (temp[0] == '{') {
+                   reParse(temp);
+                }
+            } else {
+                radical_list.push_back(temp); 
+            }
+        }   
+
+        //DEBUGGING
+        //cout << "zi: " << endl;
+        //for (int i = 0; i < zi.size(); i++) cout << zi[i] << endl;
+
+        if (reMode) {
+            for (int i = 0; i < reTemp.size(); i++) {
+                if (input_radical[0] != '{') { //case1: 水_{火/水}_
+                    for (int j = 0; j < zi.size(); j++) ziTemp.push_back(zi[j]); 
+                    ziTemp.push_back(reTemp[i]);
+                    reList.push_back(ziTemp);
+                    ziTemp.clear();
+                } else { //case2: {火/水}_曰_  *NOT WORKING PROPERLY FOR SOME REASON*
+                    ziTemp.push_back(reTemp[i]); 
+                    for (int j = 0; j < zi.size(); j++) ziTemp.push_back(zi[j]);
+                    reList.push_back(ziTemp);
+                    ziTemp.clear();
+                }
+            }
+        }
+    }*/
+
     void RadicalValuesEnumerator::parse_input(string input_radical)
     {
         stringstream ss(input_radical);
@@ -32,6 +101,17 @@ namespace BS
 
         while (getline(ss, temp, '_')) { //tokenize the input and store it in radical_list
             radical_list.push_back(temp);
+        }
+    }
+
+
+    void RadicalValuesEnumerator::reParse(string expr) {
+        expr = expr.substr(1, expr.size() - 2); //erase the brackets {}.
+        stringstream ss(expr);
+        string temp;
+
+        while (getline(ss, temp, '/')){ //tokenize the input 
+            reTemp.push_back(temp);
         }
     }
                         

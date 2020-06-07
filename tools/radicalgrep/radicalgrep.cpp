@@ -60,6 +60,7 @@ static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>")
 static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search."), cl::init(false), cl::cat(radicalgrepFlags)); 
 
 static cl::opt<bool> mixMode("m", cl::desc("Use both radical character and radical index to perform search."), cl::init(false), cl::cat(radicalgrepFlags));
+static cl::opt<bool> reMode("re", cl::desc("Use regular expressions to search for multiple phrases."), cl::init(false), cl::cat(radicalgrepFlags));
 
 //Adpated from grep_interface.cpp
 ColoringType ColorFlag;
