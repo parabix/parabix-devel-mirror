@@ -10,7 +10,7 @@ How to Test Pinyin Grep
 To build Pinyin Grep, the working environment needs to have all requirements of icgrep build met.  
 To test pinyingrep, `cd` the directory `QA` and run the following commends on your terminal:
 ```
-python greptest.py -v -t pinyintest.xml ../build/bin/pinyingrep
+python greptest.py -v -t pinyintest/pinyintest.xml ../build/bin/pinyingrep
 ```
 Also, `make check` is ready for testing all modules including pinyingrep.
 ## Iteration History
@@ -152,15 +152,28 @@ command line flag `-kpy` need to be in place.
     3. `-sim`: grep Chinese characters used in simplified Chinese. Some of Chinese characters are used in both traditional and simplified Chinese, and this commandline option indicates that such characters are also wanted. 
     4. `-tonly`: grep Chinese characters **only used** in traditional Chinese. This commandline option indicates that no Chinese characters that are used in simplified Chinese should be included.
     5. `-sonly`: grep Chinese characters **only used** in simplified Chinese. This commandline option indicates that no Chinese characters that were once used in traditional Chinese should be included.
+* For example: `井` is used in both traditional and simplified Chinese; `書` is only used in traditional Chinese while `学` is only used in simplified Chinese.
+* For more information about Traditional and Simplified Variant, please refer to <http://www.unicode.org/reports/tr38/> 
+
+#### 11. Exact Match Mode
+* **Pinyingrep** provides the user with a mode where **pinyingrep** also interpret the input string directly as a regular expression:
+    * For example, `中` and `zhong` in the original text file will both be grepped with input string `zhong`.
+* Command Line flag `-e` is used to turn on such a mode.
+
 ## Version History
+#### Version 1.3
+**Pinyingrep** version 1.3 supports:
+1. Exact match mode(turned on by `-e`)
 
 #### Version 1.2
 **Pinyingrep** version 1.2 supports:
 1. CommandLine options to grep **All/Traditional/Simplified** Chinese characters
+
 #### Version 1.1
 **Pinyingrep** version 1.1 supports:
 1. CommandLine flag to switch on coloring of grep results.
 2. CommandLine option to choose different pinyin database.
+
 #### Version 1.0
 **Pinyingrep** version 1.0 supports:
 1. Pinyin syllables without tones specified, e.g. `zhong`
