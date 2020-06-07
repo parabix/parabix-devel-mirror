@@ -66,20 +66,20 @@ Another program, `Radical Count` was implemented in this iteration. The document
     Output: 这是一个简单的例**子**
             部首分类也是使用汉**字**之文化圈少数的共通点
             部首检字也有其局限性，许多汉**字**难以归部
-    
+
 ## Example 2: Radical Phrase Input
 
     Input: 氵_子_ ../../QA/radicaltest/testfiles/test1
     
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
             部首检字也有其局限性，许多**汉字**难以归部
-   
+
 ## Example 3: Radical Pattern Not Found in File 
 
     Input: 子_子_ ../../QA/radicaltest/testfiles/test1
     
     Output: Can not find the results!
-    
+
 ## Example 4: Single Radical Input and Multiple Files
 
     Input: 子_ ../../QA/radicaltest/testfiles/test1 ../../QA/radicaltest/testfiles/test2
@@ -88,7 +88,7 @@ Another program, `Radical Count` was implemented in this iteration. The document
             部首分类也是使用汉**字**之文化圈少数的共通点
             部首检**字**也有其局限性，许多汉**字**难以归部
             偏旁是从造**字**构形的角度定义的
-
+    
             这是采用“两分法”对汉**字**进行结构分析得出的认识
             由于汉**字**结构复杂，许多汉**字**并不是左右结构的
             排列在一起，并把这种排**字**方法叫做“分别部居”
@@ -101,7 +101,7 @@ Another program, `Radical Count` was implemented in this iteration. The document
     
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
             部首检字也有其局限性，许多**汉字**难以归部
-
+    
             部首分類也是使用**漢字**之文化圈少數的共通點
             部首檢字也有其局限性，許多**漢字**難以歸部
 
@@ -110,11 +110,11 @@ Another program, `Radical Count` was implemented in this iteration. The document
 As mentioned before, it is possible to have more than one radical with the same index. In this example, 火 and 灬 are both radical 86 in the Kangxi dictionary. Similar cases include 氵and 水, as well as 忄and 心.
 
     Input: 火_灬_ ../../QA/radicaltest/testfiles/test4
-
+    
     Output: 今天天气**炎热**
-
+    
     Input: 火_火_ ../../QA/radicaltest/testfiles/test4
-
+    
     Output: 今天天气**炎热**
 
 ## Example 7: Words that are Radicals Themselves
@@ -122,7 +122,7 @@ As mentioned before, it is possible to have more than one radical with the same 
 Some characters such as 土, 火, 水, 木, and 金 are radicals themselves. They still fall into their respective set, and instead have no residual strokes.
 
     Input: 土_ ../../QA/radicaltest/testfiles/test5
-
+    
     Output: 古人把宇宙万物根据其特征划分成火、水、木、金、**土**五大类，统称“五行”
             **在**中医学中，五行有着特殊含义
             “金曰从革”，代表沉降、肃杀、收敛等性质，**在**人体为肺和大肠
@@ -136,15 +136,15 @@ Some characters such as 土, 火, 水, 木, and 金 are radicals themselves. The
 In the Kangxi dictionary, every Chinese character only has one desginated radical. For instance 伙 is composed of 亻and 火, which are two commonly seen radicals. According to the Kangxi dictionary, the official radical of 伙 is 亻.
 
     Input: 亻_ ../../QA/radicaltest/testfiles/test6
-
+    
     Output: **伙**
-
+    
     Input: 火_ ../../QA/radicaltest/testfiles/test6
-
+    
     Output: **烛**
-
+    
     Input: 虫_ ../../QA/radicaltest/testfiles/test6
-
+    
     Output: Can not find the results!
 
 ## Example 9: Search for Simplified Characters with Traditional Radicals (Vice Versa)
@@ -152,12 +152,12 @@ In the Kangxi dictionary, every Chinese character only has one desginated radica
 If the file to be searched is written in simplified Chinese and the radical expression is in traditional Chinese, it will still return the corresponding characters. This works the other way around too.
 
     Input: 言_ ../../QA/radicaltest/testfiles/test1
-
+    
     Output: 中国大陆的国标码使用汉**语**拼音排列
             部首检字也有其局限性，**许**多汉字难以归部
-
+    
     Input: 讠_ ../../QA/radicaltest/testfiles/test3
-
+    
     Output: 中國大陸的國標碼使用漢**語**拼音排列
             部首檢字也有其局限性，**許**多漢字難以歸部
 
@@ -184,10 +184,16 @@ Plans for iteration 3 include:
 * Radical Grep's default output has colorization turned off. You can turn it back on by using the option flag `-c auto` in your input.
 * Input with 3 or more radicals is now supported.
 
+### Radical Grep Version 3.2
+
+- Input with both radical characters and radical indices is now supported. To use this function, include the option flag `-m` in your input.
+
+  
+
 ## Example 1: Kangxi Radical Index Search Mode and Colorization Turned On
 
     Input: -i -c auto 85_ ../../QA/radicaltest/testfiles/test1
-
+    
     Output: 部首分类也是使用**汉**字之文化圈少数的共通点
             中国大陆的国标码使用**汉**语拼音排列
             部首检字也有其局限性，许多**汉**字难以归部
@@ -197,32 +203,33 @@ Plans for iteration 3 include:
 If the user enters uses Radical Grep in index mode and searchs for index 0 or any number greater than 214, they will get an error message because these sets do not exist in the Kangxi dictionary.
 
     Input: -i a_ ../../QA/radicaltest/testfiles/test1
-
+    
     Output: LLVM ERROR: A radical set for this input does not exist.
             Enter a integer in [1,214], followed by _.
-
+    
     Input: -i 1_215_ ../../QA/radicaltest/testfiles/test1
-
+    
     Output: LLVM ERROR: A radical set for this input does not exist.
             Enter a integer in [1,214], followed by _.
 
 ## Example 3: Input with more than 3 Radicals
 
     Input: 禾_扌_子_ ../../QA/radicaltest/testfiles/*
-
-    Output: 排列在一起，并把这种排字方法叫做“分别部居”
-
-    Input: -i 115_64_39_ ../../QA/radicaltest/testfiles/*
-
+    
     Output: 排列在一起，并把这种排字方法叫做“分别部居”
     
+    Input: -i 115_64_39_ ../../QA/radicaltest/testfiles/*
+    
+    Output: 排列在一起，并把这种排字方法叫做“分别部居”
+
 ## Example 4: Input with both radical characters and radical indices
 
     Input: -m 禾_扌_39_ ../../QA/radicaltest/testfiles/*
-
+    
     Output: 排列在一起，并把这种排字方法叫做“分别部居”
-    
-    
+
+
+​    
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
 * Unihan Database (Unihan.zip)
@@ -231,4 +238,4 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruonan),  Pan Chuwen
 
-**Last Updated:** 2020/06/05
+**Last Updated:** 2020/06/07
