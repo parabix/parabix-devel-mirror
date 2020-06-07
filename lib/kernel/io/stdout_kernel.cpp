@@ -100,12 +100,18 @@ void FileSink::generateInitializeMethod(BuilderRef b) {
 void FileSink::generateDoSegmentMethod(BuilderRef b) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
+
+    b->CallPrintInt("fileSink:codeUnitBuffer", codeUnitBuffer);
+
     Value * bytesToDo = b->getAccessibleItemCount("codeUnitBuffer");
     if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
         bytesToDo = b->CreateMul(bytesToDo, b->getSize(mCodeUnitWidth / 8));
     } else if (LLVM_UNLIKELY(mCodeUnitWidth < 8)) {
         bytesToDo = b->CreateUDiv(bytesToDo, b->getSize(8 / mCodeUnitWidth));
     }
+
+    b->CallPrintInt("fileSink:bytesToDo", bytesToDo);
+
     Value * const fileDescriptor = b->getScalarField("fileDescriptor");
     b->CreateWriteCall(fileDescriptor, codeUnitBuffer, bytesToDo);
 }

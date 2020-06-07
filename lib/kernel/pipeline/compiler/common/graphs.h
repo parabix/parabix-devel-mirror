@@ -260,6 +260,10 @@ struct BufferNode {
         return (Type & BufferType::Shared) != 0;
     }
 
+    bool isDynamic() const {
+        assert (Buffer);
+        return isa<DynamicBuffer>(Buffer);
+    }
 
 
 };

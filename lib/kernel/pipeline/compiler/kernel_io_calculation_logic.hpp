@@ -742,7 +742,8 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
 
     const BufferNode & bn = mBufferGraph[streamSet];
 
-    if (LLVM_UNLIKELY(bn.isOwned())) {
+
+    if (LLVM_UNLIKELY(bn.isOwned() && bn.isDynamic())) {
 
         const auto prefix = makeBufferName(mKernelId, outputPort);
         const StreamSetBuffer * const buffer = bn.Buffer;
@@ -759,7 +760,6 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
         const auto beforeExpansion = mWritableOutputItems[outputPort.Number];
 
         Value * const hasEnoughSpace = b->CreateICmpULE(required, beforeExpansion[WITH_OVERFLOW]);
-
         BasicBlock * const noExpansionExit = b->GetInsertBlock();
         b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
 
@@ -781,6 +781,7 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
         buffer->reserveCapacity(b, produced, consumed, required);
 
         recordBufferExpansionHistory(b, outputPort, buffer);
+
         if (cycleCounterAccumulator) {
             Value * const cycleCounterEnd = b->CreateReadCycleCounter();
             Value * const duration = b->CreateSub(cycleCounterEnd, cycleCounterStart);

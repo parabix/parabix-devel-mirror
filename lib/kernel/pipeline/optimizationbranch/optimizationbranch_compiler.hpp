@@ -131,6 +131,8 @@ private:
 
     void enterBranch(BuilderRef b, const unsigned branchType, Value * const noMore);
 
+    void consumeConditionStream(BuilderRef b);
+
     Value * calculateAccessibleOrWritableItems(BuilderRef b, const Kernel * const kernel, const Binding & binding, Value * const first, Value * const last, Value * const defaultValue) const;
 
     RelationshipGraph makeRelationshipGraph(const RelationshipType type) const;
@@ -145,6 +147,8 @@ private:
     const Relationship * const          mCondition;
 
     const std::array<const Kernel *, 4> mBranches;
+
+    Rational                            mConditionRate;
 
     Value *                             mFirstBranchPath = nullptr;
     PHINode *                           mBranchDemarcationArray = nullptr;
@@ -621,11 +625,6 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     // one of the pipeline branches uses the stream internally and we update the processed
     // item count.
 
-    Value * const processedPtr = getProcessedInputItemsPtr(condRef.Index);
-    Value * const processed = b->CreateLoad(processedPtr);
-
-//    b->CallPrintInt("cond.processed", processed);
-
     Value * const basePtr = b->CreatePointerCast(b->getInputStreamBlockPtr(condRef.Name, ZERO, ZERO), bitBlockTy->getPointerTo());
 
     Value * const spanCapacityPtr = b->getScalarFieldPtr(SPAN_CAPACITY);
@@ -634,20 +633,22 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     Value * const initialSpanBuffer = b->CreateLoad(spanBufferPtr);
 
     Value * const accessible = getAccessibleInputItems(condRef.Index);
-//    b->CallPrintInt("cond.accessible", accessible);
-    const Binding & binding = condRef.Binding;
-    const auto condRate = binding.getRate().getLowerBound() * mTarget->getStride();
-    Value * const totalNumOfStrides = b->CreateUDivRate(accessible, condRate);
-//    b->CallPrintInt("cond.totalNumOfStrides", totalNumOfStrides);
-    Value * const consumed = b->CreateMulRate(totalNumOfStrides, condRate);
-//    b->CallPrintInt("cond.consumed", consumed);
-    b->CreateStore(b->CreateAdd(processed, consumed), processedPtr);
 
-    Value * const largeEnough = b->CreateICmpULT(totalNumOfStrides, spanCapacity);
+    const Binding & binding = condRef.Binding;
+    mConditionRate = binding.getRate().getLowerBound() * mTarget->getStride();
+    mNumOfStrides = b->CreateUDivRate(accessible, mConditionRate);
+
+    if (LLVM_UNLIKELY(mEnableAsserts)) {
+        Value * const nonEmptyStride = b->CreateICmpNE(mNumOfStrides, ZERO);
+        Value * const valid = b->CreateOr(nonEmptyStride, isFinal());
+        b->CreateAssert(valid, "non-final segment was given 0 strides");
+    }
+
+    Value * const largeEnough = b->CreateICmpULT(mNumOfStrides, spanCapacity);
     b->CreateLikelyCondBr(largeEnough, summarizeDemarcations, resizeSpan);
 
     b->SetInsertPoint(resizeSpan);
-    Value * const newSpanCapacity = b->CreateRoundUp(totalNumOfStrides, spanCapacity);
+    Value * const newSpanCapacity = b->CreateRoundUp(mNumOfStrides, spanCapacity);
     b->CreateStore(newSpanCapacity, spanCapacityPtr);
     Value * const newSpanBuffer = b->CreateRealloc(sizeTy, initialSpanBuffer, newSpanCapacity);
     assert (newSpanBuffer->getType() == initialSpanBuffer->getType());
@@ -669,17 +670,10 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     currentState->addIncoming(unknownState, entry);
     currentState->addIncoming(unknownState, resizeSpan);
 
-//    b->CallPrintInt("spanIndex", spanIndex);
-
     Value * condition = nullptr;
     if (isConstantOne(numOfConditionBlocks)) {
         Value * const ptr = b->CreateGEP(basePtr, strideIndex);
-//        b->CallPrintInt("ptr", ptr);
-
         condition = b->CreateBlockAlignedLoad(ptr);
-
-//        b->CallPrintRegister("condition", condition);
-
         b->CreateBr(checkCondition);
     } else { // OR together every condition block in this stride
         BasicBlock * const combineCondition = b->CreateBasicBlock("combineCondition", addDemarcation);
@@ -711,8 +705,9 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     Value * const firstStride = b->CreateICmpEQ(strideIndex, ZERO);
     Value * const attemptToExtendSpan = b->CreateOr(sameState, firstStride);
     Value * const nextStrideIndex = b->CreateAdd(strideIndex, ONE);
-    Value * const notLastStride = b->CreateICmpULT(nextStrideIndex, totalNumOfStrides);
+    Value * const notLastStride = b->CreateICmpULT(nextStrideIndex, mNumOfStrides);
     Value * const checkNextStride = b->CreateAnd(attemptToExtendSpan, notLastStride);
+
 
     BasicBlock * const checkConditionExit = b->GetInsertBlock();
     spanBuffer->addIncoming(spanBuffer, checkConditionExit);
@@ -723,6 +718,11 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
 
     // Add the demarcation
     b->SetInsertPoint(addDemarcation);
+    if (LLVM_UNLIKELY(mEnableAsserts)) {
+        Value * const nonEmptyStride = b->CreateICmpNE(strideIndex, ZERO);
+        Value * const valid = b->CreateOr(nonEmptyStride, isFinal());
+        b->CreateAssert(valid, "non-final zero length stride detected!");
+    }
     b->CreateStore(strideIndex, b->CreateGEP(spanBuffer, spanIndex));
     Value * const nextSpanIndex = b->CreateAdd(spanIndex, ONE);
     spanBuffer->addIncoming(spanBuffer, addDemarcation);
@@ -746,7 +746,12 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     // additional demarcation based on whether we left the loop attempting
     // to extend the span.
     Value * finalSpanIndex = b->CreateSelect(attemptToExtendSpan, spanIndex, nextSpanIndex);
-    b->CreateStore(totalNumOfStrides, b->CreateGEP(spanBuffer, finalSpanIndex));
+    if (LLVM_UNLIKELY(mEnableAsserts)) {
+        Value * const nonEmptyStride = b->CreateICmpNE(mNumOfStrides, ZERO);
+        Value * const valid = b->CreateOr(nonEmptyStride, isFinal());
+        b->CreateAssert(valid, "non-final zero length stride detected!");
+    }
+    b->CreateStore(mNumOfStrides, b->CreateGEP(spanBuffer, finalSpanIndex));
     mBranchDemarcationCount = b->CreateAdd(finalSpanIndex, ONE);
 }
 
@@ -823,12 +828,31 @@ inline void OptimizationBranchCompiler::executeBranches(BuilderRef b) {
     Value * const ready = b->CreateICmpEQ(getExternalSegNo(), currentSegNo);
     b->CreateLikelyCondBr(ready, acquired, acquire);
     b->SetInsertPoint(acquired);
+    consumeConditionStream(b);
     if (mTerminatedPhi) {
         b->CreateStore(mTerminatedPhi, getTerminationSignalPtr());
     }
     Value * const nextSegNo = b->CreateAdd(getExternalSegNo(), ONE);
     b->CreateAtomicStoreRelease(nextSegNo, otherGuardPtr);
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief consumeConditionStream
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranchCompiler::consumeConditionStream(BuilderRef b) {
+    #warning fix this for if the condition variable is not passed into both branches.
+
+    // If both use it, don't set anything. If one uses it but not the other, track the last user
+    // and set as necessary. The unused one will get a default value. If neither use it, just use
+    // the following.
+
+//    const RelationshipRef & condRef = getConditionRef(mStreamSetGraph);
+//    Value * const accessible = getAccessibleInputItems(condRef.Index);
+//    Value * const processedPtr = getProcessedInputItemsPtr(condRef.Index);
+//    Value * const processed = b->CreateLoad(processedPtr);
+//    Value * const consumed = b->CreateMulRate(mNumOfStrides, mConditionRate);
+//    b->CreateStore(b->CreateAdd(processed, consumed), processedPtr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -957,7 +981,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     Value * const terminated = b->CreateCall(doSegment, args);
 
-    if (mEnableAsserts) {
+    if (LLVM_UNLIKELY(mEnableAsserts)) {
 
         for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & host = mStreamSetGraph[e];
@@ -1036,8 +1060,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
     b->CreateBr(kernelExit);
 
     b->SetInsertPoint(kernelExit);
-
-    // exitBranch(b, branchType, noMore);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -117,7 +117,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         if (LLVM_UNLIKELY(rate.isRelative())) {
             return nullptr;
         }
-
         if (port.Addressable) {
             if (port.DirectlyUpdatesInternalState) {
                 assert (itemCountPtrInStateObject);
@@ -234,6 +233,9 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             mReturnedProcessedItemCountPtr[inputPort] = addItemCountArg(rt, processed, processedItemCountInStateObject);
 
             if (mKernelIsInternallySynchronized) {
+
+                #warning change accessible to avail for safety?
+
                 const auto streamSet = source(port, mBufferGraph);
                 Value * const avail = mLocallyAvailableItems[streamSet]; assert (avail);
                 Value * const accessible = b->CreateSub(avail, processed);

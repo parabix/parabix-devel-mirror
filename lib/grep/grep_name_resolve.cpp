@@ -11,6 +11,7 @@
 #include <re/transforms/re_transformer.h>
 #include <re/unicode/resolve_properties.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace re;
 
@@ -32,7 +33,16 @@ RE * UnicodeNameResolver::transformName(Name * name) {
         if (UCD::resolvePropertyDefinition(name)) {
             name->setDefinition(transform(name->getDefinition()));
         } else {
-            name->setDefinition(makeCC(grep::resolveUnicodeSet(name), &cc::Unicode));
+
+
+            llvm::errs() << "resolveUnicodeSet: " << name->getName() << ":\n\n";
+            auto CC = grep::resolveUnicodeSet(name);
+            CC.print(llvm::errs());
+            llvm::errs() << "\n\n";
+
+            // name->setDefinition(makeCC(std::move(CC), &cc::Unicode));
+
+            return makeCC(std::move(CC), &cc::Unicode);
         }        
     } else {
         UndefinedNameError(name);

@@ -374,10 +374,12 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
 
     toAcquire = std::min(toAcquire, LastKernel);
 
-    // TODO: experiment with a mutex lock here.
     Value * const startTime = startCycleCounter(b);
-    acquireSynchronizationLock(b, toAcquire);
-    updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
+    if (LLVM_LIKELY(mKernelId < toAcquire)) {
+        // TODO: experiment with a mutex lock here?
+        acquireSynchronizationLock(b, toAcquire);
+        updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
+    }
     for (auto kernel = mKernelId; kernel < firstKernelInTargetPartition; ++kernel) {
         releaseSynchronizationLock(b, kernel);
     }

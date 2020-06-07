@@ -483,14 +483,16 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// ----------------------------------------------------
         /// accessible item count
         /// ----------------------------------------------------
-        Value * accessible = nullptr;
+        Value * accessible = nullptr;        
         if (LLVM_UNLIKELY(internallySynchronized || requiresItemCount(input))) {
             accessible = nextArg();
         } else {
             accessible = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
         }
+
         assert (accessible);
         assert (accessible->getType() == sizeTy);
+
         mAccessibleInputItems[i] = accessible;
         Value * avail = b->CreateAdd(processed, accessible);
         mAvailableInputItems[i] = avail;

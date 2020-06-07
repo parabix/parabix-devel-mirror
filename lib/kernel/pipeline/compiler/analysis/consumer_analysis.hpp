@@ -76,7 +76,7 @@ void PipelineAnalysis::makeConsumerGraph() {
         }
     }
 
-#if 0
+#ifdef PRINT_CONSUMER_GRAPH
 
     auto & out = errs();
 

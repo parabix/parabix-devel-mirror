@@ -78,7 +78,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
 
     auto currentPartitionId = -1U;
     addBufferHandlesToPipelineKernel(b, PipelineInput);
-    addConsumerKernelProperties(b, PipelineInput);
+    // addConsumerKernelProperties(b, PipelineInput);
     addPipelinePriorItemCountProperties(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
