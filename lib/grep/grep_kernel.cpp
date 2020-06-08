@@ -167,7 +167,7 @@ void UTF16_index::generatePabloMethod() {
     PabloAST * const u16sur_1 = ccc_u16_hi->compileCC(makeByte(0xD8, 0xDB));
     PabloAST * const u16sur_2 = ccc_u16_hi->compileCC(makeByte(0xDC, 0xDF)); 
     //mark all low bytes
-    PabloAST * const u16lo = ccc_u16_lo->compileCC(makeByte(0x0, 0xFF));
+    PabloAST * const u16lo = ccc_u16_lo->compileCC(makeByte(0x0, 0xFF)); //Replace by AllOnes
     //mark valid surrogate pair
     PabloAST * const u16_sur = pb.createOr(u16sur_1, u16sur_2);
     //pb.createDebugPrint(u16_sur, "u16sur");
