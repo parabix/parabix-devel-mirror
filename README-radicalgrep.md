@@ -186,8 +186,8 @@ Plans for iteration 3 include:
 
 ### Radical Grep Version 3.2
 
-- Input with both radical characters and radical indices is now supported. To use this function, include the option flag `-m` in your input.
-
+* Input with both radical characters and radical indices is now supported. To use this function, include the option flag `-m` in your input.
+* `-alt` flag functionality added, for instance `亻_衣_{/亅}` will search for `亻_衣_生_` and `亻_衣_亅`.
   
 
 ## Example 1: Kangxi Radical Index Search Mode and Colorization Turned On
@@ -228,7 +228,20 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
     
     Output: 排列在一起，并把这种排字方法叫做“分别部居”
 
+## Example 5: Input with Alternative Characters 
 
+    Input: -alt -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/*
+
+    Output: 喝着**汽水**
+            “水曰润下”，代表了**滋润**、下行、寒凉、闭藏的性质，在人体为肾和膀胱
+            “火曰炎上”，代表了**温热**、向上等性质，在人体为心和小肠
+
+    Input: ./radicalgrep -re -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/*
+
+    Output: 喝着**汽水**
+            “水曰润下”，代表了**滋润**、下行、寒凉、闭藏的性质，在人体为肾和膀胱
+            “火曰炎上”，代表了**温热**、向上等性质，在人体为心和小肠
+            
 ​    
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
