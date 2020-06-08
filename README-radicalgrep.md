@@ -252,15 +252,15 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
     Input: ./radicalgrep -alt -c auto {火/水/土}_曰_ ../../QA/radicaltest/testfiles/*
     
     Output: “**水曰**润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
-    				“**火曰**炎上”，代表了温热、向上等性质，在人体为心和小肠
-    				“**土曰**稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
+    “**火曰**炎上”，代表了温热、向上等性质，在人体为心和小肠
+    “**土曰**稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
     				
     Input: ./radicalgrep -alt -c auto 曰_{火/水/土}_水_ ../../QA/radicaltest/testfiles/*
     
     Output: 有人**曰河海**一体
-    				有人**曰火水**不容
-    				有人**曰土水**相得益彰
-    
+    有人**曰火水**不容
+    有人**曰土水**相得益彰
+
 
 ​    
 ## **References**
