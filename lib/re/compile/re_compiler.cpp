@@ -298,7 +298,7 @@ Marker RE_Compiler::compileAssertion(Assertion * const a, Marker marker, PabloBu
     auto lengths = getLengthRange(asserted, alphabet);
     auto len = lengths.second;
         // TODO: workaround.
-        if (LLVM_UNLIKELY(len == 2)) {
+        if (LLVM_UNLIKELY(len > 1)) {
             lengths.second = 1;
         }
     if (lengths.second == 0) {

@@ -120,7 +120,7 @@ public:
                                  r = regular_expression_passes(r);
                                  r = re::exclude_CC(r, breakCC);
                                  r = resolveAnchors(r, breakCC);
-                                 r = toUTF16(r);
+                                 r = toUTF8(r);
 
                                  options->setRE(r);
                                  options->setSource(BasisBits);
@@ -130,7 +130,7 @@ public:
                                  if (i || outerKernel || exclude) {
                                      options->setCombiningStream(exclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultSoFar);
                                  }
-                                 options->addExternal("UTF16_index", u8index);
+                                 options->addExternal("UTF8_index", u8index);
                                  Kernel * const matcher = new ICGrepKernel(driver.getBuilder(), std::move(options));
                                  assert (matcher->hasFamilyName());
                                  driver.addKernel(matcher);

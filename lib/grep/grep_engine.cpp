@@ -292,10 +292,10 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
             //setComponent(mExternalComponents, Component::UTF16index);
-            if (mColoring) {
+            /*if (mColoring) {
                 UnicodeIndexing = true;
-            }
-            break;
+            }*/
+            //break;
         }
     }
     if (UnicodeIndexing) {
@@ -379,10 +379,8 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
     }
     mLineBreakStream = P->CreateStreamSet(1, 1);
     mU8index = P->CreateStreamSet(1, 1);
-    StreamSet * mU8index_Unicode = P->CreateStreamSet(1,1);
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-        P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
-        UnicodeLinesLogic(P, SourceStream, mLineBreakStream, mU8index_Unicode, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
+        UnicodeLinesLogic(P, SourceStream, mLineBreakStream, mU8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
     }
     else {
         /*if (hasComponent(mExternalComponents, Component::UTF8index)) {
@@ -548,8 +546,10 @@ void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::R
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
         MatchResults = P->CreateStreamSet(1, 1);
         options->setResults(MatchResults);
+        //P->CreateKernelCall<DebugDisplayKernel>("MatchResults", MatchResults);
     } else {
         options->setResults(Results);
+        //P->CreateKernelCall<DebugDisplayKernel>("Results", Results);
     }
     if (hasComponent(mExternalComponents, Component::UTF16index)) {
         options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
@@ -721,12 +721,12 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
         }
     }
 
-    const auto bytes = line_end - line_start + 2;
+    const auto bytes = line_end - line_start + 2;  //read an extra byte of UTF16 stream
     mResultStr->write(line_start, bytes);
     mLineCount++;
     mLineNum = lineNum;
     unsigned last_byte = *line_end;
-    mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D); //second condition need to be changed?
+    mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
     if (LLVM_UNLIKELY(!mTerminated)) {
         if (last_byte == 0x85) {  //  Possible NEL terminator.
             mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x00); //NEL in UTF16 0085
@@ -745,7 +745,7 @@ void EmitMatch::finalize_match(char * buffer_end) {
 
 void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, StreamSet * ByteStream, bool BatchMode) {
     StreamSet * SourceStream = getBasis(E, ByteStream);
-
+    
     grepPrologue(E, SourceStream);
 
     prepareExternalStreams(E, SourceStream);
@@ -763,7 +763,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
-    
+
     if (MatchResultsBufs.size() > 1) {
         StreamSet * const MergedMatches = E->CreateStreamSet();
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
@@ -796,7 +796,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     }
 
     if (mColoring && !mInvertMatches) {
-        //TODO: add a LF at the end of matched lines
         StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
         FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);
 
@@ -829,7 +828,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
 
         std::string ESC = "\x1B";
-        std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
+        std::vector<std::string> colorEscapes = {/*ESC + "[01;31m" + ESC + "[K", ESC + "[m"*/ ""};
         unsigned insertLengthBits = 4;
 
         StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
@@ -908,7 +907,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             }
         }
     }
-    //E->CreateKernelCall<StdOutKernel>(ColorizedBytes);
 }
 
 void EmitMatchesEngine::grepCodeGen() {
@@ -929,6 +927,7 @@ void EmitMatchesEngine::grepCodeGen() {
     E1->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     grepPipeline(E1, ByteStream);
     E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
+    
     mMainMethod = E1->compile();
     if (haveFileBatch()) {
         auto E2 = mGrepDriver.makePipeline(
@@ -1254,7 +1253,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);
     Scalar * const callbackObject = E->getInputScalar(2);
-    StreamSet * ByteStream = E->CreateStreamSet(1, 8); 
+    StreamSet * ByteStream = E->CreateStreamSet(1, 8);
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
@@ -1284,7 +1283,6 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
         scanMatchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
         scanMatchK->link("finalize_match_wrapper", finalize_match_wrapper);
     }
-
     mMainMethod = E->compile();
 }
 
