@@ -20,6 +20,8 @@
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/raw_ostream.h>
+enum ColoringType {alwaysColor, autoColor, neverColor};
+extern ColoringType ColorFlag;
 
 namespace PinyinPattern{
     using namespace std;
@@ -109,7 +111,7 @@ namespace PinyinPattern{
             mAccumSet.insert(parsed_codepoint);
         }
     };
-    vector<string> Before_Search(string Pinyin_syllables);
+    vector <vector<string> > Before_Search(string Pinyin_syllables);
     string& trim(string &s);
     string Add_Search_Prefix(string to_add);
     bool All_Alpha(string word);

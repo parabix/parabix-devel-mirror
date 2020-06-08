@@ -6,9 +6,10 @@ namespace PinyinPattern{
     2. parse those syllables to transfer them to formal format for searching
     3. add search prefix and suffix
 */
-    vector<string> Before_Search(string Pinyin_syllables)
+    vector <vector<string> > Before_Search(string Pinyin_syllables)
     {
-        vector<string> Divided, FinalVec;
+        vector<string> Divided;
+        vector <vector <string> > FinalVec;
         int pos = 0;
         Pinyin_syllables = trim(Pinyin_syllables);
         
@@ -29,18 +30,19 @@ namespace PinyinPattern{
         }
         
 
-        vector <vector<string>> syl { {"a", "ā", "á", "ǎ", "à"}, 
-                                    {"o", "ō", "ó", "ǒ", "ò"},
-                                    {"e", "ē", "é", "ě", "è"},
-                                    {"i", "ī", "í", "ǐ", "ì"},
-                                    {"u", "ū", "ú", "ǔ", "ù"},
-                                    {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
-                                    {"m", "m̄", "ḿ", "m̀"},
-                                    {"n", "ń", "ň", "ǹ"} };
+        vector <vector<string>> syl { {"a", "ā", "á", "ǎ", "à"},
+            {"o", "ō", "ó", "ǒ", "ò"},
+            {"e", "ē", "é", "ě", "è"},
+            {"i", "ī", "í", "ǐ", "ì"},
+            {"u", "ū", "ú", "ǔ", "ù"},
+            {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
+            {"m", "m̄", "ḿ", "m̀"},
+            {"n", "ń", "ň", "ǹ"} };
         for(size_t i=0; i<Divided.size(); i++){
             string word = Divided[i];
-            if (word.find('.') != string::npos) // found regex . 
-            {   
+            vector<string> temp_vec;
+            if (word.find('.') != string::npos) // found regex .
+            {
                 for (int j=0; j<6; j++){
                     temp = word;
                     temp.replace(word.find('.'), 1, syl[j][0]);
@@ -59,7 +61,7 @@ namespace PinyinPattern{
             }
             else if (word.find('1') != string::npos || word.find('2') != string::npos|| word.find('3') != string::npos|| word.find('4') != string::npos)
             {
-                int tone;
+                int tone = 0;
                 if (word.find('1') != string::npos)
                 {
                     tone = 1;
@@ -80,7 +82,7 @@ namespace PinyinPattern{
                 for (size_t j=0; j<syl.size(); j++){
                     if (word.find(syl[j][0]) != string::npos){
                         word.replace(word.find(syl[j][0]), 1, syl[j][tone]);
-                        FinalVec.push_back(word);
+                        temp_vec.push_back(word);
                         break;
                     }
                 }
@@ -93,7 +95,7 @@ namespace PinyinPattern{
                         for (size_t k=1; k<syl[j].size(); k++){
                             temp = word;
                             temp.replace(word.find(syl[j][0]), 1, syl[j][k]);
-                            FinalVec.push_back(temp);;
+                            temp_vec.push_back(temp);;
                         }
                         break;
                     }
@@ -101,21 +103,24 @@ namespace PinyinPattern{
             }
             else
             {
-                FinalVec.push_back(word);
+                temp_vec.push_back(word);
             }
             
+            //adding the prefix and suffix to all the strings
+            for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+            {
+                *iter = Add_Search_Prefix(*iter);
+            }
+            // for (auto x: FinalVec){
+            //     llvm::errs() << x << " ";
+            // }
+            // llvm::errs() << "\n";
+            
+            FinalVec.push_back(temp_vec);
         }
-        Divided = vector <string>(); //deallocate unused vector 
-
-        //adding the prefix and suffix to all the strings
-        for(vector<string>::iterator iter = FinalVec.begin(); iter!=FinalVec.end(); iter++)
-        {
-            *iter = Add_Search_Prefix(*iter);
-        }
-        // for (auto x: FinalVec){
-        //     llvm::errs() << x << " ";
-        // }
-        // llvm::errs() << "\n";
+        Divided = vector <string>(); //deallocate unused vector
+        
+        
         return FinalVec;
     }
     // trim erases the extra space from both head and tail of a std::string

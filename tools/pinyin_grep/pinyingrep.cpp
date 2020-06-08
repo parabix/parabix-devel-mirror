@@ -48,26 +48,51 @@ namespace fs = boost::filesystem;
 using namespace llvm;
 using namespace codegen;
 using namespace kernel;
-
+using namespace std;
+using namespace pablo;
 static cl::OptionCategory pygrepFlags("Command Flags", "pinyingrep options");
 
 static cl::opt<std::string> PinyinLinePattern(cl::Positional, cl::desc("Pinyin Syllables"), cl::Required, cl::cat(pygrepFlags));
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
+ColoringType ColorFlag;
+//options for colourization; (e.g. -c auto)
+static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of the output."),
+                                         cl::values(clEnumValN(alwaysColor, "always", "Turn on colorization when outputting to a file and terminal"),
+                                                    clEnumValN(autoColor,   "auto", "Turn on colorization only when outputting to terminal"),
+                                                    clEnumValN(neverColor,  "never", "Turn off output colorization")
+                                                    CL_ENUM_VAL_SENTINEL), cl::cat(pygrepFlags), cl::location(ColorFlag), cl::init(neverColor));
 
 std::vector<fs::path> allFiles;
 
 typedef uint64_t (*UCountFunctionType)(uint32_t fd);
 
 //step4
-std::vector<re::RE*> generateREs(std::vector<std::string> KangXiLinePattern){
-    std::vector<re::RE*> PinyinCC;
+std::vector <std::vector<re::RE*> >generateREs(std::vector<std::vector<std::string> >KangXiLinePattern){
+    std::vector<std::vector<re::RE*> >PinyinCC;
     //re::RE* PinyinCC_final;
-    for(size_t i= 0;i<KangXiLinePattern.size();i++)
+    /*  for(size_t i= 0;i<KangXiLinePattern.size();i++)
+     {
+     re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, re::PCRE, false);
+     //how to find the unicode?
+     PinyinCC.push_back(PinyinRe);
+     } */
+    std::vector<std::vector<std::string> >:: iterator iter1;
+    for(iter1 = KangXiLinePattern.begin();iter1!=KangXiLinePattern.end();iter1++)
     {
-        re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, re::PCRE, false);
-       //how to find the unicode? 
-        PinyinCC.push_back(PinyinRe);
+        std::vector<re::RE*> temp_Vec_RE;
+        std::vector<std::string> temp_Vec_String;
+        std::vector<re::RE*>::iterator iter2;
+        std::vector<std::string>::iterator iter3;
+        temp_Vec_String = *iter1;
+        for(iter3 = temp_Vec_String.begin();iter3 != temp_Vec_String.end();iter3++)
+        {
+            /*for testing */
+            cout << *iter3 <<endl;
+            re::RE * PinyinRe = re::RE_Parser::parse(*iter3, 0U, re::PCRE, false);
+            temp_Vec_RE.push_back(PinyinRe);
+        }
+        PinyinCC.push_back(temp_Vec_RE);
     }
     return PinyinCC;
     //PinyinCC_final = re::makeSeq(PinyinCC.begin(),PinyinCC.end());
@@ -109,31 +134,7 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::RE * pinyinCC) {
     return reinterpret_cast<UCountFunctionType>(P->compile());
 }
 
-uint64_t ucount1(UCountFunctionType fn_ptr, const uint32_t fileIdx) {
-    std::string fileName = allFiles[fileIdx].string();
-    struct stat sb;
-    const int fd = open(fileName.c_str(), O_RDONLY);
-    if (LLVM_UNLIKELY(fd == -1)) {
-        if (errno == EACCES) {
-            std::cerr << "pinyincount: " << fileName << ": Permission denied.\n";
-        }
-        else if (errno == ENOENT) {
-            std::cerr << "pinyincount: " << fileName << ": No such file.\n";
-        }
-        else {
-            std::cerr << "pinyincount: " << fileName << ": Failed.\n";
-        }
-        return 0;
-    }
-    if (stat(fileName.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
-        std::cerr << "pinyincount: " << fileName << ": Is a directory.\n";
-        close(fd);
-        return 0;
-    }
-    uint64_t theCount = fn_ptr(fd);
-    close(fd);
-    return theCount;
-}
+
 
 int main(int argc, char* argv[]){
     PinyinPattern::Buffer buf;
@@ -148,84 +149,88 @@ int main(int argc, char* argv[]){
     CPUDriver pxDriver("pygrep");
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     const auto fileCount = allFiles.size();
-    //step2
-    std::vector <std::string> KangXiLinePattern;
-    //string Search_Prefix = "kHanyuPinyin.*";
+    /*test point1*/
+    cout << "Testing point1" << endl;
+    /**/
+    std::vector <std::vector<std::string> >KangXiLinePattern;
+    
     KangXiLinePattern = PinyinPattern::Before_Search(PinyinLinePattern);
-    //here needs step3
+    /*test point2*/
+    cout << "Parsing finished successfully" << endl;
+    /*parsing test*/
     UnihanBuf = alloc.allocate(buf.R_size32(), 0);
     std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
     std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
-    //step4
+    /*test point3*/
+    cout <<"memcpy finished successfully" << endl;
+    /**/
     auto KangXilineREs = generateREs(KangXiLinePattern);
-    //auto PinyinCC = re::makeSeq(KangXilineREs.begin(),KangXilineREs.end());
-    PinyinPattern::PinyinSetAccumulator accum;
-    std::vector <re::RE*> VectorRE;
-    for (auto word: KangXilineREs){
-        auto PinyinRE = word;
-        grep::InternalSearchEngine engine(pxDriver);
-        engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-        engine.grepCodeGen(PinyinRE);
-        engine.doGrep(UnihanBuf, buf.R_size32(), accum); 
-        resolveUnicodeNames(PinyinRE);
-    }
     
+    std::vector <PinyinPattern::PinyinSetAccumulator> accum;
+    std::vector <PinyinPattern::PinyinSetAccumulator> ::iterator accum_iter;
+    std::vector <std::vector<re::RE*> > ::iterator RE_iter;
+    accum_iter = accum.begin();
+    std::vector <re::RE*> VectorRE,FinalRE;
+    /*  for (auto word: KangXilineREs){
+     auto PinyinRE = word;
+     grep::InternalSearchEngine engine(pxDriver);
+     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+     engine.grepCodeGen(PinyinRE);
+     engine.doGrep(UnihanBuf, buf.R_size32(), *accum_iter);
+     //resolveUnicodeNames(PinyinRE);
+     } */
+    for(RE_iter = KangXilineREs.begin();RE_iter != KangXilineREs.end();RE_iter++)
+    {
+        
+        PinyinPattern::PinyinSetAccumulator Temp_accum;
+        auto Syllable = *RE_iter;
+        std::vector<re::RE *>::iterator tone_iter;
+        //syllables search times test
+        int times = 0;
+        
+        for(tone_iter = Syllable.begin();tone_iter != Syllable.end();tone_iter++)
+        {
+            grep::InternalSearchEngine engine(pxDriver);
+            engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+            engine.grepCodeGen(*tone_iter);
+            engine.doGrep(UnihanBuf, buf.R_size32(), Temp_accum);
+            times++;
+        }
+        //syllables search times test
+        cout <<times<<endl;
+        
+        accum.push_back(Temp_accum);
+    }
+
+    /*testing point4*/
+    cout <<"unicode generated successfully"<<endl;
+    /**/
     alloc.deallocate(UnihanBuf, 0);
-    re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
-    VectorRE.push_back(CC_ast);
-
-    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
-    /*
-    auto PinyinRE = KangXilineREs[0];
-    //step5 for each RE,use parabix internal search Engine to search
-    PinyinPattern::PinyinSetAccumulator accum;
     
-    // what is this driver it cannot be sepcified by the IDE
-    grep::InternalSearchEngine engine(pxDriver);
-    //
-
-    engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    //cannot using this KangXiLinePattern, must use RE int the Vector KangXiLineREs, 
-    //do not kown what this function used to do
-    engine.grepCodeGen(PinyinRE);
-
-    engine.doGrep(UnihanBuf, buf.R_size32(), accum);
-    alloc.deallocate(UnihanBuf, 0);
-    
-    resolveUnicodeNames(PinyinRE);
-    std::vector <re::RE*> VectorRE;
-
-    re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
-    VectorRE.push_back(CC_ast);
-
-    UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast); */
-    /*
-    std::vector<uint64_t> theCounts;
-    theCounts.resize(fileCount);
-    uint64_t totalCount = 0;
-    for (unsigned i = 0; i < fileCount; ++i) {
-        theCounts[i] = ucount1(uCountFunctionPtr, i);
-        totalCount += theCounts[i];
+    for(accum_iter = accum.begin();accum_iter!=accum.end();accum_iter++)
+    {
+        auto temp_accum = *accum_iter;
+        re::CC * CC_ast = re::makeCC(temp_accum.getAccumulatedSet());
+        VectorRE.push_back(CC_ast);
     }
     
-    const int defaultDisplayColumnWidth = 7;
-    int displayColumnWidth = std::to_string(totalCount).size() + 1;
-    if (displayColumnWidth < defaultDisplayColumnWidth) displayColumnWidth = defaultDisplayColumnWidth;
+    FinalRE.push_back(re::makeSeq(VectorRE.begin(),VectorRE.end()));
+    /*testing point5*/
+    cout <<"RE make successfully"<<endl;
+    /**/
+    //   re::CC * CC_ast = re::makeCC(accum.getAccumulatedSet());
+    //   VectorRE.push_back(CC_ast);
+    //VectorRE = re::makeSeq(VectorRE.begin(),VectorRE.end());
+    //   FinalRE.push_back(re::makeSeq(VectorRE.begin(),VectorRE.end()));
+    //   UCountFunctionType uCountFunctionPtr = pipelineGen(pxDriver, CC_ast);
 
-    for (unsigned i = 0; i < fileCount; ++i) {
-        std::cout << std::setw(displayColumnWidth);
-        std::cout << theCounts[i] << std::setw(displayColumnWidth);
-        std::cout << " " << allFiles[i].string() << std::endl;
-    }
-    if (inputFiles.size() > 1) {
-        std::cout << std::setw(displayColumnWidth-1);
-        std::cout << totalCount;
-        std::cout << " total" << std::endl;
-    }*/
 
     std::unique_ptr<grep::GrepEngine> grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
+    if ((ColorFlag == alwaysColor) || ((ColorFlag == autoColor) && isatty(STDOUT_FILENO))) {
+        grep->setColoring();
+    }
     grep->initFileResult(allFiles);
-    grep->initREs(VectorRE);
+    grep->initREs(FinalRE);
     grep->grepCodeGen();
     const bool matchFound = grep->searchAllFiles();
 
