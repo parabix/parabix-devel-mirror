@@ -80,9 +80,17 @@
 伙
 烛
 </datafile>
-
 <grepcase regexp = "禾_" datafile = "test6" greplines = "2"/>
 <grepcase regexp = "亻_" datafile = "test6" greplines = "3"/>
 <grepcase regexp = "火_" datafile = "test6" greplines = "4"/>
+
+<datafile id = "test7">
+有人曰河海一体
+有人曰火水不容
+有人曰土水相得益彰
+</datafile>
+<grepcase regexp = "曰_水_" datafile = "test7" greplines = "2"/>
+<grepcase regexp = "曰_火_" datafile = "test7" greplines = "3"/>
+<grepcase regexp = "曰_土_" datafile = "test7" greplines = "4"/>
 
 </greptest>
