@@ -1,9 +1,4 @@
 #include "radical_interface.h"
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/Support/ErrorHandling.h> 
 #include <unicode/data/kRSKangXi.h>
 #include <string>
 #include <iostream>
@@ -16,20 +11,31 @@ using namespace UCD::KRS_ns;
 namespace BS
 {
     //Search for the results by making CCs of each radical and pushing them the vector REs
-    std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode, bool mixMode, bool reMode)
+    std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode, bool mixMode, bool altMode)
     {
         std::vector<re::RE*> REs;
         std::vector<re::RE*> temp;
 
-        if (reMode) { //bug
-            for (std::size_t i = 0; i < reList.size(); i++) {
-                for (std::size_t j = 0; j < reList[i].size(); j++) {
-                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reList[i][j], indexMode, mixMode))));
-                    REs.push_back(re::makeAlt(temp.begin(),temp.end()));
-                    temp.clear();
-                }
-                REs.push_back(re::makeAlt());
+        //SAMPLE CASES FOR altMode:
+        // (NOT SUPPORTED):
+        //./radicalgrep -alt -c auto {火/水}_曰_ ../../QA/radicaltest/testfiles/*  
+        // (WORKING): 
+        //./radicalgrep -alt -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/* 
+        // ./radicalgrep -alt -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/* 
+        // ./radicalgrep -alt -c auto 亻_衣_{生/亅} ../../QA/radicaltest/testfiles/* 
+
+        if (altMode) { 
+            for (std::size_t i = 0; i < zi.size(); i++) {
+                temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi[i], indexMode, mixMode))));
+                REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+                temp.clear();
             }
+
+            for (std::size_t i = 0; i < reTemp.size(); i++) {
+                temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reTemp[i], indexMode, mixMode))));
+            }
+            REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+
         } else {
             for (std::size_t i = 0; i < radical_list.size(); i++) {
                 temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode, mixMode))));
@@ -37,37 +43,18 @@ namespace BS
                 temp.clear();
             }
         }
+
         return std::vector<re::RE*>(1,re::makeSeq(REs.begin(),REs.end()));
     }
 
-    /*std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode, bool mixMode)
-    {
-        std::vector<re::RE*> REs;
-        std::vector<re::RE*> temp;
-
-        for (int i = 0; i < radical_list.size(); i++) {
-            temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode, mixMode))));
-            REs.push_back(re::makeAlt(temp.begin(),temp.end()));
-            temp.clear();
-        }
-       
-        return std::vector<re::RE*>(1,re::makeSeq(REs.begin(),REs.end()));
-    }*/
-
-
     //Parse the input and store the radicals into the radical_list vector
-
-    //SAMPLE CASES FOR reMODE:
-    //./radicalgrep -re -c auto {火/水}_曰_ ../../QA/radicaltest/testfiles/* 
-    // ./radicalgrep -re -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/* ./radicalgrep -re -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/* 
-    // ./radicalgrep -re -c auto 亻_衣_{生/亅} ../../QA/radicaltest/testfiles/* 
-    void RadicalValuesEnumerator::parse_input(string input_radical, bool reMode)
+    void RadicalValuesEnumerator::parse_input(string input_radical, bool altMode)
     {
         stringstream ss(input_radical);
         string temp;
         
         while (getline(ss, temp, '_')) { //tokenize the input 
-            if (reMode) {
+            if (altMode) {
                 if (temp[0] != '{') {
                     zi.push_back(temp);
                 } else if (temp[0] == '{') {
@@ -77,38 +64,7 @@ namespace BS
                 radical_list.push_back(temp); 
             }
         }   
-
-        //DEBUGGING
-        //cout << "zi: " << endl;
-        //for (int i = 0; i < zi.size(); i++) cout << zi[i] << endl;
-
-        if (reMode) {
-            for (std::size_t i = 0; i < reTemp.size(); i++) {
-                if (input_radical[0] != '{') { //case1: 水_{火/水}_
-                    for (std::size_t j = 0; j < zi.size(); j++) ziTemp.push_back(zi[j]); 
-                    ziTemp.push_back(reTemp[i]);
-                    reList.push_back(ziTemp);
-                    ziTemp.clear();
-                } else { //case2: {火/水}_曰_ 
-                    ziTemp.push_back(reTemp[i]); 
-                    for (std::size_t j = 0; j < zi.size(); j++) ziTemp.push_back(zi[j]);
-                    reList.push_back(ziTemp);
-                    ziTemp.clear();
-                }
-            }
-        }
     }
-
-    /*void RadicalValuesEnumerator::parse_input(string input_radical)
-    {
-        stringstream ss(input_radical);
-        string temp;
-
-        while (getline(ss, temp, '_')) { //tokenize the input and store it in radical_list
-            radical_list.push_back(temp);
-        }
-    }*/
-
 
     void RadicalValuesEnumerator::reParse(string expr) {
         expr = expr.substr(1, expr.size() - 2); //erase the brackets {}.

@@ -81,15 +81,13 @@ namespace BS
     class RadicalValuesEnumerator
     {
         public:
-            std::vector<re::RE*> createREs(bool indexMode, bool mixedMode, bool reMode);   //Search for the results
-            void parse_input(string input_radical, bool reMode); //Search for the results by making CCs of each radical and pushing them the vector REs
+            std::vector<re::RE*> createREs(bool indexMode, bool mixedMode, bool altMode);   //Search for the results
+            void parse_input(string input_radical, bool altMode); //Search for the results by making CCs of each radical and pushing them the vector REs
             void reParse(string expr); //For -re mode; tokenizes {X/Y}
         private:
             std::vector<string> radical_list;   //Store the input radical(s)
             std::vector<string> reTemp; //For -re mode; stores the tokenized radicals in reParse()
-            std::vector<string> zi; //For -re mode; stores the non-changed radical in rePare() (e.g. zi would store 亻 and 衣 of 亻_衣_{生/亅})
-            std::vector<string> ziTemp; //For -re mode; temporarily stores 水_水_ before it gets passed on to reList
-            std::vector<vector<string>> reList; //For -re mode; e.g. stores 水_水_ and 水_ 水_火_ of {火/水}_ 
+            std::vector<string> zi; //For -re mode; stores the non-changed radical in rePare() (e.g. zi would store 亻 and 衣 of 亻_衣_{生/亅}) 
     };
 }
 
