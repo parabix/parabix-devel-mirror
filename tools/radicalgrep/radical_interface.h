@@ -86,8 +86,11 @@ namespace BS
             void reParse(string expr); //For -re mode; tokenizes {X/Y}
         private:
             std::vector<string> radical_list;   //Store the input radical(s)
-            std::vector<string> reTemp; //For -re mode; stores the tokenized radicals in reParse()
-            std::vector<string> zi; //For -re mode; stores the non-changed radical in rePare() (e.g. zi would store 亻 and 衣 of 亻_衣_{生/亅}) 
+            std::vector<string> reTemp; //For -alt mode; stores the tokenized radicals in reParse()
+            std::vector<string> zi; //For -alt mode; stores the non-changed radical in rePare() (e.g. zi would store 亻 and 衣 of 亻_衣_{生/亅})
+            std::vector<string> zi2;
+            int position;
+            int c1;
     };
 }
 

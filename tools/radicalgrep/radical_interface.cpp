@@ -2,7 +2,7 @@
 #include <unicode/data/kRSKangXi.h>
 #include <string>
 #include <iostream>
-#include <sstream> 
+#include <sstream>
 
 using namespace std;
 using namespace BS;
@@ -15,41 +15,88 @@ namespace BS
     {
         std::vector<re::RE*> REs;
         std::vector<re::RE*> temp;
-
+        std::vector<re::RE*> temp0;
         //SAMPLE CASES FOR altMode:
-        // (NOT SUPPORTED):
-        //./radicalgrep -alt -c auto {火/水}_曰_ ../../QA/radicaltest/testfiles/*  
-        // (WORKING): 
-        //./radicalgrep -alt -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/* 
-        // ./radicalgrep -alt -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/* 
-        // ./radicalgrep -alt -c auto 亻_衣_{生/亅} ../../QA/radicaltest/testfiles/* 
-
+        //(WORKING):
+        //./radicalgrep -alt -c auto {火/水/土}_曰_ ../QA/radicaltest/testfiles/*
+        //./radicalgrep -alt -c auto {火/水}_曰_ ../../QA/radicaltest/testfiles/*
+        //./radicalgrep -alt -c auto 曰_{火/水/土}_水_ ../QA/radicaltest/testfiles/*
+        //./radicalgrep -alt -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/*
+        // ./radicalgrep -alt -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/*
+        // ./radicalgrep -alt -c auto 亻_衣_{生/亅} ../../QA/radicaltest/testfiles/*
+        
         /*Suppose we have radical expression 亻_衣_{生/亅} as an example.
-        亻and 衣 are stored in the zi vector, and 生 and 亅 are in the reTemp vector*/ 
-        if (altMode) { 
-            //Make the RE for 亻and 衣 first. 
+        亻and 衣 are stored in the zi vector, and 生 and 亅 are in the reTemp vector*/
+        if (altMode)
+        {
+            //Make the RE for 亻and 衣 first.
             //The first loop makes the regular expression for the "non-alternative/set" radicals.
             //First Run: REs[0] = (亻|亻)
             //Second Run: REs[1] = (衣|衣)
-            //REs after the first for loop: (亻|亻)(衣|衣) 
-            for (std::size_t i = 0; i < zi.size(); i++) {
-                temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi[i], indexMode, mixMode)))); 
+            //REs after the first for loop: (亻|亻)(衣|衣)
+            if(position==0)
+            {
+                for (std::size_t i = 0; i < reTemp.size(); i++)
+                {
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reTemp[i], indexMode, mixMode))));
+                }
                 REs.push_back(re::makeAlt(temp.begin(),temp.end()));
-                temp.clear(); //We clear the temp vector, so that the current radical doesn't get written a second time in the next run
+                
+                temp.clear();
+                
+                for (std::size_t i = 0; i < zi2.size(); i++)
+                {
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi2[i], indexMode, mixMode))));
+                    REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+                }
+
+            }
+            else if(0<position<c1-1)
+            {
+                for (std::size_t i = 0; i < zi.size(); i++)
+                {
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi[i], indexMode, mixMode))));
+                    REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+                }
+                for (std::size_t i = 0; i < reTemp.size(); i++)
+                {
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reTemp[i], indexMode, mixMode))));
+                }
+                REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+                
+                temp.clear();
+                
+                for (std::size_t i = 0; i < zi2.size(); i++)
+                {
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi2[i], indexMode, mixMode))));
+                    REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+                }
+            }
+            else
+            {
+                for (std::size_t i = 0; i < zi.size(); i++)
+                {
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi[i], indexMode, mixMode))));
+                    REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+                }
+
+                //Make the RE for {生/亅}; the alterative set of radicals
+                //First Run: temp = 生
+                //Second Run: temp = 生, 亅
+                //Exit 2nd for loop and push contents of temp into REs
+                //REs after the 2nd for loop: (亻|亻)(衣|衣){生|亅}
+                for (std::size_t i = 0; i < reTemp.size(); i++)
+                {
+                    temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reTemp[i], indexMode, mixMode))));
+                }
+                REs.push_back(re::makeAlt(temp.begin(),temp.end()));
             }
 
-            //Make the RE for {生/亅}; the alterative set of radicals
-            //First Run: temp = 生
-            //Second Run: temp = 生, 亅
-            //Exit 2nd for loop and push contents of temp into REs
-            //REs after the 2nd for loop: (亻|亻)(衣|衣){生|亅}
-            for (std::size_t i = 0; i < reTemp.size(); i++) {
-                temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reTemp[i], indexMode, mixMode))));
-            }
-            REs.push_back(re::makeAlt(temp.begin(),temp.end())); 
-
-        } else {
-            for (std::size_t i = 0; i < radical_list.size(); i++) {
+        }
+        else
+        {
+            for (std::size_t i = 0; i < radical_list.size(); i++)
+            {
                 temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode, mixMode))));
                 REs.push_back(re::makeAlt(temp.begin(),temp.end()));
                 temp.clear();
@@ -64,32 +111,54 @@ namespace BS
     {
         stringstream ss(input_radical);
         string temp;
+        int count=0;
+        bool met=false;
         
-        while (getline(ss, temp, '_')) { //tokenize the input 
-            if (altMode) {
+        for(int i=0;i<input_radical.size();i++)
+        {
+            if(input_radical.at(i)=='_')
+                c1++;
+        }
+        position=0;
+        while (getline(ss, temp, '_'))
+        { //tokenize the input
+            if (altMode)
+            {
                 /* As an example, say we have a radical expression of X_Y_{A/B}_.
                 X and Y are passed into the zi vector, and {A/B} is sent to reParse for processing.
                 In reParse, A and B are put into the reTemp vector.*/
-                if (temp[0] != '{') { 
+                if (temp[0] != '{'&&met==false)
+                {
                     zi.push_back(temp);
-                } else if (temp[0] == '{') {
-                   reParse(temp);
                 }
-            } else { //If not -alt mode, store the radicals in radical_list vector
-                radical_list.push_back(temp); 
+                else if (temp[0] == '{')
+                {
+                    position=count;
+                    met=true;
+                    reParse(temp);
+                }
+                else if(temp[0]!='{'&&met==true&&position<c1-1)
+                {
+                    zi2.push_back(temp);
+                }
+                count++;
             }
-        }   
+            else
+            { //If not -alt mode, store the radicals in radical_list vector
+                radical_list.push_back(temp);
+            }
+        }
     }
 
     /* reParse is for -alt mode. it takes an expression {X/Y} passed on by parse_input().
-    It removes the brackets and tokenizes into 'X' and 'Y', 
+    It removes the brackets and tokenizes into 'X' and 'Y',
     and pushes the radicals into the reTemp vector. */
-    void RadicalValuesEnumerator::reParse(string expr) { 
+    void RadicalValuesEnumerator::reParse(string expr) {
         expr = expr.substr(1, expr.size() - 2); //erase the brackets {}.
         stringstream ss(expr);
         string temp;
 
-        while (getline(ss, temp, '/')){ //tokenize the input 
+        while (getline(ss, temp, '/')){ //tokenize the input
             reTemp.push_back(temp);
         }
     }
@@ -136,52 +205,52 @@ namespace BS
     };
 
 BS::map<string, const UCD::UnicodeSet*> UnicodeSetTable::radical_table {
-    {"一",&_1_Set},                    {"丨",&_2_Set},                    {"丶",&_3_Set},                    {"丿",&_4_Set},                    {"乀",&_4_Set},                    {"乁",&_4_Set},                    
-    {"乙",&_5_Set},                    {"乚",&_5_Set},                    {"乛",&_5_Set},                    {"亅",&_6_Set},                    {"二",&_7_Set},                    {"亠",&_8_Set},                    
-    {"人",&_9_Set},                    {"亻",&_9_Set},                    {"儿",&_10_Set},                   {"入",&_11_Set},                   {"八",&_12_Set},                   {"丷",&_12_Set},  
-    {"冂",&_13_Set},                   {"冖",&_14_Set},                   {"冫",&_15_Set},                   {"几",&_16_Set},                   {"凵",&_17_Set},                   {"刀",&_18_Set},        
-    {"刂",&_18_Set},                   {"力",&_19_Set},                   {"勹",&_20_Set},                   {"匕",&_21_Set},                   {"匚",&_22_Set},                   {"匸",&_23_Set},                   
-    {"十",&_24_Set},                   {"卜",&_25_Set},                   {"卩",&_26_Set},                   {"厂",&_27_Set},                   {"厶",&_28_Set},                   {"又",&_29_Set},                   
-    {"口",&_30_Set},                   {"囗",&_31_Set},                   {"土",&_32_Set},                   {"士",&_33_Set},                   {"夂",&_34_Set},                   {"夊",&_35_Set},                   
-    {"夕",&_36_Set},                   {"大",&_37_Set},                   {"女",&_38_Set},                   {"子",&_39_Set},                   {"宀",&_40_Set},                   {"寸",&_41_Set},                   
-    {"小",&_42_Set},                   {"尢",&_43_Set},                   {"尣",&_43_Set},                   {"尸",&_44_Set},                   {"屮",&_45_Set},                   {"山",&_46_Set},                   
-    {"川",&_47_Set},                   {"川",&_47_Set},                   {"巛",&_47_Set},                   {"巜",&_47_Set},                   {"工",&_48_Set},                   {"己",&_49_Set},                   
-    {"巾",&_50_Set},                   {"干",&_51_Set},                   {"幺",&_52_Set},                   {"广",&_53_Set},                   {"廴",&_54_Set},                   {"廾",&_55_Set},                   
-    {"弋",&_56_Set},                   {"弓",&_57_Set},                   {"彐",&_58_Set},                   {"彑",&_58_Set},                   {"彡",&_59_Set},                   {"彳",&_60_Set},                   
+    {"一",&_1_Set},                    {"丨",&_2_Set},                    {"丶",&_3_Set},                    {"丿",&_4_Set},                    {"乀",&_4_Set},                    {"乁",&_4_Set},
+    {"乙",&_5_Set},                    {"乚",&_5_Set},                    {"乛",&_5_Set},                    {"亅",&_6_Set},                    {"二",&_7_Set},                    {"亠",&_8_Set},
+    {"人",&_9_Set},                    {"亻",&_9_Set},                    {"儿",&_10_Set},                   {"入",&_11_Set},                   {"八",&_12_Set},                   {"丷",&_12_Set},
+    {"冂",&_13_Set},                   {"冖",&_14_Set},                   {"冫",&_15_Set},                   {"几",&_16_Set},                   {"凵",&_17_Set},                   {"刀",&_18_Set},
+    {"刂",&_18_Set},                   {"力",&_19_Set},                   {"勹",&_20_Set},                   {"匕",&_21_Set},                   {"匚",&_22_Set},                   {"匸",&_23_Set},
+    {"十",&_24_Set},                   {"卜",&_25_Set},                   {"卩",&_26_Set},                   {"厂",&_27_Set},                   {"厶",&_28_Set},                   {"又",&_29_Set},
+    {"口",&_30_Set},                   {"囗",&_31_Set},                   {"土",&_32_Set},                   {"士",&_33_Set},                   {"夂",&_34_Set},                   {"夊",&_35_Set},
+    {"夕",&_36_Set},                   {"大",&_37_Set},                   {"女",&_38_Set},                   {"子",&_39_Set},                   {"宀",&_40_Set},                   {"寸",&_41_Set},
+    {"小",&_42_Set},                   {"尢",&_43_Set},                   {"尣",&_43_Set},                   {"尸",&_44_Set},                   {"屮",&_45_Set},                   {"山",&_46_Set},
+    {"川",&_47_Set},                   {"川",&_47_Set},                   {"巛",&_47_Set},                   {"巜",&_47_Set},                   {"工",&_48_Set},                   {"己",&_49_Set},
+    {"巾",&_50_Set},                   {"干",&_51_Set},                   {"幺",&_52_Set},                   {"广",&_53_Set},                   {"廴",&_54_Set},                   {"廾",&_55_Set},
+    {"弋",&_56_Set},                   {"弓",&_57_Set},                   {"彐",&_58_Set},                   {"彑",&_58_Set},                   {"彡",&_59_Set},                   {"彳",&_60_Set},
     {"心",&_61_Set},                   {"忄",&_61_Set},                   {"戈",&_62_Set},                   {"戶",&_63_Set},                   {"手",&_64_Set},                   {"扌",&_64_Set},
-    {"支",&_65_Set},                   {"攴",&_66_Set},                   {"攵",&_66_Set},                   {"文",&_67_Set},                   {"斗",&_68_Set},                   {"斤",&_69_Set},                   
-    {"方",&_70_Set},                   {"无",&_71_Set},                   {"日",&_72_Set},                   {"曰",&_73_Set},                   {"月",&_74_Set},                   {"木",&_75_Set},                   
-    {"欠",&_76_Set},                   {"止",&_77_Set},                   {"歹",&_78_Set},                   {"殳",&_79_Set},                   {"毋",&_80_Set},                   {"比",&_81_Set},                   
-    {"毛",&_82_Set},                   {"氏",&_83_Set},                   {"气",&_84_Set},                   {"水",&_85_Set},                   {"氵",&_85_Set},                   {"火",&_86_Set},                  
+    {"支",&_65_Set},                   {"攴",&_66_Set},                   {"攵",&_66_Set},                   {"文",&_67_Set},                   {"斗",&_68_Set},                   {"斤",&_69_Set},
+    {"方",&_70_Set},                   {"无",&_71_Set},                   {"日",&_72_Set},                   {"曰",&_73_Set},                   {"月",&_74_Set},                   {"木",&_75_Set},
+    {"欠",&_76_Set},                   {"止",&_77_Set},                   {"歹",&_78_Set},                   {"殳",&_79_Set},                   {"毋",&_80_Set},                   {"比",&_81_Set},
+    {"毛",&_82_Set},                   {"氏",&_83_Set},                   {"气",&_84_Set},                   {"水",&_85_Set},                   {"氵",&_85_Set},                   {"火",&_86_Set},
     {"爪",&_87_Set},                   {"爫",&_87_Set},                   {"父",&_88_Set},                   {"爻",&_89_Set},                   {"爿",&_90_Set},                   {"丬",&_90_Set},
-    {"片",&_91_Set},                   {"牙",&_92_Set},                   {"牛",&_93_Set},                   {"牜",&_93_Set},                   {"犬",&_94_Set},                   {"犭",&_94_Set}, 
-    {"玄",&_95_Set},                   {"玉",&_96_Set},                   {"王",&_96_Set},                   {"瓜",&_97_Set},                   {"瓦",&_98_Set},                   {"甘",&_99_Set},                   
-    {"生",&_100_Set},                  {"用",&_101_Set},                  {"田",&_102_Set},                  {"疋",&_103_Set},                  {"疒",&_104_Set},                  {"癶",&_105_Set},                 
-    {"白",&_106_Set},                  {"皮",&_107_Set},                  {"皿",&_108_Set},                  {"目",&_109_Set},                  {"矛",&_110_Set},                  {"矢",&_111_Set},                 
+    {"片",&_91_Set},                   {"牙",&_92_Set},                   {"牛",&_93_Set},                   {"牜",&_93_Set},                   {"犬",&_94_Set},                   {"犭",&_94_Set},
+    {"玄",&_95_Set},                   {"玉",&_96_Set},                   {"王",&_96_Set},                   {"瓜",&_97_Set},                   {"瓦",&_98_Set},                   {"甘",&_99_Set},
+    {"生",&_100_Set},                  {"用",&_101_Set},                  {"田",&_102_Set},                  {"疋",&_103_Set},                  {"疒",&_104_Set},                  {"癶",&_105_Set},
+    {"白",&_106_Set},                  {"皮",&_107_Set},                  {"皿",&_108_Set},                  {"目",&_109_Set},                  {"矛",&_110_Set},                  {"矢",&_111_Set},
     {"石",&_112_Set},                  {"示",&_113_Set},                  {"礻",&_113_Set},                  {"禸",&_114_Set},                  {"禾",&_115_Set},                  {"穴",&_116_Set},
-    {"立",&_117_Set},                  {"竹",&_118_Set},                  {"⺮",&_118_Set},                  {"米",&_119_Set},                  {"糸",&_120_Set},                  {"纟",&_120_Set}, 
-    {"缶",&_121_Set},                  {"网",&_122_Set},                  {"罒",&_122_Set},                  {"羊",&_123_Set},                  {"羽",&_124_Set},                  {"老",&_125_Set},                 
-    {"而",&_126_Set},                  {"耒",&_127_Set},                  {"耳",&_128_Set},                  {"聿",&_129_Set},                  {"肉",&_130_Set},                  {"臣",&_131_Set},                 
-    {"自",&_132_Set},                  {"至",&_133_Set},                  {"臼",&_134_Set},                  {"舌",&_135_Set},                  {"舛",&_136_Set},                  {"舟",&_137_Set},                 
-    {"艮",&_138_Set},                  {"色",&_139_Set},                  {"艸",&_140_Set},                  {"艹",&_140_Set},                  {"虍",&_141_Set},                  {"虫",&_142_Set},                 
+    {"立",&_117_Set},                  {"竹",&_118_Set},                  {"⺮",&_118_Set},                  {"米",&_119_Set},                  {"糸",&_120_Set},                  {"纟",&_120_Set},
+    {"缶",&_121_Set},                  {"网",&_122_Set},                  {"罒",&_122_Set},                  {"羊",&_123_Set},                  {"羽",&_124_Set},                  {"老",&_125_Set},
+    {"而",&_126_Set},                  {"耒",&_127_Set},                  {"耳",&_128_Set},                  {"聿",&_129_Set},                  {"肉",&_130_Set},                  {"臣",&_131_Set},
+    {"自",&_132_Set},                  {"至",&_133_Set},                  {"臼",&_134_Set},                  {"舌",&_135_Set},                  {"舛",&_136_Set},                  {"舟",&_137_Set},
+    {"艮",&_138_Set},                  {"色",&_139_Set},                  {"艸",&_140_Set},                  {"艹",&_140_Set},                  {"虍",&_141_Set},                  {"虫",&_142_Set},
     {"血",&_143_Set},                  {"行",&_144_Set},                  {"衣",&_145_Set},                  {"衤",&_145_Set},                  {"襾",&_146_Set},                  {"覀",&_146_Set},
-    {"見",&_147_Set},                  {"見",&_147_Set},                  {"见",&_147_Set},                  {"角",&_148_Set},                  {"言",&_149_Set},                  {"讠",&_149_Set},                 
+    {"見",&_147_Set},                  {"見",&_147_Set},                  {"见",&_147_Set},                  {"角",&_148_Set},                  {"言",&_149_Set},                  {"讠",&_149_Set},
     {"谷",&_150_Set},                  {"豆",&_151_Set},                  {"豕",&_152_Set},                  {"豸",&_153_Set},                  {"貝",&_154_Set},                  {"贝",&_154_Set},
-    {"赤",&_155_Set},                  {"走",&_156_Set},                  {"足",&_157_Set},                  {"⻊",&_157_Set},                  {"足",&_157_Set},                  {"身",&_158_Set},                 
+    {"赤",&_155_Set},                  {"走",&_156_Set},                  {"足",&_157_Set},                  {"⻊",&_157_Set},                  {"足",&_157_Set},                  {"身",&_158_Set},
     {"車",&_159_Set},                  {"車",&_159_Set},                  {"辛",&_160_Set},                  {"辰",&_161_Set},                  {"辵",&_162_Set},                  {"辶",&_162_Set},
-    {"邑",&_163_Set},                  {"⻏",&_163_Set},                  {"酉",&_164_Set},                  {"釆",&_165_Set},                  {"里",&_166_Set},                  {"金",&_167_Set},                 
+    {"邑",&_163_Set},                  {"⻏",&_163_Set},                  {"酉",&_164_Set},                  {"釆",&_165_Set},                  {"里",&_166_Set},                  {"金",&_167_Set},
     {"長",&_168_Set},                  {"长",&_168_Set},                  {"門",&_169_Set},                  {"门",&_169_Set},                  {"阜",&_170_Set},                  {"阝",&_170_Set},
-    {"隶",&_171_Set},                  {"隹",&_172_Set},                  {"雨",&_173_Set},                  {"青",&_174_Set},                  {"非",&_175_Set},                  {"面",&_176_Set},                 
+    {"隶",&_171_Set},                  {"隹",&_172_Set},                  {"雨",&_173_Set},                  {"青",&_174_Set},                  {"非",&_175_Set},                  {"面",&_176_Set},
     {"革",&_177_Set},                  {"韋",&_178_Set},                  {"韦",&_178_Set},                  {"韭",&_179_Set},                  {"音",&_180_Set},                  {"頁",&_181_Set},
-    {"页",&_181_Set},                  {"風",&_182_Set},                  {"风",&_182_Set},                  {"飛",&_183_Set},                  {"飞",&_183_Set},                  {"食",&_184_Set},                 
+    {"页",&_181_Set},                  {"風",&_182_Set},                  {"风",&_182_Set},                  {"飛",&_183_Set},                  {"飞",&_183_Set},                  {"食",&_184_Set},
     {"飠",&_184_Set},                  {"饣",&_184_Set},                  {"首",&_185_Set},                  {"香",&_186_Set},                  {"馬",&_187_Set},                  {"马",&_187_Set},
     {"骨",&_188_Set},                  {"高",&_189_Set},                  {"髟",&_190_Set},                  {"鬥",&_191_Set},                  {"鬯",&_192_Set},                  {"鬲",&_193_Set},
-    {"鬼",&_194_Set},                  {"魚",&_195_Set},                  {"鱼",&_195_Set},                  {"鳥",&_196_Set},                  {"鸟",&_196_Set},                  {"鹵",&_197_Set},                 
-    {"鹿",&_198_Set},                  {"麥",&_199_Set},                  {"麦",&_199_Set},                  {"麻",&_200_Set},                  {"黃",&_201_Set},                  {"黍",&_202_Set},                 
-    {"黑",&_203_Set},                  {"黹",&_204_Set},                  {"黽",&_205_Set},                  {"黾",&_205_Set},                  {"鼎",&_206_Set},                  {"鼓",&_207_Set},                 
+    {"鬼",&_194_Set},                  {"魚",&_195_Set},                  {"鱼",&_195_Set},                  {"鳥",&_196_Set},                  {"鸟",&_196_Set},                  {"鹵",&_197_Set},
+    {"鹿",&_198_Set},                  {"麥",&_199_Set},                  {"麦",&_199_Set},                  {"麻",&_200_Set},                  {"黃",&_201_Set},                  {"黍",&_202_Set},
+    {"黑",&_203_Set},                  {"黹",&_204_Set},                  {"黽",&_205_Set},                  {"黾",&_205_Set},                  {"鼎",&_206_Set},                  {"鼓",&_207_Set},
     {"鼠",&_208_Set},                  {"鼡",&_208_Set},                  {"鼻",&_209_Set},                  {"齊",&_210_Set},                  {"齐",&_210_Set},                  {"齒",&_211_Set},
     {"齿",&_211_Set},                  {"龍",&_212_Set},                  {"龙",&_212_Set},                  {"龜",&_213_Set},                  {"龟",&_213_Set},                  {"龠",&_214_Set},
-    {"灬",&_86_Set}               
+    {"灬",&_86_Set}
 };
 
 BS::map<string, const UCD::UnicodeSet*> UnicodeSetTable::mixed_table{
