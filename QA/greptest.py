@@ -23,6 +23,7 @@ import xml.parsers.expat
 import sys
 import codecs
 import random
+import locale
 
 sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 sys.stderr = codecs.getwriter('utf8')(sys.stderr)
@@ -35,7 +36,7 @@ fileContents = {}
 def getFileContents(fileName):
     if not fileName in fileContents:
         outfpath = os.path.join(options.datafile_dir, fileName)
-        f = codecs.open(outfpath, encoding='utf-8', mode='r')
+        f = codecs.open(outfpath, encoding='utf-16le', mode='r')
         fileContents[fileName] = f.read()
         f.close()
     return fileContents[fileName]
@@ -55,8 +56,8 @@ def start_element_open_file(name, attrs):
             print("Expecting id attribute for datafile, but none found.")
             exit(-1)
         outfpath = os.path.join(options.datafile_dir, dataFileName)
-        if options.utf16: outf = codecs.open(outfpath, encoding='utf-16BE', mode='w')
-        else: outf = codecs.open(outfpath, encoding='utf-8', mode='w')
+        if options.utf16: outf = codecs.open(outfpath, encoding='utf-16le', mode='w')
+        else: outf = codecs.open(outfpath, encoding='utf-16le', mode='w')
         in_datafile = True
 
 def char_data_write_contents(data):
@@ -131,21 +132,32 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
         if flag_string != "": flag_string += u" "
         if flags[f] == True: flag_string += f
         else: flag_string += f + "=" + flags[f]
-    grep_cmd = u"%s %s '%s' %s" % (grep_program_under_test, flag_string, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
+    outfpath = os.path.join(options.datafile_dir, datafile)
+    grep_cmd = u"%s %s '%s' %s" % (grep_program_under_test, flag_string, escape_quotes(regexp), outfpath)
     if options.verbose:
         print("Doing: " + grep_cmd)
     try:
-        grep_out = codecs.decode(subprocess.check_output(grep_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True), 'utf-8')
+        grep_out = subprocess.check_output(grep_cmd, shell=True) 
     except subprocess.CalledProcessError as e:
         grep_out = codecs.decode(e.output, 'utf-8')
-    if len(grep_out) > 0 and grep_out[-1] == '\n': grep_out = grep_out[:-1]
+    if "-c" not in flags:
+        testpath = os.path.join(options.datafile_dir, 'test_output.txt')
+        f = codecs.open(testpath, mode='w+')
+        f.write(grep_out)
+        f.close()
+        f = codecs.open(testpath, encoding='utf-16le', mode='r')
+        grep_out = f.read()
+        f.close()
+    #print(":".join("{:x}".format(ord(c)) for c in expected_result), "expected_result")
+
+    if len(grep_out) > 1 and grep_out[-1] == '\n':
+        grep_out = grep_out[:-1]
     if grep_out != expected_result:
         print(u"Test failure: {%s} expecting {%s} got {%s}" % (grep_cmd, expected_result, grep_out))
         failure_count += 1
     else:
         if options.verbose:
             print(u"Test success: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_result, grep_out))
-
 
 flag_map = {'-CarryMode' : ['Compressed', 'BitBlock'],
             'counting_choices' : ["-c", "-l", "-L"],
@@ -209,7 +221,7 @@ def start_element_do_test(name, attrs):
             else:
                 for i in range(options.tests_per_grepcase):
                     flags = {}
-                    add_random_flags(flags, fileLength)
+ #                   add_random_flags(flags, fileLength)
                     expected_result = expected_grep_results(attrs['datafile'], lines, flags)
                     execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
 
