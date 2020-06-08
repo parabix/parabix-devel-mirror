@@ -168,8 +168,8 @@ Plans for iteration 3 include:
 
 1. ~~Implement switch between two search modes, users can choose any search mode; kangxi radical indices and actual kangxi radical.~~ **(Done)**
 2. ~~Fix colorization issue.~~ **(Done)**
-3. ~~Implement a search mode which allows for both index and kangxi radical. (e.g. 水_143_)~~ **(Done)**
-4. Implement a search mode like this 水_{火/水}_. 
+3. ~~Implement a search mode which allows for both index and kangxi radical. (e.g. `水_143_`)~~ **(Done)**
+4. ~~Implement a search mode like this `水_{火/水}_`.~~**(Done)**
 5. ~~Add support for input with >2 radicals.~~ **(Done)**
 6. Graphical interface (If time allows.)
 
@@ -187,8 +187,15 @@ Plans for iteration 3 include:
 ### Radical Grep Version 3.2
 
 * Input with both radical characters and radical indices is now supported. To use this function, include the option flag `-m` in your input.
-* `-alt` flag functionality added, for instance `亻_衣_{/亅}` will search for `亻_衣_生_` and `亻_衣_亅`.
-  
+* `-alt` flag functionality added, for instance `亻_衣_{生/亅}_` will search for `亻_衣_生_` and `亻_衣_亅_`.
+
+##### Radical Grep Version 3.2.1
+
+- Add two versions of `-alt` flag functionality input, one is the alternative part is at the beginning and the other is the alternative part at anywhere except the beginning and the end. 
+
+  For instance, `{火/水/土}_曰_` will search for `火_曰_`, `水_曰_` and `土_曰_`; `水_{火/水/人}_曰_` will search for `水_火_曰_`, `水_水_曰_` and `水_人_曰_`.
+
+
 
 ## Example 1: Kangxi Radical Index Search Mode and Colorization Turned On
 
@@ -231,17 +238,30 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 ## Example 5: Input with Alternative Characters 
 
     Input: -alt -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/*
-
+    
     Output: 喝着**汽水**
             “水曰润下”，代表了**滋润**、下行、寒凉、闭藏的性质，在人体为肾和膀胱
             “火曰炎上”，代表了**温热**、向上等性质，在人体为心和小肠
-
-    Input: ./radicalgrep -re -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/*
-
+    
+    Input: ./radicalgrep -alt -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/*
+    
     Output: 喝着**汽水**
             “水曰润下”，代表了**滋润**、下行、寒凉、闭藏的性质，在人体为肾和膀胱
             “火曰炎上”，代表了**温热**、向上等性质，在人体为心和小肠
-            
+           
+    Input: ./radicalgrep -alt -c auto {火/水/土}_曰_ ../../QA/radicaltest/testfiles/*
+    
+    Output: “**水曰**润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
+    				“**火曰**炎上”，代表了温热、向上等性质，在人体为心和小肠
+    				“**土曰**稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
+    				
+    Input: ./radicalgrep -alt -c auto 曰_{火/水/土}_水_ ../../QA/radicaltest/testfiles/*
+    
+    Output: 有人**曰河海**一体
+    				有人**曰火水**不容
+    				有人**曰土水**相得益彰
+    
+
 ​    
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
@@ -251,4 +271,4 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruonan),  Pan Chuwen
 
-**Last Updated:** 2020/06/07
+**Last Updated:** 2020/06/08
