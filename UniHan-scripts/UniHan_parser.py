@@ -89,6 +89,7 @@ def parse_fields(fields, field_name):
 KPY_Pattern = re.compile(r"U\+(\w+?)\s+(kHanyuPinyin)\s+(.+)")
 KXHC_Pattern = re.compile(r"U\+(\w+?)\s+(kXHC1983)\s+(.+)")
 KMandarin_Pattern = re.compile(r"U\+(\w+?)\s+(kMandarin)\s+(.+)")
+Codepoint_Pattern = re.compile(r"U\+(\w+?)\s+\w+")
 
 def parse_Reading_txt(f, property_code):
     # replace the utility of property object
@@ -103,20 +104,38 @@ def parse_Reading_txt(f, property_code):
         # prop_values contains all syllable without tones
         # value map use syllable without tones as keys, 
         # and corresponding values are 5-element lists from 0(no tone) to 4
+        prev_codepoint = 0
+        has_field_hanyupinyin = False
         for line in lines:
             match_obj = None
+            codepoint_match_obj = Codepoint_Pattern.match(line)
+            if(codepoint_match_obj is None):
+                continue
+            current_codepoint = int(codepoint_match_obj.group(1), 16)
+            # Different Database
+            # ============================================
             if(property_code == 'kpy'):
                 match_obj = KPY_Pattern.match(line)
                 # kHanyuPinyin need to work with kMandarin
-                if(match_obj is None):
+                # use kMandarin only if no kHanyuPinyin for this codepoint
+                if(prev_codepoint != current_codepoint):
+                    prev_codepoint = current_codepoint # encounter a new codepoint
+                    has_field_hanyupinyin = False # reset
+                if(match_obj is not None):
+                    has_field_hanyupinyin = True
+                if(not has_field_hanyupinyin): 
+                    # will not into the branch for this codepoint once kHanyuPinyin encountered
+                    # kMandarin is below kHanyuPinyin
                     match_obj = KMandarin_Pattern.match(line)
             else:
                 match_obj = KXHC_Pattern.match(line)
+            # ===========================================
             if(match_obj is not None):
                 parsed_property = {}
                 codepoint = match_obj.group(1)
                 field_name = match_obj.group(2)
                 fields = match_obj.group(3)
+
                 pinyin_list = parse_fields(fields, field_name)
 
                 parsed_property["codepoint"] = codepoint

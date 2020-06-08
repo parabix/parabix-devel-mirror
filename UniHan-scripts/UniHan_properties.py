@@ -125,8 +125,8 @@ class UniHan_generator():
 
 def UniHan_main():
     UniHan = UniHan_generator()
-    #UniHan.generate_property_value_file('Unihan_Readings','kpy')
-    #UniHan.generate_property_value_file('Unihan_Readings','kxhc')
+    UniHan.generate_property_value_file('Unihan_Readings','kpy')
+    UniHan.generate_property_value_file('Unihan_Readings','kxhc')
     UniHan.generate_property_value_file('Unihan_Variants', 'ktrd')
 
 if __name__ == "__main__":

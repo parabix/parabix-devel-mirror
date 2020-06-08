@@ -138,7 +138,7 @@ In the third iteration, we will implement **pinyingrep** version 2.0 with additi
 #### 9. Selecting different database
 * The database supported currently is:
     * `XHC1983`: it is the data from the `kXHC1983` field of `Unihan_Reading.txt` in Unihan database
-    * `HanyuPinyin`: it is the combination of data from the `kHanyuPinyin` field and the `kMandarin` field of `Unihan_Reading.txt` in Unihan database
+    * `HanyuPinyin`: it is the combination of data from the `kHanyuPinyin` field and the `kMandarin` field of `Unihan_Reading.txt` in Unihan database. `kMandarin` is only used when the codepoint has no `kHanyuPinyin` field, in case the pinyin syllable in `kMandarin` field is not included in `kHanyuPinyin` field like `U+9B0C`
     * Data differences:
         * for example, `明` has a rare reading `meng4` in `HanyuPinyin`
 * the default database is `XHC1983`
@@ -161,6 +161,10 @@ command line flag `-kpy` need to be in place.
 * Command Line flag `-e` is used to turn on such a mode.
 
 ## Version History
+#### Version 1.4
+**Pinyingrep** version 1.4 updates:
+1. `kHanyuPinyin` database is used together with `kMandarin` in a better way:
+    * `kMandarin` is only used when the codepoint has no `kHanyuPinyin` field, in case the pinyin syllable in `kMandarin` field is not included in `kHanyuPinyin` field like `U+9B0C`.
 #### Version 1.3
 **Pinyingrep** version 1.3 supports:
 1. Exact match mode(turned on by `-e`)
