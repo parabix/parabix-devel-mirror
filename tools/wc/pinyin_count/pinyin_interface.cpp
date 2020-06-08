@@ -72,15 +72,17 @@ namespace PY{
             resolved.second = vector<int>{0, 1, 2, 3, 4};
         }
         // resolve regex '?'
-        std::size_t qmark_index = s.find('?');
+	std::size_t qmark_index = s.find('?');
         if(qmark_index != s.npos){
-            if(s.find("g?") == s.npos) 
-                throw ParserException("Invalid Syntax -- only support ? after \'g\'");
+            if(qmark_index == 0) 
+                throw ParserException("Invalid Syntax -- only support ? after something'");
             // erase ?
-            s = s.substr(0, qmark_index);
-            resolved.first.push_back(s.substr(0, s.find_last_of('g'))); // push_back the syllable without g
+            s.erase(qmark_index,1);
+	    string tmps = s;
+            resolved.first.push_back(tmps.erase(qmark_index-1,1));
         }
         resolved.first.push_back(s); // push s into possibly final result
+
         
         // resolve regex '.'
         if(s.find('.') != s.npos){
@@ -88,7 +90,7 @@ namespace PY{
             for(int i = 0; i < initial_size; i++){
                 pattern = regex(resolved.first[0]);
                 for(auto iter = table.legal_begin(); iter != table.legal_end(); iter++){
-                    if(regex_match(*iter, pattern)){
+                    if(regex_match(*iter, pattern) && table.is_legal(*iter)){
                         resolved.first.push_back(*iter);
                     }
                 }
