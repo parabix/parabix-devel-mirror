@@ -24,17 +24,29 @@ namespace BS
         // ./radicalgrep -alt -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/* 
         // ./radicalgrep -alt -c auto 亻_衣_{生/亅} ../../QA/radicaltest/testfiles/* 
 
+        /*Suppose we have radical expression 亻_衣_{生/亅} as an example.
+        亻and 衣 are stored in the zi vector, and 生 and 亅 are in the reTemp vector*/ 
         if (altMode) { 
+            //Make the RE for 亻and 衣 first. 
+            //The first loop makes the regular expression for the "non-alternative/set" radicals.
+            //First Run: REs[0] = (亻|亻)
+            //Second Run: REs[1] = (衣|衣)
+            //REs after the first for loop: (亻|亻)(衣|衣) 
             for (std::size_t i = 0; i < zi.size(); i++) {
-                temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi[i], indexMode, mixMode))));
+                temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(zi[i], indexMode, mixMode)))); 
                 REs.push_back(re::makeAlt(temp.begin(),temp.end()));
-                temp.clear();
+                temp.clear(); //We clear the temp vector, so that the current radical doesn't get written a second time in the next run
             }
 
+            //Make the RE for {生/亅}; the alterative set of radicals
+            //First Run: temp = 生
+            //Second Run: temp = 生, 亅
+            //Exit 2nd for loop and push contents of temp into REs
+            //REs after the 2nd for loop: (亻|亻)(衣|衣){生|亅}
             for (std::size_t i = 0; i < reTemp.size(); i++) {
                 temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(reTemp[i], indexMode, mixMode))));
             }
-            REs.push_back(re::makeAlt(temp.begin(),temp.end()));
+            REs.push_back(re::makeAlt(temp.begin(),temp.end())); 
 
         } else {
             for (std::size_t i = 0; i < radical_list.size(); i++) {
@@ -47,7 +59,7 @@ namespace BS
         return std::vector<re::RE*>(1,re::makeSeq(REs.begin(),REs.end()));
     }
 
-    //Parse the input and store the radicals into the radical_list vector
+    //Parse the input and store the radicals into vector(s)
     void RadicalValuesEnumerator::parse_input(string input_radical, bool altMode)
     {
         stringstream ss(input_radical);
@@ -55,18 +67,24 @@ namespace BS
         
         while (getline(ss, temp, '_')) { //tokenize the input 
             if (altMode) {
-                if (temp[0] != '{') {
+                /* As an example, say we have a radical expression of X_Y_{A/B}_.
+                X and Y are passed into the zi vector, and {A/B} is sent to reParse for processing.
+                In reParse, A and B are put into the reTemp vector.*/
+                if (temp[0] != '{') { 
                     zi.push_back(temp);
                 } else if (temp[0] == '{') {
                    reParse(temp);
                 }
-            } else {
+            } else { //If not -alt mode, store the radicals in radical_list vector
                 radical_list.push_back(temp); 
             }
         }   
     }
 
-    void RadicalValuesEnumerator::reParse(string expr) {
+    /* reParse is for -alt mode. it takes an expression {X/Y} passed on by parse_input().
+    It removes the brackets and tokenizes into 'X' and 'Y', 
+    and pushes the radicals into the reTemp vector. */
+    void RadicalValuesEnumerator::reParse(string expr) { 
         expr = expr.substr(1, expr.size() - 2); //erase the brackets {}.
         stringstream ss(expr);
         string temp;
