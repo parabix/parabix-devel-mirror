@@ -120,7 +120,7 @@ Output:
 	这列子可能是重要
 	想要好成绩，
 ```
-#### Testcase 7 -- *Multiple Input*
+#### Testcase 7 -- *Sequence Search*
 Input multiple pinyin, using quotation marks (`"<word1>` `<word2>"`)
 
 ```
