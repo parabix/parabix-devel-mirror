@@ -33,7 +33,7 @@ Support for pinyin using regular expressions.
 - `m.ng`
 ##### 1. Multiple Input
 Support for multiple pinyin input.
-- `ma,fan`
+- `"ma fan"`
 
 
 ## Iteration 3: Final Product
