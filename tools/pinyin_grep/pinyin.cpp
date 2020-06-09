@@ -1,6 +1,14 @@
 #include"pinyin.h"
 namespace PinyinPattern{
-/*  
+    vector <vector<string>> syl { {"a", "ā", "á", "ǎ", "à"},
+        {"o", "ō", "ó", "ǒ", "ò"},
+        {"e", "ē", "é", "ě", "è"},
+        {"i", "ī", "í", "ǐ", "ì"},
+        {"u", "ū", "ú", "ǔ", "ù"},
+        {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
+        {"m", "m̄", "ḿ", "m̀"},
+        {"n", "ń", "ň", "ǹ"} };
+/*
     Before Search works as the following three steps:
     1. divide the input into single or multi syllables1
     2. parse those syllables to transfer them to formal format for searching
@@ -30,38 +38,33 @@ namespace PinyinPattern{
         }
         
 
-        vector <vector<string>> syl { {"a", "ā", "á", "ǎ", "à"},
-            {"o", "ō", "ó", "ǒ", "ò"},
-            {"e", "ē", "é", "ě", "è"},
-            {"i", "ī", "í", "ǐ", "ì"},
-            {"u", "ū", "ú", "ǔ", "ù"},
-            {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
-            {"m", "m̄", "ḿ", "m̀"},
-            {"n", "ń", "ň", "ǹ"} };
+
         for(size_t i=0; i<Divided.size(); i++){
             string word = Divided[i];
             vector<string> temp_vec;
-            if (word.find('.') != string::npos) // found regex .
+            vector<string> tone_parse;
+            /*if find regex . , store all possible syllables without tone in the tone_parse*/
+            if (word.find('.') != string::npos)
             {
                 for (int j=0; j<6; j++){
                     temp = word;
                     temp.replace(word.find('.'), 1, syl[j][0]);
-                    Divided.push_back(temp);
+                    tone_parse.push_back(temp);
                 }
-                Divided.erase(Divided.begin()+i);
-                i--;
             }
-            else if (word.find('?') != string::npos) // found regex ?
+            /*if find regex ? , store all possible syllables without tone in the tone_parse*/
+            else if (word.find('?') != string::npos)
             {
                 temp = temp2 = word;
                 temp.replace(word.find('?'), 1, "");
-                Divided.push_back(temp);
+                tone_parse.push_back(temp);
                 temp2.replace(word.find('?')-1, 2, "");
-                Divided.push_back(temp2);
+                tone_parse.push_back(temp2);
             }
+            /*if the word has digital tone, replace it with the regex one*/
             else if (word.find('1') != string::npos || word.find('2') != string::npos|| word.find('3') != string::npos|| word.find('4') != string::npos)
             {
-                int tone = 0;
+                int tone=0;
                 if (word.find('1') != string::npos)
                 {
                     tone = 1;
@@ -87,6 +90,7 @@ namespace PinyinPattern{
                     }
                 }
             }
+            /*deal with the example for mang*/
             else if (All_Alpha(word))
             {
                 for (size_t j=0; j<syl.size(); j++)
@@ -101,9 +105,33 @@ namespace PinyinPattern{
                     }
                 }
             }
+            /*the default one is the one has regex tone */
             else
             {
                 temp_vec.push_back(word);
+            }
+            //parse the tone_parse
+            for(vector<string>::iterator temp_iter = tone_parse.begin();temp_iter!=tone_parse.end();temp_iter++)
+            {
+                string parse_tone = *temp_iter;
+                if(All_Alpha(parse_tone))
+                {
+                    for (size_t j=0; j<syl.size(); j++)
+                    {
+                        if (parse_tone.find(syl[j][0]) != string::npos){
+                            for (size_t k=1; k<syl[j].size(); k++){
+                                temp = parse_tone;
+                                temp.replace(parse_tone.find(syl[j][0]), 1, syl[j][k]);
+                                temp_vec.push_back(temp);;
+                            }
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    temp_vec.push_back(parse_tone);
+                }
             }
             
             //adding the prefix and suffix to all the strings
@@ -116,7 +144,10 @@ namespace PinyinPattern{
             // }
             // llvm::errs() << "\n";
             
-            FinalVec.push_back(temp_vec);
+            if(temp_vec.size()!=0)
+            {
+                FinalVec.push_back(temp_vec);
+            }
         }
         Divided = vector <string>(); //deallocate unused vector
         
@@ -145,7 +176,7 @@ namespace PinyinPattern{
         return temp;
     }
     
-
+    //check if the string is all English words
     bool All_Alpha(string word)
     {
         for(size_t a=0; a<word.length(); a++){
