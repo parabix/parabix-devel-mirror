@@ -90,7 +90,7 @@ namespace PY{
             for(int i = 0; i < initial_size; i++){
                 pattern = regex(resolved.first[0]);
                 for(auto iter = table.legal_begin(); iter != table.legal_end(); iter++){
-                    if(regex_match(*iter, pattern) && table.is_legal(*iter)){
+                    if(regex_match(*iter, pattern)){
                         resolved.first.push_back(*iter);
                     }
                 }
