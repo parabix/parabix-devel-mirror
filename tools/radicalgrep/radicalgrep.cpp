@@ -45,8 +45,8 @@
 
 namespace fs = boost::filesystem;
 
-const int MatchFoundExitCode=0;
-const int MatchNotFoundExitCode=1;
+//const int MatchFoundExitCode=0;
+//const int MatchNotFoundExitCode=1;
 
 using namespace std;
 using namespace llvm;
@@ -70,6 +70,10 @@ static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of 
                                             clEnumValN(autoColor,   "auto", "Turn on colorization only when outputting to terminal"),
                                             clEnumValN(neverColor,  "never", "Turn off output colorization")
                                             CL_ENUM_VAL_SENTINEL), cl::cat(radicalgrepFlags), cl::location(ColorFlag), cl::init(neverColor));
+bool LineNumberFlag;
+static cl::opt<bool, true> LineNumberOption("n", cl::location(LineNumberFlag), cl::desc("Show the line number with each matching line."), cl::cat(radicalgrepFlags));
+bool WithFilenameFlag;
+static cl::opt<bool, true> WithFilenameOption("h", cl::location(WithFilenameFlag), cl::desc("Show the file name with each matching line."), cl::cat(radicalgrepFlags));
 
 std::vector<fs::path> allfiles; //Store all path of files
 
@@ -85,11 +89,15 @@ int main(int argc, char* argv[])
     }
     CPUDriver pxDriver("radicalgrep");
     allfiles=argv::getFullFileList(pxDriver, inputfiles);
+
+    if ((allfiles.size() > 1)) WithFilenameFlag = true;
     
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto radicalREs=generateREs(input_radical, altMode); //get the results
 
+    if (WithFilenameFlag) grep->showFileNames();
+    if (LineNumberFlag) grep->showLineNumbers();
     //turn on colorizartion if specified by user
     if ((ColorFlag == alwaysColor) || ((ColorFlag == autoColor) && isatty(STDOUT_FILENO))) {
         grep->setColoring();
