@@ -187,9 +187,12 @@ Plans for iteration 3 include:
 ### Radical Grep Version 3.2
 
 * Input with both radical characters and radical indices is now supported. To use this function, include the option flag `-m` in your input.
+
+### Radical Grep Version 3.3
+
 * `-alt` flag functionality added, for instance `亻_衣_{生/亅}_` will search for `亻_衣_生_` and `亻_衣_亅_`.
 
-##### Radical Grep Version 3.2.1
+##### Radical Grep Version 3.3.1
 
 - Add two versions of `-alt` flag functionality input, one is the alternative part is at the beginning and the other is the alternative part at anywhere except the beginning and the end. 
 
@@ -271,4 +274,4 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruonan),  Pan Chuwen
 
-**Last Updated:** 2020/06/08
+**Last Updated:** 2020/06/10
