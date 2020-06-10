@@ -186,12 +186,10 @@ Plans for iteration 3 include:
 
 ### Radical Grep Version 3.2
 
-- Add a search mode which uses both radical indices and radical characters (i.e. `85_水_91_`).
-- To use this search mode, including the option flag `-m` in your input.
+* Input with both radical characters and radical indices is now supported. To use this function, include the option flag `-m` in your input.
 
 ### Radical Grep Version 3.3
 
-* Input with both radical characters and radical indices is now supported. To use this function, include the option flag `-m` in your input.
 * `-alt` flag functionality added, for instance `亻_衣_{生/亅}_` will search for `亻_衣_生_` and `亻_衣_亅_`.
 
 ##### Radical Grep Version 3.3.1
