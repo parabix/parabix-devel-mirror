@@ -126,7 +126,20 @@ The following testcases give example about the functionality of **pinyingrep**.
 Third Iteration(WIP)
 ----------------
 In the third iteration, we will implement **pinyingrep** version 2.0 with additional functionalities. 
-### New Features
+### Requirements
+1. :white_check_mark: CommandLine flag for coloring 
+2. :white_check_mark: Switching from different databases 
+3. :white_check_mark: Traditional/Simplified Chinese option 
+4. :white_check_mark: Exact Match Mode 
+5. :white_check_mark: More flexible regex feature `?` 
+6. :white_large_square: Case insensitive 
+7. :white_large_square: Eliminate compile time warnings 
+8. :white_large_square: Option for showing match lines numbers
+9. :white_large_square: Option for displaying file paths
+10. :white_large_square: Refactoring
+
+    
+### Supported New Features
 #### 8. Coloring with Command Line `-c`
 * Input: with command line flag `-c`
 * Coloring the matched Chinese characters or phrases in output
@@ -160,7 +173,7 @@ command line flag `-kpy` need to be in place.
     * For example, `中` and `zhong` in the original text file will both be grepped with input string `zhong`.
 * Command Line flag `-e` is used to turn on such a mode.
 
-#### 12. Regular expression feature -- `?`
+#### 12. More flexible Regular expression feature -- `?`
 * Input: “xia?ng” Equivalent to "xing|xiang".
 * "?" will automatically find the previous letter and skip the numbers.
 * if the letter before `?` is a toned unicode character, the tone will not be changed even if this letter does not exist in some cases.
@@ -184,6 +197,9 @@ command line flag `-kpy` need to be in place.
     Output: 
     兄友弟恭
 ``` 
+#### More: About Vague/Loose Matching
+* With a more flexible regex feature `?`, Vague or Loose Matching is already available for users. Users can input `zh?i` if they are not sure whether it is `zhi` or `zi`. Such a feature gives the user more flexibility where they can specify the exact place(e.g. `h` after `z` or `g` after `n`) they are not sured about.
+
 
 ## Version History
 #### Version 1.5
@@ -230,3 +246,4 @@ Huke: Implementing Methods of `PinyinValuesTable` in `pinyin_interface.cpp`, Tes
 Kirby: `PinyinValuesEnumerator` Implementation in `pinyin_interface.cpp`, Adding CommandLine flags
 
 Wendy: Generating static member initialization of `PinyinValuesTable` and `UnicodeSetTable` in `kpy_unicodeset_table.cpp` and `kxhc_unicodeset_table.cpp`, Adding CommandLine flags
+
