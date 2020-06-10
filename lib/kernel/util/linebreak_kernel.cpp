@@ -20,6 +20,8 @@
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/core/callback.h>
 #include <llvm/Support/raw_ostream.h>
+#include <kernel/util/debug_display.h>
+#include <pablo/pe_debugprint.h>
 
 using namespace cc;
 using namespace kernel;
@@ -183,18 +185,25 @@ mNullMode(nullMode) {
 
 void UnicodeLinesKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    std::unique_ptr<CC_Compiler> ccc;
-    if (getInputStreamSet("basis").size() == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
-    } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
-    }
+    std::unique_ptr<cc::CC_Compiler> ccc_u16_hi;
+    std::unique_ptr<cc::CC_Compiler> ccc_u16_lo;
+
+    //input
+    std::vector<PabloAST *> u16bytes = getInputStreamSet("basis");
+    //separate the 2 bytes into hi and lo 8 bits
+    std::vector<PabloAST *> hiByte(u16bytes.begin()+ u16bytes.size()/2, u16bytes.end());
+    std::vector<PabloAST *> loByte(u16bytes.begin(), u16bytes.begin()+ u16bytes.size()/2);
+    //works only with bitStream
+    ccc_u16_hi = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), hiByte);
+    ccc_u16_lo = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), loByte);
+
     if (mNullMode == NullCharMode::Abort) {
-        pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
+        pb.createTerminateAt(ccc_u16_lo->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
     }
     PabloAST * const LF = pb.createExtract(getInput(1), pb.getInteger(0), "LF");
-    PabloAST * const CR = ccc->compileCC(makeByte(0x0D));
-    PabloAST * const LF_VT_FF_CR = ccc->compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
+    PabloAST * const CR = ccc_u16_lo->compileCC(makeByte(0x0D)); //Mark all CR
+    PabloAST * const LF_VT_FF_CR = ccc_u16_lo->compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb); 
+    //Mark all lo bytes in range 0x0A and 0x0D
     Var * const LineBreak = pb.createVar("LineBreak", LF_VT_FF_CR);
 
     // Remove the CR of any CR+LF
@@ -206,82 +215,34 @@ void UnicodeLinesKernelBuilder::generatePabloMethod() {
     PabloAST * removedCRLF = crb.createXor(LineBreak, CR_before_LF);
     crb.createAssign(LineBreak, removedCRLF);
 
-    Zeroes * const ZEROES = pb.createZeroes();
-    PabloAST * const u8pfx = ccc->compileCC(makeByte(0xC0, 0xFF));
+    PabloAST * NEL = ccc_u16_lo->compileCC(makeByte(0x85));
+    pb.createAssign(LineBreak, pb.createOr(LineBreak, NEL));
 
-    Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
-    Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
-    Var * const valid_pfx = pb.createVar("valid_pfx", u8pfx);
+    PabloAST * LS_PS_hiByte = ccc_u16_hi->compileCC(makeByte(0x20));
+    PabloAST * LS_PS_loByte = ccc_u16_lo->compileCC(makeByte(0x28,0x29));
+    PabloAST * LS_PS = pb.createAnd(LS_PS_hiByte,LS_PS_loByte);
+    pb.createAssign(LineBreak, pb.createOr(LineBreak, LS_PS));
 
-    auto it = pb.createScope();
-    pb.createIf(u8pfx, it);
-    PabloAST * const u8pfx2 = ccc->compileCC(makeByte(0xC2, 0xDF), it);
-    PabloAST * const u8pfx3 = ccc->compileCC(makeByte(0xE0, 0xEF), it);
-    PabloAST * const u8pfx4 = ccc->compileCC(makeByte(0xF0, 0xF4), it);
-    PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
+    PabloAST * const u16sur_1 = ccc_u16_hi->compileCC(makeByte(0xD8, 0xDB));
+    PabloAST * const u16sur_2 = ccc_u16_hi->compileCC(makeByte(0xDC, 0xDF)); 
+    //mark all low bytes
+    PabloAST * const u16lo = pb.createOnes(); //Mark all lo bytes
+    //mark valid surrogate pair
+    PabloAST * const u16_sur = pb.createOr(u16sur_1, u16sur_2);
+    //mark the prefix of valid surrogate pair
+    PabloAST * const u16sur_final = pb.createAnd(u16_sur, u16sur_1);
+    PabloAST * const u16valid = pb.createNot(u16sur_final, "u16prefix");
+    //mark all 2 byte code units and final code unit of valid surrogare pairs
+    Var * const u16valid_final = pb.createVar("u16valid_final", pb.createZeroes());
+    pb.createAssign(u16valid_final, pb.createAnd(u16lo, u16valid));
+    //pb.createDebugPrint(u16valid_final, "u16valid_final");
 
-    //
-    // Two-byte sequences
-    Var * const anyscope = it.createVar("anyscope", ZEROES);
-    auto it2 = it.createScope();
-    it.createIf(u8pfx2, it2);
-    it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
-    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc->compileCC(makeByte(0xC2), it2), 1), ccc->compileCC(makeByte(0x85), it2), "NEL");
-    it2.createAssign(LineBreak, it2.createOr(LineBreak, NEL));
-
-
-    //
-    // Three-byte sequences
-    Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
-    auto it3 = it.createScope();
-    it.createIf(u8pfx3, it3);
-    PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
-    it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
-    PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
-    PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
-    it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
-    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
-    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
-    PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
-    it3.createAssign(EF_invalid, EX_invalid);
-    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE2), it3), 1), ccc->compileCC(makeByte(0x80), it3));
-    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc->compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
-    it3.createAssign(LineBreak, it3.createOr(LineBreak, LS_PS));
-
-    //
-    // Four-byte sequences
-    auto it4 = it.createScope();
-    it.createIf(u8pfx4, it4);
-    PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
-    PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
-    PabloAST * const u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
-    PabloAST * const u8scope4nonfinal = it4.createOr(u8scope42, u8scope43);
-    it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
-    PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
-    it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
-    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF0), it4), 1), ccc->compileCC(makeByte(0x80, 0x8F), it4));
-    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
-    PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
-    it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
-
-    //
-    // Invalid cases
-    PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
-    //  Any scope that does not have a suffix byte, and any suffix byte that is not in
-    //  a scope is a mismatch, i.e., invalid UTF-8.
-    PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
-    //
-    PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
-    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
-    PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
-    //
-    //
-    it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
-    pb.createAssign(nonFinal, pb.createOr(nonFinal, CR_before_LF));
-
+    // TODO: Invalid cases -  check for invalid surrogare pairs
+    pb.createAssign(u16valid_final, pb.createOr(u16valid_final, CR_before_LF));
+    //output
     Var * const u8index = getOutputStreamVar("u8index");
-    PabloAST * u8final = pb.createNot(nonFinal);
-    pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u8final);
+    pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u16valid_final);
+
     PabloAST * notLB = pb.createNot(LineBreak);
     if (mEOFmode == UnterminatedLineAtEOF::Add1) {
         PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(notLB, 1), "unterminatedLineAtEOF");
