@@ -233,6 +233,11 @@ command line flag `-kpy` need to be in place.
         9:这是中文测试数据
 ```
 ## Version History
+#### Version 1.6
+**Pinyingrep** version 1.6 supports:
+1. Option for showing match lines numbers
+2. Option for displaying file paths
+
 #### Version 1.5
 **Pinyingrep** version 1.5 updates:
 1. `?` can be used anywhere besides after `g`, indicating that the previous letter may or may not exist.
