@@ -304,7 +304,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 }
 
 ScanMatchKernel::ScanMatchKernel(BuilderRef b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks)
-    : MultiBlockKernel(b, "scanMatch" + std::to_string(strideBlocks),
+    : MultiBlockKernel(b, "scanMatch" + std::to_string(strideBlocks)+ "x" + std::to_string(ByteStream->getFieldWidth()),
 // inputs
 {Binding{"matchResult", Matches}
 ,Binding{"lineBreak", LineBreakStream}
