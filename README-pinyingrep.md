@@ -160,7 +160,23 @@ command line flag `-kpy` need to be in place.
     * For example, `中` and `zhong` in the original text file will both be grepped with input string `zhong`.
 * Command Line flag `-e` is used to turn on such a mode.
 
+#### 12. Regular expression feature -- `?`
+* Input: “xia?ng” Equivalent to "xing|xiang".
+* "?" will automatically find the previous letter and skip the numbers.
+```
+    Test
+    Input: xi.?ng
+    Output: 
+    心想事成
+    兄友弟恭
+    行云流水
+``` 
+
 ## Version History
+#### Version 1.5
+**Pinyingrep** version 1.5 updates:
+1. `?` can be used anywhere besides after `g`, indicating that the previous letter may or may not exist.
+
 #### Version 1.4
 **Pinyingrep** version 1.4 updates:
 1. `kHanyuPinyin` database is used together with `kMandarin` in a better way:
