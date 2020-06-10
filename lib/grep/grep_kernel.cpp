@@ -184,6 +184,8 @@ void UTF16_index::generatePabloMethod() {
     //output
     Var * const u16index = getOutputStreamVar("u16index");
     pb.createAssign(pb.createExtract(u16index, pb.getInteger(0)), u16valid_final);
+
+    //TODO: check for invalid surrogare pairs
 }
 
 UTF16_index::UTF16_index(BuilderRef kb, StreamSet * Source, StreamSet * u16index)

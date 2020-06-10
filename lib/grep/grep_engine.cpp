@@ -828,7 +828,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
 
         std::string ESC = "\x1B";
-        std::vector<std::string> colorEscapes = {/*ESC + "[01;31m" + ESC + "[K", ESC + "[m"*/ ""};
+        std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
         unsigned insertLengthBits = 4;
 
         StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
