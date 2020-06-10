@@ -51,6 +51,9 @@ using namespace kernel;
 // Given regular-expression-like pinyin input, pinyingrep will grep the lines
 // containing corresponding Chinese characters or Chinese phrases.
 
+/**
+ * Command Line Flags
+ */
 static cl::OptionCategory pygrepFlags("Command Flags", "pinyingrep options");
 
 // Regex-like pinyin syllables input
@@ -81,8 +84,18 @@ cl::opt<OptTraditional, All> ChineseCharacterType(cl::desc("Choose Chinese Chara
     clEnumValN(TraditionalOnly, "tonly", "Grep Chinese characters if they are only used in traditional Chinese."),
     clEnumValN(SimplifiedOnly,  "sonly", "Grep Chinese characters if they are only used in simplified Chinese.")));
 
+// Option for showing match lines numbers
+static cl::opt<bool, false> LineNumberOption("n", cl::desc("Show the line number with each matching line."), cl::cat(pygrepFlags));
+static cl::alias LineNumberAlias("line-number", cl::desc("Alias for -n"), cl::aliasopt(LineNumberOption));
+
+// Option for showing file names
+static cl::opt<bool, false> WithFilenameOption("h", cl::desc("Show the file name with each matching line."), cl::cat(pygrepFlags));
+static cl::alias WithFilenameAlias("with-filename", cl::desc("Alias for -h"), cl::aliasopt(WithFilenameOption));
+
 // the source files to grep from
 std::vector<fs::path> allFiles;
+
+
 
 std::vector<re::RE*> generateREs(std::string pyregex){
     // Separate the input string containing multiple pinyin syllables 
@@ -124,9 +137,9 @@ int main(int argc, char* argv[]){
     grep->initFileResult(allFiles); // initialize source files
     // generate REs to initialize the grep engine
     auto pinyinREs = generateREs(pyregex);
-    if(pyColorOption){
-    	grep->setColoring();
-    }
+    if (pyColorOption) grep->setColoring();
+    if (WithFilenameOption) grep->showFileNames();
+    if (LineNumberOption) grep->showLineNumbers();
     grep->initREs(pinyinREs); // initialize REs
     grep->grepCodeGen(); // generate pipeline
     

@@ -132,10 +132,10 @@ In the third iteration, we will implement **pinyingrep** version 2.0 with additi
 3. :white_check_mark: Traditional/Simplified Chinese option 
 4. :white_check_mark: Exact Match Mode 
 5. :white_check_mark: More flexible regex feature `?` 
-6. :white_large_square: Case insensitive 
-7. :white_large_square: Eliminate compile time warnings 
-8. :white_large_square: Option for showing match lines numbers
-9. :white_large_square: Option for displaying file paths
+6. :white_check_mark: Option for showing match lines numbers
+7. :white_check_mark: Option for displaying file paths
+8. :white_large_square: Case insensitive 
+9. :white_large_square: Eliminate compile time warnings 
 10. :white_large_square: Refactoring
 
     
@@ -200,7 +200,38 @@ command line flag `-kpy` need to be in place.
 #### More: About Vague/Loose Matching
 * With a more flexible regex feature `?`, Vague or Loose Matching is already available for users. Users can input `zh?i` if they are not sure whether it is `zhi` or `zi`. Such a feature gives the user more flexibility where they can specify the exact place(e.g. `h` after `z` or `g` after `n`) they are not sured about.
 
+#### 13. Option for showing filename
+* Command Line option `-h` is now supported by **pinyingrep**, which means showing the filename of *each* line grepped.
+```
+    Input:  
+        "zhong" -h ../QA/pinyintest/testfiles/simple_pinyin 
+        ../QA/pinyintest/testfiles/traditional-test  
+        ../QA/pinyintest/testfiles/test2 
+    Output: 
+        ../QA/pinyintest/testfiles/simple_pinyin:欢迎来到中文世界。
+        ../QA/pinyintest/testfiles/simple_pinyin:在这里你可以感受中文的博大精深。
+            ......
+        ../QA/pinyintest/testfiles/traditional-test:忧从中来，不可断绝。
+        ../QA/pinyintest/testfiles/traditional-test:憂從中來，不可斷絕。
+```
 
+#### 14. Option for showing line numbers
+* Command Line option `-n` is now supported, which means showing the line number in the *original* file of *each* grepped line.
+```
+    Input:
+        "zhong" ../QA/pinyintest/testfiles/simple_pinyin 
+        ../QA/pinyintest/testfiles/traditional-test 
+        ../QA/pinyintest/testfiles/test2 
+        ../QA/pinyintest/testfiles/exact-test -n
+    Output:
+        3:欢迎来到中文世界。
+        4:在这里你可以感受中文的博大精深。
+            ......
+        11:忧从中来，不可断绝。
+        28:憂從中來，不可斷絕。
+        8:选择权很重要
+        9:这是中文测试数据
+```
 ## Version History
 #### Version 1.5
 **Pinyingrep** version 1.5 updates:
