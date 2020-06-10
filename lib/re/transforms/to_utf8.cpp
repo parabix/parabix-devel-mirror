@@ -73,8 +73,6 @@ static RE *rangeCodeUnitsU16(codepoint_t lo, codepoint_t hi, unsigned index, con
     const codepoint_t hunit = UTF<16>::nthCodeUnit(hi, index);  
     const codepoint_t lunit = UTF<16>::nthCodeUnit(lo, index);  
     if (index == lgth) {
-        if(hunit<lunit )
-            return makeCC(hunit, lunit, &cc::UTF16); //surrogate pair code points treated separately 
         return makeCC(lunit, hunit, &cc::UTF16);
     } else if (hunit == lunit) {
         return makeSeq({makeCC(hunit, &cc::UTF16), rangeCodeUnitsU16(lo, hi, index + 1, lgth)});
