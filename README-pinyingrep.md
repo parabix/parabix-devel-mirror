@@ -163,13 +163,26 @@ command line flag `-kpy` need to be in place.
 #### 12. Regular expression feature -- `?`
 * Input: “xia?ng” Equivalent to "xing|xiang".
 * "?" will automatically find the previous letter and skip the numbers.
+* if the letter before `?` is a toned unicode character, the tone will not be changed even if this letter does not exist in some case.
 ```
-    Test
+    Test 1: ater `.`
     Input: xi.?ng
     Output: 
     心想事成
     兄友弟恭
     行云流水
+``` 
+```
+    Test 2: after numbers
+    Input: xi.3?ng
+    Output: 
+    心想事成
+``` 
+```
+    Test 1: after toned unicode character
+    Input: xiō?ng
+    Output: 
+    兄友弟恭
 ``` 
 
 ## Version History
