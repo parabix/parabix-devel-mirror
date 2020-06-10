@@ -3,6 +3,8 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h> 
 
 using namespace std;
 using namespace BS;
@@ -14,7 +16,7 @@ namespace BS
             {
                 if (indexMode)
                 { //search using the index (e.g. 85_)
-                    try
+                    /*try
                     {
                         int num = std::stoi(radical); //checks if the input is anything other than a number
                         if (num < 1 || num > 214)
@@ -25,25 +27,30 @@ namespace BS
                     catch (std::invalid_argument)
                     { //if input not an integer, terminate program
                         llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
-                    }
+                    }*/
                     if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                         return std::move(*_unicodeset_radical_table[radical]);
                     else
-                        return std::move(UCD::UnicodeSet());
+                        llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
+                        //return std::move(UCD::UnicodeSet());
                 }
                 else if (mixedMode)
                 {
                     if(mixed_table.find(radical)!=mixed_table.end())
                         return std::move(*mixed_table[radical]);
                     else
-                        return std::move(UCD::UnicodeSet());
+                        //return std::move(UCD::UnicodeSet());
+                        llvm::report_fatal_error("A radical set for this input does not exist.");
                 }
                 else
                 { //search using the actual radical (e.g. 氵_)
-                    if(radical_table.find(radical) != radical_table.end())
+                    if(radical_table.find(radical) != radical_table.end()) {
                         return std::move(*radical_table[radical]);
-                    else
-                        return std::move(UCD::UnicodeSet());
+                    } else {
+                        llvm::report_fatal_error("A radical set for this input does not exist.");
+                        //return std::move(UCD::UnicodeSet());
+                    }
+
                 }
                 
             }
@@ -53,6 +60,7 @@ namespace BS
         std::vector<re::RE*> REs;
         std::vector<re::RE*> temp;
         std::vector<re::RE*> temp0;
+
         //SAMPLE CASES FOR altMode:
         //(WORKING):
         //./radicalgrep -alt -c auto {火/水/土}_曰_ ../QA/radicaltest/testfiles/*

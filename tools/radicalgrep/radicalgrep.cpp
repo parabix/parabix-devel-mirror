@@ -57,7 +57,7 @@ using namespace codegen;
 static cl::OptionCategory radicalgrepFlags("Command Flags", "Options for Radical Grep"); //The command line
 static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags));    //The input  radical(s)
 static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));    //search for multiple input files is supported
-static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search."), cl::init(false), cl::cat(radicalgrepFlags)); 
+static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search.\n Link to Radical Indices: https://www.yellowbridge.com/chinese/radicals.php"), cl::init(false), cl::cat(radicalgrepFlags)); 
 
 static cl::opt<bool> mixMode("m", cl::desc("Use both radical character and radical index to perform search."), cl::init(false), cl::cat(radicalgrepFlags));
 static cl::opt<bool> altMode("alt", cl::desc("Use regular expressions to search for multiple phrases."), cl::init(false), cl::cat(radicalgrepFlags));
