@@ -84,6 +84,56 @@ class CSV_Masking : public PabloKernel {
         void generatePabloMethod() override;
 };
 
+class CSV_Marks : public PabloKernel {
+public:
+    CSV_Marks(BuilderRef kb, StreamSet * field_starts, StreamSet * escape,StreamSet * record_starts, StreamSet* starts, int n, StreamSet * marks) 
+        : PabloKernel(kb, "CSV_Marks"+to_string(n),
+                      {Binding{"field_starts", field_starts},
+                      Binding{"record_starts", record_starts},
+                      Binding{"starts", starts, FixedRate(),LookAhead(1)},
+                      Binding{"escape", escape}},
+                      {Binding{"marks", marks}},
+                      {},
+                      {}),num_of_field(n){}
+protected:
+    void generatePabloMethod() override;
+    int num_of_field;
+};
+
+typedef void (*CSVTranslateFunctionType)(uint32_t fd);
+CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<string>& Header_Vec, string s);
+
+int Get_Field_Count(const char delimiter, const char* argv);
+void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n);
+
+int main(int argc, char *argv[]) {
+    //  ParseCommandLineOptions uses the LLVM CommandLine processor, but we also add
+    //  standard Parabix command line options such as -help, -ShowPablo and many others.
+    codegen::ParseCommandLineOptions(argc, argv, {&CSV_Parsing_Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
+    //  A CPU driver is capable of compiling and running Parabix programs on the CPU.
+    CPUDriver driver("csv_quote_xlator");
+    
+    const char delimiter = ',';
+    int n = Get_Field_Count(delimiter, inputFile.c_str());
+    vector<string> header;
+    Get_Header(delimiter,inputFile.c_str(), header, n);
+    
+    //  Build and compile the Parabix pipeline by calling the Pipeline function above.
+    CSVTranslateFunctionType fn = generatePipeline(driver,n,header,"}\n]");
+    //  The compile function "fn"  can now be used.   It takes a file
+    //  descriptor as an input, which is specified by the filename given by
+    //  the inputFile command line option.
+    const int fd = open(inputFile.c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
+        llvm::errs() << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
+    } else {
+        //  Run the pipeline.
+        fn(fd);
+        close(fd);
+    }
+    return 0;
+}
+
 void CSV_Masking::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
@@ -100,7 +150,6 @@ void CSV_Masking::generatePabloMethod() {
     PabloAST * start_dquote = pb.createXor(dquote_odd, escaped_quote);
     PabloAST * end_dquote = pb.createXor(dquote_even, quote_escape);
     PabloAST * surrandingDquotes = pb.createOr(start_dquote,end_dquote);
-
     
     //newline
     PabloAST * literal_CRs = pb.createAnd(CRs,pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
@@ -127,7 +176,6 @@ void CSV_Masking::generatePabloMethod() {
 
     PabloAST * escapes = pb.createOr(escaped_quote,literal_newlines);
     
-    
     //mask= pb.createXor(pb.createAnd(pb.createNot(header),mask),last);
     mask= pb.createAnd(pb.createNot(header),mask);
 
@@ -136,7 +184,6 @@ void CSV_Masking::generatePabloMethod() {
     Var * escapeVar = getOutputStreamVar("escapes");
     Var * record_startsVar = getOutputStreamVar("record_starts");
     Var * startsVar = getOutputStreamVar("starts");
-
 
     // Translate \n to n    ASCII value of \n = 0x0d, ASCII value of n = 0x6e   blackslashes will be added lateron to show \n
     std::vector<PabloAST *> translated_basis(8, nullptr);
@@ -160,27 +207,6 @@ void CSV_Masking::generatePabloMethod() {
     pb.createAssign(pb.createExtract(record_startsVar, pb.getInteger(0)), record_starts);
     pb.createAssign(pb.createExtract(startsVar, pb.getInteger(0)), pb.createOr(record_starts,field_starts));
 }
-
-
-
-
-
-class CSV_Marks : public PabloKernel {
-public:
-    CSV_Marks(BuilderRef kb, StreamSet * field_starts, StreamSet * escape,StreamSet * record_starts, StreamSet* starts, int n, StreamSet * marks) 
-        : PabloKernel(kb, "CSV_Marks"+to_string(n),
-                      {Binding{"field_starts", field_starts},
-                      Binding{"record_starts", record_starts},
-                      Binding{"starts", starts, FixedRate(),LookAhead(1)},
-                      Binding{"escape", escape}},
-                      {Binding{"marks", marks}},
-                      {},
-                      {}),num_of_field(n){}
-protected:
-    void generatePabloMethod() override;
-    int num_of_field;
-};
-
 
 void CSV_Marks::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
@@ -207,15 +233,11 @@ void CSV_Marks::generatePabloMethod() {
         }
     }
     
-    
     pb.createAssign(pb.createExtract(marksVar, pb.getInteger(num_of_field)), escape);
     pb.createAssign(pb.createExtract(marksVar, pb.getInteger(num_of_field+1)), pb.createXor(all_starts,first));
     pb.createAssign(pb.createExtract(marksVar, pb.getInteger(num_of_field+2)), first);
     pb.createAssign(pb.createExtract(marksVar, pb.getInteger(num_of_field+3)), pb.createXor(all_starts,record_starts));
 }
-
-
-typedef void (*CSVTranslateFunctionType)(uint32_t fd);
 
 CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<string>& Header_Vec, string s) {
     // A Parabix program is build as a set of kernel calls called a pipeline.
@@ -248,7 +270,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     StreamSet * newline = P->CreateStreamSet(1);
     P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0a)}, BasisBits, newline);
 
-
     StreamSet * Field_starts = P->CreateStreamSet(1);
     StreamSet * starts = P->CreateStreamSet(1);
     StreamSet * CSV_data_mask = P->CreateStreamSet(1);
@@ -273,8 +294,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     StreamSet * Filtered_starts = P->CreateStreamSet(1);
     FilterByMask(P,CSV_data_mask,starts,Filtered_starts);
     
-
-
     /*
     StreamSet * Filtered_mask = P->CreateStreamSet(1);
     FilterByMask(P,CSV_data_mask,CSV_data_mask,Filtered_mask);
@@ -288,7 +307,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     //StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
     //P->CreateKernelCall<P2SKernel>(FilteredBasis, FilteredByte);
     //P->CreateKernelCall<StdOutKernel>(FilteredByte);
-
    
     //StreamSet* maskPlus = P->CreateStreamSet(1);
     //P->CreateKernelCall<AddSentinel>(Filtered_mask,maskPlus);
@@ -308,44 +326,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
 
     StreamSet * const InsertBixNum = P->CreateStreamSet(insertLengthBits,1);
     P->CreateKernelCall<StringInsertBixNum>(Header_Vec, InsertMarks, InsertBixNum);
-
-    /*
-
-    Suppose the header is:
-    group,project,numer of members,comment
-    
-    We declare:
-
-    vector<string> templateVector;
-    
-    Our template vector is:
-    ("\t{\n", "\n\t},\n", "\",\n", "\\", "\t\t\"group\": \"", "\t\t\"project\": \"", "\t\t\"number of members\": \"", "\t\t\"comment\": \"")
-    
-    The first four template strings are common to all templateVectors. They are independant of the number of fields and field names.
-
-    The vector contains 8 template strings. Let n be the length of the template vector.
-    
-    We declare:
-
-    StreamSet * InsertMarks = P->CreateStreamSet(numberOfFields+4, 1);
-
-    InsertMarks[0] has a 1 at each position in FilteredBasis where templateVector[0] must be inserted.
-    InsertMarks[1] has a 1 at each position in FilteredBasis where templateVector[1] must be inserted.
-    .
-    .
-    .
-    InsertMarks[7] has a 1 at each position in FilteredBases where templateVector[7] must be inserted.
-
-    templateVector[0] (left curly bracket) must be inserted at each position where recordStarts has a 1. Thus, templateVector[0] is identical to recordStarts.
-    templateVector[1] (right curly bracket) must be inserted at each position where recordFollows has a 1 and recordStarts has a 1
-    templateVector[2] (field seperator comma) must be inserted at each position where fieldStarts has a 1 and fieldFollows has a 1
-    templateVector[3] (escape slash) must be inserted at each position where there is an escaped character
-
-    the final "}" can be inserted at the end of the file using standard c++ methods without affecting time complexity
-    */
-
-    
-    
 
     StreamSet * const SpreadMask = InsertionSpreadMask(P, InsertBixNum, InsertPosition::Before);
     StreamSet * ExpandedBasis = P->CreateStreamSet(8);
@@ -367,7 +347,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     StreamSet * FilledBytes  = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(FilledBasis, FilledBytes);
     //P->CreateKernelCall<StdOutKernel>(FilledBytes);
-
     
     //output to file
     //Scalar * outputFileName = P->getInputScalar("outputFileName");
@@ -375,37 +354,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     P->CreateKernelCall<StdOutKernel>(FilledBytes);
     return reinterpret_cast<CSVTranslateFunctionType>(P->compile());
 }
-
-int main(int argc, char *argv[]) {
-    //  ParseCommandLineOptions uses the LLVM CommandLine processor, but we also add
-    //  standard Parabix command line options such as -help, -ShowPablo and many others.
-    codegen::ParseCommandLineOptions(argc, argv, {&CSV_Parsing_Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
-    //  A CPU driver is capable of compiling and running Parabix programs on the CPU.
-    CPUDriver driver("csv_quote_xlator");
-    
-    const char delimiter = ',';
-    int n = Get_Field_Count(delimiter, inputFile.c_str());
-    vector<string> header;
-    Get_Header(delimiter,inputFile.c_str(), header, n);
-    
-    //  Build and compile the Parabix pipeline by calling the Pipeline function above.
-    CSVTranslateFunctionType fn = generatePipeline(driver,n,header,"}\n]");
-    //  The compile function "fn"  can now be used.   It takes a file
-    //  descriptor as an input, which is specified by the filename given by
-    //  the inputFile command line option.
-    const int fd = open(inputFile.c_str(), O_RDONLY);
-    if (LLVM_UNLIKELY(fd == -1)) {
-        llvm::errs() << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
-    } else {
-        //  Run the pipeline.
-        fn(fd);
-        close(fd);
-    }
-    return 0;
-}
-
-
-
 
 int Get_Field_Count(const char delimiter, const char* argv) {
 	string ipath;
@@ -434,7 +382,6 @@ int Get_Field_Count(const char delimiter, const char* argv) {
 	csvInput.close();
 	return FieldNumber + 1;//the number of delimiter +1
 }
-
 
 void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
 {
