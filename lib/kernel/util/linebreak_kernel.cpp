@@ -238,7 +238,7 @@ void UnicodeLinesKernelBuilder::generatePabloMethod() {
     //pb.createDebugPrint(u16valid_final, "u16valid_final");
 
     // TODO: Invalid cases -  check for invalid surrogare pairs
-    pb.createAssign(u16valid_final, pb.createOr(u16valid_final, CR_before_LF));
+    pb.createAssign(u16valid_final, pb.createAnd(u16valid_final, pb.createNot(CR_before_LF)));
     //output
     Var * const u8index = getOutputStreamVar("u8index");
     pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u16valid_final);
