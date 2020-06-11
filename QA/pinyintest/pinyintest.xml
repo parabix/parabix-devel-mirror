@@ -14,12 +14,14 @@
 我喜欢旅行,唱，跳，rap，篮球，music！
 </datafile>
 
-<grepcase regexp="ZHOng wen" datafile="simple_pinyin" greplines="3 4"/>
+<grepcase regexp="ZHONG wen" datafile="simple_pinyin" greplines="3 4"/>
 <grepcase regexp="zhong yAO" datafile="simple_pinyin" greplines="5 6 9 10"/>
 <grepcase regexp="lian xi" datafile="simple_pinyin" greplines="8 11"/>
 <grepcase regexp="huAn ying" datafile="simple_pinyin" greplines="3"/>
 <grepcase regexp="lai dao" datafile="simple_pinyin" greplines="3"/>
 <grepcase regexp="hUAn ying lai dao" datafile="simple_pinyin" greplines="3"/>
+<grepcase regexp="Zhōng" datafile="simple_pinyin" greplines="3 4 6 10"/>
+<grepcase regexp="Zhong1 Yao4" datafile="simple_pinyin" greplines="6 10"/>
 
 <grepcase regexp="zhong1 yao4" datafile="simple_pinyin" greplines="6 10"/>
 <grepcase regexp="zho4ng yao" datafile="simple_pinyin" greplines="5 6 9 10"/>

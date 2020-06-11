@@ -134,7 +134,7 @@ In the third iteration, we will implement **pinyingrep** version 2.0 with additi
 5. :white_check_mark: More flexible regex feature `?` 
 6. :white_check_mark: Option for showing match lines numbers
 7. :white_check_mark: Option for displaying file paths
-8. :white_large_square: Case insensitive 
+8. :white_check_mark: Case insensitive 
 9. :white_large_square: Eliminate compile time warnings 
 10. :white_large_square: Refactoring
 
