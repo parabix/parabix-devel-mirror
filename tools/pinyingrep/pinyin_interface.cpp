@@ -78,6 +78,11 @@ namespace PY{
             table.replace_equivalence(s);
             resolved.second = vector<int>{0, 1, 2, 3, 4};
         }
+	//resolve capital letters
+	for(int i=0;i<s.size();i++){
+	    if(s[i] >= 'A' && s[i] <= 'Z')
+		s[i] = s[i] + 'a' - 'A';
+	}
         // resolve regex '?'
 	std::size_t qmark_index = s.find('?');
         if(qmark_index != s.npos){

@@ -232,7 +232,22 @@ command line flag `-kpy` need to be in place.
         8:选择权很重要
         9:这是中文测试数据
 ```
+#### 15. Case-insensitive input
+* Uppercase and lowercase input are equivalent.
+* Toned unicode characters do not support uppercase typing.
+```
+    Test
+    Input: ZHOng wen
+    Output:
+    欢迎来到中文世界。
+    在这里你可以感受中文的博大精深。
+```
+
 ## Version History
+#### Version 1.7
+**Pinyingrep** version 1.7 supports:
+1. Case-insensitive input
+
 #### Version 1.6
 **Pinyingrep** version 1.6 supports:
 1. Option for showing match lines numbers
