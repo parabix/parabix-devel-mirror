@@ -304,9 +304,9 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     P->CreateKernelCall<DebugDisplayKernel>("Filtered_record_starts", Filtered_record_starts);
     P->CreateKernelCall<DebugDisplayKernel>("Filtered_starts", Filtered_starts);
     */
-    //StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
-    //P->CreateKernelCall<P2SKernel>(FilteredBasis, FilteredByte);
-    //P->CreateKernelCall<StdOutKernel>(FilteredByte);
+    StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
+    P->CreateKernelCall<P2SKernel>(FilteredBasis, FilteredByte);
+    P->CreateKernelCall<StdOutKernel>(FilteredByte);
    
     //StreamSet* maskPlus = P->CreateStreamSet(1);
     //P->CreateKernelCall<AddSentinel>(Filtered_mask,maskPlus);
@@ -336,17 +336,22 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     //StreamSet * FilteredBasisPlus = P->CreateStreamSet(8);
     //->CreateKernelCall<AddSentinel>(FilteredBasis,FilteredBasisPlus);
    //P->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
-    SpreadByMask(P, SpreadMask, FilteredBasis, ExpandedBasis); 
+    SpreadByMask(P, SpreadMask, FilteredBasis, ExpandedBasis);
+
+    StreamSet * ExpandedBytes = P->CreateStreamSet(1,8);
+    P->CreateKernelCall<P2SKernel>(ExpandedBasis, ExpandedBytes);
+    P->CreateKernelCall<DebugDisplayKernel>("Expanded Basis", ExpandedBytes);
 
     StreamSet * ExpandedMarks = P->CreateStreamSet(marksize);
     SpreadByMask(P, SpreadMask, InsertMarks, ExpandedMarks);
+
+
 
     StreamSet * FilledBasis = P->CreateStreamSet(8);
     P->CreateKernelCall<StringReplaceKernel>(Header_Vec, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, FilledBasis);
 
     StreamSet * FilledBytes  = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(FilledBasis, FilledBytes);
-    //P->CreateKernelCall<StdOutKernel>(FilledBytes);
     
     //output to file
     //Scalar * outputFileName = P->getInputScalar("outputFileName");
@@ -383,24 +388,34 @@ int Get_Field_Count(const char delimiter, const char* argv) {
 	return FieldNumber + 1;//the number of delimiter +1
 }
 
-void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
-{
+void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n){
     ifstream in(dir);
-    string header;
-    string first;
+    string fieldname;
     for(int i=0;i<n-1;i++){
-        getline(in,header,delimiter);
-        if(i==0) {
-            first = header;
-            v.push_back("{\"" + header + "\":\"");  //first header
+        getline(in,fieldname,delimiter);
+        int len=fieldname.size();
+        if(len==0)  fieldname="header"+to_string(i);
+        else{
+            if(fieldname[0]=='\"' && fieldname[len-1]=='\"'){
+                if(len<3)   fieldname="header"+to_string(i);
+                else    fieldname=fieldname.substr(1, len-2);
+            }
         }
-        else v.push_back("\",\"" + header + "\":\"");
+        if(i==0) {
+            v.push_back("{\"" + fieldname + "\":\"");  //first fieldname
+        }
+        else v.push_back("\",\"" + fieldname + "\":\"");
     }
-    getline(in,header);
-    if (header.back() == '\r') {
-        header.pop_back();
+    getline(in,fieldname);
+    int len=fieldname.size();
+    if(len==0)  fieldname="header"+to_string(n-1);
+    else{
+        if(fieldname[0]=='\"' && fieldname[len-1]=='\"'){
+            if(len<3)   fieldname="header"+to_string(n-1);
+            else    fieldname=fieldname.substr(1, len-2);
+        }
     }
-    v.push_back("\",\"" + header + "\":\"");    //last header
+    v.push_back("\",\"" + fieldname + "\":\"");    //last fieldname
     v.push_back("\\");                          //back slash
     v.push_back("\"},");                            //rec start
     if(n>0)                                     //first
@@ -408,4 +423,8 @@ void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
     else
         v.push_back("[\n");
     v.push_back("\"}\n]");
+    for(int i=0;i<n+4;i++){
+        cout<<v[i]<<endl;
+    }
+    return;
 }
