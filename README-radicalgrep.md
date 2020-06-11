@@ -4,15 +4,7 @@ Radical Grep is a tool built off of icgrep. It searches for the given Chinese ra
 
 ## **Table of Contents**
 
-* [Introduction](#Introduction)
-* [Installation](#Installation)
-* [How to Run Radical Grep](#How%20to%20Run%20Radical%20Grep)
-* [Supported Features](#Supported%20Features)
-* [Iteration 1](#Iteration%201:%20Hard-Coding%20the%20Testcases%20into%20the%20Program)
-* [Iteration 2](#Iteration%202:%20Radical%20Count%20&%20Grep%20Implementation)
-* [Iteration 3](#Iteration%203:%20Adding%20New%20Features%20&%20Final%20Iteration)
-* [References](#References)
-
+[[_TOC_]]
 
 ## **Introduction**
 The 214 Kangxi radicals are sorted in increasing order by stroke count. Originally introduced in 1615, many modern Chinese dictionaries still use the Kangxi system. In our program, we used the Unihan `kRSKangxi` property to generate Unicode sets for all 214 radicals. One important key to note is that some radicals may have the same index. For instance, characters 火 and 灬 are both the 86th radical of the dictionary and would map to the same Unicode set. Thus, 灯 and 点 would be characters in the same set.
@@ -191,7 +183,7 @@ If the file to be searched is written in simplified Chinese and the radical expr
     Output: 中國大陸的國標碼使用漢**語**拼音排列
             部首檢字也有其局限性，**許**多漢字難以歸部
 
-###### ** Output is printed in red on the terminal. Colorization was turned on for this iteration.** 
+** Output is printed in red on the terminal. Colorization was turned on for this iteration.** 
 
 ## **Iteration 3: Adding New Features & Final Iteration**
 Plans for iteration 3 include:
