@@ -27,7 +27,7 @@
 
 <grepcase regexp="zhong1 yao4" datafile="simple_pinyin" greplines="6 10"/>
 <grepcase regexp="zho4ng yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
-<grepcase regexp="zhŌng" datafile="simple_pinyin" greplines="3 4 6 10"/>
+<grepcase regexp="zhōng" datafile="simple_pinyin" greplines="3 4 6 10"/>
 <grepcase regexp="zhòng" datafile="simple_pinyin" greplines="3 4 5 6 7 9 10"/>
 
 <grepcase regexp="lü" datafile="simple_pinyin" greplines="12 13"/>
