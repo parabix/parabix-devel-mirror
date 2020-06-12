@@ -150,9 +150,9 @@ namespace PY{
 
 
     // Methods in PinyinValuesEnumerator
-    void PinyinValuesEnumerator::enumerate(PinyinValuesParser& parser){
+    void PinyinValuesEnumerator::enumerate(vector<std::pair<vector<string>, vector<int>>> parsed){
         
-        for(auto first_syl=parser._parsed_syllable_tone.begin();first_syl!=parser._parsed_syllable_tone.end();first_syl++){
+        for(auto first_syl=parsed.begin();first_syl!=parsed.end();first_syl++){
             vector<pair<string,int>> temp;
             for(auto syl=first_syl->first.begin();syl!=first_syl->first.end();syl++){
                 for(auto tone=first_syl->second.begin();tone!=first_syl->second.end();tone++){

@@ -65,7 +65,10 @@ namespace PY{
             return _parsed;
         }
 
-        friend class PinyinValuesEnumerator;
+        // return _parsed_syllable_tone(copy)
+        vector<std::pair<vector<string>, vector<int>>>
+        get_parsed() { return _parsed_syllable_tone; }
+
     private:
         vector<std::pair<vector<string>, vector<int>>> _parsed_syllable_tone; // record the possible syllables and tones
         // e.g. (<,> for pair, and {} for vector)
@@ -84,7 +87,6 @@ namespace PY{
         // elimiate extra space in both ends of the string
         void eliminate_space(string& s);
 
-        vector<re::RE*> createREs(int database);
     };
 
     class ParserException : public std::exception{
@@ -113,7 +115,7 @@ namespace PY{
         // , generate _half_enumerated_list
         // and generate _enumerated_list if _fully_enumerate is true
         // which contains all possible values of <syllable,tone> pairs
-        void enumerate(PinyinValuesParser& parser);
+        void enumerate(vector<std::pair<vector<string>, vector<int>>> parsed);
 
         // Method: createREs(int dabase) ==1 for kpy, 0 for xhc
         // create a vector of RE* for grep engine

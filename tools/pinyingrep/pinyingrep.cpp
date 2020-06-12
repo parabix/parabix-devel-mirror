@@ -108,7 +108,7 @@ std::vector<re::RE*> generateREs(std::string pyregex){
     // into `{<syllable, tone>,...}` a vector of pairs.
     // for every individual syllable
     PY::PinyinValuesEnumerator enumerator;
-    enumerator.enumerate(parser);
+    enumerator.enumerate(parser.get_parsed());
 
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
