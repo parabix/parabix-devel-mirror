@@ -332,7 +332,7 @@ For inputs with more than one test files, filepaths are automatically shown. You
 
 ## Example 7: Runtime of the search
 
-The `-clk` flag can be toggled to measure the runtime of a search. It returns the in seconds.
+The `-clk` flag can be toggled to measure the runtime of a search. It returns the time taken in seconds.
 
     Input: -clk -c auto 水_子_ ../../QA/radicaltest/testfiles/*
 

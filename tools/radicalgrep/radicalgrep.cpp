@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
     const bool matchFound=grep->searchAllFiles();   //Return if there have found any result, if yes, return true, else return false
 
     //if there does not exist any results
-    if(!matchFound) cout<<"Can not find the results!"<<endl;
+    if (!matchFound) cout << "No matches are found for " << input_radical << endl;
 
     if(CLKCountingFlag)
     {
