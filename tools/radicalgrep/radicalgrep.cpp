@@ -40,7 +40,8 @@
 #include <sys/stat.h>
 #include <vector>
 #include <map>
-#include <sstream>  
+#include <sstream>
+#include <time.h>
 #include "radical_interface.h"
 
 namespace fs = boost::filesystem;
@@ -61,7 +62,6 @@ static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the r
 
 static cl::opt<bool> mixMode("m", cl::desc("Use both radical character and radical index to perform search."), cl::init(false), cl::cat(radicalgrepFlags));
 static cl::opt<bool> altMode("alt", cl::desc("Use regular expressions to search for multiple phrases."), cl::init(false), cl::cat(radicalgrepFlags));
-
 //Adpated from grep_interface.cpp
 ColoringType ColorFlag;
 //options for colourization; (e.g. -c auto)
@@ -74,7 +74,8 @@ bool LineNumberFlag;
 static cl::opt<bool, true> LineNumberOption("n", cl::location(LineNumberFlag), cl::desc("Show the line number with each matching line."), cl::cat(radicalgrepFlags));
 bool WithFilenameFlag;
 static cl::opt<bool, true> WithFilenameOption("h", cl::location(WithFilenameFlag), cl::desc("Show the file name with each matching line."), cl::cat(radicalgrepFlags));
-
+bool CLKCountingFlag;
+static cl::opt<bool, true> CLKCountingOption("clk", cl::location(CLKCountingFlag), cl::desc("Show the runtime of the function."), cl::cat(radicalgrepFlags));
 std::vector<fs::path> allfiles; //Store all path of files
 
 std::vector<re::RE*> generateREs(std::string input_radical, bool altMode);    //This function parse the input and get the results
@@ -94,6 +95,10 @@ int main(int argc, char* argv[])
     
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
+    
+    long begintime;
+     if(CLKCountingFlag==true)
+         begintime=clock();
     auto radicalREs=generateREs(input_radical, altMode); //get the results
 
     if (WithFilenameFlag) grep->showFileNames();
@@ -109,6 +114,13 @@ int main(int argc, char* argv[])
     const bool matchFound=grep->searchAllFiles();   //Return if there have found any result, if yes, return true, else return false
     if(matchFound==false)   //if there does not exist any results
         cout<<"Can not find the results!"<<endl;
+    
+    if(CLKCountingFlag==true)
+    {
+        long endtime=clock();
+        cout<<"the runtime is:"<<(endtime-begintime)*1.0/CLOCKS_PER_SEC<<"s."<<endl;
+    }
+    
     return matchFound? MatchFoundExitCode : MatchNotFoundExitCode;
 }
 
