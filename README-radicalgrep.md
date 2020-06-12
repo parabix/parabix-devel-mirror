@@ -28,19 +28,25 @@ For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.
 ## **Supported Features**
 
 * Single Radical Expressions 
+    
     > e.g.  亻_
 * Radical Expressions of >= 2 Radicals
+    
     > e.g.  亻_心_ , 禾_扌_子_ 
 * `-i` index mode
+    
     > e.g. 85_
 * `-m` mixed mode
+    
     > e.g. 水_143_
 * `-alt` alternative character mode 
+    
     > e.g. 水_{火/水}_
 * `-c` colourization
     > Colourization is turned off by default. 
     > To turn on colourization, include `-c auto`
 * `-h` manually toggle file path to be shown for each matching line
+    
     > This is turned on automatically each time when > 1 files are inputted
 * `-n` shows the line number along with each match
 * Single and multi-file input
@@ -195,7 +201,8 @@ Plans for iteration 3 include:
 3. ~~Implement a search mode which allows for both index and kangxi radical. (e.g. `水_143_`)~~ **(Done)**
 4. ~~Implement a search mode like this `水_{火/水}_`.~~**(Done)**
 5. ~~Add support for input with >2 radicals.~~ **(Done)**
-6. ~~Graphical interface~~ Time is not in our favour :( 
+6. ~~Add a runtime counting function.~~ **(Done)**
+7. ~~Graphical interface~~ Time is not in our favour :( 
 
 ## Changelog
 
@@ -222,11 +229,18 @@ Plans for iteration 3 include:
 
   For instance, `{火/水/土}_曰_` will search for `火_曰_`, `水_曰_` and `土_曰_`; `水_{火/水/人}_曰_` will search for `水_火_曰_`, `水_水_曰_` and `水_人_曰_`.
 
-* `-n` flag added. If toggled, it will indicate the line number along with the line. 
+### Radical Grep Version 3.4
 
+* `-n` flag added. If toggled, it will indicate the line number along with the line. 
 * File path is displayed for inputs containing > 1 test files.
 * Error message for invalid input added.
 * A link for the chart of indices is included in the `-help` menu for `-i`.
+
+### Radical Grep Version 3.4.1
+
+- `-clk` flag added. If the option flag used, it will show the runtime of the search.
+
+
 
 ## Example 1: Kangxi Radical Index Search Mode and Colorization Turned On
 
@@ -249,9 +263,9 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
     
     Output: LLVM ERROR: A radical set for this input does not exist.
             Enter a integer in [1,214], followed by _.
-
+    
     Input: 检_ ../../QA/radicaltest/testfiles/*
-
+    
     Output: LLVM ERROR: A radical set for this input does not exist.
 
 ## Example 3: Input with more than 3 Radicals
@@ -272,7 +286,7 @@ If the user enters uses Radical Grep in index mode and searchs for index 0 or an
 
 ## Example 5: Input with Alternative Characters 
 
-The first input searches for the radical expressions 水_火_ and 水_水_, and the second input utilizes the indices for the same radicals. The third input searches for the radical expressions 火_曰_, 水_曰_ and 土_曰_. The forth input searches for the radical expressions 曰_水_曰_, 曰_火_曰_ and 曰_土_曰_.
+The first input searches for the radical expressions `水_火_` and ` 水_水_`, and the second input utilizes the indices for the same radicals. The third input searches for the radical expressions` 火_曰_`, `水_曰_ `and `土_曰_`. The forth input searches for the radical expressions `曰_水_曰_`, ` 曰_火_曰_` and `曰_土_曰_`.
 
     Input: -alt -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/*
     
@@ -303,17 +317,28 @@ The first input searches for the radical expressions 水_火_ and 水_水_, and 
 For inputs with more than one test files, filepaths are automatically shown. You can manually toggle this feature with the `-h` flag. Line number can be toggled with the `-n` flag.
 
     Input: -h -n 曰_ ../../QA/radicaltest/testfiles/*
-
+    
     Output: ../../QA/radicaltest/testfiles/test5:4:“金曰从革”，代表沉降、肃杀、收敛等性质，在人体为肺和大肠
-            ../../QA/radicaltest/testfiles/test5:5:“水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
-            ../../QA/radicaltest/testfiles/test5:6:“木曰曲直”，代表生长、升发、条达、舒畅的功能，在人体为肝和膽
-            ../../QA/radicaltest/testfiles/test5:7:“火曰炎上”，代表了温热、向上等性质，在人体为心和小肠
-            ../../QA/radicaltest/testfiles/test5:8:“土曰稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
-            ../../QA/radicaltest/testfiles/test7:2:有人曰河海一体
-            ../../QA/radicaltest/testfiles/test7:3:有人曰火水不容
-            ../../QA/radicaltest/testfiles/test7:4:有人曰土水相得益彰
+    ../../QA/radicaltest/testfiles/test5:5:“水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
+    ../../QA/radicaltest/testfiles/test5:6:“木曰曲直”，代表生长、升发、条达、舒畅的功能，在人体为肝和膽
+    ../../QA/radicaltest/testfiles/test5:7:“火曰炎上”，代表了温热、向上等性质，在人体为心和小肠
+    ../../QA/radicaltest/testfiles/test5:8:“土曰稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
+    ../../QA/radicaltest/testfiles/test7:2:有人曰河海一体
+    ../../QA/radicaltest/testfiles/test7:3:有人曰火水不容
+    ../../QA/radicaltest/testfiles/test7:4:有人曰土水相得益彰
 
-​    
+## Example 7: Runtime of the search
+
+```
+Input: -clk -c auto 水_子_ ../../QA/radicaltest/testfiles/*
+
+Output: 部首分类也是使用**汉字**之文化圈少数的共通点
+				部首检字也有其局限性，许多**汉字**难以归部
+				the runtime is:2.54655s.
+```
+
+
+
 ## **References**
 * [Unicode Standard Annex #38: Unihan](http://www.unicode.org/reports/tr38/)
 * Unihan Database (Unihan.zip)
@@ -322,4 +347,4 @@ For inputs with more than one test files, filepaths are automatically shown. You
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruonan),  Pan Chuwen
 
-**Last Updated:** 2020/06/11
+**Last Updated:** 2020/06/12
