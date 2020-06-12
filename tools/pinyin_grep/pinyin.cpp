@@ -14,7 +14,7 @@ namespace PinyinPattern{
     2. parse those syllables to transfer them to formal format for searching
     3. add search prefix and suffix
 */
-    vector <vector<string> > Before_Search(string Pinyin_syllables)
+    vector <vector<string> > Syllable_Parse(string Pinyin_syllables, bool database)
     {
         vector<string> Divided;
         vector <vector <string> > FinalVec;
@@ -93,6 +93,7 @@ namespace PinyinPattern{
             /*deal with the example for mang*/
             else if (All_Alpha(word))
             {
+                temp_vec.push_back(word);
                 for (size_t j=0; j<syl.size(); j++)
                 {
                     if (Divided[i].find(syl[j][0]) != string::npos){
@@ -116,6 +117,7 @@ namespace PinyinPattern{
                 string parse_tone = *temp_iter;
                 if(All_Alpha(parse_tone))
                 {
+                    temp_vec.push_back(parse_tone);
                     for (size_t j=0; j<syl.size(); j++)
                     {
                         if (parse_tone.find(syl[j][0]) != string::npos){
@@ -133,17 +135,33 @@ namespace PinyinPattern{
                     temp_vec.push_back(parse_tone);
                 }
             }
-            
-            //adding the prefix and suffix to all the strings
-            for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+            //select the database
+            if(!database)
             {
-                *iter = Add_Search_Prefix(*iter);
+            //adding the prefix and suffix to all the strings
+            
+                for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+                {
+                    *iter = Add_kHanyuPinyin_fix(*iter);
+                }
+            }
+            else
+            {
+                for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+                {
+                    *iter = Add_kXHC1983_fix(*iter);
+                }
             }
             // for (auto x: FinalVec){
             //     llvm::errs() << x << " ";
             // }
             // llvm::errs() << "\n";
-            
+            //test the parsing
+            //for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+            //{
+            //    cout<<*iter<<endl;
+            //}
+            //
             if(temp_vec.size()!=0)
             {
                 FinalVec.push_back(temp_vec);
@@ -167,7 +185,7 @@ namespace PinyinPattern{
         return s;
     }
     // Add_Search_Prefix adds both the prefix and suffix of the search module to search in the grep engine
-    string Add_Search_Prefix(string to_add)
+    string Add_kHanyuPinyin_fix(string to_add)
     {
         string temp = to_add;
         string prefix = "(kHanyuPinyin.*"; 
@@ -175,7 +193,14 @@ namespace PinyinPattern{
         temp = prefix + temp + suffix;
         return temp;
     }
-    
+    string Add_kXHC1983_fix(string to_add)
+    {
+        string temp = to_add;
+        string prefix = "(kXHC1983.*";
+        string suffix = ")(,|$| )";
+        temp = prefix + temp + suffix;
+        return temp;
+    }
     //check if the string is all English words
     bool All_Alpha(string word)
     {

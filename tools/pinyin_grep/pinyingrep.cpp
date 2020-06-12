@@ -55,6 +55,10 @@ static cl::OptionCategory pygrepFlags("Command Flags", "pinyingrep options");
 static cl::opt<std::string> PinyinLinePattern(cl::Positional, cl::desc("Pinyin Syllables"), cl::Required, cl::cat(pygrepFlags));
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(pygrepFlags));
+
+//the default one is kHanyuPinyin
+static cl::opt<bool> Database("data", cl::desc("Searching by kXHC1983 database instead of kHanyuPinyin database"), cl::init(false), cl::cat(pygrepFlags));
+
 ColoringType ColorFlag;
 //options for colourization; (e.g. -c auto)
 static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of the output."),
@@ -63,20 +67,15 @@ static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of 
                                                     clEnumValN(neverColor,  "never", "Turn off output colorization")
                                                     CL_ENUM_VAL_SENTINEL), cl::cat(pygrepFlags), cl::location(ColorFlag), cl::init(neverColor));
 
+//static cl::opt<bool> Database2("d2", cl::desc("Searching through kXHC1983 database"), cl::init(false), cl::cat(pygrepFlags))
 std::vector<fs::path> allFiles;
 
 typedef uint64_t (*UCountFunctionType)(uint32_t fd);
 
-//step4
+
 std::vector <std::vector<re::RE*> >generateREs(std::vector<std::vector<std::string> >KangXiLinePattern){
     std::vector<std::vector<re::RE*> >PinyinCC;
-    //re::RE* PinyinCC_final;
-    /*  for(size_t i= 0;i<KangXiLinePattern.size();i++)
-     {
-     re::RE * PinyinRe = re::RE_Parser::parse(KangXiLinePattern[i], 0U, re::PCRE, false);
-     //how to find the unicode?
-     PinyinCC.push_back(PinyinRe);
-     } */
+
     std::vector<std::vector<std::string> >:: iterator iter1;
     for(iter1 = KangXiLinePattern.begin();iter1!=KangXiLinePattern.end();iter1++)
     {
@@ -95,8 +94,7 @@ std::vector <std::vector<re::RE*> >generateREs(std::vector<std::vector<std::stri
         PinyinCC.push_back(temp_Vec_RE);
     }
     return PinyinCC;
-    //PinyinCC_final = re::makeSeq(PinyinCC.begin(),PinyinCC.end());
-    //return PinyinCC_final;
+
 }
 
 UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::RE * pinyinCC) {
@@ -154,7 +152,7 @@ int main(int argc, char* argv[]){
     /**/
     std::vector <std::vector<std::string> >KangXiLinePattern;
     
-    KangXiLinePattern = PinyinPattern::Before_Search(PinyinLinePattern);
+    KangXiLinePattern = PinyinPattern::Syllable_Parse(PinyinLinePattern,Database);
     /*test point2*/
     cout << "Parsing finished successfully" << endl;
     /*parsing test*/

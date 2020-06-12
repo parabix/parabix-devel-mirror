@@ -111,9 +111,10 @@ namespace PinyinPattern{
             mAccumSet.insert(parsed_codepoint);
         }
     };
-    vector <vector<string> > Before_Search(string Pinyin_syllables);
+    vector <vector<string> > Syllable_Parse(string Pinyin_syllables, bool database);
     string& trim(string &s);
-    string Add_Search_Prefix(string to_add);
+    string Add_kHanyuPinyin_fix(string to_add);
+    string Add_kXHC1983_fix(string to_add);
     bool All_Alpha(string word);
     
 }
