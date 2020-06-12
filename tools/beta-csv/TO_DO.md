@@ -10,3 +10,5 @@
 8. Throw error message when input file is incorrectly formatted.
 9. Support for tab delimited values.
 10. Support for user set fieldnames.
+11. Testcase_escapes
+12. Debug testcase_doublequote
