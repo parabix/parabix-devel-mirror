@@ -320,8 +320,8 @@ namespace PY{
             final_part = s.substr(i);
         }
         for(int charlen=1;charlen<5;charlen++){
-            if(charlen > final_part.length()) break;
-            for(i = 0;i <= final_part.length()-charlen;++i){
+            if(charlen > (int)final_part.length()) break;
+            for(i = 0;i <= (int)final_part.length()-charlen;++i){
                 string toned_char = final_part.substr(i,charlen);
                 if(_toned_character_table.find(toned_char) != _toned_character_table.end()){
                     replace_tone(toned_char);
