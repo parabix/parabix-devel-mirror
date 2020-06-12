@@ -311,7 +311,7 @@ namespace PinyinPattern{
             }
             if(!check_flag)
             {
-                cout<<"please enter the corret format of syllables which listed in the README.md, for example 'ming'. "<<endl;
+                cout<<"Please enter the correct format of syllables, listed in the README-pinyingrep.md, for example 'ming'. "<<endl;
                 return false;
             }
         }
