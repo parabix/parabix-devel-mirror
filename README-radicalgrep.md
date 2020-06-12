@@ -45,6 +45,8 @@ For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.
 * `-n` shows the line number along with each match
 * Single and multi-file input
 
+Filepath and line count option does not produce correct results when colourization is turned on. This is because an external issue with icgrep.
+
 ## **Iteration 1: Hard-Coding the Testcases into the Program**
 
 In the first iteration, Radical Grep takes in pre-programmed inputs and returns the sentence(s) with the corresponding pattern.
@@ -303,13 +305,13 @@ For inputs with more than one test files, filepaths are automatically shown. You
     Input: -h -n 曰_ ../../QA/radicaltest/testfiles/*
 
     Output: ../../QA/radicaltest/testfiles/test5:4:“金曰从革”，代表沉降、肃杀、收敛等性质，在人体为肺和大肠
-    ../../QA/radicaltest/testfiles/test5:5:“水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
-    ../../QA/radicaltest/testfiles/test5:6:“木曰曲直”，代表生长、升发、条达、舒畅的功能，在人体为肝和膽
-    ../../QA/radicaltest/testfiles/test5:7:“火曰炎上”，代表了温热、向上等性质，在人体为心和小肠
-    ../../QA/radicaltest/testfiles/test5:8:“土曰稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
-    ../../QA/radicaltest/testfiles/test7:2:有人曰河海一体
-    ../../QA/radicaltest/testfiles/test7:3:有人曰火水不容
-    ../../QA/radicaltest/testfiles/test7:4:有人曰土水相得益彰
+            ../../QA/radicaltest/testfiles/test5:5:“水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
+            ../../QA/radicaltest/testfiles/test5:6:“木曰曲直”，代表生长、升发、条达、舒畅的功能，在人体为肝和膽
+            ../../QA/radicaltest/testfiles/test5:7:“火曰炎上”，代表了温热、向上等性质，在人体为心和小肠
+            ../../QA/radicaltest/testfiles/test5:8:“土曰稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
+            ../../QA/radicaltest/testfiles/test7:2:有人曰河海一体
+            ../../QA/radicaltest/testfiles/test7:3:有人曰火水不容
+            ../../QA/radicaltest/testfiles/test7:4:有人曰土水相得益彰
 
 ​    
 ## **References**

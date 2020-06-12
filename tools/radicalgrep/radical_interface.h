@@ -17,14 +17,13 @@
 #include <re/parse/parser.h>
 #include <re/toolchain/toolchain.h>
 #include <unicode/data/kRSKangXi.h>
-#include <llvm/Support/ErrorHandling.h>
 
 enum ColoringType {alwaysColor, autoColor, neverColor};
 extern ColoringType ColorFlag;
 extern bool LineNumberFlag; 
 extern bool WithFilenameFlag;
-const int MatchFoundExitCode=0;
-const int MatchNotFoundExitCode=1;
+const int MatchFoundExitCode = 0;
+const int MatchNotFoundExitCode = 1;
 
 namespace BS
 {
@@ -44,7 +43,7 @@ namespace BS
             static map<string, const UCD::UnicodeSet*> mixed_table;
     };
 
-    static UnicodeSetTable ucd_radical;
+    //static UnicodeSetTable ucd_radical;
 
     class RadicalValuesEnumerator
     {
