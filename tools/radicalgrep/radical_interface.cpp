@@ -3,7 +3,6 @@
 #include <string>
 #include <iostream>
 #include <sstream>
-#include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h> 
 
 using namespace std;
@@ -12,63 +11,34 @@ using namespace UCD::KRS_ns;
 
 namespace BS
 {
-            const UCD::UnicodeSet&& UnicodeSetTable::get_uset(string radical, bool indexMode, bool mixedMode)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
-            {
-                if (indexMode)
-                { //search using the index (e.g. 85_)
-                    /*try
-                    {
-                        int num = std::stoi(radical); //checks if the input is anything other than a number
-                        if (num < 1 || num > 214)
-                        { //if input is a number not in range [1,214]; terminate program
-                            llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
-                        }
-                    }
-                    catch (std::invalid_argument)
-                    { //if input not an integer, terminate program
-                        llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
-                    }*/
-                    if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
-                        return std::move(*_unicodeset_radical_table[radical]);
-                    else
-                        llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
-                        //return std::move(UCD::UnicodeSet());
-                }
-                else if (mixedMode)
-                {
-                    if(mixed_table.find(radical)!=mixed_table.end())
-                        return std::move(*mixed_table[radical]);
-                    else
-                        //return std::move(UCD::UnicodeSet());
-                        llvm::report_fatal_error("A radical set for this input does not exist.");
-                }
-                else
-                { //search using the actual radical (e.g. 氵_)
-                    if(radical_table.find(radical) != radical_table.end()) {
-                        return std::move(*radical_table[radical]);
-                    } else {
-                        llvm::report_fatal_error("A radical set for this input does not exist.");
-                        //return std::move(UCD::UnicodeSet());
-                    }
+    static UnicodeSetTable ucd_radical;
+    
+    const UCD::UnicodeSet&& UnicodeSetTable::get_uset(string radical, bool indexMode, bool mixedMode)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
+    {
+        if (indexMode) { //search using the index (e.g. 85_)
+            if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
+                return std::move(*_unicodeset_radical_table[radical]);
+            else
+                llvm::report_fatal_error("A radical set for this input does not exist.\n Enter a integer in [1,214], followed by _.");
+        } else if (mixedMode) {
+            if(mixed_table.find(radical)!=mixed_table.end())
+                return std::move(*mixed_table[radical]);
+             else
+                llvm::report_fatal_error("A radical set for this input does not exist.");
+        } else { //search using the actual radical (e.g. 氵_)
+            if(radical_table.find(radical) != radical_table.end()) 
+                return std::move(*radical_table[radical]);
+            else 
+                llvm::report_fatal_error("A radical set for this input does not exist.");
+        }
+    }
 
-                }
-                
-            }
     //Search for the results by making CCs of each radical and pushing them the vector REs
     std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode, bool mixMode, bool altMode)
     {
         std::vector<re::RE*> REs;
         std::vector<re::RE*> temp;
         std::vector<re::RE*> temp0;
-
-        //SAMPLE CASES FOR altMode:
-        //(WORKING):
-        //./radicalgrep -alt -c auto {火/水/土}_曰_ ../QA/radicaltest/testfiles/*
-        //./radicalgrep -alt -c auto {火/水}_曰_ ../../QA/radicaltest/testfiles/*
-        //./radicalgrep -alt -c auto 曰_{火/水/土}_水_ ../QA/radicaltest/testfiles/*
-        //./radicalgrep -alt -c auto 水_{火/水}_ ../../QA/radicaltest/testfiles/*
-        // ./radicalgrep -alt -c auto -m 水_{86/85}_ ../../QA/radicaltest/testfiles/*
-        // ./radicalgrep -alt -c auto 亻_衣_{生/亅} ../../QA/radicaltest/testfiles/*
         
         /*Suppose we have radical expression 亻_衣_{生/亅} as an example.
         亻and 衣 are stored in the zi vector, and 生 and 亅 are in the reTemp vector*/
@@ -96,7 +66,7 @@ namespace BS
                 }
 
             }
-            else if(0<position<c1-1)
+            else if (position > 0 && position < c1-1)
             {
                 for (std::size_t i = 0; i < zi.size(); i++)
                 {
