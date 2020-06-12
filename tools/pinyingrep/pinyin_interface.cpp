@@ -5,7 +5,6 @@
  */
 
 #include "pinyin_interface.h"
-#define DEBUG 0
 
 using namespace std;
 
@@ -90,7 +89,7 @@ namespace PY{
                 throw ParserException("Invalid Syntax -- only support ? after something'");
             // erase ?
             s.erase(qmark_index,1);
-	    string tmps = s;
+	        string tmps = s;
             resolved.first.push_back(tmps.erase(qmark_index-1,1));
         }
         resolved.first.push_back(s); // push s into possibly final result
@@ -152,37 +151,41 @@ namespace PY{
     // Methods in PinyinValuesEnumerator
     void PinyinValuesEnumerator::enumerate(vector<std::pair<vector<string>, vector<int>>> parsed){
         
-        for(auto first_syl=parsed.begin();first_syl!=parsed.end();first_syl++){
-            vector<pair<string,int>> temp;
-            for(auto syl=first_syl->first.begin();syl!=first_syl->first.end();syl++){
-                for(auto tone=first_syl->second.begin();tone!=first_syl->second.end();tone++){
-                    temp.push_back(make_pair(*syl,*tone));
-                }
-            }            
-            _half_enumerated_list.push_back(temp);
-        }
-        #if DEBUG
-        std::cout<<"Half Enumerated Result: "<<std::endl;
-        for(auto iter = _half_enumerated_list.begin(); iter != _half_enumerated_list.end(); iter++){
-            for(auto inner = iter->begin(); inner != iter->end(); inner++){
-                std::cout<<"* "<<inner->first<<" "<<inner->second<<std::endl;
+        #if LAZY_ENUM
+            _parsed = parsed;
+        #else
+            for(auto first_syl=parsed.begin();first_syl!=parsed.end();first_syl++){
+                vector<pair<string,int>> temp;
+                for(auto syl=first_syl->first.begin();syl!=first_syl->first.end();syl++){
+                    for(auto tone=first_syl->second.begin();tone!=first_syl->second.end();tone++){
+                        temp.push_back(make_pair(*syl,*tone));
+                    }
+                }            
+                _half_enumerated_list.push_back(temp);
             }
-        }
-        if(_fully_enumerate){
-            vector<int> indices(_half_enumerated_list.size());
-            int i=_half_enumerated_list.size()-1;
-            while(i>=0){
-                vector<pair<string,int>> T; //temporary vector of pairs
-                for(int k=0;k<_half_enumerated_list.size();k++){
-                    T.push_back(_half_enumerated_list[k][indices[k]]); //build current combination
-                }
-                _enumerated_list.push_back(T); //add to final vector
-                i=_half_enumerated_list.size()-1;
-                while(i>=0&&++indices[i]==_half_enumerated_list[i].size()){ 
-                    indices[i--]=0; //reset indices to 0;
+            #if DEBUG
+            std::cout<<"Half Enumerated Result: "<<std::endl;
+            for(auto iter = _half_enumerated_list.begin(); iter != _half_enumerated_list.end(); iter++){
+                for(auto inner = iter->begin(); inner != iter->end(); inner++){
+                    std::cout<<"* "<<inner->first<<" "<<inner->second<<std::endl;
                 }
             }
-        }
+            #endif
+            if(_fully_enumerate){
+                vector<int> indices(_half_enumerated_list.size());
+                int i=_half_enumerated_list.size()-1;
+                while(i>=0){
+                    vector<pair<string,int>> T; //temporary vector of pairs
+                    for(int k=0;k<_half_enumerated_list.size();k++){
+                        T.push_back(_half_enumerated_list[k][indices[k]]); //build current combination
+                    }
+                    _enumerated_list.push_back(T); //add to final vector
+                    i=_half_enumerated_list.size()-1;
+                    while(i>=0&&++indices[i]==_half_enumerated_list[i].size()){ 
+                        indices[i--]=0; //reset indices to 0;
+                    }
+                }
+            }
         #endif
         
         _enumerated = true;    
@@ -231,26 +234,48 @@ namespace PY{
 
     std::vector<re::RE*> PinyinValuesEnumerator::createREs(int database, OptTraditional opt){ //database=1 for kpy, database=0 for xhc
         std::vector<re::RE*> REs;
-        for(auto iter = _half_enumerated_list.begin(); iter != _half_enumerated_list.end(); iter++){
-            std::vector<re::RE*> components;
-            for(auto inner = iter->begin(); inner != iter->end(); inner++){
-                if (database==1){
-                    components.push_back(
-                        _intersect_character_type(
-                            UST::get_KPY(inner->first, inner->second), opt
+        #if LAZY_ENUM
+            for(auto iter = _parsed.begin(); iter != _parsed.end(); iter++){
+                std::vector<re::RE*> components;
+                for(auto syllable_iter = iter->first.begin(); 
+                syllable_iter != iter->first.end(); syllable_iter++)
+                    for(auto tone_iter = iter->second.begin();
+                    tone_iter != iter->second.end(); tone_iter++){
+                        if (database==1)
+                            components.push_back(
+                                _intersect_character_type
+                                    (UST::get_KPY(*syllable_iter, *tone_iter), opt)
+                                );
+                        else
+                            components.push_back(
+                                _intersect_character_type
+                                    (UST::get_XHC(*syllable_iter, *tone_iter), opt)
+                                );
+                    }   
+                REs.push_back(re::makeAlt(components.begin(), components.end())); 
+            }
+        #else
+            for(auto iter = _half_enumerated_list.begin(); iter != _half_enumerated_list.end(); iter++){
+                std::vector<re::RE*> components;
+                for(auto inner = iter->begin(); inner != iter->end(); inner++){
+                    if (database==1){
+                        components.push_back(
+                            _intersect_character_type(
+                                UST::get_KPY(inner->first, inner->second), opt
+                                )
+                            );
+                    }
+                    else{
+                        components.push_back(
+                            _intersect_character_type(
+                                UST::get_XHC(inner->first, inner->second), opt
                             )
                         );
+                    }
                 }
-                else{
-                    components.push_back(
-                        _intersect_character_type(
-                            UST::get_XHC(inner->first, inner->second), opt
-                        )
-                    );
-                }
+                REs.push_back(re::makeAlt(components.begin(), components.end()));
             }
-            REs.push_back(re::makeAlt(components.begin(), components.end()));
-        }
+        #endif
         return std::vector<re::RE*>(1, re::makeSeq(REs.begin(), REs.end()));
     }
 

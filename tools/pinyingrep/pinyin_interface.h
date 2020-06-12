@@ -25,6 +25,8 @@
 #include <unicode/data/KHanyuPinyin.h>
 #include <unicode/data/KXHC1983.h>
 #include <unicode/data/KTraditional.h>
+#define LAZY_ENUM 1
+#define DEBUG 0
 
 enum OptTraditional {
   All, Traditional, Simplified, TraditionalOnly, SimplifiedOnly
@@ -124,6 +126,8 @@ namespace PY{
         // private method
         re::CC* _intersect_character_type(const UCD::UnicodeSet&& uset, OptTraditional opt);
 
+        // private member
+        vector<std::pair<vector<string>, vector<int>>> _parsed;
 
         vector<vector<std::pair<string, int>>> _enumerated_list;
         // e.g.  (<,> for pair, and {} for vector)
