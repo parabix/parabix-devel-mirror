@@ -8,7 +8,8 @@ See below for more examples.
 How to Test Pinyin Grep
 ------------------
 To build Pinyin Grep, the working environment needs to have all requirements of icgrep build met.  
-To test pinyingrep, `cd` the directory `QA` and run the following commends on your terminal:
+To test pinyingrep, you can run `make pinyintest` in the build directory.
+Equivalently, you can `cd` the directory `QA` and run the following commends on your terminal:
 ```
 python greptest.py -v -t pinyintest/pinyintest.xml ../build/bin/pinyingrep
 ```
@@ -134,7 +135,7 @@ In the third iteration, we will implement **pinyingrep** version 2.0 with additi
 5. :white_check_mark: More flexible regex feature `?` 
 6. :white_check_mark: Option for showing match lines numbers
 7. :white_check_mark: Option for displaying file paths
-8. :white_check_mark: Case insensitive 
+8. :white_check_mark: Case insensitive (Update: Upper Toned Characters Supported)
 9. :white_check_mark: Refactoring
 10. :white_large_square: Eliminate compile time warnings 
 
@@ -234,16 +235,20 @@ command line flag `-kpy` need to be in place.
 ```
 #### 15. Case-insensitive input
 * Uppercase and lowercase input are equivalent.
-* Toned unicode characters do not support uppercase typing.
+* Update: Upper Toned Characters Also Supported Now.
 ```
     Test
-    Input: ZHOng wen
+    Input: ZHŌng wen
     Output:
     欢迎来到中文世界。
     在这里你可以感受中文的博大精深。
 ```
 
 ## Version History
+#### Version 1.71
+**Pinyingrep** version 1.71 complete the supports:
+1. Upper Toned Characters like `Ō` are also supported.
+
 #### Version 1.7
 **Pinyingrep** version 1.7 supports:
 1. Case-insensitive input
