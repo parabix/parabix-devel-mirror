@@ -16,6 +16,8 @@
 
 <grepcase regexp="ZHONG wen" datafile="simple_pinyin" greplines="3 4"/>
 <grepcase regexp="zhong yAO" datafile="simple_pinyin" greplines="5 6 9 10"/>
+<grepcase regexp="ZHONG yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
+<grepcase regexp="ZHoNg yAo" datafile="simple_pinyin" greplines="5 6 9 10"/>
 <grepcase regexp="lian xi" datafile="simple_pinyin" greplines="8 11"/>
 <grepcase regexp="huAn ying" datafile="simple_pinyin" greplines="3"/>
 <grepcase regexp="lai dao" datafile="simple_pinyin" greplines="3"/>
@@ -25,13 +27,14 @@
 
 <grepcase regexp="zhong1 yao4" datafile="simple_pinyin" greplines="6 10"/>
 <grepcase regexp="zho4ng yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
-<grepcase regexp="zhōng" datafile="simple_pinyin" greplines="3 4 6 10"/>
+<grepcase regexp="zhŌng" datafile="simple_pinyin" greplines="3 4 6 10"/>
 <grepcase regexp="zhòng" datafile="simple_pinyin" greplines="3 4 5 6 7 9 10"/>
 
 <grepcase regexp="lü" datafile="simple_pinyin" greplines="12 13"/>
 <grepcase regexp="lǜ" datafile="simple_pinyin" greplines="12"/>
 <grepcase regexp="lv" datafile="simple_pinyin" greplines="12 13"/>
-<grepcase regexp="lv3" datafile="simple_pinyin" greplines="13"/>
+<grepcase regexp="lV" datafile="simple_pinyin" greplines="12 13"/>
+<grepcase regexp="Lv3" datafile="simple_pinyin" greplines="13"/>
 
 
 <datafile id = "test2">
@@ -106,11 +109,17 @@
 <grepcase regexp="bin" datafile="traditional-test" greplines="26" flags="-trd"/>
 <grepcase regexp="bin" datafile="traditional-test" greplines="26" flags="-tonly"/>
 
+<grepcase regexp="jia bin" datafile="traditional-test" greplines="9 26" flags="-all"/>
 <grepcase regexp="jia bin" datafile="traditional-test" greplines="9" flags="-sim"/>
 <grepcase regexp="jia bin" datafile="traditional-test" greplines="" flags="-sonly"/>
 <grepcase regexp="jia bin" datafile="traditional-test" greplines="26" flags="-trd"/>
 <grepcase regexp="jia bin" datafile="traditional-test" greplines="" flags="-tonly"/>
 
+<grepcase regexp="dui" datafile="traditional-test" greplines="2 19" flags="-all"/>
+<grepcase regexp="dui" datafile="traditional-test" greplines="2" flags="-sonly"/>
+<grepcase regexp="dui" datafile="traditional-test" greplines="19" flags="-trd"/>
+<grepcase regexp="dui" datafile="traditional-test" greplines="19" flags="-tonly"/>
+<grepcase regexp="dui" datafile="traditional-test" greplines="2" flags="-sim"/>
 
 <datafile id = "exact-test">
 pin yin
@@ -140,6 +149,9 @@ xuǎn
 <grepcase regexp="xi.?ng" datafile="questionmarktest" greplines="2 3 4"/>
 <grepcase regexp="man?g" datafile="questionmarktest" greplines="6"/>
 <grepcase regexp="chu?an3" datafile="questionmarktest" greplines="7 8"/>
+<grepcase regexp="chu?an3" datafile="questionmarktest" greplines="7 8"/>
+<grepcase regexp="cHu?aN3" datafile="questionmarktest" greplines="7 8"/>
+
 
 
 </greptest>
