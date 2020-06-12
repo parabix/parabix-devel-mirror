@@ -1,5 +1,5 @@
 ﻿The number of double quotes in CSV,The number of double quotes in JSON,value
-2,0,""
+2,0,"x"
 4,1,""""
 6,2,""""""
 8,3,""""""""
