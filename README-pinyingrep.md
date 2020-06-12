@@ -5,7 +5,7 @@ Pinyin grep is a Chinese text grep built using the icgrep engine. The program ta
 In order to build pinyin grep, icgrep would have to be already built.
 From the `QA` directory run the following command to generate the required test files.
 ```
-python greptest.py -t pinyintest/pinyintest.xml ../build/bin/pinyingrep
+python greptest.py -t pinyin_test/pinyin_test.xml ../build/bin/pinyin_grep
 ```
 
 ## Execution
@@ -20,24 +20,41 @@ After a successful run, it is complete.
 The program takes a specific pinyin input and outputs the corresponding Chinese characters according to previously made test cases.
 In this iteration, there is a specific range of input implemented, just so it is enough to pass specific test cases.
 
-
 ## Iteration 2: Enhanced Implementation 
 Iteration 2 is suppose to deliver enhanced implementation. Similar to the previous iteration, the program is suppose to be able to read an input and output the corresponding lines.\
 Changes made in this iteration includes:
 ##### 1. Tone Number
 Support for pinyin input using numbers to signify tone. 
 - `ni3` `hao3`
-##### 1. Regular Expressions
+##### 2. Regular Expressions
 Support for pinyin using regular expressions.
 - `qing?`
 - `m.ng`
-##### 1. Multiple Input
+##### 3. Multiple Files
 Support for multiple pinyin input.
+- `../QA/pinyin_test/testfiles/T1_pinyin` `../QA/pinyin_test/testfiles/T3_pinyin`
+##### 4. Sequence Search`
 - `"ma fan"`
 
-
 ## Iteration 3: Final Product
-
+A polished version of iteration 2 with added features. 
+Features added in this iteration includes:
+##### 1. Colorization
+- Places emphasis the searched word(s) by colouring it red.
+##### 2. Database Selection
+- An option to choose between databases: `kHanyuPinyin`, `kXHC1983`
+##### 3. Loose Matching
+- Allows for a more general search for pinyin pairs such as `zh` and `z`
+##### 4. Definitions
+- Displays the definition of searched word(s)
+- using database kDefinitions, it would print the line of definition after the printed matched grep lines.
+##### 5. Indexing
+- Search for a Chinese character by using the unicode value
+- Option to input a Hex (`3442`) or a Dec (`13378`) match a chinese character (`仿`)
+##### 6. Regular Expression -- `[]`
+- `[zc]hang` seaches for `zhang` and `chang`
+##### 7. Case Insensitive
+- `SHANG`, `Shang`, `ShAnG`, and `shang` would all have the same results
 ---
 
 ### Testcases:
@@ -131,4 +148,30 @@ Input:
 Output:
 	写完了去睡觉
 ```
-
+#### Testcase 8 -- *Mixed*
+```
+Command:
+	bin/pinyin_grep m.ng?4 ../QA/pinyin_test/testfiles/T2_regex
+Input: 
+	m.ng?4
+Output:
+	每天慢慢做作业。
+	睡眠不足，没有梦想
+```
+#### Testcase 9 -- *Colorization*
+Input `-c auto` right before pinyin input, to select the option for coloured pinyin
+```
+Command:
+	bin/pinyin_grep -c auto wán ../QA/pinyin_test/testfiles/T1_pinyin
+Input: 
+	(colourful) wán
+Output:
+	**玩**乐都没时间
+	写**完**了去睡觉
+```
+#### Testcase 10 -- *Database Selection*
+#### Testcase 11 -- *Loose Matching*
+#### Testcase 12 -- *Definitions*
+#### Testcase 13 -- *Indexing*
+#### Testcase 14 -- *Regular Expression (`[]`)*
+#### Testcase 14 -- *Case Insensitive*
