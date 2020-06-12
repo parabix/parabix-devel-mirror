@@ -41,7 +41,7 @@
 #include <kernel/util/debug_display.h>
 #include <fstream>
 #include <sstream>
-
+#include <math.h>
 #include <kernel/streamutils/sentinel.h>
 #include <kernel/streamutils/string_insert.h>
 #include <kernel/streamutils/run_index.h>
@@ -144,7 +144,7 @@ protected:
 };
 
 typedef void (*CSVTranslateFunctionType)(uint32_t fd);
-CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<string>& Header_Vec, string s);
+CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<string>& Header_Vec, unsigned bixnum_size);
 
 int Get_Field_Count(const char delimiter, const char* argv);
 void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n);
@@ -160,9 +160,14 @@ int main(int argc, char *argv[]) {
     int n = Get_Field_Count(delimiter, inputFile.c_str());
     vector<string> header;
     Get_Header(delimiter,inputFile.c_str(), header, n);
-    
+
+    unsigned max_length = 0;
+    for(unsigned i=0;i<header.size();i++)   if(header[i].size()>max_length)    max_length=header[i].size();
+
+    unsigned bixnum_size = (int)(log2(max_length))+1;
+
     //  Build and compile the Parabix pipeline by calling the Pipeline function above.
-    CSVTranslateFunctionType fn = generatePipeline(driver,n,header,"}\n]");
+    CSVTranslateFunctionType fn = generatePipeline(driver, n, header, bixnum_size);
     //  The compile function "fn"  can now be used.   It takes a file
     //  descriptor as an input, which is specified by the filename given by
     //  the inputFile command line option.
@@ -339,7 +344,7 @@ void CSV_Marks::generatePabloMethod() {
     pb.createAssign(pb.createExtract(marksVar, pb.getInteger(num_of_field+3)), pb.createXor(betweenRecords,record_starts));
 }
 
-CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<string>& Header_Vec, string s) {
+CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<string>& Header_Vec, unsigned bixnum_size) {
     // A Parabix program is build as a set of kernel calls called a pipeline.
     // A pipeline is construction using a Parabix driver object.
     auto & b = pxDriver.getBuilder();
@@ -387,7 +392,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     //P->CreateKernelCall<DebugDisplayKernel>("CSV_data_mask", CSV_data_mask);
     // StreamSet * original = P->CreateStreamSet(1,8);
     // P->CreateKernelCall<P2SKernel>(BasisBits, original);
-    // P->CreateKernelCall<StdOutKernel>(original);
+    // P->CreateKernelCall<DebugDisplayKernel>("inputfile",original);
 
     StreamSet * CSV_data_mask = P->CreateStreamSet(1);          //output streamsets from Lookahead Driver kernels
     StreamSet * Field_starts = P->CreateStreamSet(1);
@@ -444,7 +449,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     // P->CreateKernelCall<DebugDisplayKernel>("InsertMarks", InsertMarks);
     
     //P->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
-    unsigned insertLengthBits = 5;  //needs to be changed later, will create problems if max field name length is greater than 31
+    unsigned insertLengthBits = bixnum_size;  //needs to be changed later, will create problems if max field name length is greater than 31
                                     //cannot be less than 5 with current program
 
     StreamSet * const InsertBixNum = P->CreateStreamSet(insertLengthBits,1);
@@ -482,6 +487,8 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     
     StreamSet * FilledBytes  = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(FinalBasis, FilledBytes);
+
+    // P->CreateKernelCall<DebugDisplayKernel>("output", FilledBytes);
     
     //output to file
     //Scalar * outputFileName = P->getInputScalar("outputFileName");
