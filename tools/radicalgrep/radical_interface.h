@@ -43,8 +43,6 @@ namespace BS
             static map<string, const UCD::UnicodeSet*> mixed_table;
     };
 
-    //static UnicodeSetTable ucd_radical;
-
     class RadicalValuesEnumerator
     {
         public:

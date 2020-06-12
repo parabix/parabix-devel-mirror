@@ -48,6 +48,9 @@ For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.
 * `-h` manually toggle file path to be shown for each matching line
     
     > This is turned on automatically each time when > 1 files are inputted
+* `-clk` program timer
+    > Used to measure the runtime of Radical Grep.
+    > Returns the runtine in seconds.
 * `-n` shows the line number along with each match
 * Single and multi-file input
 
@@ -74,7 +77,7 @@ In the first iteration, Radical Grep takes in pre-programmed inputs and returns 
 
 In the second iteration, Radical Grep can take Kangxi radical character(s) as input (e.g. 子_ or 氵_子_). It returns the sentence with the correspondings radicals marked in red text. Iteration 2 of Radical Grep can be run using the same input format as iteration 1.
 
-Another program, `Radical Count` was implemented in this iteration. The documentation can be found [here](https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel/blob/delta-radicalgrep/README-radicalcount.md) and the program can found in parabix-devel/tools/wc/radical_count.
+Another program, `Radical Count` was implemented in this iteration. The documentation and program can found in `parabix-devel/tools/wc/radical_count`.
 
 ## Changelog
 
@@ -319,23 +322,23 @@ For inputs with more than one test files, filepaths are automatically shown. You
     Input: -h -n 曰_ ../../QA/radicaltest/testfiles/*
     
     Output: ../../QA/radicaltest/testfiles/test5:4:“金曰从革”，代表沉降、肃杀、收敛等性质，在人体为肺和大肠
-    ../../QA/radicaltest/testfiles/test5:5:“水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
-    ../../QA/radicaltest/testfiles/test5:6:“木曰曲直”，代表生长、升发、条达、舒畅的功能，在人体为肝和膽
-    ../../QA/radicaltest/testfiles/test5:7:“火曰炎上”，代表了温热、向上等性质，在人体为心和小肠
-    ../../QA/radicaltest/testfiles/test5:8:“土曰稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
-    ../../QA/radicaltest/testfiles/test7:2:有人曰河海一体
-    ../../QA/radicaltest/testfiles/test7:3:有人曰火水不容
-    ../../QA/radicaltest/testfiles/test7:4:有人曰土水相得益彰
+            ../../QA/radicaltest/testfiles/test5:5:“水曰润下”，代表了滋润、下行、寒凉、闭藏的性质，在人体为肾和膀胱
+            ../../QA/radicaltest/testfiles/test5:6:“木曰曲直”，代表生长、升发、条达、舒畅的功能，在人体为肝和膽
+            ../../QA/radicaltest/testfiles/test5:7:“火曰炎上”，代表了温热、向上等性质，在人体为心和小肠
+            ../../QA/radicaltest/testfiles/test5:8:“土曰稼穑”，代表了生化、承载、受纳等性质，在人体为脾和胃
+            ../../QA/radicaltest/testfiles/test7:2:有人曰河海一体
+            ../../QA/radicaltest/testfiles/test7:3:有人曰火水不容
+            ../../QA/radicaltest/testfiles/test7:4:有人曰土水相得益彰
 
 ## Example 7: Runtime of the search
 
-```
-Input: -clk -c auto 水_子_ ../../QA/radicaltest/testfiles/*
+The `-clk` flag can be toggled to measure the runtime of a search. It returns the in seconds.
 
-Output: 部首分类也是使用**汉字**之文化圈少数的共通点
-				部首检字也有其局限性，许多**汉字**难以归部
-				the runtime is:2.54655s.
-```
+    Input: -clk -c auto 水_子_ ../../QA/radicaltest/testfiles/*
+
+    Output: 部首分类也是使用**汉字**之文化圈少数的共通点
+            部首检字也有其局限性，许多**汉字**难以归部
+            the runtime is:2.54655s.
 
 
 

@@ -59,6 +59,7 @@ static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the r
 
 static cl::opt<bool> mixMode("m", cl::desc("Use both radical character and radical index to perform search."), cl::init(false), cl::cat(radicalgrepFlags));
 static cl::opt<bool> altMode("alt", cl::desc("Use regular expressions to search for multiple phrases."), cl::init(false), cl::cat(radicalgrepFlags));
+
 //Adpated from grep_interface.cpp
 ColoringType ColorFlag;
 static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of the output."),
@@ -66,10 +67,9 @@ static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of 
                                             clEnumValN(autoColor,   "auto", "Turn on colorization only when outputting to terminal"),
                                             clEnumValN(neverColor,  "never", "Turn off output colorization")
                                             CL_ENUM_VAL_SENTINEL), cl::cat(radicalgrepFlags), cl::location(ColorFlag), cl::init(neverColor));
-bool LineNumberFlag, WithFilenameFlag;
+bool LineNumberFlag, WithFilenameFlag, CLKCountingFlag;
 static cl::opt<bool, true> LineNumberOption("n", cl::location(LineNumberFlag), cl::desc("Show the line number with each matching line."), cl::cat(radicalgrepFlags));
 static cl::opt<bool, true> WithFilenameOption("h", cl::location(WithFilenameFlag), cl::desc("Show the file name with each matching line."), cl::cat(radicalgrepFlags));
-bool CLKCountingFlag;
 static cl::opt<bool, true> CLKCountingOption("clk", cl::location(CLKCountingFlag), cl::desc("Show the runtime of the function."), cl::cat(radicalgrepFlags));
 std::vector<fs::path> allfiles; //Store all path of files
 
@@ -93,8 +93,8 @@ int main(int argc, char* argv[])
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     
     long begintime;
-     if(CLKCountingFlag==true)
-         begintime=clock();
+    if(CLKCountingFlag)
+        begintime=clock();
     auto radicalREs=generateREs(input_radical, altMode); //get the results
 
     if (WithFilenameFlag) grep->showFileNames();
@@ -103,16 +103,15 @@ int main(int argc, char* argv[])
     //turn on colorizartion if specified by user
     if ((ColorFlag == alwaysColor) || ((ColorFlag == autoColor) && isatty(STDOUT_FILENO))) grep->setColoring();
     
-
     grep->initFileResult(allfiles); //Defined in file grep_engine, Initialize results of each file
     grep->initREs(radicalREs);  //Defined in file grep_engine, Initialize the output
     grep->grepCodeGen();    //Return the number of the result
     const bool matchFound=grep->searchAllFiles();   //Return if there have found any result, if yes, return true, else return false
 
     //if there does not exist any results
-    if(matchFound==false) cout<<"Can not find the results!"<<endl;
+    if(!matchFound) cout<<"Can not find the results!"<<endl;
 
-    if(CLKCountingFlag==true)
+    if(CLKCountingFlag)
     {
         long endtime=clock();
         cout<<"the runtime is:"<<(endtime-begintime)*1.0/CLOCKS_PER_SEC<<"s."<<endl;
