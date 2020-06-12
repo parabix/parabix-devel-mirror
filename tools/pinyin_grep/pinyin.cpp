@@ -1,23 +1,55 @@
 #include"pinyin.h"
 namespace PinyinPattern{
-    vector <vector<string>> syl { {"a", "ā", "á", "ǎ", "à"},
+    //the program will not support for syllable ê anymore because it can be replace by ei
+    vector <vector<string> > syl { {"a", "ā", "á", "ǎ", "à"},
         {"o", "ō", "ó", "ǒ", "ò"},
         {"e", "ē", "é", "ě", "è"},
-        {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
-        {"ai", "āi", "ái", "ǎi", "ài"},
-        {"ei", "ēi", "éi", "ěi", "èi"},
-        {"ao", "āo", "áo", "ǎo", "ào"},
-        {"ou", "ōu", "óu", "ǒu", "òu"},
-        {"an", "ān", "án", "ǎn","àn"},
-        {"en", "ēn", "én", "ěn", "èn"},
-        {"ang", "āng", "áng", "ǎng", "àng"},
-        {"eng", "ēng", "éng", "ěng", "èng"},
-        {"er", "ēr", "ér", "ěr", "èr"},
         {"i", "ī", "í", "ǐ", "ì"},
         {"u", "ū", "ú", "ǔ", "ù"},
-        {"ü", "ǖ", "ǘ", "ǚ", "ǜ"},
-        {"m", "m̄", "ḿ", "m̀"},
-        {"n", "ń", "ň", "ǹ"} };
+        {"ü", "ǖ", "ǘ", "ǚ", "ǜ"}
+        //        {"ê", "ê̄ ", "ế ", "ê̌ ", "ề "},
+        //        {"m", "m̄", "ḿ", "m̀"},
+        //        {"n", "ń", "ň", "ǹ"}
+    };
+    vector <string> consonant {"b","c","d","f","g","h","j","k","l","m","n","p","q",
+        "r","s","t","v","w","x","y","z","ch","sh","zh"
+    };
+    vector <string> vowel{"a", "ā", "á", "ǎ", "à",
+        "ai", "āi", "ái", "ǎi", "ài",
+        "ao", "āo", "áo", "ǎo", "ào",
+        "an", "ān", "án", "ǎn","àn",
+        "ang", "āng", "áng", "ǎng", "àng",
+        "ian", "iān", "ián", "iǎn","iàn",
+        "iao", "iāo", "iáo", "iǎo", "iào",
+        "iang", "iāng", "iáng", "iǎng","iàng",
+        "ia", "iā", "iá", "iǎ", "ià",
+        "ua", "uā", "uá", "uǎ", "uà",
+        "uan", "uān", "uán", "uǎn","uàn",
+        "uai", "uāi", "uái", "uǎi", "uài",
+        "uang", "uāng", "uáng", "uǎng","uàng",
+        "o", "ō", "ó", "ǒ", "ò",
+        "ou", "ōu", "óu", "ǒu", "òu",
+        "uo", "uō", "uó", "uǒ", "uò",
+        "ong", "ōng", "óng", "ǒng", "òng",
+        "iong", "iōng", "ióng", "iǒng", "iòng",
+        "e", "ē", "é", "ě", "è",
+        "ei", "ēi", "éi", "ěi", "èi",
+        "en", "ēn", "én", "ěn", "èn",
+        "ie", "iē", "ié", "iě", "iè",
+        "eng", "ēng", "éng", "ěng", "èng",
+        "er", "ēr", "ér", "ěr", "èr",
+        "üe", "üē", "üé", "üě", "üè",
+        "ue", "uē", "ué", "uě", "uè",
+        "i", "ī", "í", "ǐ", "ì",
+        "ui", "uī", "uí", "uǐ", "uì",
+        "in", "īn", "ín", "ǐn", "ìn",
+        "ing", "īng", "íng", "ǐng", "ìng",
+        "u", "ū", "ú", "ǔ", "ù",
+        "iu", "iū", "iú", "iǔ", "iù",
+        "un", "ūn", "ún", "ǔn", "ùn",
+        "ü", "ǖ", "ǘ", "ǚ", "ǜ"
+        //                          "ê", "ê̄", "ế", "ê̌", "ề"
+    };
 /*
     Before Search works as the following three steps:
     1. divide the input into single or multi syllables1
@@ -28,9 +60,11 @@ namespace PinyinPattern{
     {
         vector<string> Divided;
         vector <vector <string> > FinalVec;
+        bool legal = true;
+        bool vague_input = false;
         int pos = 0;
         Pinyin_syllables = trim(Pinyin_syllables);
-        
+        transform(Pinyin_syllables.begin(),Pinyin_syllables.end(),Pinyin_syllables.begin(),::tolower);
         string temp, temp2;
         while(pos!=-1)
         {
@@ -70,6 +104,31 @@ namespace PinyinPattern{
                 tone_parse.push_back(temp);
                 temp2.replace(word.find('?')-1, 2, "");
                 tone_parse.push_back(temp2);
+            }
+            /*if find regex [ ] , store all possible syllables without tone in the tone_parse*/
+            else if (find_bracket(word))
+            {
+                int pos1,pos2;
+                pos1 = word.find_first_of('[');
+                pos2 = word.find_first_of(']');
+                vector <string>  vague_syntax;
+                for(int i = pos1+1;i!=pos2;i++)
+                {
+                    vague_syntax.push_back(word.substr(i,1));
+                }
+                vector <string>::iterator iter;
+                iter = vague_syntax.begin();
+                for(int i = 1;i<pos2-pos1;i++)
+                {
+                    
+                    string tmp_str;
+                    tmp_str = *iter;
+                    temp = word;
+                    temp.erase(pos1,pos2-pos1+1);
+                    temp.insert(pos1,tmp_str);
+                    tone_parse.push_back(temp);
+                    iter++;
+                }
             }
             /*if the word has digital tone, replace it with the regex one*/
             else if (word.find('1') != string::npos || word.find('2') != string::npos|| word.find('3') != string::npos|| word.find('4') != string::npos)
@@ -145,36 +204,48 @@ namespace PinyinPattern{
                     temp_vec.push_back(parse_tone);
                 }
             }
-            //select the database
-            if(!database)
+            //check the legality
+            legal = check_legel(temp_vec);
+            if(vague_input)
+                legal = true;
+            if(legal)
             {
-            //adding the prefix and suffix to all the strings
-            
-                for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+                //select the database
+                if(!database)
                 {
-                    *iter = Add_kHanyuPinyin_fix(*iter);
+                    //adding the prefix and suffix to all the strings
+                    
+                    for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+                    {
+                        *iter = Add_kHanyuPinyin_fix(*iter);
+                    }
+                }
+                else
+                {
+                    for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+                    {
+                        *iter = Add_kXHC1983_fix(*iter);
+                    }
+                }
+                // for (auto x: FinalVec){
+                //     llvm::errs() << x << " ";
+                // }
+                // llvm::errs() << "\n";
+                //test the parsing
+                //for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
+                //{
+                //    cout<<*iter<<endl;
+                //}
+                //
+                if(temp_vec.size()!=0)
+                {
+                    FinalVec.push_back(temp_vec);
                 }
             }
             else
             {
-                for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
-                {
-                    *iter = Add_kXHC1983_fix(*iter);
-                }
-            }
-            // for (auto x: FinalVec){
-            //     llvm::errs() << x << " ";
-            // }
-            // llvm::errs() << "\n";
-            //test the parsing
-            //for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
-            //{
-            //    cout<<*iter<<endl;
-            //}
-            //
-            if(temp_vec.size()!=0)
-            {
-                FinalVec.push_back(temp_vec);
+                FinalVec.clear();
+                return FinalVec;
             }
         }
         Divided = vector <string>(); //deallocate unused vector
@@ -220,5 +291,43 @@ namespace PinyinPattern{
             }
         }
         return true;
+    }
+    bool check_legel(vector<string> to_check)
+    {
+        vector<string>::iterator consonant_iter,vowel_iter,str_iter;
+        for(str_iter = to_check.begin();str_iter != to_check.end();str_iter++)
+        {
+            bool check_flag = false;
+            for(consonant_iter = consonant.begin();consonant_iter != consonant.end();consonant_iter++)
+            {
+                for(vowel_iter = vowel.begin();vowel_iter != vowel.end();vowel_iter++)
+                {
+                    string temp_str = *consonant_iter+*vowel_iter;
+                    if(*str_iter==temp_str)
+                    {
+                        check_flag = true;
+                    }
+                }
+            }
+            if(!check_flag)
+            {
+                cout<<"please enter the corret format of syllables which listed in the README.md, for example 'ming'. "<<endl;
+                return false;
+            }
+        }
+        return true;
+    }
+    bool find_bracket(string to_find)
+    {
+        bool find_flag = false;
+        int pos1,pos2;
+        pos1 = pos2 = -1;
+        pos1 = to_find.find_first_of('[');
+        pos2 = to_find.find_first_of(']');
+        if(pos1!=-1&&pos2>pos1)
+        {
+            find_flag = true;
+        }
+        return find_flag;
     }
 }

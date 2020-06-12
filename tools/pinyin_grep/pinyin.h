@@ -116,6 +116,7 @@ namespace PinyinPattern{
     string Add_kHanyuPinyin_fix(string to_add);
     string Add_kXHC1983_fix(string to_add);
     bool All_Alpha(string word);
-    
+    bool check_legel(vector<string> to_check);
+    bool find_bracket(string to_find);
 }
 #endif

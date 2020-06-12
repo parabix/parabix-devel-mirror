@@ -153,6 +153,10 @@ int main(int argc, char* argv[]){
     std::vector <std::vector<std::string> >KangXiLinePattern;
     
     KangXiLinePattern = PinyinPattern::Syllable_Parse(PinyinLinePattern,Database);
+    if(KangXiLinePattern.empty())
+    {
+        return 0;
+    }
     /*test point2*/
     cout << "Parsing finished successfully" << endl;
     /*parsing test*/
