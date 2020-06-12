@@ -30,6 +30,7 @@
 #include <string>
 #include <toolchain/toolchain.h>
 #include <toolchain/pablo_toolchain.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_ones.h>
 #include <pablo/pe_zeroes.h>
@@ -64,7 +65,7 @@ static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>")
 class CSV_Masking : public PabloKernel {
     public:
         CSV_Masking(BuilderRef kb, StreamSet * dquote, StreamSet * delimiter,  StreamSet * newline, StreamSet * CR, StreamSet * basis, 
-        StreamSet * translatedBasis, StreamSet * field_starts, StreamSet* record_starts, StreamSet* starts, StreamSet * mask, StreamSet * escapes):
+        StreamSet * translatedBasis, StreamSet * field_starts, StreamSet* record_starts, StreamSet* starts, StreamSet * mask, StreamSet * escapes, StreamSet * testOut, StreamSet * testOut1, StreamSet * testOut2):
         PabloKernel(kb, "CSV_Masking", {
             Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, 
             Binding{"basis", basis},
@@ -78,7 +79,10 @@ class CSV_Masking : public PabloKernel {
             Binding{"record_starts",record_starts},
             Binding{"starts",starts},
             Binding{"mask",mask},
-            Binding{"escapes",escapes}
+            Binding{"escapes",escapes},
+            Binding{"testOut", testOut},
+            Binding{"testOut1", testOut1},
+            Binding{"testOut2", testOut2}
         }, {}, {}){}
     protected:
         void generatePabloMethod() override;
@@ -171,7 +175,14 @@ void CSV_Masking::generatePabloMethod() {
    
     PabloAST * mask = pb.createNot(toDelete);
 
-    PabloAST * field_starts = pb.createAdd(pb.createOr(pb.createAdvance(CSV_delimiters,1),pb.createAdvance(record_starts,1)),start_dquote);
+    PabloAST * char_after_delim = pb.createOr(pb.createAdvance(CSV_delimiters, 1), pb.createAdvance(record_starts,1));
+
+    PabloAST * char_after_start_quote = pb.createAnd(pb.createAdvance(char_after_delim, 1), pb.createAdvance(start_dquote,1));//pb.createAdd(pb.createOr(pb.createAdvance(CSV_delimiters,1),pb.createAdvance(record_starts,1)),start_dquote);
+
+    PabloAST * noquote_field_starts = pb.createXor(char_after_delim, start_dquote);
+
+    PabloAST *field_starts = pb.createOr(noquote_field_starts, char_after_start_quote);
+    // pb.createIntrinsicCall(pablo::Intrinsic::PrintRegister, {CSV_delimiters});
 
     PabloAST * escapes = pb.createOr(escaped_quote,literal_newlines);
     
@@ -183,6 +194,9 @@ void CSV_Masking::generatePabloMethod() {
     Var * escapeVar = getOutputStreamVar("escapes");
     Var * record_startsVar = getOutputStreamVar("record_starts");
     Var * startsVar = getOutputStreamVar("starts");
+    Var * testOutVar = getOutputStreamVar("testOut");
+    Var * testOut1Var = getOutputStreamVar("testOut1");
+    Var * testOut2Var = getOutputStreamVar("testOut2");
 
     // Translate \n to n    ASCII value of \n = 0x0d, ASCII value of n = 0x6e   blackslashes will be added lateron to show \n
     std::vector<PabloAST *> translated_basis(8, nullptr);
@@ -205,6 +219,9 @@ void CSV_Masking::generatePabloMethod() {
     pb.createAssign(pb.createExtract(escapeVar, pb.getInteger(0)), escapes);
     pb.createAssign(pb.createExtract(record_startsVar, pb.getInteger(0)), record_starts);
     pb.createAssign(pb.createExtract(startsVar, pb.getInteger(0)), pb.createOr(record_starts,field_starts));
+    pb.createAssign(pb.createExtract(testOutVar, pb.getInteger(0)), pb.createOr(pb.createAdvance(record_starts,1), pb.createAdvance(CSV_delimiters,1)));
+    pb.createAssign(pb.createExtract(testOut1Var, pb.getInteger(0)), pb.createAdvance(record_starts,1));
+    pb.createAssign(pb.createExtract(testOut2Var, pb.getInteger(0)), pb.createAdvance(CSV_delimiters,1));
 }
 
 void CSV_Marks::generatePabloMethod() {
@@ -261,6 +278,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     
      StreamSet * delimiter = P->CreateStreamSet(1);
     P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x2c)}, BasisBits, delimiter);
+    // P->CreateKernelCall<DebugDisplayKernel>("delimiter", delimiter);
 
     StreamSet * CR = P->CreateStreamSet(1);
     P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0d)}, BasisBits, CR);
@@ -274,8 +292,11 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     StreamSet * escapes = P->CreateStreamSet(1);
     StreamSet * Record_starts = P->CreateStreamSet(1);
     StreamSet * TranslatedBasis = P->CreateStreamSet(8,1);
+    StreamSet * testOut = P->CreateStreamSet(1);
+    StreamSet * testOut1 = P->CreateStreamSet(1);
+    StreamSet * testOut2 = P->CreateStreamSet(1);
     P->CreateKernelCall<CSV_Masking>(Dquote, delimiter, newline, CR, BasisBits, TranslatedBasis, 
-    Field_starts,Record_starts, starts,CSV_data_mask, escapes);
+    Field_starts,Record_starts, starts,CSV_data_mask, escapes, testOut, testOut1, testOut2);
     //P->CreateKernelCall<DebugDisplayKernel>("CSV_data_mask", CSV_data_mask);
     //StreamSet * original = P->CreateStreamSet(1,8);
     //P->CreateKernelCall<P2SKernel>(BasisBits, original);
@@ -294,9 +315,13 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     // StreamSet * Filtered_mask = P->CreateStreamSet(1);
     // FilterByMask(P,CSV_data_mask,CSV_data_mask,Filtered_mask);
     // P->CreateKernelCall<DebugDisplayKernel>("Filtered_mask", Filtered_mask);
+    // P->CreateKernelCall<DebugDisplayKernel>("Record_starts", Record_starts);
+    // P->CreateKernelCall<DebugDisplayKernel>("start_dquote", testOut);
+    // P->CreateKernelCall<DebugDisplayKernel>("advanceRecord", testOut1);
+    // P->CreateKernelCall<DebugDisplayKernel>("advanceDelim", testOut2);
     //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_field_starts", Filtered_field_starts);
     // P->CreateKernelCall<DebugDisplayKernel>("Filtered_escapes", Filtered_escapes);
-    // P->CreateKernelCall<DebugDisplayKernel>("Record_starts", Record_starts);
+    //  P->CreateKernelCall<DebugDisplayKernel>("Field_starts", Field_starts);
     //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_record_starts", Filtered_record_starts);
     
     // StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
@@ -313,7 +338,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int n, vector<st
     StreamSet * InsertMarks = P->CreateStreamSet(marksize);
     P->CreateKernelCall<CSV_Marks>(Filtered_field_starts,Filtered_escapes,Filtered_record_starts, n,InsertMarks);
     //P->CreateKernelCall<CSV_Marks>(startPlus,escapePlus,,n,InsertMarks);
-    // P->CreateKernelCall<DebugDisplayKernel>("InsertMarks", InsertMarks);
+    // P->CreateKernelCall<DebugDisplayKernel>("Filtered_record_starts", Filtered_record_starts);
     
     //P->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
     unsigned insertLengthBits = 5;  //needs to be changed later, will create problems if max field name length is greater than 31
