@@ -77,13 +77,13 @@ namespace PY{
             table.replace_equivalence(s);
             resolved.second = vector<int>{0, 1, 2, 3, 4};
         }
-	//resolve capital letters
-	for(unsigned i=0; i < s.size(); i++){
-	    if(s[i] >= 'A' && s[i] <= 'Z')
-		    s[i] |= 0x20; // make lower case
-	}
-        // resolve regex '?'
-	std::size_t qmark_index = s.find('?');
+        //resolve capital letters
+        for(unsigned i=0; i < s.size(); i++){
+            if(s[i] >= 'A' && s[i] <= 'Z')
+                s[i] |= 0x20; // make lower case
+        }
+            // resolve regex '?'
+        std::size_t qmark_index = s.find('?');
         if(qmark_index != s.npos){
             if(qmark_index == 0) 
                 throw ParserException("Invalid Syntax -- only support ? after something'");
@@ -394,7 +394,7 @@ namespace PY{
     // replave unicode v and e_hat
     void PinyinValuesTable::replace_equivalence(string& s){
         for(auto iter = _equivalence_table.begin(); iter != _equivalence_table.end(); iter++){
-            int index = s.find(iter->first);
+            auto index = s.find(iter->first);
             if(index != s.npos){
                 s = s.replace(index, iter->first.length(), iter->second);
             }
