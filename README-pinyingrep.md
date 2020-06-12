@@ -135,8 +135,8 @@ In the third iteration, we will implement **pinyingrep** version 2.0 with additi
 6. :white_check_mark: Option for showing match lines numbers
 7. :white_check_mark: Option for displaying file paths
 8. :white_check_mark: Case insensitive 
-9. :white_large_square: Eliminate compile time warnings 
-10. :white_large_square: Refactoring
+9. :white_check_mark: Refactoring
+10. :white_large_square: Eliminate compile time warnings 
 
     
 ### Supported New Features
@@ -178,7 +178,7 @@ command line flag `-kpy` need to be in place.
 * "?" will automatically find the previous letter and skip the numbers.
 * if the letter before `?` is a toned unicode character, the tone will not be changed even if this letter does not exist in some cases.
 ```
-    Test 1: ater `.`
+    Test 1: after `.`
     Input: xi.?ng
     Output: 
     心想事成
