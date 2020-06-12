@@ -79,9 +79,9 @@ namespace PY{
             resolved.second = vector<int>{0, 1, 2, 3, 4};
         }
 	//resolve capital letters
-	for(int i=0;i<s.size();i++){
+	for(unsigned i=0; i < s.size(); i++){
 	    if(s[i] >= 'A' && s[i] <= 'Z')
-		s[i] = s[i] + 'a' - 'A';
+		    s[i] |= 0x20; // make lower case
 	}
         // resolve regex '?'
 	std::size_t qmark_index = s.find('?');
@@ -168,7 +168,6 @@ namespace PY{
                 std::cout<<"* "<<inner->first<<" "<<inner->second<<std::endl;
             }
         }
-        #endif
         if(_fully_enumerate){
             vector<int> indices(_half_enumerated_list.size());
             int i=_half_enumerated_list.size()-1;
@@ -184,6 +183,8 @@ namespace PY{
                 }
             }
         }
+        #endif
+        
         _enumerated = true;    
     }
 
