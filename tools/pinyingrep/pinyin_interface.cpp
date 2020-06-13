@@ -54,6 +54,7 @@ namespace PY{
     PinyinValuesParser::_interpret_regex(string s){
         std::pair<vector<string>, vector<int>> resolved;
         PinyinValuesTable table;
+        string temp_for_warning;
 
         // resloved tones specified 
         regex pattern(".*([0-4]).*");
@@ -82,7 +83,8 @@ namespace PY{
             if(s[i] >= 'A' && s[i] <= 'Z')
                 s[i] |= 0x20; // make lower case
         }
-            // resolve regex '?'
+        temp_for_warning = s; // to display temp_for_warning if any warning
+        // resolve regex '?'
         std::size_t qmark_index = s.find('?');
         if(qmark_index != s.npos){
             if(qmark_index == 0) 
@@ -118,6 +120,18 @@ namespace PY{
                 cout<<"* "<<*iter<<endl;
             cout<<"=============="<<endl;
         #endif
+
+        // Remove all non-legal syllables
+        for(auto iter = resolved.first.begin(); iter != resolved.first.end(); ){
+            if(!table.is_legal(*iter))
+                iter = resolved.first.erase(iter);
+            else
+                iter++;
+        }
+        // If no legal syllables left and Warning mode is on, print warning messages
+        if(_warning && resolved.first.empty()){
+            cout<<"[WARNING] "<<temp_for_warning<<" matches no legitimate pinyin syllables."<<endl;
+        }
         return resolved;
     }
 
@@ -241,17 +255,22 @@ namespace PY{
                 syllable_iter != iter->first.end(); syllable_iter++)
                     for(auto tone_iter = iter->second.begin();
                     tone_iter != iter->second.end(); tone_iter++){
-                        if (database==1)
-                            components.push_back(
-                                _intersect_character_type
-                                    (UST::get_KPY(*syllable_iter, *tone_iter), opt)
-                                );
-                        else
-                            components.push_back(
-                                _intersect_character_type
-                                    (UST::get_XHC(*syllable_iter, *tone_iter), opt)
-                                );
-                    }   
+                        bool matched = false;
+                        if (database==1){
+                            const UCD::UnicodeSet&& uset = UST::get_KPY(*syllable_iter, *tone_iter);
+                            if(!uset.empty()) matched = true;
+                            components.push_back(_intersect_character_type(std::move(uset), opt));
+                        }
+                        else{
+                            const UCD::UnicodeSet&& uset = UST::get_XHC(*syllable_iter, *tone_iter);
+                            if(!uset.empty()) matched = true;
+                            components.push_back(_intersect_character_type(std::move(uset), opt));
+                        }
+                        if(!matched && _warning){
+                            cout<<"[WARNING] "<<*syllable_iter<<*tone_iter
+                            <<" matches no Chinese characters in the current database"<<endl;
+                        }
+                    }
                 REs.push_back(re::makeAlt(components.begin(), components.end())); 
             }
         #else
@@ -337,7 +356,7 @@ namespace PY{
     // Method: is_legal
     // Check whether the syllable is legal or not
     bool PinyinValuesTable::is_legal(string s){
-        return _legal_syllables_set.find(get_initial(s) + get_final(s)) != _legal_syllables_set.end();
+        return _legal_syllables_set.find(s) != _legal_syllables_set.end();
     }
     // Method: is_toned
     // Check whether the syllable has toned final

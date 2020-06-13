@@ -92,6 +92,10 @@ static cl::alias LineNumberAlias("line-number", cl::desc("Alias for -n"), cl::al
 static cl::opt<bool, false> WithFilenameOption("h", cl::desc("Show the file name with each matching line."), cl::cat(pygrepFlags));
 static cl::alias WithFilenameAlias("with-filename", cl::desc("Alias for -h"), cl::aliasopt(WithFilenameOption));
 
+//Option for showing warning message about input legitimacy
+static cl::opt<bool, false> WarningOption("w", cl::desc("Show warning message about input legitimacy."), cl::cat(pygrepFlags));
+static cl::alias WarningAlias("warning", cl::desc("Alias for -w"), cl::aliasopt(WarningOption));
+
 // the source files to grep from
 std::vector<fs::path> allFiles;
 
@@ -102,12 +106,14 @@ std::vector<re::RE*> generateREs(std::string pyregex){
     // into the sequence of individual syllable strings. 
     // And for each individual syllable, it parse it into `<{Syllables}, {Tones}>` pairs.
     PY::PinyinValuesParser parser;
+    if(WarningOption) parser.set_warning();
     parser.parse(pyregex);
     
     // enumerate the pair of vector mentioned above 
     // into `{<syllable, tone>,...}` a vector of pairs.
     // for every individual syllable
     PY::PinyinValuesEnumerator enumerator;
+    if(WarningOption) enumerator.set_warning();
     enumerator.enumerate(parser.get_parsed());
 
     // Create re::REs from the enumerated result

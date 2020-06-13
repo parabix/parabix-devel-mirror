@@ -35,6 +35,7 @@ As an exception of alphabetic characters in pinyin representation, `ü` is also 
 With such a form of input syllables, pinyingrep will 'grep' lines with Chinese characters with
 readings specified by the pinyin syllables in all five tones(Tone `1-4` as well as Qingsheng/Soft/Neutral)
 For instance, the result of grepping `zhong` is equivalent to those of grepping `zhong0`(Qingsheng), `zhong1`, `zhong2`, `zhong3` and `zhong4`.
+Using numeric tones together with Latin characters' tones, is not supported. In this case, the number `[0-4]` is with higher priority to be considered as tones, while the previous syllable are probably illegal since there is toned Latin characters embedded other than supported alphabetic characters.
 
 #### 2. Pinyin syllables with tones specified by numbers
 **Pinyingrep** supports pinyin syllables with tones specified by Arabic numbers(`0-4`).
@@ -138,6 +139,7 @@ In the third iteration, we will implement **pinyingrep** version 2.0 with additi
 8. :white_check_mark: Case insensitive (Update: Upper Toned Characters Supported)
 9. :white_check_mark: Refactoring
 10. 🏆 Eliminate compile time warnings 
+11. 🚀 Warning mode for users
 
     
 ### Supported New Features
@@ -244,7 +246,30 @@ command line flag `-kpy` need to be in place.
     在这里你可以感受中文的博大精深。
 ```
 
+#### 16. Warning Mode
+* Command Line flag `-w` is used to turn on Warning Mode.
+* When Warning Mode is on, users get warnings when their pinyin syllable input is not legitimate, and also when the interpreted toned syllable is not in the current database.
+* The basic principle of such a warning mode is to give users more flexibility when using the software without making them bothered by unwanted warning/error messages.
+```
+    Input: "zhiŌng" -w 
+    Output: [WARNING] zhiong matches no legitimate pinyin syllables.
+```
+```
+    Input: "zh?ong" -w
+    Output: [WARNING] zong0 matches no Chinese characters in the current database
+            [WARNING] zong2 matches no Chinese characters in the current database
+            [WARNING] zhong0 matches no Chinese characters in the current database
+            [WARNING] zhong2 matches no Chinese characters in the current database
+            欢迎来到中文世界。
+            在这里你可以感受中文的博大精深。
+            ......
+
+```
 ## Version History
+#### Version 1.8
+**Pinyingrep** version 1.8 supports:
+1. Warning mode for users. It is helpful for user to debug their input's legitimacy.
+
 #### Version 1.71
 **Pinyingrep** version 1.71 complete the supports:
 1. Upper Toned Characters like `Ō` are also supported.

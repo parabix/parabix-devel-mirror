@@ -47,10 +47,10 @@ namespace PY{
     class PinyinValuesParser{
     public:
         // Constructor
-        PinyinValuesParser(string input): _parsed(false){
+        PinyinValuesParser(string input): _parsed(false), _warning(false){
             parse(input);
         }
-        PinyinValuesParser():_parsed(false) {}
+        PinyinValuesParser():_parsed(false), _warning(false) {}
 
         // Core Method
 
@@ -67,6 +67,10 @@ namespace PY{
             return _parsed;
         }
 
+        void set_warning(){
+            _warning = true;
+        }
+
         // return _parsed_syllable_tone(copy)
         vector<std::pair<vector<string>, vector<int>>>
         get_parsed() { return _parsed_syllable_tone; }
@@ -77,6 +81,7 @@ namespace PY{
         // { <{jin},{0,1,2,3,4}>, <{rong},{0,1,2,3,4}>} for input "jin rong"
 
         bool _parsed; // whether the parser has done the parsing or not
+        bool _warning; // whether display warning message
 
         // Private Method
 
@@ -109,7 +114,8 @@ namespace PY{
     // of syllables and tones
     class PinyinValuesEnumerator{
     public:
-        PinyinValuesEnumerator(bool flag = false): _enumerated(false), _fully_enumerate(flag) {}
+        PinyinValuesEnumerator(bool flag = false)
+        : _enumerated(false), _fully_enumerate(flag), _warning(false) {}
         // Core Method
 
         // Method: emumerate
@@ -122,12 +128,16 @@ namespace PY{
         // Method: createREs(int dabase) ==1 for kpy, 0 for xhc
         // create a vector of RE* for grep engine
         std::vector<re::RE*> createREs(int database, OptTraditional opt);
+
+        void set_warning(){
+            _warning = true;
+        }
     private:
         // private method
         re::CC* _intersect_character_type(const UCD::UnicodeSet&& uset, OptTraditional opt);
 
         // private member
-        vector<std::pair<vector<string>, vector<int>>> _parsed;
+        vector<std::pair<vector<string>, vector<int>>> _parsed; // parsed list from parser
 
         vector<vector<std::pair<string, int>>> _enumerated_list;
         // e.g.  (<,> for pair, and {} for vector)
@@ -139,6 +149,7 @@ namespace PY{
 
         bool _enumerated;
         bool _fully_enumerate; // whether to enumerate fully
+        bool _warning; // whether display warning message
     };
 
     // PinyinValuesTable
