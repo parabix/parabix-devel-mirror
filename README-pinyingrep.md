@@ -37,7 +37,7 @@ Features added in this iteration includes:
 4. Case Insensitive 
 5. Regular Expression -- `[]`
 6. Loose Matching 
-7. Colorization \
+7. Colourization \
 7.1 Places emphasis the searched word(s) by colouring it red. 
 8. Indexing \
 8.1 Search for a Chinese character by using the unicode value \
@@ -53,6 +53,7 @@ Features added in this iteration includes:
 ---
 
 ### Testcases:
+* Testcase commands are formatted to run from the `build` directory.
 #### Testcase 1.1 -- *Regular Romanisation*
 Inputs Latin alphabets
 
@@ -152,8 +153,16 @@ Output:
 	每天慢慢做作业。
 	睡眠不足，没有梦想
 ```
-#### Testcase 3.1 -- *Display Error Message when Input is not in the Correct Format*
-#### Testcase 3.2 -- *Option to Display Grep Line Number for Matched Characters*
+#### Testcase 3.1 -- *Error Message*
+```
+Command:
+	bin/pinyin_grep word ../QA/pinyin_test/testfiles/T2_regex
+Input:
+	word
+Output:
+	Please enter the correct format of syllables, listed in the README-pinyingrep.md, for example 'ming'.
+```
+#### Testcase 3.2 -- *Display Grep Line Number for Matched Characters*
 #### Testcase 3.3 -- *Display File Path for Matched Characters in Multi File Input*
 #### Testcase 3.4 -- *Case Insensitive*
 `SHANG`, `Shang`, `ShAnG`, and `shang` would all have the same results
@@ -161,7 +170,15 @@ Output:
 Allows for a more general search for pinyin pairs such as `zh` and `z`
 #### Testcase 3.6 -- *Regular Expression -- `[]`*
 `[zc]hang` seaches for `zhang` and `chang`
-#### Testcase 3.7 -- *Colorization*
+```
+Command:
+	bin/pinyin_grep [tm]ing ../QA/pinyin_test/testfiles/T2_regex
+Input:
+	[tm]ing
+Output:
+	我听说明天会很晴朗，也许明天会更好。
+```
+#### Testcase 3.7 -- *Colourization*
 Input `-c auto` right before pinyin input, to select the option for coloured pinyin
 ```
 Command:
@@ -174,4 +191,14 @@ Output:
 ```
 #### Testcase 3.8 -- *Indexing*
 #### Testcase 3.9 -- *Database Selection*
+Input `-data` right before pinyin input, to search through the `kXHC1983` database instead of the `kHanyuPinyin` database.
+* `这` cannot be found in `kHanyuPinyin` database.
+```
+Command:
+	bin/pinyin_grep -data zhè ../QA/pinyin_test/testfiles/T1_pinyin
+Input:
+	-data zhè
+Output:
+	这列子可能是重要
+```
 #### Testcase 3.10 -- *Definitions*
