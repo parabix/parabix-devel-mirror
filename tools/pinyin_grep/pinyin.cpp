@@ -50,6 +50,20 @@ namespace PinyinPattern{
         "ü", "ǖ", "ǘ", "ǚ", "ǜ"
         //                          "ê", "ê̄", "ế", "ê̌", "ề"
     };
+    vector <string> single_vowel{
+        "a", "ā", "á", "ǎ", "à",
+        "ai", "āi", "ái", "ǎi", "ài",
+        "ao", "āo", "áo", "ǎo", "ào",
+        "an", "ān", "án", "ǎn","àn",
+        "ang", "āng", "áng", "ǎng", "àng",
+        "o", "ō", "ó", "ǒ", "ò",
+        "ou", "ōu", "óu", "ǒu", "òu",
+        "e", "ē", "é", "ě", "è",
+        "ei", "ēi", "éi", "ěi", "èi",
+        "en", "ēn", "én", "ěn", "èn",
+        "er", "ēr", "ér", "ěr", "èr",
+        "eng", "ēng", "éng", "ěng", "èng",
+    };
 /*
     Before Search works as the following three steps:
     1. divide the input into single or multi syllables1
@@ -269,7 +283,7 @@ namespace PinyinPattern{
     string Add_kHanyuPinyin_fix(string to_add)
     {
         string temp = to_add;
-        string prefix = "(kHanyuPinyin.*"; 
+        string prefix = "(kHanyuPinyin.*[:,]";
         string suffix = ")(,|$)";
         temp = prefix + temp + suffix;
         return temp;
@@ -277,7 +291,7 @@ namespace PinyinPattern{
     string Add_kXHC1983_fix(string to_add)
     {
         string temp = to_add;
-        string prefix = "(kXHC1983.*";
+        string prefix = "(kXHC1983.*[:,]";
         string suffix = ")(,|$| )";
         temp = prefix + temp + suffix;
         return temp;
@@ -294,10 +308,18 @@ namespace PinyinPattern{
     }
     bool check_legel(vector<string> to_check)
     {
-        vector<string>::iterator consonant_iter,vowel_iter,str_iter;
+        vector<string>::iterator consonant_iter,vowel_iter,str_iter,svowel_iter;
         for(str_iter = to_check.begin();str_iter != to_check.end();str_iter++)
         {
             bool check_flag = false;
+            for(svowel_iter = single_vowel.begin();svowel_iter!=single_vowel.end();svowel_iter++)
+            {
+                string temp_str = *svowel_iter;
+                if(*str_iter==temp_str)
+                {
+                    check_flag = true;
+                }
+            }
             for(consonant_iter = consonant.begin();consonant_iter != consonant.end();consonant_iter++)
             {
                 for(vowel_iter = vowel.begin();vowel_iter != vowel.end();vowel_iter++)
