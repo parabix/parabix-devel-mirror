@@ -10,17 +10,18 @@ using namespace BS;
 using namespace UCD::KRS_ns;
 
 namespace BS
-{
+{   
+    //A functor used to invoke get_uset() in createREs()
     static UnicodeSetTable ucd_radical;
     
-    const UCD::UnicodeSet&& UnicodeSetTable::get_uset(string radical, bool indexMode, bool mixedMode)    //Map the input radical to the corresponding UnicodeSet predefined in kRSKangXi.h
+    const UCD::UnicodeSet&& UnicodeSetTable::get_uset(string radical, bool indexMode, bool mixedMode)    
     {
         if (indexMode) { //search using the index (e.g. 85_)
             if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                 return std::move(*_unicodeset_radical_table[radical]);
             else
                 llvm::report_fatal_error("A radical set for this input does not exist.\nEnter a integer in [1,214], followed by _.");
-        } else if (mixedMode) {
+        } else if (mixedMode) { //search using radical characters and the index (e.g. 氵_85_)
             if (_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
                 return std::move(*_unicodeset_radical_table[radical]);
             else if (radical_table.find(radical) != radical_table.end()) 
@@ -35,9 +36,10 @@ namespace BS
         }
     }
 
-    //Search for the results by making CCs of each radical and pushing them the vector REs
     std::vector<re::RE*> RadicalValuesEnumerator::createREs(bool indexMode, bool mixMode, bool altMode)
     {
+        //REs stores the regular expression nodes for each character and gets returned to the main function.
+        //temp and temp0 are storage buffers.
         std::vector<re::RE*> REs;
         std::vector<re::RE*> temp;
         std::vector<re::RE*> temp0;
@@ -68,7 +70,7 @@ namespace BS
                 }
 
             }
-            else if (position > 0 && position < c1-1)
+            else if (position > 0 && position < c1-1) 
             {
                 for (std::size_t i = 0; i < zi.size(); i++)
                 {
@@ -110,8 +112,16 @@ namespace BS
             }
 
         }
-        else
+        else //non alt mode inputs.
         {
+            //Suppose we have an inputted radical expression like this: 亻_心_ ,
+            //and we want to return a regular expression representing that input.
+            //After parsing, radical_list will look like this: {亻,心}
+            //First Run of the loop likes this: REs[0] = (亻|亻) 
+            //It makes a "alt" node, similar to the alt syntax in regex.
+            //Second Run: REs[1] = (心|心)
+            //After both characters have been processed, REs = (亻|亻)(心|心)
+            //This means that the first character must have only the 亻radical, and the second character must have the 心 radical.
             for (std::size_t i = 0; i < radical_list.size(); i++)
             {
                 temp.push_back(re::makeCC(UCD::UnicodeSet(ucd_radical.get_uset(radical_list[i], indexMode, mixMode))));
@@ -137,8 +147,10 @@ namespace BS
                 c1++;
         }
         position=0;
+
+        //Tokenize input_radical, with '_' as the delimiter. 
         while (getline(ss, temp, '_'))
-        { //tokenize the input
+        { 
             if (altMode)
             {
                 /* As an example, say we have a radical expression of X_Y_{A/B}_.

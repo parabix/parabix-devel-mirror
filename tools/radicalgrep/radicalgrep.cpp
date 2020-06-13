@@ -52,28 +52,32 @@ using namespace pablo;
 using namespace kernel;
 using namespace codegen;
 
-static cl::OptionCategory radicalgrepFlags("Command Flags", "Options for Radical Grep"); //The command line
-static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags));    //The input  radical(s)
-static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));    //search for multiple input files is supported
-static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search.\n Link to Radical Indices: https://www.yellowbridge.com/chinese/radicals.php"), cl::init(false), cl::cat(radicalgrepFlags)); 
+//category for Radical Grep specific cmd line flags
+static cl::OptionCategory radicalgrepFlags("Command Flags", "Options for Radical Grep"); 
+//Input; the radical expression & file(s) to search
+static cl::opt<std::string> input_radical(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(radicalgrepFlags)); 
+static cl::list<std::string> inputfiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(radicalgrepFlags));  
 
+//Radical Grep Input Flags; index mode, mixed mdde, and alt mode
+static cl::opt<bool> indexMode("i", cl::desc("Use radical index instead of the radical character to perform search.\n Link to Radical Indices: https://www.yellowbridge.com/chinese/radicals.php"), cl::init(false), cl::cat(radicalgrepFlags)); 
 static cl::opt<bool> mixMode("m", cl::desc("Use both radical character and radical index to perform search."), cl::init(false), cl::cat(radicalgrepFlags));
 static cl::opt<bool> altMode("alt", cl::desc("Use regular expressions to search for multiple phrases."), cl::init(false), cl::cat(radicalgrepFlags));
 
-//Adpated from grep_interface.cpp
+//Adpated from grep_interface.cpp; icgrep output flags - colourization, line number, file name, runtime
 ColoringType ColorFlag;
-static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of the output."),
+static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of the output."), //Turn on/off colourization
                                  cl::values(clEnumValN(alwaysColor, "always", "Turn on colorization when outputting to a file and terminal"),
                                             clEnumValN(autoColor,   "auto", "Turn on colorization only when outputting to terminal"),
                                             clEnumValN(neverColor,  "never", "Turn off output colorization")
                                             CL_ENUM_VAL_SENTINEL), cl::cat(radicalgrepFlags), cl::location(ColorFlag), cl::init(neverColor));
 bool LineNumberFlag, WithFilenameFlag, CLKCountingFlag;
-static cl::opt<bool, true> LineNumberOption("n", cl::location(LineNumberFlag), cl::desc("Show the line number with each matching line."), cl::cat(radicalgrepFlags));
-static cl::opt<bool, true> WithFilenameOption("h", cl::location(WithFilenameFlag), cl::desc("Show the file name with each matching line."), cl::cat(radicalgrepFlags));
-static cl::opt<bool, true> CLKCountingOption("clk", cl::location(CLKCountingFlag), cl::desc("Show the runtime of the function."), cl::cat(radicalgrepFlags));
-std::vector<fs::path> allfiles; //Store all path of files
+static cl::opt<bool, true> LineNumberOption("n", cl::location(LineNumberFlag), cl::desc("Show the line number with each matching line."), cl::cat(radicalgrepFlags)); 
+static cl::opt<bool, true> WithFilenameOption("h", cl::location(WithFilenameFlag), cl::desc("Show the file name with each matching line."), cl::cat(radicalgrepFlags)); 
+static cl::opt<bool, true> CLKCountingOption("clk", cl::location(CLKCountingFlag), cl::desc("Show the runtime of the function."), cl::cat(radicalgrepFlags)); 
 
-std::vector<re::RE*> generateREs(std::string input_radical, bool altMode);    //This function parse the input and get the results
+std::vector<fs::path> allfiles; //Stores all the inputted file paths
+
+std::vector<re::RE*> generateREs(std::string input_radical, bool altMode);  
 
 int main(int argc, char* argv[])
 {
@@ -87,30 +91,43 @@ int main(int argc, char* argv[])
     CPUDriver pxDriver("radicalgrep");
     allfiles=argv::getFullFileList(pxDriver, inputfiles);
 
+    //If > 1 files are inputted, the file name will automatically be shown next to each matching line.
     if ((allfiles.size() > 1)) WithFilenameFlag = true;
     
+    //Adapted from icgrep.cpp; the Parabix Grep engine
     std::unique_ptr<grep::GrepEngine> grep;
     grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
     
+    //For the -clk flag, the runtime starts from here.
     long begintime;
-    if(CLKCountingFlag)
-        begintime=clock();
-    auto radicalREs=generateREs(input_radical, altMode); //get the results
+    if(CLKCountingFlag) begintime=clock();
 
+    //generateREs() takes input_radical and parses the expression into a regular expression for processing.
+    //For each inputted radical, the respective radical set is retrieved and made into a node.
+    //Following the pattern of the input_radical, this function will return a regular expression in the form of a vector.
+    auto radicalREs=generateREs(input_radical, altMode); 
+
+    //If enabled, line count and file name will be shown in the output.
     if (WithFilenameFlag) grep->showFileNames();
     if (LineNumberFlag) grep->showLineNumbers();
 
     //turn on colorizartion if specified by user
     if ((ColorFlag == alwaysColor) || ((ColorFlag == autoColor) && isatty(STDOUT_FILENO))) grep->setColoring();
     
-    grep->initFileResult(allfiles); //Defined in file grep_engine, Initialize results of each file
-    grep->initREs(radicalREs);  //Defined in file grep_engine, Initialize the output
-    grep->grepCodeGen();    //Return the number of the result
-    const bool matchFound=grep->searchAllFiles();   //Return if there have found any result, if yes, return true, else return false
+    //Defined in file grep_engine.cpp and adapted from icgrep.cpp
+    //Initialize inputted files and the radical regular expression returned from generateREs, 
+    //Create the grep pipeline and search for the radicals in a parallel fashion.
+    //If lines with matching radicals have been found, set matchFound to True.
+    //Else, return False.
+    grep->initFileResult(allfiles);
+    grep->initREs(radicalREs); 
+    grep->grepCodeGen();    
+    const bool matchFound=grep->searchAllFiles();   
 
-    //if there does not exist any results
+    //If no matches were found, return an error message and terminate program.
     if (!matchFound) cout << "No matches are found for " << input_radical << endl;
 
+    //Endpoint of measuring the runtime.
     if(CLKCountingFlag)
     {
         long endtime=clock();
