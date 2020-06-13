@@ -109,6 +109,7 @@ namespace PinyinPattern{
                     temp.replace(word.find('.'), 1, syl[j][0]);
                     tone_parse.push_back(temp);
                 }
+                vague_input = true;
             }
             /*if find regex ? , store all possible syllables without tone in the tone_parse*/
             else if (word.find('?') != string::npos)
@@ -219,9 +220,13 @@ namespace PinyinPattern{
                 }
             }
             //check the legality
-            legal = check_legel(temp_vec);
             if(vague_input)
+            {
                 legal = true;
+            }
+            else{
+                legal = check_legel(temp_vec);
+            }
             if(legal)
             {
                 //select the database
