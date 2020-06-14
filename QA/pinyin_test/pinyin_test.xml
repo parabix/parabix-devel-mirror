@@ -17,6 +17,8 @@
 <datafile id = "T3_pinyin">
 想要好成绩，
 需要努力进步。
+这个产品称它能帮助你聪明一点。
+但是当我看到考试成绩觉得惨了。
 </datafile>
 
 <grepcase regexp = "zhong yao" datafile = "T1_pinyin" greplines = "2 3"/>

@@ -163,11 +163,48 @@ Output:
 	Please enter the correct format of syllables, listed in the README-pinyingrep.md, for example 'ming'.
 ```
 #### Testcase 3.2 -- *Display Grep Line Number for Matched Characters*
+Input `-n` right before pinyin input, to display the grep line of matched characters 
+```
+Command:
+	bin/pinyin_grep -n zhong ../QA/pinyin_test/testfiles/T1_pinyin
+Input:
+	-n zhong
+Output:
+	2:这列子可能是重要
+	3:喝中药一定要吃山楂饼
+```
 #### Testcase 3.3 -- *Display File Path for Matched Characters in Multi File Input*
+Input `-h` right before pinyin input, to display the file path of matched characters 
+```
+Command:
+	bin/pinyin_grep -h shui ../QA/pinyin_test/testfiles/T1_pinyin ../QA/pinyin_test/testfiles/T2_regex
+Input:
+	-h shui
+Output:
+	../QA/pinyin_test/testfiles/T1_pinyin:写完了去睡觉
+	../QA/pinyin_test/testfiles/T2_regex:睡眠不足，没有梦想。
+```
 #### Testcase 3.4 -- *Case Insensitive*
 `SHANG`, `Shang`, `ShAnG`, and `shang` would all have the same results
+```
+Command:
+	bin/pinyin_grep DING ../QA/pinyin_test/testfiles/T1_pinyin
+Input:
+	DING
+Output:
+	喝中药一定要吃山楂饼
+```
 #### Testcase 3.5 -- *Loose Matching*
-Allows for a more general search for pinyin pairs such as `zh` and `z`
+Allows for a more general search for pinyin pairs such as `zh` and `z`, by using `?`
+```
+Command:
+	bin/pinyin_grep -data ch?an ../QA/pinyin_test/testfiles/T3_pinyin
+Input:
+	ch?an
+Output:
+	这个产品称它能帮助你聪明一点。
+	但是当我看到考试成绩觉得惨了。
+```
 #### Testcase 3.6 -- *Regular Expression -- `[]`*
 `[zc]hang` seaches for `zhang` and `chang`
 ```
