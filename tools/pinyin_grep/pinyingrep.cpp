@@ -66,6 +66,8 @@ static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of 
                                                     clEnumValN(autoColor,   "auto", "Turn on colorization only when outputting to terminal"),
                                                     clEnumValN(neverColor,  "never", "Turn off output colorization")
                                                     CL_ENUM_VAL_SENTINEL), cl::cat(pygrepFlags), cl::location(ColorFlag), cl::init(neverColor));
+static cl::opt<bool> LineNumberOption("n", cl::desc("Show the line number with each matching line."), cl::init(false), cl::cat(pygrepFlags));
+static cl::opt<bool> WithFilenameOption("h", cl::desc("Show the file name with each matching line."), cl::init(false), cl::cat(pygrepFlags));
 
 //static cl::opt<bool> Database2("d2", cl::desc("Searching through kXHC1983 database"), cl::init(false), cl::cat(pygrepFlags))
 std::vector<fs::path> allFiles;
@@ -231,6 +233,9 @@ int main(int argc, char* argv[]){
     if ((ColorFlag == alwaysColor) || ((ColorFlag == autoColor) && isatty(STDOUT_FILENO))) {
         grep->setColoring();
     }
+    if (WithFilenameOption) grep->showFileNames();
+    if (LineNumberOption) grep->showLineNumbers();
+
     grep->initFileResult(allFiles);
     grep->initREs(FinalRE);
     grep->grepCodeGen();
