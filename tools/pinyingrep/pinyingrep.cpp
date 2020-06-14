@@ -118,7 +118,7 @@ std::vector<re::RE*> generateREs(std::string pyregex){
 
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
-    std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? 1 : 0, ChineseCharacterType));
+    std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? (Database::KPY) : (Database::XHC), ChineseCharacterType));
     if(pyExactOption){
         re::ModeFlagSet InitialFlag = re::MULTILINE_MODE_FLAG;
         re::RE_Syntax RegexpSyntax = re::RE_Syntax::PCRE;

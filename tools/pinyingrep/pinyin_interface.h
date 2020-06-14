@@ -31,6 +31,9 @@
 enum OptTraditional {
   All, Traditional, Simplified, TraditionalOnly, SimplifiedOnly
 };
+enum Database {
+    KPY, XHC
+};
 typedef re::CC* (*OptTraditionalFunctionType)(const UCD::UnicodeSet&& );
 namespace PY{
     using std::vector;
@@ -125,9 +128,11 @@ namespace PY{
         // which contains all possible values of <syllable,tone> pairs
         void enumerate(vector<std::pair<vector<string>, vector<int>>> parsed);
 
-        // Method: createREs(int dabase) ==1 for kpy, 0 for xhc
+        // Method: createREs(Database, ChineseCharacterType) 
+        // Database set to xhc-database as default. Can be switched to kpy-database.
+        // ChineseCharacterType options includes: traditional, simplified, trad-only, and simp-only
         // create a vector of RE* for grep engine
-        std::vector<re::RE*> createREs(int database, OptTraditional opt);
+        std::vector<re::RE*> createREs(Database database, OptTraditional opt);
 
         void set_warning(){
             _warning = true;

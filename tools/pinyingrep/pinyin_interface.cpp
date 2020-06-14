@@ -246,7 +246,7 @@ namespace PY{
         return fmap[opt](std::move(uset));
     }
 
-    std::vector<re::RE*> PinyinValuesEnumerator::createREs(int database, OptTraditional opt){ //database=1 for kpy, database=0 for xhc
+    std::vector<re::RE*> PinyinValuesEnumerator::createREs(Database database, OptTraditional opt){ 
         std::vector<re::RE*> REs;
         #if LAZY_ENUM
             for(auto iter = _parsed.begin(); iter != _parsed.end(); iter++){
@@ -256,7 +256,7 @@ namespace PY{
                     for(auto tone_iter = iter->second.begin();
                     tone_iter != iter->second.end(); tone_iter++){
                         bool matched = false;
-                        if (database==1){
+                        if (database==KPY){
                             const UCD::UnicodeSet&& uset = UST::get_KPY(*syllable_iter, *tone_iter);
                             if(!uset.empty()) matched = true;
                             components.push_back(_intersect_character_type(std::move(uset), opt));
@@ -277,7 +277,7 @@ namespace PY{
             for(auto iter = _half_enumerated_list.begin(); iter != _half_enumerated_list.end(); iter++){
                 std::vector<re::RE*> components;
                 for(auto inner = iter->begin(); inner != iter->end(); inner++){
-                    if (database==1){
+                    if (database==KPY){
                         components.push_back(
                             _intersect_character_type(
                                 UST::get_KPY(inner->first, inner->second), opt
