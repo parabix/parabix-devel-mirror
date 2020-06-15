@@ -64,6 +64,14 @@ namespace PinyinPattern{
         "er", "ēr", "ér", "ěr", "èr",
         "eng", "ēng", "éng", "ěng", "èng",
     };
+    vector<vector<string> > upper_syl{
+        {A,Ā,Á,Ǎ,À},
+        {O,Ō,Ó,Ŏ,Ò},
+        {E,Ē,É,Ĕ,È},
+        {I,Ī,Í,Ǐ,Ì},
+        {U,Ū,Ú,Ǔ,Ù},
+        {Ü,Ǖ,Ǘ,Ǚ,Ǜ}
+    };
 /*
     Before Search works as the following three steps:
     1. divide the input into single or multi syllables1
