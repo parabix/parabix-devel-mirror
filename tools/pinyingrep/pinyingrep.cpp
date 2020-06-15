@@ -79,7 +79,6 @@ static cl::opt<Database, XHC> pyKPY(cl::desc("Database Options:"),cl::cat(pygrep
         clEnumValN(KPY,"kpy", "use kpy database")
     )
 );
-static cl::alias pyKPYAlias0("KPY_Database",cl::desc("alias for kpy database -kpy"),cl::aliasopt(pyKPY));
 
 cl::opt<OptTraditional, All> ChineseCharacterType(cl::desc("Choose Chinese Characters Type(Traditional or Simplified):"), cl::cat(pygrepFlags),
   cl::values(
