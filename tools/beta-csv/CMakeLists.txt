@@ -20,6 +20,24 @@ DEPS
     	re.parse
 )
 
+parabix_add_executable(
+NAME
+	csv2jsontmp
+SRC
+    	csv2json_3.0.cpp
+	
+DEPS
+    	pablo
+    	kernel.basis
+    	kernel.io
+    	kernel.pipeline
+    	kernel.streamutils
+    	kernel.util
+    	toolchain
+    	fileselect
+    	re.cc
+    	re.parse
+)
 
 
 parabix_add_executable(

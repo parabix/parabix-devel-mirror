@@ -38,14 +38,13 @@ directions for work to enhance your applications.
 
 **Implementation To Do List**
 
-1. Implement kernel to remove CRs from file BEFORE doing any other processing. This will do a lot to prevent errors.
-2. Command line option for processing all .csv files in a directory.
-3. Support for user set fieldnames.
-4. Support for tab delimited values.
-
-1. Implement escaping for backslashes.
-2. Testcase_escapes
-3. Debug testcase_doublequote
-4. Support for user specification of field type and NULL values for empty fields.
-5. Throw error message when input file is incorrectly formatted.
+1. ~~Implement kernel to remove CRs from file BEFORE doing any other processing. This will do a lot to prevent errors.~~
+2. ~~Command line option for processing all .csv files in a directory.~~
+3. ~~Support for user set fieldnames.~~
+4. ~~Support for tab delimited values.~~
+5. Implement escaping for backslashes.
+6. Testcase_escapes
+7. Debug testcase_doublequote
+8. Support for user specification of field type and NULL values for empty fields.
+9. Throw error message when input file is incorrectly formatted.
 
