@@ -1,5 +1,6 @@
 # Don't track build directories
 *build*/
+*QA/csv2json/outs/
 libllv*
 # Don't track LLVM source
 llvm-[0-9]*.src
