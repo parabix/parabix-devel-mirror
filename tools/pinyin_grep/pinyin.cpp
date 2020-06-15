@@ -64,20 +64,12 @@ namespace PinyinPattern{
         "er", "ēr", "ér", "ěr", "èr",
         "eng", "ēng", "éng", "ěng", "èng",
     };
-    vector<vector<string> > upper_syl{
-        {A,Ā,Á,Ǎ,À},
-        {O,Ō,Ó,Ŏ,Ò},
-        {E,Ē,É,Ĕ,È},
-        {I,Ī,Í,Ǐ,Ì},
-        {U,Ū,Ú,Ǔ,Ù},
-        {Ü,Ǖ,Ǘ,Ǚ,Ǜ}
-    };
-/*
-    Before Search works as the following three steps:
-    1. divide the input into single or multi syllables1
-    2. parse those syllables to transfer them to formal format for searching
-    3. add search prefix and suffix
-*/
+    /*
+     Syllable_Parse works as the following three steps:
+     1. divide the input into single or multi syllables
+     2. parse those syllables to transfer them to formal format for searching
+     3. add search prefix and suffix
+     */
     vector <vector<string> > Syllable_Parse(string Pinyin_syllables, bool database)
     {
         vector<string> Divided;
@@ -85,8 +77,12 @@ namespace PinyinPattern{
         bool legal = true;
         bool vague_input = false;
         int pos = 0;
+        /*if there is extra space, omit it*/
+        /*if there is up class English charactor, tansform it into lower class*/
+        /*--------------------------------------*/
         Pinyin_syllables = trim(Pinyin_syllables);
         transform(Pinyin_syllables.begin(),Pinyin_syllables.end(),Pinyin_syllables.begin(),::tolower);
+        /*-------------------------------------------------------------------------------------------*/
         string temp, temp2;
         while(pos!=-1)
         {
@@ -102,9 +98,9 @@ namespace PinyinPattern{
         {
             Divided.push_back(Pinyin_syllables);
         }
+        /*the dividing part finished*/
         
-
-
+        /*parse every divided syllable*/
         for(size_t i=0; i<Divided.size(); i++){
             string word = Divided[i];
             vector<string> temp_vec;
@@ -112,7 +108,7 @@ namespace PinyinPattern{
             /*if find regex . , store all possible syllables without tone in the tone_parse*/
             if (word.find('.') != string::npos)
             {
-                for (int j=0; j<6; j++){
+                for (int j=0; j<5; j++){
                     temp = word;
                     temp.replace(word.find('.'), 1, syl[j][0]);
                     tone_parse.push_back(temp);
@@ -207,6 +203,7 @@ namespace PinyinPattern{
             for(vector<string>::iterator temp_iter = tone_parse.begin();temp_iter!=tone_parse.end();temp_iter++)
             {
                 string parse_tone = *temp_iter;
+                cout<<parse_tone<<endl;
                 if(All_Alpha(parse_tone))
                 {
                     temp_vec.push_back(parse_tone);
@@ -218,6 +215,39 @@ namespace PinyinPattern{
                                 temp.replace(parse_tone.find(syl[j][0]), 1, syl[j][k]);
                                 temp_vec.push_back(temp);;
                             }
+                            break;
+                        }
+                    }
+                }
+                else if(parse_tone.find('1') != string::npos || parse_tone.find('2') != string::npos|| parse_tone.find('3') != string::npos|| parse_tone.find('4') != string::npos)
+                {
+                    int tone=0;
+                    if (parse_tone.find('1') != string::npos)
+                    {
+                        tone = 1;
+                    }
+                    else if (parse_tone.find('2') != string::npos)
+                    {
+                        tone = 2;
+                    }
+                    else if (parse_tone.find('3') != string::npos)
+                    {
+                        tone = 3;
+                    }
+                    else if (parse_tone.find('4') != string::npos)
+                    {
+                        tone = 4;
+                    }
+                    parse_tone.replace(parse_tone.find(to_string(tone)), 1, "");
+                    for (size_t j=0; j<syl.size(); j++)
+                    {
+                        if (parse_tone.find(syl[j][0]) != string::npos)
+                        {
+                            int tmp_pos = parse_tone.find(syl[j][0]);
+                            string temp_str = syl[j][tone];
+                            parse_tone.erase(tmp_pos, 1);
+                            parse_tone.insert(tmp_pos,temp_str);
+                            temp_vec.push_back(parse_tone);
                             break;
                         }
                     }
@@ -254,16 +284,8 @@ namespace PinyinPattern{
                         *iter = Add_kXHC1983_fix(*iter);
                     }
                 }
-                // for (auto x: FinalVec){
-                //     llvm::errs() << x << " ";
-                // }
-                // llvm::errs() << "\n";
-                //test the parsing
-                //for(vector<string>::iterator iter = temp_vec.begin(); iter!=temp_vec.end(); iter++)
-                //{
-                //    cout<<*iter<<endl;
-                //}
-                //
+                
+                
                 if(temp_vec.size()!=0)
                 {
                     FinalVec.push_back(temp_vec);
@@ -352,6 +374,7 @@ namespace PinyinPattern{
         }
         return true;
     }
+    
     bool find_bracket(string to_find)
     {
         bool find_flag = false;
@@ -365,4 +388,5 @@ namespace PinyinPattern{
         }
         return find_flag;
     }
+    
 }
