@@ -72,11 +72,16 @@ static cl::alias pyColorOptionAlias0("colour",cl::desc("alias for coloring -c"),
 static cl::opt<bool, false> pyExactOption("e", cl::desc("enable exact match mode"), cl::cat(pygrepFlags));
 static cl::alias pyExactOptionAlias0("exact", cl::desc("alias for exact match mode -e"), cl::aliasopt(pyExactOption));
 
-//switch database to kpy, xhc database is enabled by default
-static cl::opt<bool,false> pyKPY("kpy",cl::desc("set database to kpy"),cl::cat(pygrepFlags));
+//switch databases, xhc database is enabled by default
+static cl::opt<Database, XHC> pyKPY(cl::desc("Database Options:"),cl::cat(pygrepFlags),
+    cl::values(
+        clEnumValN(XHC,"xhc", "Default: use xhc database"),
+        clEnumValN(KPY,"kpy", "use kpy database")
+    )
+);
 static cl::alias pyKPYAlias0("KPY_Database",cl::desc("alias for kpy database -kpy"),cl::aliasopt(pyKPY));
 
-cl::opt<OptTraditional, All> ChineseCharacterType(cl::desc("Choose Chinese Characters Type(Traditional or Simplified):"),
+cl::opt<OptTraditional, All> ChineseCharacterType(cl::desc("Choose Chinese Characters Type(Traditional or Simplified):"), cl::cat(pygrepFlags),
   cl::values(
     clEnumValN(All,         "all", "Default: grep all Chinese characters, both traditional and simplified."),
     clEnumValN(Traditional, "trd", "Grep Chinese characters used in traditional Chinese."),
@@ -118,7 +123,7 @@ std::vector<re::RE*> generateREs(std::string pyregex){
 
     // Create re::REs from the enumerated result
     // to initialize the grep engine of Parabix
-    std::vector<re::RE*> REs(enumerator.createREs((pyKPY)? (Database::KPY) : (Database::XHC), ChineseCharacterType));
+    std::vector<re::RE*> REs(enumerator.createREs(pyKPY, ChineseCharacterType));
     if(pyExactOption){
         re::ModeFlagSet InitialFlag = re::MULTILINE_MODE_FLAG;
         re::RE_Syntax RegexpSyntax = re::RE_Syntax::PCRE;

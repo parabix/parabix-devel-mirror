@@ -32,7 +32,7 @@ enum OptTraditional {
   All, Traditional, Simplified, TraditionalOnly, SimplifiedOnly
 };
 enum Database {
-    KPY, XHC
+    XHC, KPY
 };
 typedef re::CC* (*OptTraditionalFunctionType)(const UCD::UnicodeSet&& );
 namespace PY{
