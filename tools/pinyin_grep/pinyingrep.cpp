@@ -68,6 +68,7 @@ static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of 
                                                     CL_ENUM_VAL_SENTINEL), cl::cat(pygrepFlags), cl::location(ColorFlag), cl::init(neverColor));
 static cl::opt<bool> LineNumberOption("n", cl::desc("Show the line number with each matching line."), cl::init(false), cl::cat(pygrepFlags));
 static cl::opt<bool> WithFilenameOption("h", cl::desc("Show the file name with each matching line."), cl::init(false), cl::cat(pygrepFlags));
+static cl::opt<bool> IndexSearchingOption("i", cl::desc("using hexidemical unicode index for searching"), cl::init(false), cl::cat(pygrepFlags));
 /*unfinished ST_Search Part*/
 
 std::vector<fs::path> allFiles;
@@ -182,72 +183,84 @@ int main(int argc, char* argv[]){
     /*test point1*/
     cout << "Testing point1" << endl;
     /*------------------------------*/
-    
-    std::vector <std::vector<std::string> >KangXiLinePattern;
-    /*parse the input syllables*/
-    KangXiLinePattern = PinyinPattern::Syllable_Parse(PinyinLinePattern,Database);
-    /*if there is no syllbales or no legeal syllables return directly*/
-    if(KangXiLinePattern.empty())
-    {
-        return 0;
-    }
-    
-    /*test point2*/
-    cout << "Parsing finished successfully" << endl;
-    /*parsing test*/
-    
-    /*copy the context of Unihan_reading.txt into the UnihanBuf for Search*/
-    UnihanBuf = alloc.allocate(buf.R_size32(), 0);
-    std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
-    std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
-    
-    /*test point3*/
-    cout <<"memcpy finished successfully" << endl;
-    /*-----------------------------------------*/
-    
-    auto KangXilineREs = generateREs(KangXiLinePattern);
-    
-    std::vector <PinyinPattern::PinyinSetAccumulator> accum;
-    std::vector <std::vector<re::RE*> > ::iterator RE_iter;
-    std::vector <PinyinPattern::PinyinSetAccumulator>::iterator accum_iter;
     std::vector <re::RE*> VectorRE,FinalRE;
-    /*The search Engine first Search through the Unihan_Reading.txt and find the results store in the accum*/
-    for(RE_iter = KangXilineREs.begin();RE_iter != KangXilineREs.end();RE_iter++)
+    
+    if(!IndexSearchingOption)
     {
-        
-        PinyinPattern::PinyinSetAccumulator Temp_accum;
-        auto Syllable = *RE_iter;
-        std::vector<re::RE *>::iterator tone_iter;
-        for(tone_iter = Syllable.begin();tone_iter != Syllable.end();tone_iter++)
+        std::vector <std::vector<std::string> >KangXiLinePattern;
+        /*parse the input syllables*/
+        KangXiLinePattern = PinyinPattern::Syllable_Parse(PinyinLinePattern,Database);
+        /*if there is no syllbales or no legeal syllables return directly*/
+        if(KangXiLinePattern.empty())
         {
-            grep::InternalSearchEngine engine(pxDriver);
-            engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-            engine.grepCodeGen(*tone_iter);
-            engine.doGrep(UnihanBuf, buf.R_size32(), Temp_accum);
-            
+            return 0;
         }
-        accum.push_back(Temp_accum);
+        
+        /*test point2*/
+        cout << "Parsing finished successfully" << endl;
+        /*parsing test*/
+        
+        /*copy the context of Unihan_reading.txt into the UnihanBuf for Search*/
+        UnihanBuf = alloc.allocate(buf.R_size32(), 0);
+        std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
+        std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
+        
+        /*test point3*/
+        cout <<"memcpy finished successfully" << endl;
+        /*-----------------------------------------*/
+        
+        auto KangXilineREs = generateREs(KangXiLinePattern);
+        
+        std::vector <PinyinPattern::PinyinSetAccumulator> accum;
+        std::vector <std::vector<re::RE*> > ::iterator RE_iter;
+        std::vector <PinyinPattern::PinyinSetAccumulator>::iterator accum_iter;
+
+        /*The search Engine first Search through the Unihan_Reading.txt and find the results store in the accum*/
+        for(RE_iter = KangXilineREs.begin();RE_iter != KangXilineREs.end();RE_iter++)
+        {
+            
+            PinyinPattern::PinyinSetAccumulator Temp_accum;
+            auto Syllable = *RE_iter;
+            std::vector<re::RE *>::iterator tone_iter;
+            for(tone_iter = Syllable.begin();tone_iter != Syllable.end();tone_iter++)
+            {
+                grep::InternalSearchEngine engine(pxDriver);
+                engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+                engine.grepCodeGen(*tone_iter);
+                engine.doGrep(UnihanBuf, buf.R_size32(), Temp_accum);
+                
+            }
+            accum.push_back(Temp_accum);
+        }
+        
+        /*testing point4*/
+        cout <<"unicode generated successfully"<<endl;
+        /*------------------------------------------*/
+        
+        alloc.deallocate(UnihanBuf, 0);
+        
+        /*using the unicode store in the accum to make another RE for the final search*/
+        for(accum_iter = accum.begin();accum_iter!=accum.end();accum_iter++)
+        {
+            auto temp_accum = *accum_iter;
+            re::CC * CC_ast = re::makeCC(temp_accum.getAccumulatedSet());
+            VectorRE.push_back(CC_ast);
+        }
+        /*if the syllable is a sequence then make the RE a sequence*/
+        FinalRE.push_back(re::makeSeq(VectorRE.begin(),VectorRE.end()));
+        
+        /*testing point5*/
+        cout <<"RE make successfully"<<endl;
+        /*----------------------------------*/
     }
-    
-    /*testing point4*/
-    cout <<"unicode generated successfully"<<endl;
-    /*------------------------------------------*/
-    
-    alloc.deallocate(UnihanBuf, 0);
-    
-    /*using the unicode store in the accum to make another RE for the final search*/
-    for(accum_iter = accum.begin();accum_iter!=accum.end();accum_iter++)
-    {
-        auto temp_accum = *accum_iter;
-        re::CC * CC_ast = re::makeCC(temp_accum.getAccumulatedSet());
-        VectorRE.push_back(CC_ast);
+    else{
+        stringstream s;
+        unsigned int CodePoint;
+        s << hex << PinyinLinePattern;
+        s >> CodePoint;
+        re::CC * CC_ast = re::makeCC(CodePoint);
+        FinalRE.push_back(CC_ast);
     }
-    /*if the syllable is a sequence then make the RE a sequence*/
-    FinalRE.push_back(re::makeSeq(VectorRE.begin(),VectorRE.end()));
-    
-    /*testing point5*/
-    cout <<"RE make successfully"<<endl;
-    /*----------------------------------*/
     
     /*the final search part*/
     std::unique_ptr<grep::GrepEngine> grep = make_unique<grep::EmitMatchesEngine>(pxDriver);
