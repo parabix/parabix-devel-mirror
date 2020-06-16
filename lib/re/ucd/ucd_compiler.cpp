@@ -147,12 +147,11 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, PabloBuilder & entry
     // Pregenerate the suffix var outside of the if ranges. The DCE pass will either eliminate it if it's not used or the
     // code sinking pass will move appropriately into an inner if block.
     bool isUTF_16 = true;
-    CC *  prefix;
+    CC *  suffix;
     if(isUTF_16) {
-        prefix = makeByte(0xD800, 0xDBFF);
+        suffix = makeByte(0xDC00, 0xDFFF);
         assert (!suffix->empty());
-        //validation to be done yet!
-        mSuffixVar = entry.createAdvance(mCodeUnitCompiler.compileCC(prefix, entry),1);
+        mSuffixVar = mCodeUnitCompiler.compileCC(suffix, entry);
     }
     else {
         suffix = makeByte(0x80, 0xBF); 
