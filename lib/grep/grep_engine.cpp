@@ -702,8 +702,9 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     const auto numOfREs = mREs.size();
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
 
+    unsigned matchResultStreamCount = (mColoring && !mInvertMatches) ? 2 : 1;
     for(unsigned i = 0; i < numOfREs; ++i) {
-        StreamSet * const MatchResults = E->CreateStreamSet((mColoring && !mInvertMatches) ? 2 : 1 , 1);
+        StreamSet * const MatchResults = E->CreateStreamSet(matchResultStreamCount, 1);
         MatchResultsBufs[i] = MatchResults;
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
@@ -713,7 +714,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     }
     StreamSet * Matches = MatchResultsBufs[0];
     if (MatchResultsBufs.size() > 1) {
-        StreamSet * const MergedMatches = E->CreateStreamSet();
+        StreamSet * const MergedMatches = E->CreateStreamSet(matchResultStreamCount);
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
         Matches = MergedMatches;
     }
