@@ -36,10 +36,14 @@ public:
                         StreamSet * basis, StreamSet * spreadMask,
                         StreamSet * insertMarks, StreamSet * runIndex,
                         StreamSet * output);
+    llvm::StringRef getSignature() const override;
+    bool hasSignature() const override { return true; }
     void generatePabloMethod() override;
 private:
+    std::string makeSignature(std::vector<std::string> & insertStrs, StreamSet * insertMarks);
     std::vector<std::string> mInsertStrings;
     bool mMultiplexing;
+    std::string                         mSignature;
 };
 }
 
