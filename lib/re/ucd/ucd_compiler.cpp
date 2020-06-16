@@ -146,9 +146,19 @@ const UCDCompiler::RangeList UCDCompiler::noIfHierachy = {{0x80, 0x10FFFF}};
 void UCDCompiler::generateRange(const RangeList & ifRanges, PabloBuilder & entry) {
     // Pregenerate the suffix var outside of the if ranges. The DCE pass will either eliminate it if it's not used or the
     // code sinking pass will move appropriately into an inner if block.
-    CC *  suffix = makeByte(0x80, 0xBF);
-    assert (!suffix->empty());
-    mSuffixVar = mCodeUnitCompiler.compileCC(suffix, entry);
+    bool isUTF_16 = true;
+    CC *  prefix;
+    if(isUTF_16) {
+        prefix = makeByte(0xD800, 0xDBFF);
+        assert (!suffix->empty());
+        //validation to be done yet!
+        mSuffixVar = entry.createAdvance(mCodeUnitCompiler.compileCC(prefix, entry),1);
+    }
+    else {
+        suffix = makeByte(0x80, 0xBF); 
+        assert (!suffix->empty());
+        mSuffixVar = mCodeUnitCompiler.compileCC(suffix, entry);
+    }
     generateRange(ifRanges, 0, UNICODE_MAX, entry);
 }
 
