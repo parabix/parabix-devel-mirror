@@ -102,6 +102,7 @@ public:
     void setBinaryFilesOption(argv::BinaryFilesMode mode) {mBinaryFilesMode = mode;}
     void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(const std::vector<boost::filesystem::path> & filenames);
+    bool haveFileBatch();
     void initREs(std::vector<re::RE *> & REs);
     virtual void grepCodeGen();
     bool searchAllFiles();
@@ -239,7 +240,7 @@ protected:
 class EmitMatchesEngine final : public GrepEngine {
 public:
     EmitMatchesEngine(BaseDriver & driver);
-    void grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
+    void grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream, bool BatchMode = false);
     void grepCodeGen() override;
 private:
     uint64_t doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) override;
