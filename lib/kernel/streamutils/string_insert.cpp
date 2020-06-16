@@ -60,22 +60,27 @@ void StringInsertBixNum::generatePabloMethod() {
     }
 }
 
-std::string StringReplaceName(std::vector<std::string> & insertStrs, StreamSet * insertMarks) {
-    std::string name = "StringInsertBixNum";
+std::string StringReplaceKernel::makeSignature(std::vector<std::string> & insertStrs, StreamSet * insertMarks) {
+    std::string name = "";
     for (auto s : insertStrs) {
         name += "_" + s;
     }
     if (insertMarks->getNumElements() < insertStrs.size()) {
         name += "_multiplexed";
     }
-    return name;
+    mSignature = name;
+    return mSignature;
+}
+
+StringRef StringReplaceKernel::getSignature() const {
+    return mSignature;
 }
 
 StringReplaceKernel::StringReplaceKernel(BuilderRef b, std::vector<std::string> & insertStrs,
                                          StreamSet * basis, StreamSet * spreadMask,
                                          StreamSet * insertMarks, StreamSet * runIndex,
                                          StreamSet * output)
-    : PabloKernel(b, StringReplaceName(insertStrs, insertMarks),
+    : PabloKernel(b, "StringReplace" + getStringHash(makeSignature(insertStrs, insertMarks)),
                  {Binding{"basis", basis}, Binding{"spreadMask", spreadMask},
                   Binding{"insertMarks", insertMarks, FixedRate(1), LookAhead(1 << (runIndex->getNumElements()))},
                      Binding{"runIndex", runIndex}},
