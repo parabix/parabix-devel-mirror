@@ -778,6 +778,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
 
     const auto numOfREs = mREs.size();
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
+    unsigned matchResultStreamCount = (mColoring && !mInvertMatches) ? 2 : 1;
     for(unsigned i = 0; i < numOfREs; ++i) {
         StreamSet * const MatchResults = E->CreateStreamSet(matchResultStreamCount, 1);
         MatchResultsBufs[i] = MatchResults;
