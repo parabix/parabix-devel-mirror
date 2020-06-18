@@ -9,6 +9,7 @@
 #include <atomic>
 #include <errno.h>
 #include <fcntl.h>
+#include <iomanip>
 #include <iostream>
 #include <sched.h>
 #include <boost/filesystem.hpp>
@@ -355,10 +356,16 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS_U16, 1);
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
-        } else {
+        }
+        else {
             P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
         }
         return BasisBits;
+    }
+    else if (hasComponent(mExternalComponents, Component::S2P)) {
+            StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
+            P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+            return BasisBits;
     }
     else return ByteStream;
 }
@@ -402,6 +409,7 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
             P->CreateKernelCall<NullDelimiterKernel>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1);
         }
     }
+    //P->CreateKernelCall<DebugDisplayKernel>("mU8index", mU8index);
 }
 
 void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
@@ -481,12 +489,14 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
         StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
         P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
+        //P->CreateKernelCall<DebugDisplayKernel>("u8CharClasses", u8CharClasses);
         FilterByMask(P, mU8index, u8CharClasses, CharClasses);
         options->setSource(CharClasses);
         options->addAlphabet(mpx, CharClasses);
     }
     StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
     options->setResults(MatchResults);
+    //P->CreateKernelCall<DebugDisplayKernel>("MatchResults", MatchResults);
     addExternalStreams(P, options, re, mU8index);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
     StreamSet * u8index1 = P->CreateStreamSet(1, 1);
@@ -699,7 +709,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
             setFileLabel(mFileNames[mCurrentFile]);
             if (!mTerminated) {
-                *mResultStr << "\n";
+                mResultStr->write("\n", 2);
                 mTerminated = true;
             }
             //llvm::errs() << "accumulate_match(" << lineNum << "), file " << mFileNames[mCurrentFile] << "\n";
@@ -707,17 +717,33 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
-        *mResultStr << "--\n";
+        mResultStr->write("--\n", 6);
     }
     *mResultStr << mLinePrefix;
     if (mShowLineNumbers) {
         // Internally line numbers are counted from 0.  For display, adjust
         // the line number so that lines are numbered from 1.
+        size_t lineNum = relLineNum+1;
+        size_t rem10;
+        size_t divisor;
+        size_t quotient;
+        rem10 = lineNum/10;
+        divisor = 1;
+        while(divisor <= rem10)               // skip to 1st digit
+            divisor *= 10;
+        while(divisor) {                      // append UTF16 hex number to lineNumUF16
+            std::ostringstream ss;
+            quotient = lineNum / divisor;
+            quotient += 48;                   //corresponding hex value of digit
+            mResultStr->write((const char*)&quotient, 2);     //treat as UTF-16 codepoint
+            lineNum %= divisor;
+            divisor /= 10;
+        }
         if (mInitialTab) {
-            *mResultStr << relLineNum+1 << "\t:";
+            mResultStr->write("\t", 2);     //treat as UTF-16 codepoint
         }
         else {
-            *mResultStr << relLineNum+1 << ":";
+            mResultStr->write(":", 2);      //treat as UTF-16 codepoint
         }
     }
 
@@ -740,19 +766,18 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
 }
 
 void EmitMatch::finalize_match(char * buffer_end) {
-    if (!mTerminated) *mResultStr << "\n";
+    if (!mTerminated) mResultStr->write("\n", 2);
 }
 
 void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, StreamSet * ByteStream, bool BatchMode) {
     StreamSet * SourceStream = getBasis(E, ByteStream);
-    
+    //E->CreateKernelCall<DebugDisplayKernel>("ByteStream", ByteStream);
     grepPrologue(E, SourceStream);
 
     prepareExternalStreams(E, SourceStream);
 
     const auto numOfREs = mREs.size();
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
-
     for(unsigned i = 0; i < numOfREs; ++i) {
         StreamSet * const MatchResults = E->CreateStreamSet((mColoring && !mInvertMatches) ? 2 : 1 , 1);
         MatchResultsBufs[i] = MatchResults;
