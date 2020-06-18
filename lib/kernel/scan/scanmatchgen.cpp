@@ -896,7 +896,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
 }
 
 MatchReporter::MatchReporter(BuilderRef b, StreamSet * ByteStream, StreamSet * const Coordinates, Scalar * const callbackObject)
-: SegmentOrientedKernel(b, "matchReporter" + std::to_string(Coordinates->getNumElements()),
+: SegmentOrientedKernel(b, "matchReporter" + std::to_string(Coordinates->getNumElements())+ "x" + std::to_string(ByteStream->getFieldWidth()),
 // inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred()},
  Binding{"Coordinates", Coordinates, GreedyRate(1)}},
@@ -972,7 +972,10 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
     auto farg = finalizer->arg_begin();
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
-    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    //workaround - casting the buffer end pointer to i8*
+    Value * const bufferEndI8 = b->CreateBitCast(bufferEnd, b->getInt8PtrTy());
+    b->CreateCall(finalizer, {accumulator, bufferEndI8});
+    //b->CreateCall(finalizer, {accumulator, bufferEnd});
     Value * const bufferEndPtr = b->CreatePointerCast(bufferEnd, (++farg)->getType());
     b->CreateCall(finalizer, {accumulator, bufferEndPtr});
     b->CreateBr(scanReturn);
