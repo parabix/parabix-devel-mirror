@@ -152,6 +152,43 @@ xuǎn
 <grepcase regexp="chu?an3" datafile="questionmarktest" greplines="7 8"/>
 <grepcase regexp="cHu?aN3" datafile="questionmarktest" greplines="7 8"/>
 
+<datafile id = "database_test">
+明明不是我錯
+我名字叫小張
+校長說小孩兒應該有夢想
+我常常想念奶奶
+一丈是十尺
+她丈夫很高
+功夫不錯
+我头发又长了
 
+我弟弟叫小亮
+我哥哥叫大梁
+我們家姓恒
+我們今天要去銀行
+
+小狗咬了小亮
+我們已經叫他小心
+不過他不聽話
+小狗不能吃巧克力
+</datafile>
+<grepcase regexp="chang" datafile="database_test" greplines="4 5 9"/>
+<grepcase regexp="chang" datafile="database_test" greplines="4 5" flags="-kpy"/>
+<grepcase regexp="meng" datafile="database_test" greplines="4"/>
+<grepcase regexp="meng" datafile="database_test" greplines="2 4" flags="-kpy"/>
+<grepcase regexp="zhang4" datafile="database_test" greplines="6 7"/>
+<grepcase regexp="zhang4" datafile="database_test" greplines="3 4 6 7" flags="-kpy"/>
+
+<grepcase regexp="liang2" datafile="database_test" greplines="12"/>
+<grepcase regexp="liang2" datafile="database_test" greplines="11 12 16" flags="-kpy"/>
+<grepcase regexp="heng" datafile="database_test" greplines="13"/>
+<grepcase regexp="heng" datafile="database_test" greplines="13 14" flags="-kpy"/>
+<grepcase regexp="yao3" datafile="database_test" greplines="16"/>
+<grepcase regexp="yao3" datafile="database_test" greplines="14 16" flags="-kpy"/>
+
+<grepcase regexp="jiao" datafile="database_test" greplines="3 4 11 12 17"/>
+<grepcase regexp="jiao" datafile="database_test" greplines="3 4 11 12 16 17" flags="-kpy"/>
+<grepcase regexp="qiao" datafile="database_test" greplines="19"/>
+<grepcase regexp="qiao" datafile="database_test" greplines="4 19" flags="-kpy"/>
 
 </greptest>
