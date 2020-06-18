@@ -779,7 +779,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     const auto numOfREs = mREs.size();
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
     for(unsigned i = 0; i < numOfREs; ++i) {
-        StreamSet * const MatchResults = E->CreateStreamSet((mColoring && !mInvertMatches) ? 2 : 1 , 1);
+        StreamSet * const MatchResults = E->CreateStreamSet(matchResultStreamCount, 1);
         MatchResultsBufs[i] = MatchResults;
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
@@ -790,7 +790,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     StreamSet * Matches = MatchResultsBufs[0];
 
     if (MatchResultsBufs.size() > 1) {
-        StreamSet * const MergedMatches = E->CreateStreamSet();
+        StreamSet * const MergedMatches = E->CreateStreamSet(matchResultStreamCount);
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
         Matches = MergedMatches;
     }
@@ -1264,10 +1264,10 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
         breakCC = re::makeCC(0x0A, &cc::Unicode);
     }
 
-    matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
-    matchingRE = regular_expression_passes(matchingRE);
     matchingRE = re::exclude_CC(matchingRE, breakCC);
     matchingRE = resolveAnchors(matchingRE, breakCC);
+    matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
+    matchingRE = regular_expression_passes(matchingRE);
     matchingRE = toUTF8(matchingRE);
 
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
@@ -1369,9 +1369,9 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
         auto options = make_unique<GrepKernelOptions>();
 
         auto r = resolveCaseInsensitiveMode(patterns[i].second, mCaseInsensitive);
-        r = regular_expression_passes(r);
         r = re::exclude_CC(r, breakCC);
         r = resolveAnchors(r, breakCC);
+        r = regular_expression_passes(r);
         r = toUTF8(r);
 
         options->setRE(r);
