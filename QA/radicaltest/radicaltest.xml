@@ -61,7 +61,7 @@
 <grepcase regexp = "忄_心" datafile = "test4" greplines = "4"/>
 <grepcase regexp = "日_日_儿_" datafile = "test4" greplines = "4"/>
 <grepcase regexp = "口_目_氵_水_" datafile = "test4" greplines = "3"/>
-<grepcase regexp = "61_心" datafile = "test4" greplines = "4" flags = "-m"/>
+<grepcase regexp = "61_心_" datafile = "test4" greplines = "4" flags = "-m"/>
 
 <!--characters that are radicals themselves, for example 木 水(氵) 金(钅) -->
 
@@ -104,4 +104,34 @@
 <grepcase regexp = "曰_土_" datafile = "test7" greplines = "4"/>
 <grepcase regexp = "曰_{火/水/土}_水_" datafile = "test7" greplines = "2 3 4" flags = "-alt"/>
 
+<!--this test will test more about alternative search mode and some easy to be confused radicals-->
+<datafile id = "test8">
+水汽草朔美
+河湖月光
+又见海边朋友
+潮饮月光
+他说这很好
+她说这不错
+它话迟不可以
+别说话讲道理
+别言语说明白
+有些话让他们误解
+月日曰
+月日明
+月日嘻
+月日困
+月脂
+月朋
+</datafile>
+<grepcase regexp = "水_{艹/水/辶/饣}_月_" datafile = "test8" greplines = "2 3 4 5" flags = "-alt"/>
+<grepcase regexp = "{亻/女/宀}_讠_辶_" datafile = "test8" greplines = "6 7 8" flags = "-alt"/>
+<grepcase regexp = "讠_讠_{辶/日/亻}_" datafile = "test8" greplines = "9 10 11" flags = "-alt"/>
+
+<grepcase regexp = "月_日_曰_" datafile = "test8" greplines = "12"/>
+<grepcase regexp = "月_日_日_" datafile = "test8" greplines = "13" />
+<grepcase regexp = "月_日_口_" datafile = "test8" greplines = "14"/>
+<grepcase regexp = "月_日_囗_" datafile = "test8" greplines = "15"/>
+
+<grepcase regexp = "月_肉_" datafile = "test8" greplines = "16"/>
+<grepcase regexp = "月_月_" datafile = "test8" greplines = "17"/>
 </greptest>
