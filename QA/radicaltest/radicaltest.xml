@@ -12,6 +12,10 @@
 <grepcase regexp= "子_" datafile = "test1" greplines = "2 4 6"/>
 <grepcase regexp= "氵_讠_扌_" datafile = "test1" greplines = "5"/>
 <grepcase regexp= "亻_用_氵_子_" datafile = "test1" greplines = "4"/>
+<grepcase regexp= "85_39_" datafile = "test1" greplines = "4 6" flags = "-i"/>
+<grepcase regexp= "85_讠_扌_" datafile = "test1" greplines = "5" flags = "-m"/>
+<grepcase regexp = "氵_{子/讠}_" datafile = "test1" greplines = "4 5 6" flags = "-alt"/>
+<grepcase regexp = "{木/氵}_子_" datafile = "test1" greplines = "4 6" flags = "-alt"/>
 
 <datafile id = "test2">
 偏旁是从造字构形的角度定义的
@@ -26,6 +30,8 @@
 <grepcase regexp= "扌_刂_" datafile = "test2" greplines = "6 8"/>
 <grepcase regexp= "禾_扌_子_" datafile = "test2" greplines = "6"/>
 <grepcase regexp= "扌_刂_土_一_走_" datafile = "test2" greplines = "6"/>
+<grepcase regexp= "115_64_39_" datafile = "test2" greplines = "6" flags = "-i"/>
+<grepcase regexp = "氵_{子/讠}_" datafile = "test2" greplines = "4 5 8" flags = "-alt"/>
 
 <!--not simplified Chinese-->
 <datafile id = "test3">
@@ -38,6 +44,7 @@
 <grepcase regexp= "亻_心_" datafile = "test3" greplines = "3"/>
 <grepcase regexp= "氵_子_" datafile = "test3" greplines = "4 6"/>
 <grepcase regexp= "扌_刂_" datafile = "test3" greplines = "5"/>
+<grepcase regexp= "9_61_" datafile = "test3" greplines = "3" flags = "-i"/>
 
 <!--radicals like 火 and 灬 are regarded as the same radical accoding to KangXi dictionary-->
 <datafile id = "test4">
@@ -54,6 +61,7 @@
 <grepcase regexp = "忄_心" datafile = "test4" greplines = "4"/>
 <grepcase regexp = "日_日_儿_" datafile = "test4" greplines = "4"/>
 <grepcase regexp = "口_目_氵_水_" datafile = "test4" greplines = "3"/>
+<grepcase regexp = "61_心" datafile = "test4" greplines = "4" flags = "-m"/>
 
 <!--characters that are radicals themselves, for example 木 水(氵) 金(钅) -->
 
@@ -73,6 +81,8 @@
 <grepcase regexp = "土_" datafile = "test5" greplines = "2 3 4 5 6 7 8"/>
 <grepcase regexp = "火_曰_火_一_" datafile = "test5" greplines = "7"/>
 <grepcase regexp = "土_人_亻_" datafile = "test5" greplines = "4 5 6 7 8"/>
+<grepcase regexp = "{火/水/土}_曰_" datafile = "test5" greplines = "5 7 8" flags = "-alt"/>
+<!--<grepcase regexp = "85_{火/水}_" datafile = "test5" greplines = "5 7" flags = "-alt -m"/>-->
 
 <!--each character will only have 1 radical, according to KangXi dictionary. To avoid confusion, we only take 1 character per line to illustrate the point-->
 <datafile id = "test6">
@@ -92,5 +102,6 @@
 <grepcase regexp = "曰_水_" datafile = "test7" greplines = "2"/>
 <grepcase regexp = "曰_火_" datafile = "test7" greplines = "3"/>
 <grepcase regexp = "曰_土_" datafile = "test7" greplines = "4"/>
+<grepcase regexp = "曰_{火/水/土}_水_" datafile = "test7" greplines = "2 3 4" flags = "-alt"/>
 
 </greptest>
