@@ -28,25 +28,25 @@ For sample testcases, please refer to [radicaltest.xml](https://cs-git-research.
 ## **Supported Features**
 
 * Single Radical Expressions 
-    
+  
     > e.g.  亻_
 * Radical Expressions of >= 2 Radicals
-    
+  
     > e.g.  亻_心_ , 禾_扌_子_ 
 * `-i` index mode
-    
+  
     > e.g. 85_
 * `-m` mixed mode
-    
+  
     > e.g. 水_143_
 * `-alt` alternative character mode 
-    
+  
     > e.g. 水_{火/水}_
 * `-c` colourization
     > Colourization is turned off by default. 
     > To turn on colourization, include `-c auto`
 * `-h` manually toggle file path to be shown for each matching line
-    
+  
     > This is turned on automatically each time when > 1 files are inputted
 * `-clk` program timer
     > Used to measure the runtime of Radical Grep.
@@ -335,10 +335,24 @@ For inputs with more than one test files, filepaths are automatically shown. You
 The `-clk` flag can be toggled to measure the runtime of a search. It returns the time taken in seconds.
 
     Input: -clk -c auto 水_子_ ../../QA/radicaltest/testfiles/*
-
+    
     Output: 部首分类也是使用**汉字**之文化圈少数的共通点
             部首检字也有其局限性，许多**汉字**难以归部
             the runtime is:2.54655s.
+
+## Example 8: The Same Radical with Different Meanings
+
+Since kRSKangxi classifies radicals according to the specific characters and also classifies radicals according to the meaning of the them. Like radical “月”, when the meaning of the words with it are more close to "the moon", the index is 74, but when their meaning is more close to "the meat" or "the body", the index is 130, and at this time we search them use ”肉“ instead of “月”. The following example shows this case.
+
+```
+Input: 月_肉_ ../../QA/radicaltest/testfiles/test8
+
+Output: 月脂
+
+Input: 月_月_ ../../QA/radicaltest/testfiles/test8
+
+Output: 月朋
+```
 
 
 
@@ -350,4 +364,4 @@ The `-clk` flag can be toggled to measure the runtime of a search. It returns th
 
 **Authored by Team Delta:** Anna Tang, Lexie Yu (Yu Ruonan),  Pan Chuwen
 
-**Last Updated:** 2020/06/12
+**Last Updated:** 2020/06/19
