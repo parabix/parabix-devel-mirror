@@ -1034,7 +1034,15 @@ void CountOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
 
 void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
     if (grepResult == mRequiredCount) {
-       strm << linePrefix(fileName);
+       std::string file = linePrefix(fileName).c_str();
+       //encoding fileName in UTF16
+       for (auto ch : file) {
+            std::ostringstream letter;
+            letter << ch;
+            strm << letter.str();
+            strm.write("\00", 1);
+       }
+           //strm << linePrefix(fileName);
     }
 }
 
