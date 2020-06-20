@@ -80,26 +80,25 @@ def runProc(command, timeout):
 # less icgrep compile time, less total time, less asm size,
 # standard icgrep compile time, standard total time, standard asm size,
 # aggressive icgrep compile time, aggressive total time, aggressive asm size
-def run(what, otherflags, filename, regex, delimiter=", ", timeout=30, asmFile="asm"):
+def run(what, otherflags, filename, regex, delimiter=", ", timeout=30, asmFile="asm", optLevels=[]):
     output = [str(datetime.now()), filename, regex]
     versionCmd = what + ["--version"]
     output += stripVersions(subprocess.check_output(versionCmd))
     logging.info("version command: " + " ".join(versionCmd))
     command = what + otherflags + ["-enable-object-cache=0"]
-    opt_levels = ["none", "less", "standard", "aggressive"]
     runtime = []
-    for opt_level in opt_levels:
+    for optLevel in optLevels:
         try:
-            command_opt_level = command + ["-backend-optimization-level=" + opt_level]
-            timeKernelCmd = command_opt_level + ["-time-kernels"]
+            commandOptLevel = command + ["-backend-optimization-level=" + optLevel]
+            timeKernelCmd = commandOptLevel + ["-time-kernels"]
             output += stripIcGrepCompileTime(runProc(timeKernelCmd, timeout=timeout))
             logging.info("time kernel command: " + " ".join(timeKernelCmd))
-            perfCmd = ["perf", "stat"] + command_opt_level
+            perfCmd = ["perf", "stat"] + commandOptLevel
             (time, out) = stripPerfStatTime(runProc(perfCmd, timeout=timeout))
             output += out
-            runtime += [(time, command_opt_level)]
+            runtime += [(time, commandOptLevel)]
             logging.info("perf stat command: " + " ".join(perfCmd))
-            asmCmd = command_opt_level + ["-ShowASM=" + asmFile]
+            asmCmd = commandOptLevel + ["-ShowASM=" + asmFile]
             output += runAndReturnSizeFile(runProc(asmCmd, timeout=timeout), asmFile)
             logging.info("asm command: " + " ".join(perfCmd))
         except Exception as e:
@@ -166,6 +165,7 @@ if __name__ == '__main__':
     argparser.add_argument("-x", "--expression", dest="regex", default="[a-c]", help="Regular expression")
     argparser.add_argument("-t", "--target", dest="target", default=os.path.join('.', 'script.py'), help="File target for comparison")
     argparser.add_argument("-z", "--logfile", dest="logfile", default=os.path.join('.', 'log'), help="log file for debugging")
+    argparser.add_argument("-o", "--optlevels", dest="optlevels", default=["none", "less"], help="opt levels for test")
     args, otherflags = argparser.parse_known_args()
 
     logging.basicConfig(filename=args.logfile, filemode='w', level=logging.DEBUG)
@@ -187,7 +187,7 @@ if __name__ == '__main__':
                         impFlags,
                         breakFlagsIfNeeded,
                         lambda flgs: mkname(folder, args.regex, args.target, flgs, args.buildfolder),
-                        lambda c: run(c, otherflags, args.target, args.regex),
+                        lambda c: run(c, otherflags, args.target, args.regex, optLevels=args.optlevels),
                         lambda res: save(res, args.finalfile, args.runtimefile)
                     )
             impFlagsRuntime = pipe(map(mapFn, folders), list)
