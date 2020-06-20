@@ -91,7 +91,7 @@ def run(what, otherflags, filename, regex, delimiter=", ", timeout=30, asmFile="
     for opt_level in opt_levels:
         try:
             command_opt_level = command + ["-backend-optimization-level=" + opt_level]
-            timeKernelCmd = command_opt_level + ["-kernel-time-passes"]
+            timeKernelCmd = command_opt_level + ["-time-kernels"]
             output += stripIcGrepCompileTime(runProc(timeKernelCmd, timeout=timeout))
             logging.info("time kernel command: " + " ".join(timeKernelCmd))
             perfCmd = ["perf", "stat"] + command_opt_level
