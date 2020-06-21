@@ -30,6 +30,10 @@
 <grepcase regexp="zhōng" datafile="simple_pinyin" greplines="3 4 6 10"/>
 <grepcase regexp="zhòng" datafile="simple_pinyin" greplines="3 4 5 6 7 9 10"/>
 
+<grepcase regexp="Z...." datafile="simple_pinyin" greplines="3 4 5 6 7 9 10 11"/>
+<grepcase regexp="Zhōng1" datafile="simple_pinyin" greplines=""/>
+<grepcase regexp="zhò?ng" datafile="simple_pinyin" greplines="3 4 5 6 7 9 10"/>
+<grepcase regexp=" " datafile="simple_pinyin" greplines="1 2 3 4 5 6 7 8 9 10 11 12 13"/>
 <grepcase regexp="lü" datafile="simple_pinyin" greplines="12 13"/>
 <grepcase regexp="lǜ" datafile="simple_pinyin" greplines="12"/>
 <grepcase regexp="lv" datafile="simple_pinyin" greplines="12 13"/>
@@ -57,7 +61,6 @@
 <grepcase regexp="sh.ng" datafile="test2" greplines="2 4 6 8"/>
 <grepcase regexp="b.ng" datafile="test2" greplines="9"/>
 <grepcase regexp="x..ng" datafile="test2" greplines="5 7 8 9"/>
-
 <grepcase regexp="qing?" datafile="test2" greplines="5 10"/>
 <grepcase regexp="kang?" datafile="test2" greplines="4 9 11"/>
 <grepcase regexp="jing?" datafile="test2" greplines="3 4 5 6 10"/>
@@ -66,7 +69,7 @@
 <grepcase regexp="hu a" datafile="test2" greplines="14"/>
 <grepcase regexp="hua" datafile="test2" greplines="12 13"/>
 <grepcase regexp="e" datafile="test2" greplines="7"/>
-
+<grepcase regexp="" datafile="test2" greplines="1 2 3 4 5 6 7 8 9 10 11 12 13 14"/>
 
 <datafile id = "traditional-test">
 对酒当歌，人生几何！
@@ -120,6 +123,8 @@
 <grepcase regexp="dui" datafile="traditional-test" greplines="19" flags="-trd"/>
 <grepcase regexp="dui" datafile="traditional-test" greplines="19" flags="-tonly"/>
 <grepcase regexp="dui" datafile="traditional-test" greplines="2" flags="-sim"/>
+<grepcase regexp="" datafile="traditional-test" greplines="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34" flags="-sim"/>
+
 
 <datafile id = "exact-test">
 pin yin
@@ -135,7 +140,8 @@ xuǎn
 <grepcase regexp="pin yin" datafile="exact-test" greplines="2" flags="-e"/>
 <grepcase regexp="m.ng?" datafile="exact-test" greplines="4 5 6" flags="-e"/>
 <grepcase regexp="xuǎn" datafile="exact-test" greplines="7 8" flags="-e"/>
-
+<grepcase regexp="xuǎn1" datafile="exact-test" greplines="" flags="-e"/>
+<grepcase regexp="xtwuǎn" datafile="exact-test" greplines="" flags="-e"/>
 
 <datafile id = "questionmarktest">
 心想事成
@@ -147,6 +153,7 @@ xuǎn
 气喘吁吁
 </datafile>
 <grepcase regexp="xi.?ng" datafile="questionmarktest" greplines="2 3 4"/>
+<grepcase regexp="xna.g" datafile="questionmarktest" greplines=""/>
 <grepcase regexp="man?g" datafile="questionmarktest" greplines="6"/>
 <grepcase regexp="chu?an3" datafile="questionmarktest" greplines="7 8"/>
 <grepcase regexp="chu?an3" datafile="questionmarktest" greplines="7 8"/>
