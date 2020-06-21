@@ -127,9 +127,9 @@ The following testcases give example about the functionality of **pinyingrep**.
     虽然他们不能康复，但可以变更好。
 ```
 
-Third Iteration(WIP)
+Third Iteration
 ----------------
-In the third iteration, we will implement **pinyingrep** version 2.0 with additional functionalities. 
+In the third iteration, we implement **pinyingrep** version 2.0 with additional functionalities. 
 ### Requirements
 1. :white_check_mark: CommandLine flag for coloring 
 2. :white_check_mark: Switching from different databases 
@@ -268,6 +268,9 @@ command line flag `-kpy` need to be in place.
 
 ```
 ## Version History
+#### Version 2.0
+**Pinyingrep** version 2.0 is the final version released in iteration 3.
+
 #### Version 1.8
 **Pinyingrep** version 1.8 supports:
 1. Warning mode for users. It is helpful for user to debug their input's legitimacy.
