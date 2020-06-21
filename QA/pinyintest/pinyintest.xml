@@ -200,4 +200,26 @@ xuǎn
 <grepcase regexp="qiao" datafile="database_test" greplines="19"/>
 <grepcase regexp="qiao" datafile="database_test" greplines="4 19" flags="-kpy"/>
 
+<datafile id="e_hatandv_test">
+誒!
+我很餓
+沒有東西給我吃
+早餐沒吃
+午餐沒吃
+要等到天黑
+才能吃飯
+
+誒!誒!誒!
+草是绿色
+女人很強
+好的
+誒，拜拜
+
+</datafile>
+<grepcase regexp="e_hat" datafile="e_hatandv_test" greplines="2 10 14" flags="-kpy"/>
+<grepcase regexp="ê" datafile="e_hatandv_test" greplines="2 10 14" flags="-kpy"/>
+<grepcase regexp="lv" datafile="e_hatandv_test" greplines="11"/>
+<grepcase regexp="nv" datafile="e_hatandv_test" greplines="12"/>
+<grepcase regexp="lü" datafile="e_hatandv_test" greplines="11"/>
+<grepcase regexp="nü" datafile="e_hatandv_test" greplines="12"/>
 </greptest>
