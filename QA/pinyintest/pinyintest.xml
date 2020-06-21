@@ -184,7 +184,9 @@ xuǎn
 <grepcase regexp="meng" datafile="database_test" greplines="4"/>
 <grepcase regexp="meng" datafile="database_test" greplines="2 4" flags="-kpy"/>
 <grepcase regexp="zhang4" datafile="database_test" greplines="6 7"/>
+<grepcase regexp="zhÀng" datafile="database_test" greplines="6 7"/>
 <grepcase regexp="zhang4" datafile="database_test" greplines="3 4 6 7" flags="-kpy"/>
+<grepcase regexp="zhÀng" datafile="database_test" greplines="3 4 6 7" flags="-kpy"/>
 
 <grepcase regexp="liang2" datafile="database_test" greplines="12"/>
 <grepcase regexp="liang2" datafile="database_test" greplines="11 12 16" flags="-kpy"/>
