@@ -36,7 +36,9 @@ void UnicodePropertyKernelBuilder::generatePabloMethod() {
     } else {
         ccc = llvm::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
+    const unsigned numOfStreams = getInput(0)->getType()->getArrayNumElements();
     UCD::UCDCompiler unicodeCompiler(*ccc.get());
+    unicodeCompiler.numberOfInputStreams(numOfStreams);
     UCD::UCDCompiler::NameMap nameMap;
     nameMap.emplace(mName, nullptr);
     unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
