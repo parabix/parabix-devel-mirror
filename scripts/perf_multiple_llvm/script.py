@@ -4,6 +4,7 @@ import os
 import subprocess
 import argparse
 import sys
+import copy
 import itertools
 import logging
 from functools import reduce
@@ -21,10 +22,7 @@ def createCSV(filename, delimiter=', ', opt=1):
     if not os.path.exists(filename):
         if opt == 1:
             value  = "datetime, filename, regular expression, LLVM version, Unicode version, parabix revision, "
-            value += "none icgrep compile time, none total time, none asm size, "
-            value += "less icgrep compile time, less total time, less asm size, "
-            value += "standard icgrep compile time, standard total time, standard asm size, "
-            value += "aggressive icgrep compile time, aggressive total time, aggressive asm size"
+            value += "host CPU, target triple, full command, opt level, compile time, total time, asm size"
         else:
             value = "runtime, command"
         with open(filename, 'a') as f:
@@ -49,7 +47,9 @@ def stripVersions(s):
     llvmVersion = stripString(s, "LLVM version ", "\\n")
     unicodeVersion = stripString(s, "Unicode version ", "\\n")
     parabixRevision = stripString(s, "Parabix revision ", "\\n")
-    return [llvmVersion, unicodeVersion, parabixRevision]
+    hostCPU = stripString(s, "Host CPU: ", "\\n")
+    target = stripString(s, "Default target: ", "\\n")
+    return [llvmVersion, unicodeVersion, parabixRevision, hostCPU, target]
 
 def stripIcGrepCompileTime(s):
     out = stripString(s, "Execution Time: ", " seconds", "Kernel Generation\\n")
@@ -76,37 +76,41 @@ def runProc(command, timeout):
 # Append to the CSV file in the format
 #
 # datetime, filename, regular expression, LLVM version, Unicode version, parabix revision,
-# none icgrep compile time, none total time, none asm size,
-# less icgrep compile time, less total time, less asm size,
-# standard icgrep compile time, standard total time, standard asm size,
-# aggressive icgrep compile time, aggressive total time, aggressive asm size
-def run(what, otherflags, filename, regex, delimiter=", ", timeout=30, asmFile="asm", optLevels=[]):
-    output = [str(datetime.now()), filename, regex]
+# host CPU, target triple, full command, opt level, compile time, total time, asm size
+def run(what, filename, regex, delimiter=", ", timeout=30, asmFile="asm", optLevels=[], otherFlags=[]):
+    baseOutput = [str(datetime.now()), filename, regex]
     versionCmd = what + ["--version"]
-    output += stripVersions(subprocess.check_output(versionCmd))
+    baseOutput += stripVersions(subprocess.check_output(versionCmd))
     logging.info("version command: " + " ".join(versionCmd))
-    command = what + otherflags + ["-enable-object-cache=0"]
+    command = what + otherFlags + ["-enable-object-cache=0"]
+    baseOutput += [" ".join(command)]
     runtime = []
-    for optLevel in optLevels:
+    allOutputs = [copy.deepcopy(baseOutput) for _ in range(len(optLevels))]
+    for (idx, optLevel) in enumerate(optLevels):
         try:
+            allOutputs[idx] += [optLevel]
             commandOptLevel = command + ["-backend-optimization-level=" + optLevel]
             timeKernelCmd = commandOptLevel + ["-time-kernels"]
-            output += stripIcGrepCompileTime(runProc(timeKernelCmd, timeout=timeout))
+            allOutputs[idx] += stripIcGrepCompileTime(runProc(timeKernelCmd, timeout=timeout))
             logging.info("time kernel command: " + " ".join(timeKernelCmd))
             perfCmd = ["perf", "stat"] + commandOptLevel
             (time, out) = stripPerfStatTime(runProc(perfCmd, timeout=timeout))
-            output += out
+            allOutputs[idx] += out
             runtime += [(time, commandOptLevel)]
             logging.info("perf stat command: " + " ".join(perfCmd))
             asmCmd = commandOptLevel + ["-ShowASM=" + asmFile]
-            output += runAndReturnSizeFile(runProc(asmCmd, timeout=timeout), asmFile)
+            allOutputs[idx] += runAndReturnSizeFile(runProc(asmCmd, timeout=timeout), asmFile)
             logging.info("asm command: " + " ".join(perfCmd))
         except Exception as e:
-            output += ["inf"] * len(optLevels)
+            # 3 represents the values for compile time, total time and asm size
+            allOutputs[idx] += ["inf"] * 3
             runtime += [(sys.maxsize, command)]
             logging.error("error raised: ", e)
             continue
-    return (runtime, delimiter.join(output))
+    finalOutputs = []
+    for output in allOutputs:
+        finalOutputs += [delimiter.join(output)]
+    return (runtime, finalOutputs)
 
 def mkname(folder, regex, target, flags, buildfolder):
     buildpath = os.path.join(buildfolder, os.path.join(folder, "bin/icgrep"))
@@ -127,8 +131,9 @@ def findLLVMFolders(llvmsfile):
         return readFile(llvmsfile)
 
 def save(res, outfile, runFile):
-    (runtime, output) = res
-    saveInFile(outfile, output)
+    (runtime, allOutputs) = res
+    for output in allOutputs:
+        saveInFile(outfile, output)
     best = 0
     for i in range(1, len(runtime)):
         (besttime, _) = runtime[best]
@@ -166,7 +171,7 @@ if __name__ == '__main__':
     argparser.add_argument("-t", "--target", dest="target", default=os.path.join('.', 'script.py'), help="File target for comparison")
     argparser.add_argument("-z", "--logfile", dest="logfile", default=os.path.join('.', 'log'), help="log file for debugging")
     argparser.add_argument("-o", "--optlevels", dest="optlevels", default=["none", "less"], help="opt levels for test")
-    args, otherflags = argparser.parse_known_args()
+    args, otherFlags = argparser.parse_known_args()
 
     logging.basicConfig(filename=args.logfile, filemode='w', level=logging.DEBUG)
 
@@ -187,7 +192,7 @@ if __name__ == '__main__':
                         impFlags,
                         breakFlagsIfNeeded,
                         lambda flgs: mkname(folder, args.regex, args.target, flgs, args.buildfolder),
-                        lambda c: run(c, otherflags, args.target, args.regex, optLevels=args.optlevels),
+                        lambda c: run(c, args.target, args.regex, optLevels=args.optlevels, otherFlags=otherFlags),
                         lambda res: save(res, args.finalfile, args.runtimefile)
                     )
             impFlagsRuntime = pipe(map(mapFn, folders), list)
