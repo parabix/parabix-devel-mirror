@@ -102,7 +102,7 @@ def run(what, otherflags, filename, regex, delimiter=", ", timeout=30, asmFile="
             output += runAndReturnSizeFile(runProc(asmCmd, timeout=timeout), asmFile)
             logging.info("asm command: " + " ".join(perfCmd))
         except Exception as e:
-            output += ["inf", "inf", "inf"]
+            output += ["inf"] * len(optLevels)
             runtime += [(sys.maxsize, command)]
             logging.error("error raised: ", e)
             continue
@@ -176,7 +176,7 @@ if __name__ == '__main__':
     folders = findLLVMFolders(args.llvms)
     initFlags = [[], flagset, None]
     nfolders = 1 if not folders else len(folders) 
-    bestFlagsRuntime = [[sys.maxsize] * 4] * nfolders
+    bestFlagsRuntime = [[sys.maxsize] * len(args.optlevels)] * nfolders
     bestFlags = flagset
     for flags in initFlags:
         converged = False
