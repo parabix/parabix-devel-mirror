@@ -150,8 +150,11 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
         f.close()
     #print(":".join("{:x}".format(ord(c)) for c in expected_result), "expected_result")
 
-    if len(grep_out) > 1 and grep_out[-1] == '\n':
-        grep_out = grep_out[:-1]
+    if len(grep_out) > 1:
+        if grep_out[-2] == '\n':
+            grep_out = grep_out[:-2]
+        if grep_out[-1] == '\n':
+            grep_out = grep_out[:-1]
     if grep_out != expected_result:
         print(u"Test failure: {%s} expecting {%s} got {%s}" % (grep_cmd, expected_result, grep_out))
         failure_count += 1
