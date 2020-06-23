@@ -45,6 +45,8 @@ public:
 
     UCDCompiler(cc::CC_Compiler & ccCompiler);
 
+    void numberOfInputStreams(const unsigned NumOfStreams);
+
     void generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry);
 
     void generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry);
@@ -85,6 +87,7 @@ private:
     PabloAST *              mSuffixVar;
     TargetMap               mTarget;
     ValueMap                mTargetValue;
+    unsigned                mNumOfStreams;
 };
 
 }

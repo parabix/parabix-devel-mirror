@@ -75,8 +75,9 @@ void CharClassesKernel::generatePabloMethod() {
         nameMap.emplace(name, nullptr);
         names.push_back(name);
     }
-
+    const unsigned numOfStreams = getInput(0)->getType()->getArrayNumElements();
     UCD::UCDCompiler unicodeCompiler(*ccc.get());
+    unicodeCompiler.numberOfInputStreams(numOfStreams);
     if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
         unicodeCompiler.generateWithoutIfHierarchy(nameMap, pb);
     } else {
