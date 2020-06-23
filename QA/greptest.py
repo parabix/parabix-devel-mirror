@@ -221,7 +221,7 @@ def start_element_do_test(name, attrs):
             else:
                 for i in range(options.tests_per_grepcase):
                     flags = {}
- #                   add_random_flags(flags, fileLength)
+                    add_random_flags(flags, fileLength)
                     expected_result = expected_grep_results(attrs['datafile'], lines, flags)
                     execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
 
