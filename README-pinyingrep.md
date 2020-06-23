@@ -227,6 +227,15 @@ Output:
 	写**完**了去睡觉
 ```
 #### Testcase 3.8 -- *Indexing*
+Input `-i` right before hexadecimal input, to search for the character with the same unicode.
+```
+Command:
+    bin/pinyin_grep -i 4E2D ../QA/pinyin_test/testfiles/T1_pinyin
+Input:
+    -i 4E2D
+Output:
+    喝中药一定要吃山楂饼
+```
 #### Testcase 3.9 -- *Database Selection*
 Input `-data` right before pinyin input, to search through the `kXHC1983` database instead of the `kHanyuPinyin` database.
 * `这` cannot be found in `kHanyuPinyin` database.
@@ -238,4 +247,3 @@ Input:
 Output:
 	这列子可能是重要
 ```
-#### Testcase 3.10 -- *Definitions*
