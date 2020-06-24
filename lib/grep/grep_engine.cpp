@@ -272,7 +272,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::Name * anchorName = re::makeName("UTF16_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
-        //setComponent(mExternalComponents, Component::UTF16index);
+        setComponent(mExternalComponents, Component::UTF16index);
         mExternalNames.insert(anchorName);
     }
 
@@ -292,11 +292,11 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
-            //setComponent(mExternalComponents, Component::UTF16index);
-            /*if (mColoring) {
+            //setComponent(mExternalComponents, Component::UTF8index);
+            if (mColoring) {
                 UnicodeIndexing = true;
-            }*/
-            //break;
+            }
+            break;
         }
     }
     if (UnicodeIndexing) {
@@ -347,7 +347,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         setComponent(mExternalComponents, Component::S2P_16);
     //}
     if (!mExternalNames.empty()) {
-        //setComponent(mExternalComponents, Component::UTF16index);
+        setComponent(mExternalComponents, Component::UTF16index); 
     }
 }
 
@@ -409,7 +409,7 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
             P->CreateKernelCall<NullDelimiterKernel>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1);
         }
     }
-    //P->CreateKernelCall<DebugDisplayKernel>("mU8index", mU8index);
+     //P->CreateKernelCall<DebugDisplayKernel>("mLineBreakStream", mLineBreakStream);
 }
 
 void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
@@ -525,7 +525,6 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
         options->setIndexingTransformer(&mUTF8_Transformer, mU8index); 
-        //encoding transformer set to UTF16 temporarily
         if (mSuffixRE != nullptr) {
             options->setPrefixRE(mPrefixRE);
             options->setRE(mSuffixRE);
@@ -550,7 +549,7 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
 
 void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF16);
-    auto lengths = getLengthRange(re, &cc::UTF16); 
+    auto lengths = getLengthRange(re, &cc::UTF16);
     options->setSource(Source);
     StreamSet * MatchResults = nullptr;
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
@@ -561,22 +560,21 @@ void GrepEngine::U16indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::R
         options->setResults(Results);
         //P->CreateKernelCall<DebugDisplayKernel>("Results", Results);
     }
+    if (mSuffixRE != nullptr) {
+        options->setPrefixRE(toUTF16(mPrefixRE));
+        options->setRE(toUTF16(mSuffixRE));
+    } 
     if (hasComponent(mExternalComponents, Component::UTF16index)) {
-        options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
-        if (mSuffixRE != nullptr) {
-            options->setPrefixRE(toUTF16(mPrefixRE));
-            options->setRE(toUTF16(mSuffixRE));
-        } else {
-            options->setRE(toUTF16(re));
+        if (hasComponent(mExternalComponents, Component::MoveMatchesToEOL)) {
+            options->setIndexingTransformer(&mUTF16_Transformer, mU8index);
+            options->setRE(re);
         }
-    } else {
-        if (mSuffixRE != nullptr) {
-            options->setPrefixRE(toUTF16(mPrefixRE));
-            options->setRE(toUTF16(mSuffixRE));
-        } else {
-            options->setRE(toUTF16(re));
+        else {
+            options->setRE(toUTF16(re));    
         }
-    }
+     }
+    else 
+        options->setRE(toUTF16(re));
     addExternalStreams(P, options, re);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
@@ -789,7 +787,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
-
     if (MatchResultsBufs.size() > 1) {
         StreamSet * const MergedMatches = E->CreateStreamSet(matchResultStreamCount);
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
