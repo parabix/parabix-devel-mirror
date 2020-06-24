@@ -90,7 +90,7 @@ std::vector <std::vector<re::RE*> >generateREs(std::vector<std::vector<std::stri
         for(iter3 = temp_Vec_String.begin();iter3 != temp_Vec_String.end();iter3++)
         {
             /*for testing */
-            cout << *iter3 <<endl;
+            //cout << *iter3 <<endl;
             /*------------------*/
             re::RE * PinyinRe = re::RE_Parser::parse(*iter3, 0U, re::PCRE, false);
             temp_Vec_RE.push_back(PinyinRe);
@@ -181,7 +181,7 @@ int main(int argc, char* argv[]){
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     
     /*test point1*/
-    cout << "Testing point1" << endl;
+    //cout << "Testing point1" << endl;
     /*------------------------------*/
     std::vector <re::RE*> VectorRE,FinalRE;
     
@@ -197,7 +197,7 @@ int main(int argc, char* argv[]){
         }
         
         /*test point2*/
-        cout << "Parsing finished successfully" << endl;
+        //cout << "Parsing finished successfully" << endl;
         /*parsing test*/
         
         /*copy the context of Unihan_reading.txt into the UnihanBuf for Search*/
@@ -206,7 +206,7 @@ int main(int argc, char* argv[]){
         std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
         
         /*test point3*/
-        cout <<"memcpy finished successfully" << endl;
+        //cout <<"memcpy finished successfully" << endl;
         /*-----------------------------------------*/
         
         auto KangXilineREs = generateREs(KangXiLinePattern);
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]){
         }
         
         /*testing point4*/
-        cout <<"unicode generated successfully"<<endl;
+        //cout <<"unicode generated successfully"<<endl;
         /*------------------------------------------*/
         
         alloc.deallocate(UnihanBuf, 0);
@@ -250,7 +250,7 @@ int main(int argc, char* argv[]){
         FinalRE.push_back(re::makeSeq(VectorRE.begin(),VectorRE.end()));
         
         /*testing point5*/
-        cout <<"RE make successfully"<<endl;
+        //cout <<"RE make successfully"<<endl;
         /*----------------------------------*/
     }
     else{
