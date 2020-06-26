@@ -64,7 +64,8 @@ namespace PY{
             #if DEBUG
                 cout<<"tone:"<<tone<<endl;
             #endif
-            if(tone.length() > 1) throw ParserException("Invalid Syntax -- Too many numbers to specify tones");
+            if(tone.length() > 1) throw ParserException("[ERROR] Invalid Syntax -- Too many numbers to specify tones");
+            if(table.is_toned(s)) throw ParserException("[ERROR] Invalid Syntax -- Using both ways of toning not allowed");
             s = regex_replace(s, regex("[0-4]"), ""); // erase the tone number
             resolved.second.push_back(*tone.begin() - '0'); // convert char to int
         }
@@ -88,7 +89,7 @@ namespace PY{
         std::size_t qmark_index = s.find('?');
         if(qmark_index != s.npos){
             if(qmark_index == 0) 
-                throw ParserException("Invalid Syntax -- only support ? after something'");
+                throw ParserException("[ERROR] Invalid Syntax -- only support ? after something'");
             // erase ?
             s.erase(qmark_index,1);
 	        string tmps = s;

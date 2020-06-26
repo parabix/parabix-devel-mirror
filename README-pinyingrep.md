@@ -37,7 +37,7 @@ As an exception of alphabetic characters in pinyin representation, `ü` is also 
 With such a form of input syllables, pinyingrep will 'grep' lines with Chinese characters with
 readings specified by the pinyin syllables in all five tones(Tone `1-4` as well as Qingsheng/Soft/Neutral)
 For instance, the result of grepping `zhong` is equivalent to those of grepping `zhong0`(Qingsheng), `zhong1`, `zhong2`, `zhong3` and `zhong4`.
-Using numeric tones together with Latin characters' tones, is not supported. In this case, the number `[0-4]` is with higher priority to be considered as tones, while the previous syllable are probably illegal since there is toned Latin characters embedded other than supported alphabetic characters.
+Using numeric tones together with Latin characters' tones, is not supported. In this case, the number `[0-4]` is with higher priority to be considered as tones, while the previous syllable are considered illegal since there is toned Latin characters embedded other than supported alphabetic characters. In this case, pinyingrep throw errors saying that using both ways of toning is not allowed.
 
 #### 2. Pinyin syllables with tones specified by numbers
 **Pinyingrep** supports pinyin syllables with tones specified by Arabic numbers(`0-4`).

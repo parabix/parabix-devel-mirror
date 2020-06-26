@@ -31,7 +31,6 @@
 <grepcase regexp="zhòng" datafile="simple_pinyin" greplines="3 4 5 6 7 9 10"/>
 
 <grepcase regexp="Z...." datafile="simple_pinyin" greplines="3 4 5 6 7 9 10 11"/>
-<grepcase regexp="Zhōng1" datafile="simple_pinyin" greplines=""/>
 <grepcase regexp="zhò?ng" datafile="simple_pinyin" greplines="3 4 5 6 7 9 10"/>
 <grepcase regexp=" " datafile="simple_pinyin" greplines="1 2 3 4 5 6 7 8 9 10 11 12 13"/>
 <grepcase regexp="lü" datafile="simple_pinyin" greplines="12 13"/>
@@ -140,7 +139,6 @@ xuǎn
 <grepcase regexp="pin yin" datafile="exact-test" greplines="2" flags="-e"/>
 <grepcase regexp="m.ng?" datafile="exact-test" greplines="4 5 6" flags="-e"/>
 <grepcase regexp="xuǎn" datafile="exact-test" greplines="7 8" flags="-e"/>
-<grepcase regexp="xuǎn1" datafile="exact-test" greplines="" flags="-e"/>
 <grepcase regexp="xtwuǎn" datafile="exact-test" greplines="" flags="-e"/>
 
 <datafile id = "questionmarktest">
