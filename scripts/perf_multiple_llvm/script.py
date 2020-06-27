@@ -73,6 +73,13 @@ def runProc(command, timeout):
             popen.kill()
             raise e
 
+def crashIfNotAllNumbers(arr):
+    for value in arr:
+        try:
+            float(value)
+        except Exception as e:
+            raise e
+
 # Append to the CSV file in the format
 #
 # datetime, filename, regular expression, LLVM version, Unicode version, parabix revision,
@@ -91,7 +98,9 @@ def run(what, filename, regex, delimiter=", ", timeout=30, asmFile="asm", optLev
             allOutputs[idx] += [optLevel]
             commandOptLevel = command + ["-backend-optimization-level=" + optLevel]
             timeKernelCmd = commandOptLevel + ["-time-kernels"]
-            allOutputs[idx] += stripIcGrepCompileTime(runProc(timeKernelCmd, timeout=timeout))
+            icgrepCompTime = stripIcGrepCompileTime(runProc(timeKernelCmd, timeout=timeout))
+            crashIfNotAllNumbers(icgrepCompTime)
+            allOutputs[idx] += icgrepCompTime
             logging.info("time kernel command: " + " ".join(timeKernelCmd))
             perfCmd = ["perf", "stat"] + commandOptLevel
             (time, out) = stripPerfStatTime(runProc(perfCmd, timeout=timeout))
