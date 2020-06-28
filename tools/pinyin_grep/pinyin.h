@@ -45,7 +45,6 @@ namespace PinyinPattern{
             if(file) {
                 str.assign(istreambuf_iterator<char>(file), istreambuf_iterator<char>());
                 //test if it read the file
-                //std::cout<<str<<std::endl;
             }
             else{
                 cout << "Fatal Error, cannot open the file"<<endl;
@@ -114,12 +113,9 @@ namespace PinyinPattern{
             while(*(start+i) != '\t'){
                 strcodepoint += *(start+i);
                 i++;
-                //    llvm::errs() << "strcodepoint " << strcodepoint << "\n";
             }
             UnicodeString.push_back(strcodepoint);
-            // llvm::errs() << "strcodepoint " << strcodepoint << "\n";
             parsed_codepoint = conv_int(strcodepoint);
-            // llvm::errs() << "parsed_codepoint " << parsed_codepoint << "\n";
             mAccumSet.insert(parsed_codepoint);
         }
     };

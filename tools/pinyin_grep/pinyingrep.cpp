@@ -29,7 +29,6 @@
 #include <fileselect/file_select.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-//#include <llvm/ADT/STLExtras.h> // for make_unique
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
@@ -69,7 +68,6 @@ static cl::opt<ColoringType, true> Color("c", cl::desc("Set the colorization of 
 static cl::opt<bool> LineNumberOption("n", cl::desc("Show the line number with each matching line."), cl::init(false), cl::cat(pygrepFlags));
 static cl::opt<bool> WithFilenameOption("h", cl::desc("Show the file name with each matching line."), cl::init(false), cl::cat(pygrepFlags));
 static cl::opt<bool> IndexSearchingOption("i", cl::desc("using hexidemical unicode index for searching"), cl::init(false), cl::cat(pygrepFlags));
-/*unfinished ST_Search Part*/
 
 std::vector<fs::path> allFiles;
 
@@ -89,9 +87,6 @@ std::vector <std::vector<re::RE*> >generateREs(std::vector<std::vector<std::stri
         temp_Vec_String = *iter1;
         for(iter3 = temp_Vec_String.begin();iter3 != temp_Vec_String.end();iter3++)
         {
-            /*for testing */
-            //cout << *iter3 <<endl;
-            /*------------------*/
             re::RE * PinyinRe = re::RE_Parser::parse(*iter3, 0U, re::PCRE, false);
             temp_Vec_RE.push_back(PinyinRe);
         }
@@ -108,70 +103,6 @@ int main(int argc, char* argv[]){
     AlignedAllocator <char, 32> alloc;
     char * UnihanBuf;
     PinyinPattern::Buffer buf(false);
-    
-    /*Unfinished Search Part*/
-    /*-----------------------------------------------------------------------------------------------------*/
-    
-    //static cl::opt<bool> SimplifiedSearchOption("simple", cl::desc("Search only simplified chinese regex."), cl::init(false), cl::cat(pygrepFlags));
-    //static cl::opt<bool> TraditionalSearchOption("traditional", cl::desc("Search only traditional chinese regex."), cl::init(false), cl::cat(pygrepFlags));
-    //bool S_T_Search_Flag;
-    //S_T_Search_Flag = false;//(SimplifiedSearchOption||TraditionalSearchOption);
-    //cout<<S_T_Search_Flag<<endl;
-    //cout<<SimplifiedSearchOption<<endl;
-    //cout<<TraditionalSearchOption<<endl;
-    //PinyinPattern::Buffer ST_buf(true);
-    //char * Unihan_ST_Buf = alloc.allocate(ST_buf.R_size32(), 0);
-    //std::memcpy(Unihan_ST_Buf, ST_buf.R_fstring().data(),ST_buf.R_size());
-    //std::memset(Unihan_ST_Buf + ST_buf.R_size(), 0, ST_buf.R_diff());
-    /*Unicode_return = Temp_accum.get_unicode();
-     //PinyinPattern::PinyinSetAccumulator ST_Temp_accum;
-     if(S_T_Search_Flag)
-     {
-     auto ST_REs = generate_S_T_REs(Unicode_return,SimplifiedSearchOption,TraditionalSearchOption);
-     for(vector<re::RE*>::iterator ST_RE_iter = ST_REs.begin();ST_RE_iter!=ST_REs.end();ST_RE_iter++)
-     {
-     grep::InternalSearchEngine engine_ST(pxDriver);
-     engine_ST.setRecordBreak(grep::GrepRecordBreakKind::LF);
-     engine_ST.grepCodeGen(*ST_RE_iter);
-     engine_ST.doGrep(Unihan_ST_Buf, ST_buf.R_size32(), ST_Temp_accum);
-     vector <string> test_vec = ST_Temp_accum.get_unicode();
-     for(vector <string>::iterator test_iter = test_vec.begin();test_iter!=test_vec.end();test_iter++)
-     {
-     cout<<*test_iter<<endl;
-     }
-     accum.push_back(ST_Temp_accum);
-     }
-     cout<<"Did do the ST_Search"<<endl;
-     }
-     else
-     {
-     accum.push_back(Temp_accum);
-     }*/
-    
-    /*
-     vector <re::RE*> generate_S_T_REs(vector <string> S_T_Unicode, bool is_simple, bool is_traditional)
-     {
-     vector<re::RE*> S_T_REs;
-     for(vector <string>::iterator iter = S_T_Unicode.begin(); iter != S_T_Unicode.end(); iter++)
-     {
-     string temp_str;
-     if(is_simple)
-     {
-     temp_str = "kSimplifiedVariant.*U\\+" + *iter;
-     }
-     else if(is_traditional)
-     {
-     temp_str = "kTraditionalVariant.*U\\+" + *iter;
-     }
-     cout <<temp_str<<endl;
-     re::RE * S_T_Re = re::RE_Parser::parse(temp_str, 0U, re::PCRE, false);
-     S_T_REs.push_back(S_T_Re);
-     }
-     return S_T_REs;
-     }
-     */
-    
-    /*-----------------------------------------------------------------------------------------------------*/
     codegen::ParseCommandLineOptions(argc, argv, {&pygrepFlags, codegen::codegen_flags()});
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
@@ -180,9 +111,6 @@ int main(int argc, char* argv[]){
     CPUDriver pxDriver("pygrep");
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     
-    /*test point1*/
-    //cout << "Testing point1" << endl;
-    /*------------------------------*/
     std::vector <re::RE*> VectorRE,FinalRE;
     
     if(!IndexSearchingOption)
@@ -190,24 +118,16 @@ int main(int argc, char* argv[]){
         std::vector <std::vector<std::string> >KangXiLinePattern;
         /*parse the input syllables*/
         KangXiLinePattern = PinyinPattern::Syllable_Parse(PinyinLinePattern,Database);
-        /*if there is no syllbales or no legeal syllables return directly*/
+        /*if there is no syllbales or no legal syllables return directly*/
         if(KangXiLinePattern.empty())
         {
             return 0;
         }
         
-        /*test point2*/
-        //cout << "Parsing finished successfully" << endl;
-        /*parsing test*/
-        
         /*copy the context of Unihan_reading.txt into the UnihanBuf for Search*/
         UnihanBuf = alloc.allocate(buf.R_size32(), 0);
         std::memcpy(UnihanBuf, buf.R_fstring().data(),buf.R_size());
         std::memset(UnihanBuf + buf.R_size(), 0, buf.R_diff());
-        
-        /*test point3*/
-        //cout <<"memcpy finished successfully" << endl;
-        /*-----------------------------------------*/
         
         auto KangXilineREs = generateREs(KangXiLinePattern);
         
@@ -233,10 +153,6 @@ int main(int argc, char* argv[]){
             accum.push_back(Temp_accum);
         }
         
-        /*testing point4*/
-        //cout <<"unicode generated successfully"<<endl;
-        /*------------------------------------------*/
-        
         alloc.deallocate(UnihanBuf, 0);
         
         /*using the unicode store in the accum to make another RE for the final search*/
@@ -249,9 +165,6 @@ int main(int argc, char* argv[]){
         /*if the syllable is a sequence then make the RE a sequence*/
         FinalRE.push_back(re::makeSeq(VectorRE.begin(),VectorRE.end()));
         
-        /*testing point5*/
-        //cout <<"RE make successfully"<<endl;
-        /*----------------------------------*/
     }
     else{
         stringstream s;
