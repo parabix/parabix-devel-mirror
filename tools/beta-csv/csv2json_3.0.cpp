@@ -109,7 +109,7 @@ class CSV_Masking : public PabloKernel {
     public:
         CSV_Masking(    BuilderRef kb, StreamSet * dquote, StreamSet * delimiter,  StreamSet * newline, StreamSet * basis, 
                         StreamSet * translatedBasis, StreamSet * field_starts, StreamSet* record_starts, StreamSet * mask, StreamSet * escapes,
-                        StreamSet * emptyFirst, StreamSet * emptyMid, StreamSet * emptyLast, int fileHeaders
+                        StreamSet * empties, StreamSet * emptyLast, int fileHeaders
                     ):
         PabloKernel(kb, "CSV_Masking"+to_string(fileHeaders), {
             Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, 
@@ -123,8 +123,7 @@ class CSV_Masking : public PabloKernel {
             Binding{"record_starts",record_starts},
             Binding{"mask",mask},
             Binding{"escapes",escapes},
-            Binding{"emptyFirst", emptyFirst},
-            Binding{"emptyMid", emptyMid},
+            Binding{"empties", empties},
             Binding{"emptyLast", emptyLast},
         }, {}, {}),headers_from_file(fileHeaders){}
     protected:
@@ -150,12 +149,11 @@ protected:
 
 class LookaheadDriver : public PabloKernel {
 public:
-    LookaheadDriver(    BuilderRef kb, StreamSet * emptyFirst, StreamSet * emptyMid, StreamSet * skewedEmptyLast, StreamSet * maskIn, StreamSet * fieldsIn, //inputs
+    LookaheadDriver(    BuilderRef kb, StreamSet * empties, StreamSet * skewedEmptyLast, StreamSet * maskIn, StreamSet * fieldsIn, //inputs
                         StreamSet * maskOut, StreamSet * fieldsOut, StreamSet * emptyMask   //outputs
                     )
         : PabloKernel(kb, "LookaheadDriver",
-                    {   Binding{"emptyFirst", emptyFirst},
-                        Binding{"emptyMid", emptyMid},
+                    {   Binding{"empties", empties},
                         Binding{"skewedEmptyLast", skewedEmptyLast, FixedRate(),LookAhead(1)},
                         Binding{"maskIn", maskIn},
                         Binding{"fieldsIn", fieldsIn}
@@ -325,7 +323,7 @@ void CSV_Masking::  generatePabloMethod() {
     PabloAST * quote_escape = pb.createAdvance(escaped_quote, 1);
     PabloAST * start_dquote = pb.createXor(dquote_odd, quote_escape);
     PabloAST * end_dquote = pb.createXor(dquote_even, escaped_quote);
-    PabloAST * surrandingDquotes = pb.createOr(start_dquote,end_dquote);
+    PabloAST * surroundingDquotes = pb.createOr(start_dquote,end_dquote);
     
     //newline
     PabloAST * literal_newlines = pb.createAnd(newlines,pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
@@ -342,13 +340,11 @@ void CSV_Masking::  generatePabloMethod() {
         header = pb.createScanThru(pb.createOnes(),CSV_newlines);
     }
     
-    //PabloAST * headerMask = pb.createXor(header,pb.createAnd(header,surrandingDquotes));
+    //PabloAST * headerMask = pb.createXor(header,pb.createAnd(header,surroundingDquotes));
 
     //delimiters
     PabloAST * literal_delimiters = pb.createAnd(delimiters,pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
     PabloAST * CSV_delimiters = pb.createXor(delimiters,literal_delimiters);//delimiter not in strings
-    
-    PabloAST *  toDelete = pb.createOr(pb.createOr(CSV_delimiters,surrandingDquotes),quote_escape);// to be deleted from csv data
     
     //empty fields
     PabloAST * empty_first_fields = pb.createAnd(pb.createAdvance(CSV_newlines, 1), CSV_delimiters);
@@ -357,7 +353,9 @@ void CSV_Masking::  generatePabloMethod() {
 
     PabloAST * empty_last_fields = pb.createAnd(pb.createAdvance(CSV_delimiters, 1), CSV_newlines);
 
-    PabloAST * empty_both = pb.createOr(empty_first_fields, empty_intermed_fields);
+    PabloAST * empty_string_fields = pb.createAnd(surroundingDquotes, pb.createAdvance(surroundingDquotes, 1));
+
+    PabloAST * empty_both = pb.createOr3(empty_first_fields, empty_intermed_fields, empty_string_fields);
 
     //escapes
     PabloAST * escapes = pb.createOr(escaped_quote,literal_newlines);
@@ -378,6 +376,8 @@ void CSV_Masking::  generatePabloMethod() {
     PabloAST * field_starts = pb.createOr3(noquote_field_starts, char_after_start_quote, empty_both);
     
     //filtermask
+
+    PabloAST *  toDelete = pb.createOr(pb.createOr(CSV_delimiters, pb.createXor(surroundingDquotes, empty_string_fields)),quote_escape);// to be deleted from csv data
     PabloAST * mask = pb.createNot(toDelete);
 
     mask = pb.createOr(mask, empty_both);
@@ -390,8 +390,7 @@ void CSV_Masking::  generatePabloMethod() {
     Var * maskVar = getOutputStreamVar("mask");
     Var * escapeVar = getOutputStreamVar("escapes");
     Var * record_startsVar = getOutputStreamVar("record_starts");
-    Var * emptyFirstVar = getOutputStreamVar("emptyFirst");
-    Var * emptyMidVar = getOutputStreamVar("emptyMid");
+    Var * emptiesVar = getOutputStreamVar("empties");
     Var * emptyLastVar = getOutputStreamVar("emptyLast");
 
     // Translate \n to n    ASCII value of \n = 0x0d, ASCII value of n = 0x6e   blackslashes will be added lateron to show \n
@@ -414,20 +413,18 @@ void CSV_Masking::  generatePabloMethod() {
     pb.createAssign(pb.createExtract(maskVar, pb.getInteger(0)), mask);
     pb.createAssign(pb.createExtract(escapeVar, pb.getInteger(0)), escapes);
     pb.createAssign(pb.createExtract(record_startsVar, pb.getInteger(0)), record_starts);
-    pb.createAssign(pb.createExtract(emptyFirstVar, pb.getInteger(0)), empty_first_fields);
-    pb.createAssign(pb.createExtract(emptyMidVar, pb.getInteger(0)), empty_intermed_fields);
+    pb.createAssign(pb.createExtract(emptiesVar, pb.getInteger(0)), empty_both);
     pb.createAssign(pb.createExtract(emptyLastVar, pb.getInteger(0)), empty_last_fields);
 }
 
 void LookaheadDriver::generatePabloMethod(){
     pablo::PabloBuilder pb(getEntryScope());
-    PabloAST * emptyFirst = getInputStreamSet("emptyFirst")[0];
-    PabloAST * emptyMid = getInputStreamSet("emptyMid")[0];
-    PabloAST * emptyFieldsIn = getInputStreamSet("skewedEmptyLast")[0];
+    PabloAST * empties = getInputStreamSet("empties")[0];
+    PabloAST * emptyLastFieldsIn = getInputStreamSet("skewedEmptyLast")[0];
     PabloAST * maskIn = getInputStreamSet("maskIn")[0];
     PabloAST * fieldsIn = getInputStreamSet("fieldsIn")[0];
 
-    PabloAST * emptyLast = pb.createLookahead(emptyFieldsIn, 1);
+    PabloAST * emptyLast = pb.createLookahead(emptyLastFieldsIn, 1);
 
     Var * marksOutVar = getOutputStreamVar("maskOut");
     Var * fieldsOutVar = getOutputStreamVar("fieldsOut");
@@ -435,7 +432,7 @@ void LookaheadDriver::generatePabloMethod(){
 
     pb.createAssign(pb.createExtract(marksOutVar, pb.getInteger(0)), pb.createOr(maskIn, emptyLast));
     pb.createAssign(pb.createExtract(fieldsOutVar, pb.getInteger(0)), pb.createOr(fieldsIn, emptyLast));
-    pb.createAssign(pb.createExtract(emptyMaskVar, pb.getInteger(0)), pb.createOr3(emptyFirst, emptyMid, emptyLast));
+    pb.createAssign(pb.createExtract(emptyMaskVar, pb.getInteger(0)), pb.createOr(empties, emptyLast));
 }
 
 void createNotDriver::generatePabloMethod(){
@@ -529,13 +526,12 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
     StreamSet * escapes = P->CreateStreamSet(1);
     StreamSet * Record_starts = P->CreateStreamSet(1);
     StreamSet * TranslatedBasis = P->CreateStreamSet(8,1);
-    StreamSet * emptyFirst = P->CreateStreamSet(1);
-    StreamSet * emptyMid = P->CreateStreamSet(1);
+    StreamSet * emptiesExceptLastOnes = P->CreateStreamSet(1);
     StreamSet * emptyLastSkew = P->CreateStreamSet(1);
 
     P->CreateKernelCall<CSV_Masking>(   Dquote, delimiter, newline, BasisBits,
                                         TranslatedBasis, Field_starts_incomplete,Record_starts,CSV_data_mask_incomplete, 
-                                        escapes, emptyFirst, emptyMid, emptyLastSkew, fileHeaders
+                                        escapes, emptiesExceptLastOnes, emptyLastSkew, fileHeaders
                                     );
 
     //P->CreateKernelCall<DebugDisplayKernel>("CSV_data_mask", CSV_data_mask);
@@ -547,7 +543,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
     StreamSet * Field_starts = P->CreateStreamSet(1);
     StreamSet * empties = P->CreateStreamSet(1);
 
-    P->CreateKernelCall<LookaheadDriver>(   emptyFirst, emptyMid, emptyLastSkew, CSV_data_mask_incomplete, Field_starts_incomplete,
+    P->CreateKernelCall<LookaheadDriver>(   emptiesExceptLastOnes, emptyLastSkew, CSV_data_mask_incomplete, Field_starts_incomplete,
                                             CSV_data_mask, Field_starts, empties);
 
     //filtering streamsets to remove csv syntax
@@ -582,7 +578,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
     
     //  StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
     //  P->CreateKernelCall<P2SKernel>(FilteredBasis, FilteredByte);
-     //P->CreateKernelCall<DebugDisplayKernel>("FilteredBytes", FilteredByte);
+    //  //P->CreateKernelCall<DebugDisplayKernel>("FilteredBytes", FilteredByte);
     //  P->CreateKernelCall<StdOutKernel>(FilteredByte);
    
     //StreamSet* maskPlus = P->CreateStreamSet(1);
@@ -621,6 +617,8 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
 
     StreamSet * ExpandedMarks = P->CreateStreamSet(marksize);
     SpreadByMask(P, SpreadMask, InsertMarks, ExpandedMarks);
+
+    // P->CreateKernelCall<DebugDisplayKernel>("Expanded Escapes", ExpandedMarks);
 
     StreamSet * ExpandedEmpties = P->CreateStreamSet(1);
     SpreadByMask(P, SpreadMask, FilteredEmpties, ExpandedEmpties);
