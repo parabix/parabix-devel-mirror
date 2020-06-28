@@ -72,26 +72,25 @@ void setHeader(cl::list<std::string> &userHeader, vector<string> &header);
 //  The declarations below are for command line processing.
 //  See the LLVM CommandLine 2.0 Library Manual https://llvm.org/docs/CommandLine.html
 static cl::OptionCategory CSV_Parsing_Options("CSV Parsing Options", "CSV Parsing Options.");
+
+//option to display file(s) in process with "-names"
 static cl::opt<bool,false> displaynames("names", cl::desc("display processed file names"), cl::cat(CSV_Parsing_Options));
 static cl::alias displaynamesAlias("shownames",cl::desc("display processed file names -names"),cl::aliasopt(displaynames));
 
+//option to set delimitor, eg. "-set ,"
 static cl::opt<std::string> setDelimitor("set", cl::desc("<input delimitor>"),cl::cat(CSV_Parsing_Options) );
 static cl::alias setDelimitorAlias("delimitor",cl::desc("<input delimitor ...>"),cl::aliasopt(setDelimitor));
 
-//static cl::opt<bool,false> specifyHeader("header",cl::desc("specify header"),cl::cat(CSV_Header_Options));
-//static cl::alias setHeaderAlias("setHeader",cl::desc("specify header -header"),cl::aliasopt(specifyHeader));
+
+//option for files as input args, eg. "-file f1 f2 f3..."
 static cl::list<std::string> inputFiles("file",cl::Positional, cl::desc("<input file ...>]") , cl::PositionalEatsArgs ,cl::cat(CSV_Parsing_Options));
 static cl::alias inputFilesAlias("files",cl::desc("input file ... -file"),cl::aliasopt(inputFiles));
 
+//option for setting headers, eg. "-header head1 head2..."
 static cl::list<std::string> userHeader("header",cl::Positional, cl::desc("<input header ...>"), cl::PositionalEatsArgs, cl::cat(CSV_Parsing_Options));
 static cl::alias userHeaderAlias("userHeader",cl::desc("input header ... [header]"),cl::aliasopt(userHeader));
 
-//static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(CSV_Parsing_Options));
-//  Multiple input files are allowed on the command line;
-//static cl::opt<bool,false> inputOptionFiles("f",cl::desc("input file ..."),cl::cat(CSV_Parsing_Options));
-//static cl::alias inputOptionFilesAlias("files",cl::desc("input file ... -f"),cl::aliasopt(inputOptionFiles));
-
-
+//option for directories as input args, eg. "-dir d1 d2 d3..."
 static cl::list<std::string> inputDirs("dir",cl::Positional, cl::desc("[<input dir ...> or "), cl::PositionalEatsArgs,cl::cat(CSV_Parsing_Options));
 static cl::alias inputDirsAlias("dirs",cl::desc("input dir ... -dir"),cl::aliasopt(inputDirs));
 
@@ -99,11 +98,6 @@ static cl::alias inputDirsAlias("dirs",cl::desc("input dir ... -dir"),cl::aliaso
 std::vector<fs::path> files;
 std::vector<fs::path> dirs;
 std::vector<string> allFiles;
-
-
-//static cl::opt<bool,false> pyColorOption("c",cl::desc("set coloring of output"),cl::cat(pygrepFlags));
-//static cl::alias pyColorOptionAlias0("colour",cl::desc("alias for coloring -c"),cl::aliasopt(pyColorOption));
-
 
 class CSV_Masking : public PabloKernel {
     public:
@@ -219,14 +213,11 @@ int main(int argc, char *argv[]) {
     re::Name * CC_deli = NULL;
     re::RE * CC_re = re::RE_Parser::parse(setDelimitor);
     resolveUnicodeNames(CC_re);
-    if(re::Name * UCD_property_name = dyn_cast<re::Name>(CC_re)){
-        //cout<<UCD_property_name->getName()<<endl;
+    if(re::Name * UCD_property_name = dyn_cast<re::Name>(CC_re)){   //delimitor in UCD_property
         CC_deli = dyn_cast<re::Name>(CC_re);
-    }else if (re::CC * CC_ast = dyn_cast<re::CC>(CC_re)) {
-        //cout<<CC_ast->count()<<endl;
-        //cout<<makeName(CC_ast)->getFullName()<<endl;
+    }else if (re::CC * CC_ast = dyn_cast<re::CC>(CC_re)) {  //delimitor in CC
         if(CC_ast->count()>1){
-            std::cerr << "Only one type of delimitor is allowed.\n";
+            std::cerr << "Only one delimitor is allowed.\n";
             exit(1);  
         }
         else if(CC_ast->count() == 1){
@@ -235,7 +226,7 @@ int main(int argc, char *argv[]) {
             {
                 delimiter = setDelimitor[0];
             }
-            else{
+            else{                                   //process backslash characters. delimitor input "\t" is counted as two characters.
                 string de = setDelimitor.c_str();
                 if(de == "\\t") delimiter = '\t';   
                 else if(de == "\\r") delimiter ='\r';
@@ -249,10 +240,6 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    
-    
-    //cout<<"deli["<<setDelimitor.c_str()<<"]"<<"length:"<<strlen(setDelimitor.c_str())<<endl;
-    //cout<<"deli["<<delimiter<<"]"<<endl;
     if(inputFiles.size()>0){
         files = argv::getFullFileList(driver, inputFiles);
         for(unsigned i=0;i<files.size();i++){
@@ -274,14 +261,6 @@ int main(int argc, char *argv[]) {
     
     if(userHeader.size()>0){
         setHeader(userHeader,header);
-        /*
-        cout<<"begin print header\n";
-        vector<string>::iterator it;
-        for(it=header.begin();it!=header.end();it++){
-            cout<<*it<<endl;
-        }
-        cout<<"finished print header\n";
-        */
     }
     for(unsigned i=0;i<allFiles.size();i++){
         std::string fileName = allFiles[i];
@@ -304,7 +283,7 @@ int main(int argc, char *argv[]) {
             llvm::errs() << "Error: cannot open " << fileName << " for processing. Skipped.\n";
         } else {
             //  Run the pipeline.
-            if(displaynames){
+            if(displaynames){   //display header for file in process
                 if(i!=0) cout<<endl;
                 cout<<"__________________________________________________________________________________\n";
                 cout<<endl<<fileName<<"->"<<fileName.replace(fileName.find_last_of("."),4,".json\n\n");
@@ -316,12 +295,6 @@ int main(int argc, char *argv[]) {
                 cout<<"\n__________________________________________________________________________________\n";
         }
     }
-    
-
-    
-
-    
-
     
     return 0;
 }
@@ -602,39 +575,11 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
 
     StreamSet * FilteredEmpties = P->CreateStreamSet(1);
     FilterByMask(P,CSV_data_mask,empties,FilteredEmpties);
-    
-    
-    // StreamSet * Filtered_mask = P->CreateStreamSet(1);
-    // FilterByMask(P,CSV_data_mask,CSV_data_mask,Filtered_mask);
-    // P->CreateKernelCall<DebugDisplayKernel>("Filtered_mask", Filtered_mask);
-    // P->CreateKernelCall<DebugDisplayKernel>("Record_starts", Record_starts);
-    // P->CreateKernelCall<DebugDisplayKernel>("mask", CSV_data_mask);
-    // P->CreateKernelCall<DebugDisplayKernel>("first", emptyFirst);
-    // P->CreateKernelCall<DebugDisplayKernel>("mid", emptyMid);
-    // P->CreateKernelCall<DebugDisplayKernel>("empties", FilteredEmpties);
-    //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_field_starts", Filtered_field_starts);
-    //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_escapes", Filtered_escapes);
-    // P->CreateKernelCall<DebugDisplayKernel>("Field_starts", Field_starts);
-    //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_record_starts", Filtered_record_starts);
-    
-    //  StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
-    //  P->CreateKernelCall<P2SKernel>(FilteredBasis, FilteredByte);
-    //  //P->CreateKernelCall<DebugDisplayKernel>("FilteredBytes", FilteredByte);
-    //  P->CreateKernelCall<StdOutKernel>(FilteredByte);
-   
-    //StreamSet* maskPlus = P->CreateStreamSet(1);
-    //P->CreateKernelCall<AddSentinel>(Filtered_mask,maskPlus);
-    //P->CreateKernelCall<DebugDisplayKernel>("maskPlus", maskPlus);
-    //StreamSet* FilteredBasisPlus = P->CreateStreamSet(8);
-    //P->CreateKernelCall<AddSentinel>(FilteredBasis,FilteredBasisPlus);
 
     unsigned marksize = Header_Vec.size();
     StreamSet * InsertMarks = P->CreateStreamSet(marksize);
     P->CreateKernelCall<CSV_Marks>(Filtered_field_starts, Filtered_record_starts, Header_Vec.size()-3,InsertMarks, fileHeaders);
-    //P->CreateKernelCall<CSV_Marks>(startPlus,escapePlus,,n,InsertMarks);
-    // P->CreateKernelCall<DebugDisplayKernel>("InsertMarks", InsertMarks);
-    
-    //P->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
+
     unsigned insertLengthBits = bixnum_size;  //needs to be changed later, will create problems if max field name length is greater than 31
                                     //cannot be less than 5 with current program
 
@@ -647,19 +592,10 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
 
     P->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, true);
 
-    //StreamSet * FilteredBasisPlus = P->CreateStreamSet(8);
-    //->CreateKernelCall<AddSentinel>(FilteredBasis,FilteredBasisPlus);
-   //P->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
     SpreadByMask(P, SpreadMask, FilteredBasis, ExpandedBasis);
-
-    // StreamSet * ExpandedBytes = P->CreateStreamSet(1,8);
-    // P->CreateKernelCall<P2SKernel>(ExpandedBasis, ExpandedBytes);
-    // P->CreateKernelCall<DebugDisplayKernel>("Expanded Basis", ExpandedBytes);
 
     StreamSet * ExpandedMarks = P->CreateStreamSet(marksize);
     SpreadByMask(P, SpreadMask, InsertMarks, ExpandedMarks);
-
-    // P->CreateKernelCall<DebugDisplayKernel>("Expanded Escapes", ExpandedMarks);
 
     StreamSet * ExpandedEmpties = P->CreateStreamSet(1);
     SpreadByMask(P, SpreadMask, FilteredEmpties, ExpandedEmpties);
@@ -694,10 +630,6 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
     
     StreamSet * FilledBytes  = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(BasisWithEscapes, FilledBytes);
-
-    // P->CreateKernelCall<DebugDisplayKernel>("escapesb4", FinalEscapes);
-    // P->CreateKernelCall<DebugDisplayKernel>("escapes", NotSoFinalEscapes);
-    //P->CreateKernelCall<DebugDisplayKernel>("output", FilledBytes);
     
     //output to file
     P->CreateKernelCall<StdOutKernel>(FilledBytes);
@@ -752,7 +684,8 @@ void Get_Header(const char delimiter, const char* dir, vector<string>& v, int n)
     }
     string last;
     getline(in,last);
-    if(last[last.size()-1]=='\r'){  //getline above returns the file contents before the first '\n' character. If the file was created in windows, this line feed will be preceded by a carriage return which must be removed.
+    if(last[last.size()-1]=='\r'){  //getline above returns the file contents before the first '\n' character. If the file was created in windows, 
+                                    //this line feed will be preceded by a carriage return which must be removed.
         last=last.substr(0, last.size()-1);
     }
     int len=last.size();
