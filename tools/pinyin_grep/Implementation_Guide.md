@@ -33,7 +33,30 @@ Declaration of Namespace `PinyinPattern`, as well as its associated classes and 
 - `Buffer`
 Buffer is used to read in and store the file `"Unihan_Readings.txt"`.
 - `PinyinSetAccumulator`
-A subclass of `grep::MatchAccumulator`, it's purpose is to obtain the codepoints of the matched lines, store it as a `codepoint_t`(`int32`) in the UnicodeSet.
+A subclass of `grep::MatchAccumulator`, it's purpose is to obtain the codepoints of the matched lines, store it as a `codepoint_t`(`int32`) in the UnicodeSet. \
+The functions used to parse the input syllables which include:
+    - `Syllable_Parse`: \
+        Parses the input and returns a string vector containing correct pinyin format.
 
-###2. `pinyin.cpp`
-Description of the function used to parse the input syllables
+    - `Add_kHanyuPinyin_fix`: \
+        Format the input to search through the `kHanyuPinyin` database.
+
+    - `Add_kXHC1983_fix`: \
+        Format the input to search through `kXHC1983` databse.
+
+    - `All_Alpha`: \
+        Determines whether the input contains purely latin alphabets.
+
+
+    - `check_legel`: \
+        Determines whether the input is in the correct format.
+
+    - `find_bracket`: \
+        Finds `[]` in the input to expand its content -- used in *feature 5*.
+
+    - `trim`:\
+        Deletes extra spaces both before and after the string.
+
+
+### 3. `pinyin.cpp`
+Description of the function used to parse the input syllables and the possible syllable table.
