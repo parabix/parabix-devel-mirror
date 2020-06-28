@@ -321,10 +321,10 @@ void CSV_Masking::  generatePabloMethod() {
     //dquotes
     PabloAST * dquote_odd = pb.createEveryNth(dquotes, pb.getInteger(2));
     PabloAST * dquote_even = pb.createXor(dquotes, dquote_odd);
-    PabloAST * quote_escape = pb.createAnd(dquote_even, pb.createLookahead(dquotes, 1));
-    PabloAST * escaped_quote = pb.createAdvance(quote_escape, 1);
-    PabloAST * start_dquote = pb.createXor(dquote_odd, escaped_quote);
-    PabloAST * end_dquote = pb.createXor(dquote_even, quote_escape);
+    PabloAST * escaped_quote = pb.createAnd(dquote_even, pb.createLookahead(dquotes, 1));
+    PabloAST * quote_escape = pb.createAdvance(escaped_quote, 1);
+    PabloAST * start_dquote = pb.createXor(dquote_odd, quote_escape);
+    PabloAST * end_dquote = pb.createXor(dquote_even, escaped_quote);
     PabloAST * surrandingDquotes = pb.createOr(start_dquote,end_dquote);
     
     //newline
@@ -508,7 +508,7 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
 
     StreamSet * BasisBits = P->CreateStreamSet(8);
     P->CreateKernelCall<createNotDriver>(CR,CRmask);
-    FilterByMask(P,CRmask,BasisBitsWithCR,BasisBits);
+    FilterByMask(P,CRmask,BasisBitsWithCR,BasisBits);	//in this kernel call we filter out CRs from the data, to avoid complication later on
 
     //  We need to know which input positions are dquotes and which are not.
     StreamSet * Dquote = P->CreateStreamSet(1);
@@ -575,15 +575,15 @@ CSVTranslateFunctionType generatePipeline(CPUDriver & pxDriver, int fileHeaders,
     // P->CreateKernelCall<DebugDisplayKernel>("first", emptyFirst);
     // P->CreateKernelCall<DebugDisplayKernel>("mid", emptyMid);
     // P->CreateKernelCall<DebugDisplayKernel>("empties", FilteredEmpties);
-    // P->CreateKernelCall<DebugDisplayKernel>("Filtered_field_starts", Filtered_field_starts);
-    // P->CreateKernelCall<DebugDisplayKernel>("Filtered_escapes", Filtered_escapes);
+    //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_field_starts", Filtered_field_starts);
+    //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_escapes", Filtered_escapes);
     // P->CreateKernelCall<DebugDisplayKernel>("Field_starts", Field_starts);
     //  P->CreateKernelCall<DebugDisplayKernel>("Filtered_record_starts", Filtered_record_starts);
     
-     //StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
-     //P->CreateKernelCall<P2SKernel>(FilteredBasis, FilteredByte);
+    //  StreamSet * FilteredByte = P->CreateStreamSet(1,8);           //for debug purpose
+    //  P->CreateKernelCall<P2SKernel>(FilteredBasis, FilteredByte);
      //P->CreateKernelCall<DebugDisplayKernel>("FilteredBytes", FilteredByte);
-     //P->CreateKernelCall<StdOutKernel>(FilteredByte);
+    //  P->CreateKernelCall<StdOutKernel>(FilteredByte);
    
     //StreamSet* maskPlus = P->CreateStreamSet(1);
     //P->CreateKernelCall<AddSentinel>(Filtered_mask,maskPlus);
