@@ -1,0 +1,5 @@
+escape_type,csv_representation,json_representation
+"LF","
+","\n"
+"backslash","\","\\"
+"double quote","""","\"""

@@ -1,0 +1,7 @@
+[
+{"escape_type":"LF","csv_representation":"\n","json_representation":"\\n"},
+{"escape_type":"backslash","csv_representation":"\\","json_representation":"\\\\"},
+{"escape_type":"double quote","csv_representation":"\"","json_representation":"\\\""}
+]
+
+
