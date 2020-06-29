@@ -47,7 +47,7 @@ Features added in this iteration includes:
 4. Case Insensitive \
 4.1 Use of upper case letters, lower case letters, or a mix of both to search for characters.
 
-5. Regular Expression -- `[]` \
+5. Regular Expression -- `[]` 
 
 6. Loose Matching 
 
