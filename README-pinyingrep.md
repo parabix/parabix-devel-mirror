@@ -21,38 +21,48 @@ The program takes a specific pinyin input and outputs the corresponding Chinese 
 In this iteration, there is a specific range of input implemented, just so it is enough to pass specific test cases.
 
 ## Iteration 2: Enhanced Implementation 
-Iteration 2 is suppose to deliver enhanced implementation. Similar to the previous iteration, the program is suppose to be able to read an input and output the corresponding lines.\
+*Iteration 2* is suppose to deliver enhanced implementation. Similar to the previous iteration, the program is suppose to be able to read an input and output the corresponding lines.\
 Changes made in this iteration includes:
 1. Tone Number 
+
 2. Regular Expression
+
 3. Multiple Input Files 
+
 4. Sequence Search
 
 ## Iteration 3: Final Product
-A polished version of iteration 2 with added features. 
+A polished version of *iteration 2* with added features. \
 Features added in this iteration includes:
-1. Display Error Message when Input is not in the correct format.
-2. Option to Display Grep line number of matched characters
-3. Display File Path for Matched Characters in Multi File Input
-4. Case Insensitive 
-5. Regular Expression -- `[]`
+
+1. Error Message\
+1.1 Display Error Message when Input is not in the correct format.
+
+2. Grep Lines \
+2.1 Option to Display Grep line number of matched characters 
+
+3. File Path \
+3.1 Display File Path for Matched Characters in Multi File Input 
+
+4. Case Insensitive \
+4.1 Use of upper case letters, lower case letters, or a mix of both to search for characters.
+
+5. Regular Expression -- `[]` \
+
 6. Loose Matching 
+
 7. Colourization \
 7.1 Places emphasis the searched word(s) by colouring it red. 
+
 8. Indexing \
 8.1 Search for a Chinese character by using the unicode value \
-8.2 Option to input a Hex (`3442`) or a Dec (`13378`) match a chinese character (`仿`)
-9. Database Selection \
-9.1 An option to choose between databases: `kHanyuPinyin`, `kXHC1983`
-10. Simplified & Traditional Variants \
-10.1 Input using *simplified*, *traditional* or *both* 
-11. Definitions \
-11.1 Displays the definition of searched word(s) \
-11.2 using database kDefinitions, it would print the line of definition after the printed matched grep lines. 
+8.2 Option to input a Hex (`3442`) match a chinese character (`仿`) 
 
+9. Database Selection \
+9.1 An option to choose between databases: `kHanyuPinyin`, `kXHC1983` 
 ---
 
-### Testcases:
+## Testcases:
 * Testcase commands are formatted to run from the `build` directory.
 #### Testcase 1.1 -- *Regular Romanisation*
 Inputs Latin alphabets
@@ -144,14 +154,14 @@ Output:
 	写完了去睡觉
 ```
 #### Testcase 2.3 -- *Mixed*
+Combinations are restricted to a singular regular expression and a tone number. (`c.ng3` works but `c.ng?3` would not)
 ```
 Command:
-	bin/pinyin_grep m.ng?4 ../QA/pinyin_test/testfiles/T2_regex
+	bin/pinyin_grep m.ng4 ../QA/pinyin_test/testfiles/T2_regex
 Input: 
-	m.ng?4
+	m.ng4
 Output:
 	每天慢慢做作业。
-	睡眠不足，没有梦想
 ```
 #### Testcase 3.1 -- *Error Message*
 ```
@@ -162,7 +172,7 @@ Input:
 Output:
 	Please enter the correct format of syllables, listed in the README-pinyingrep.md, for example 'ming'.
 ```
-#### Testcase 3.2 -- *Display Grep Line Number for Matched Characters*
+#### Testcase 3.2 -- *Grep Lines*
 Input `-n` right before pinyin input, to display the grep line of matched characters 
 ```
 Command:
@@ -173,7 +183,7 @@ Output:
 	2:这列子可能是重要
 	3:喝中药一定要吃山楂饼
 ```
-#### Testcase 3.3 -- *Display File Path for Matched Characters in Multi File Input*
+#### Testcase 3.3 -- *File Path*
 Input `-h` right before pinyin input, to display the file path of matched characters 
 ```
 Command:
