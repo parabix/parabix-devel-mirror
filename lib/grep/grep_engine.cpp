@@ -318,7 +318,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
-        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), toUTF16(mBreakCC));
+        re::RE * notBreak = re::makeDiff(re::makeDiff(re::makeByte(0x00, 0xF8FF), re::makeByte(0xDC00, 0xDFFF)), toUTF16(mBreakCC));
         for (unsigned i = 0; i < mREs.size(); ++i) {
             if (!hasEndAnchor(mREs[i])) {
                 mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
@@ -401,9 +401,7 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
          //run in UTF-16 mode - have the marker stream mark at the end of final code unit of every UTF-16 sequence*/
         
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-            //P->CreateKernelCall<UTF16_index>(SourceStream, mU8index);
             Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
-            //P->CreateKernelCall<DebugDisplayKernel>("mLineBreakStream", mLineBreakStream);
             if (mNullMode == NullCharMode::Abort) {
                 k->link("signal_dispatcher", kernel::signal_dispatcher);
             }
@@ -489,14 +487,12 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
         StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
         P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
-        //P->CreateKernelCall<DebugDisplayKernel>("u8CharClasses", u8CharClasses);
         FilterByMask(P, mU8index, u8CharClasses, CharClasses);
         options->setSource(CharClasses);
         options->addAlphabet(mpx, CharClasses);
     }
     StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
     options->setResults(MatchResults);
-    //P->CreateKernelCall<DebugDisplayKernel>("MatchResults", MatchResults);
     addExternalStreams(P, options, re, mU8index);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
     StreamSet * u8index1 = P->CreateStreamSet(1, 1);
@@ -787,7 +783,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
-    //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
     if (MatchResultsBufs.size() > 1) {
         StreamSet * const MergedMatches = E->CreateStreamSet(matchResultStreamCount);
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
