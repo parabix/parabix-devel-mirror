@@ -37,7 +37,7 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
     const unsigned numOfStreams = getInput(0)->getType()->getArrayNumElements(); 
-    UCD::UCDCompiler unicodeCompiler(ccc);
+    UCD::UCDCompiler unicodeCompiler(ccc, numOfStreams);
     unicodeCompiler.numberOfInputStreams(numOfStreams);
     re::RE_Compiler re_compiler(getEntryScope(), &cc::UTF8);  
     re_compiler.addAlphabet(&cc::UTF8, basis);

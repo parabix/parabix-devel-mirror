@@ -43,7 +43,7 @@ public:
 
     using NameMap = boost::container::flat_map<re::Name *, PabloAST *>;
 
-    UCDCompiler(cc::CC_Compiler & ccCompiler);
+    UCDCompiler(cc::CC_Compiler & ccCompiler, const unsigned NumOfStreams);
 
     void numberOfInputStreams(const unsigned NumOfStreams);
 
@@ -59,17 +59,21 @@ protected:
 
     void generateSubRanges(const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder);
 
-    PabloAST * sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix);
+    template <typename Bits>
+    PabloAST * sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix, const Bits bits);
 
     PabloAST * sequenceGenerator(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix);
 
     PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder);
 
-    PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target);
+    template <typename Bits>
+    PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, const Bits bits);
 
-    PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix);
+    template <typename Bits>
+    PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix, const Bits bits);
 
-    static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no, bool isUTF_16);
+    template <typename Bits>
+    static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no, const Bits bits);
 
     template <typename RangeListOrUnicodeSet>
     static RangeList rangeIntersect(const RangeListOrUnicodeSet & list, const codepoint_t lo, const codepoint_t hi);
