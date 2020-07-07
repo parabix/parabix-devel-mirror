@@ -49,7 +49,7 @@ CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool us
 
 CharClassesKernel::CharClassesKernel(BuilderRef b, std::vector<CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses)
 : CharClassesSignature(ccs, BasisBits->getNumElements() == 1)
-, PabloKernel(b, "cc" + getStringHash(mSignature), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
+, PabloKernel(b, "cc" + getStringHash(mSignature) + "x" + std::to_string(BasisBits->getNumElements()), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
 , mCCs(std::move(ccs)) {
 
 }
@@ -76,7 +76,7 @@ void CharClassesKernel::generatePabloMethod() {
         names.push_back(name);
     }
     const unsigned numOfStreams = getInput(0)->getType()->getArrayNumElements();
-    UCD::UCDCompiler unicodeCompiler(*ccc.get());
+    UCD::UCDCompiler unicodeCompiler(*ccc.get(), numOfStreams);
     unicodeCompiler.numberOfInputStreams(numOfStreams);
     if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
         unicodeCompiler.generateWithoutIfHierarchy(nameMap, pb);

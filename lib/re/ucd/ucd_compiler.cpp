@@ -203,15 +203,24 @@ void UCDCompiler::generateSubRanges(const codepoint_t lo, const codepoint_t hi, 
     for (auto & t : mTargetValue) {
         const auto range = rangeIntersect(*t.first, lo, hi);
         PabloAST * target = t.second;
-        // Divide by UTF-8 length, separating out E0, ED, F0 and F4 ranges
-        const std::array<interval_t, 9> ranges =
-            {{{0, 0x7F}, {0x80, 0x7FF}, {0x800, 0xFFF}, {0x1000, 0xD7FF}, {0xD800, 0xDFFF},
-             {0xE000, 0xFFFF}, {0x10000, 0x3FFFF}, {0x40000, 0xFFFFF}, {0x100000, 0x10FFFF}}};
-        for (auto r : ranges) {
-            const auto subrange = rangeIntersect(range, lo_codepoint(r), hi_codepoint(r));
-            target = sequenceGenerator(std::move(subrange), 1, builder, target, nullptr, mNumOfStreams);
+        if(mNumOfStreams == 16) {
+            const std::array<interval_t, 2> ranges = {{ {0, 0xFFFF}, {0x10000, 0x10FFFF} }};
+            for (auto r : ranges) {
+                const auto subrange = rangeIntersect(range, lo_codepoint(r), hi_codepoint(r));
+                target = sequenceGenerator(std::move(subrange), 1, builder, target, nullptr, mNumOfStreams);
+            }
+            t.second = target;
         }
-        t.second = target;
+        else {
+            // Divide by UTF-8 length, separating out E0, ED, F0 and F4 ranges
+            const std::array<interval_t, 9> ranges = {{{0, 0x7F}, {0x80, 0x7FF}, {0x800, 0xFFF}, {0x1000, 0xD7FF}, {0xD800, 0xDFFF},
+                     {0xE000, 0xFFFF}, {0x10000, 0x3FFFF}, {0x40000, 0xFFFFF}, {0x100000, 0x10FFFF}}};
+            for (auto r : ranges) {
+                const auto subrange = rangeIntersect(range, lo_codepoint(r), hi_codepoint(r));
+                target = sequenceGenerator(std::move(subrange), 1, builder, target, nullptr, mNumOfStreams);
+            }
+            t.second = target;
+        }
     }
 }
 
@@ -240,14 +249,24 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
         } else if (min == byte_no) {
             // We have a single byte remaining to match for all code points in this CC.
             // Use the byte class compiler to generate matches for these codepoints.
-            PabloAST * var = mCodeUnitCompiler.compileCC(makeCC(byteDefinitions(ranges, byte_no, bits), &Byte), builder);
-            target = mCodeUnitCompiler.createUCDSequence(byte_no, target, var, makePrefix(lo, byte_no, builder, prefix, bits), builder);
+            PabloAST * var = builder.createZeroes();
+            for (auto byteDef : byteDefinitions(ranges, byte_no, bits)) {
+                //separate surrogate pairs
+                if(mNumOfStreams == 16) {
+                    if (! ((55296 <= byteDef.first && byteDef.first <= 56319) && (56320 <= byteDef.second && byteDef.second <= 57343)) ) {
+                        var = builder.createOr(var, mCodeUnitCompiler.compileCC(makeByte(byteDef.first, byteDef.second), builder));
+                    }
+                }
+                else
+                    var = mCodeUnitCompiler.compileCC(makeCC(byteDefinitions(ranges, byte_no, bits), &Byte), builder);
+                target = mCodeUnitCompiler.createUCDSequence(byte_no, target, var, makePrefix(lo, byte_no, builder, prefix, bits), builder);
+            }
         } else {
             for (auto rg : ranges) {
                 codepoint_t lo, hi;
                 std::tie(lo, hi) = rg;
-                const auto lo_byte =  UTF_Encoder<Bits>::encodingByte(lo, byte_no, bits);
-                const auto hi_byte =  UTF_Encoder<Bits>::encodingByte(hi, byte_no, bits);
+                const auto lo_byte =  UTF_Encoder<Bits>::encodingUnit(lo, byte_no, bits);
+                const auto hi_byte =  UTF_Encoder<Bits>::encodingUnit(hi, byte_no, bits);
                 if (lo_byte != hi_byte) {
                     unsigned num = bits==16 ? 10 : 6;
                     if (!UTF_Encoder<Bits>::isLowCodePointAfterByte(lo, byte_no, bits)) {
@@ -299,10 +318,10 @@ inline PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepo
 
 template <typename Bits>
 PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, const Bits bits) {
-    codepoint_t lo_byte = UTF_Encoder<Bits>::encodingByte(lo, byte_no, bits);
-    codepoint_t hi_byte = UTF_Encoder<Bits>::encodingByte(hi, byte_no, bits);
-    const bool at_lo_boundary = (lo == 0 || UTF_Encoder<Bits>::encodingByte(lo - 1, byte_no, bits) != lo_byte);
-    const bool at_hi_boundary = (hi == 0x10FFFF || UTF_Encoder<Bits>::encodingByte(hi + 1, byte_no, bits) != hi_byte);
+    codepoint_t lo_byte = UTF_Encoder<Bits>::encodingUnit(lo, byte_no, bits);
+    codepoint_t hi_byte = UTF_Encoder<Bits>::encodingUnit(hi, byte_no, bits);
+    const bool at_lo_boundary = (lo == 0 || UTF_Encoder<Bits>::encodingUnit(lo - 1, byte_no, bits) != lo_byte);
+    const bool at_hi_boundary = (hi == 0x10FFFF || UTF_Encoder<Bits>::encodingUnit(hi + 1, byte_no, bits) != hi_byte);
 
     if (at_lo_boundary && at_hi_boundary) {
         if (bits==8) {
@@ -345,7 +364,7 @@ PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no,
     assert (byte_no == 1 || prefix != nullptr);
 
     for (unsigned i = 1; i != byte_no; ++i) {
-        const CC * const cc = makeByte(UTF_Encoder<Bits>::encodingByte(cp, i, bits));
+        const CC * const cc = makeCC(UTF_Encoder<Bits>::encodingUnit(cp, i, bits));
         PabloAST * var = mCodeUnitCompiler.compileCC(cc, builder);
         if (i > 1) {
             var = builder.createAnd(var, builder.createAdvance(prefix, 1));
@@ -367,7 +386,7 @@ UCDCompiler::RangeList UCDCompiler::byteDefinitions(const RangeList & list, cons
     RangeList result;
     result.reserve(list.size());
     for (const auto & i : list) {
-        result.emplace_back(UTF_Encoder<Bits>::encodingByte(lo_codepoint(i), byte_no, bits), UTF_Encoder<Bits>::encodingByte(hi_codepoint(i), byte_no, bits));
+        result.emplace_back(UTF_Encoder<Bits>::encodingUnit(lo_codepoint(i), byte_no, bits), UTF_Encoder<Bits>::encodingUnit(hi_codepoint(i), byte_no, bits));
     }
     return result;
 }
@@ -475,7 +494,6 @@ void UCDCompiler::generateWithoutIfHierarchy(NameMap & names, PabloBuilder & ent
  * @brief addTargets
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void UCDCompiler::makeTargets(PabloBuilder & entry, NameMap & names) {
-
     mTargetValue.clear();
     mTarget.clear();
 
@@ -523,5 +541,9 @@ UCDCompiler::UCDCompiler(cc::CC_Compiler & ccCompiler, const unsigned NumOfStrea
 : mCodeUnitCompiler(ccCompiler)
 , mSuffixVar(nullptr)
 , mNumOfStreams(NumOfStreams) { }
+
+UCDCompiler::UCDCompiler(cc::CC_Compiler & ccCompiler)
+: mCodeUnitCompiler(ccCompiler)
+, mSuffixVar(nullptr) { }
 
 }
