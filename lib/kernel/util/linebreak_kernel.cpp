@@ -81,20 +81,34 @@ mNullMode(nullMode) {
 
 void UnixLinesKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    std::unique_ptr<CC_Compiler> ccc;
+    /*std::unique_ptr<CC_Compiler> ccc;
     if (getInputStreamSet("basis").size() == 1) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
         ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
-    }
+    }*/
+    std::unique_ptr<cc::CC_Compiler> ccc_u16_hi;
+    std::unique_ptr<cc::CC_Compiler> ccc_u16_lo;
+
+    //input
+    std::vector<PabloAST *> u16bytes = getInputStreamSet("basis");
+    //separate the 2 bytes into hi and lo 8 bits
+    std::vector<PabloAST *> hiByte(u16bytes.begin()+ u16bytes.size()/2, u16bytes.end());
+    std::vector<PabloAST *> loByte(u16bytes.begin(), u16bytes.begin()+ u16bytes.size()/2);
+    //works only with bitStream
+    ccc_u16_hi = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), hiByte);
+    ccc_u16_lo = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), loByte);
+
     if (mNullMode == NullCharMode::Abort) {
-        pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
+        PabloAST * Abort_hiByte = ccc_u16_hi->compileCC(makeByte(0x0));
+        PabloAST * Abort_loByte = ccc_u16_lo->compileCC(makeByte(0x0));
+        pb.createTerminateAt(pb.createAnd(Abort_hiByte, Abort_loByte), pb.getInteger(0));
     }
     CC * breakCC = makeByte(0x0A);
     if (mNullMode == NullCharMode::Break) {
         breakCC = makeCC(breakCC, makeCC(0, &cc::Byte));
     }
-    PabloAST * LB = ccc->compileCC(breakCC);
+    PabloAST * LB = ccc_u16_lo->compileCC(breakCC);
     if (mEOFmode == UnterminatedLineAtEOF::Add1) {
         PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LB), 1), "unterminatedLineAtEOF");
         LB = pb.createOr(LB, unterminatedLineAtEOF);
