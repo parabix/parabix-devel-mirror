@@ -19,7 +19,7 @@ public:
     static inline bool isLo_Surrogate(const codepoint_t cp);
     static inline unsigned length(const codepoint_t cp, const Bits bits);
     static inline codepoint_t maxCodePoint(const unsigned length, const Bits bits);
-    static inline codepoint_t encodingByte(const codepoint_t cp, const unsigned n, const Bits bits);
+    static inline codepoint_t encodingUnit(const codepoint_t cp, const unsigned n, const Bits bits);
     static inline bool isLowCodePointAfterByte(const codepoint_t cp, const unsigned n, const Bits bits);
     static inline bool isHighCodePointAfterByte(const codepoint_t cp, const unsigned n, const Bits bits);
     static inline codepoint_t minCodePointWithCommonBytes(const codepoint_t cp, const unsigned n, const Bits bits);
@@ -55,7 +55,7 @@ bool UTF_Encoder<Bits>::isPrefix(const codepoint_t cp) {
 }
 
 template <typename Bits>
-codepoint_t UTF_Encoder<Bits>::encodingByte(const codepoint_t cp, const unsigned n, const Bits bits) {
+codepoint_t UTF_Encoder<Bits>::encodingUnit(const codepoint_t cp, const unsigned n, const Bits bits) {
     codepoint_t retVal = 0;
     const unsigned len = length(cp, bits);
  
@@ -122,14 +122,14 @@ bool UTF_Encoder<Bits>::isLowCodePointAfterByte(const codepoint_t cp, const unsi
     const auto l = length(cp, bits);
     if(bits == 8) {
         for (auto i = n; i != l; ++i) {
-            if (encodingByte(cp, i + 1, bits) != 0x80) {
+            if (encodingUnit(cp, i + 1, bits) != 0x80) {
                 return false;
             }
         }
     }
     else {
         for (auto i = n; i != l; ++i) {
-            if (encodingByte(cp, i + 1, bits) != 0xDC00) {
+            if (encodingUnit(cp, i + 1, bits) != 0xDC00) {
                 return false;
             }
         }
@@ -142,14 +142,14 @@ bool UTF_Encoder<Bits>::isHighCodePointAfterByte(const codepoint_t cp, const uns
     const auto l = length(cp, bits);
     if(bits == 8) {
         for (auto i = n; i != l; ++i) {
-            if (encodingByte(cp, i + 1, bits) != 0xBF) {
+            if (encodingUnit(cp, i + 1, bits) != 0xBF) {
                 return false;
             }
         }
     }
     else {
         for (auto i = n; i != l; ++i) {
-            if (encodingByte(cp, i + 1, bits) != 0xDFFF) {
+            if (encodingUnit(cp, i + 1, bits) != 0xDFFF) {
                 return false;
             }
         }
