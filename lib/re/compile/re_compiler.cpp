@@ -23,6 +23,7 @@
 #include <re/analysis/re_local.h>
 #include <re/toolchain/toolchain.h>
 #include <re/ucd/ucd_compiler.hpp>
+#include <toolchain/toolchain.h>
 
 namespace pablo { class PabloAST; }
 namespace pablo { class Var; }
@@ -49,6 +50,19 @@ void RE_Compiler::addAlphabet(const cc::Alphabet * a, std::vector<pablo::PabloAS
         ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, basis_set);
     }
     mAlphabetCompilers.push_back(std::move(ccc));
+
+    if(isTernary) {
+        std::unique_ptr<cc::CC_Compiler> ccc_u16_hi;
+        std::unique_ptr<cc::CC_Compiler> ccc_u16_lo;
+        //separate the 2 bytes into hi and lo 8 bits
+        std::vector<PabloAST *> hiByte(basis_set.begin()+ basis_set.size()/2, basis_set.end());
+        std::vector<PabloAST *> loByte(basis_set.begin(), basis_set.begin()+ basis_set.size()/2);
+
+        ccc_u16_hi = make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, hiByte);
+        ccc_u16_lo = make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, loByte);
+        mAlphabetCompilers_hi.push_back(std::move(ccc_u16_hi));
+        mAlphabetCompilers_lo.push_back(std::move(ccc_u16_lo));
+    }
 }
 
 void RE_Compiler::addIndexingAlphabet(EncodingTransformer * indexingTransformer, PabloAST * indexStream) {
@@ -133,7 +147,26 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
         //llvm::errs() << "Found alphabet: " << i << ", " << mAlphabets[i]->getName() << "\n";
         if (marker.offset() == 0) {
             nextPos = pb.createIndexedAdvance(nextPos, mIndexStream, 1);
-            //pb.createDebugPrint(nextPos, "nextPosUpdated");
+        }
+        if(isTernary) {
+            //only for a few codepoints having trouble with ternary compiler
+            bool surrogate = false;
+            PabloAST * hi = pb.createZeroes();
+            PabloAST * lo = pb.createZeroes();
+            for (const interval_t & intr : *cc) {
+                    codepoint_t lo_cp = lo_codepoint(intr);
+                    auto  byte = lo_cp % 0x100;
+                    lo = mAlphabetCompilers_lo[i]->compileCC(makeByte(byte), pb);
+                    lo_cp = lo_cp / 0x100;
+                    if (lo_cp >= 0xA0) {
+                        //errs() << "byte " << byte << "\n";
+                        //errs() << "lo_cp " << lo_cp << "\n";
+                        surrogate = true;
+                        hi = mAlphabetCompilers_hi[i]->compileCC(makeByte(lo_cp), pb);
+                }
+            }
+            if(surrogate) return Marker(pb.createAnd(nextPos, pb.createAnd(hi, lo)));
+            return Marker(pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
         }
         return Marker(pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
@@ -353,7 +386,6 @@ Marker RE_Compiler::compileAssertion(Assertion * const a, Marker marker, PabloBu
         return Marker(FinalPostPositionUnit, pb.createAnd(fbyte.stream(), la, "lookahead"));
     }
 #endif
-    llvm::errs() << "lengths.second = " << lengths.second << "\n";
     UnsupportedRE("Unsupported lookahead assertion:" + Printer_RE::PrintRE(a));
 }
 
@@ -674,6 +706,7 @@ RE_Compiler::RE_Compiler(PabloBlock * scope,
 , mCompiledName(&mBaseMap) {
     PabloBuilder pb(mEntryScope);
     mIndexStream = pb.createOnes();
+    isTernary = LLVM_LIKELY(codegen::CCCOption.compare("ternary") == 0);
 }
 
 } // end of namespace re

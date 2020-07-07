@@ -170,11 +170,14 @@ private:
     std::vector<const cc::Alphabet *>               mAlphabets;
     std::vector<std::vector<pablo::PabloAST *>>     mBasisSets;
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
+    std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers_hi;
+    std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers_lo;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
     NameMap *                                       mCompiledName;
     NameMap                                         mBaseMap;
     std::map<std::string, pablo::PabloAST *>        mExternalNameMap;
+    bool                                            isTernary;
 };
 
 }
