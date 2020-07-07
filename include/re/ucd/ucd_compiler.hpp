@@ -43,6 +43,7 @@ public:
 
     using NameMap = boost::container::flat_map<re::Name *, PabloAST *>;
 
+    UCDCompiler(cc::CC_Compiler & ccCompiler);
     UCDCompiler(cc::CC_Compiler & ccCompiler, const unsigned NumOfStreams);
 
     void numberOfInputStreams(const unsigned NumOfStreams);
