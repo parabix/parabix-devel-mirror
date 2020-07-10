@@ -1,0 +1,21 @@
+stages:
+  - build
+  - test
+
+image: luizperes/parabix:llvm-7.0.1
+
+build_llvm7:
+  stage: build
+  except: [merge_requests]
+  script:
+    - mkdir build && cd build
+    - cmake -DCMAKE_BUILD_TYPE=Release ..
+    - make -j4
+
+test_llvm7:
+  stage: test
+  script:
+    - mkdir -p build && cd build
+    - cmake -DCMAKE_BUILD_TYPE=Release ..
+    - make -j4 check && make kernel-tests
+

@@ -1,0 +1,39 @@
+stages:
+  - triggers
+
+build_llvm39:
+  stage: triggers
+  trigger:
+    include: .gitlab-pipelines/llvm39/config.yml
+    strategy: depend
+
+build_llvm5:
+  stage: triggers
+  trigger:
+    include: .gitlab-pipelines/llvm5/config.yml
+    strategy: depend
+
+build_llvm6:
+  stage: triggers
+  trigger:
+    include: .gitlab-pipelines/llvm6/config.yml
+    strategy: depend
+
+build_llvm7:
+  stage: triggers
+  trigger:
+    include: .gitlab-pipelines/llvm7/config.yml
+    strategy: depend
+
+build_llvm8:
+  stage: triggers
+  trigger:
+    include: .gitlab-pipelines/llvm8/config.yml
+    strategy: depend
+
+build_llvm9:
+  stage: triggers
+  trigger:
+    include: .gitlab-pipelines/llvm9/config.yml
+    strategy: depend
+
