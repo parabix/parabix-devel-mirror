@@ -1,0 +1,23 @@
+stages:
+  - build
+  - test
+
+image: luizperes/parabix:llvm-9
+
+build_llvm9:
+  stage: build
+  except: [merge_requests]
+  script:
+    - mkdir build && cd build
+    - cmake -DCMAKE_BUILD_TYPE=Release -DBOOST_INCLUDEDIR=/home/boost_1_68_0 ..
+    - make -j4
+
+test_llvm9:
+  stage: test
+  before_script:
+    - apt-get install -y python python3
+  script:
+    - mkdir -p build && cd build
+    - cmake -DCMAKE_BUILD_TYPE=Release -DBOOST_INCLUDEDIR=/home/boost_1_68_0 ..
+    - make -j4 check && make kernel-tests
+
