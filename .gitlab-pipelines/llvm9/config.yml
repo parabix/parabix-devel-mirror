@@ -2,10 +2,9 @@ stages:
   - build
   - test
 
-image: luizperes/parabix:llvm-9
-
 build_llvm9:
   stage: build
+  image: luizperes/parabix:llvm-9
   script:
     - mkdir build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release -DBOOST_INCLUDEDIR=/home/boost_1_68_0 ..
@@ -13,6 +12,7 @@ build_llvm9:
 
 .test-default: &test-default
   stage: test
+  image: luizperes/parabix:llvm-9
   before_script:
     - apt-get install -y python python3
   script:
@@ -28,3 +28,14 @@ merge_request_llvm9:
   rules:
     # If there is a merge request
     - if: '$CI_MERGE_REQUEST_IID'
+
+test_llvm9_avx512:
+  stage: test
+  script:
+    - mkdir -p build && cd build
+    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
+    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm9 -DCMAKE_BUILD_TYPE=Release ..
+    - make -j4 check && make kernel-tests
+  tags:
+    - avx512
+
