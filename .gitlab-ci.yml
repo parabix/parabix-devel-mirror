@@ -1,37 +1,48 @@
 stages:
   - triggers
 
-build_llvm39:
+workflow:
+  rules:
+    # If `$FORCE_GITLAB_CI` is set, create a pipeline.
+    - if: '$FORCE_GITLAB_CI'
+    # For merge requests, create a pipeline.
+    - if: '$CI_MERGE_REQUEST_IID'
+    # For tags, create a pipeline.
+    - if: '$CI_COMMIT_TAG'
+    # If commit title starts with 'run-ci:'
+    - if: '$CI_COMMIT_TITLE =~ /^(r|R)un-ci:/'
+
+trigger_llvm39:
   stage: triggers
   trigger:
     include: .gitlab-pipelines/llvm39/config.yml
     strategy: depend
 
-build_llvm5:
+trigger_llvm5:
   stage: triggers
   trigger:
     include: .gitlab-pipelines/llvm5/config.yml
     strategy: depend
 
-build_llvm6:
+trigger_llvm6:
   stage: triggers
   trigger:
     include: .gitlab-pipelines/llvm6/config.yml
     strategy: depend
 
-build_llvm7:
+trigger_llvm7:
   stage: triggers
   trigger:
     include: .gitlab-pipelines/llvm7/config.yml
     strategy: depend
 
-build_llvm8:
+trigger_llvm8:
   stage: triggers
   trigger:
     include: .gitlab-pipelines/llvm8/config.yml
     strategy: depend
 
-build_llvm9:
+trigger_llvm9:
   stage: triggers
   trigger:
     include: .gitlab-pipelines/llvm9/config.yml

@@ -6,16 +6,24 @@ image: luizperes/parabix:llvm-8
 
 build_llvm8:
   stage: build
-  except: [merge_requests]
   script:
     - mkdir build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4
 
-test_llvm8:
+.test-default: &test-default
   stage: test
   script:
     - mkdir -p build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4 check && make kernel-tests
+
+test_llvm8:
+  <<: *test-default
+
+merge_request_llvm8:
+  <<: *test-default
+  rules:
+    # If there is a merge request
+    - if: '$CI_MERGE_REQUEST_IID'
 
