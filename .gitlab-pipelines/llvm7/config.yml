@@ -27,7 +27,7 @@ merge_request_llvm7:
     # If there is a merge request
     - if: '$CI_MERGE_REQUEST_IID'
 
-test_llvm7_avx512:
+.test-avx512-default: &test-avx512-default
   stage: test
   script:
     - mkdir -p build && cd build
@@ -36,4 +36,13 @@ test_llvm7_avx512:
     - make -j4 check && make kernel-tests
   tags:
     - avx512
+
+test_avx512_llvm7:
+  <<: *test-avx512-default
+
+merge_request_avx512_llvm7:
+  <<: *test-avx512-default
+  rules:
+    # If there is a merge request
+    - if: '$CI_MERGE_REQUEST_IID'
 
