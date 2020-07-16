@@ -100,14 +100,14 @@ static cl::opt<BinaryFilesMode, true> BinaryFilesOption("binary-files", cl::desc
                                                                 clEnumValN(WithoutMatch, "without-match", "Always report as non-matching."),
                                                                 clEnumValN(Text, "text", "Treat binary files as text.")
                                                                 CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(WithoutMatch));
-    
 
-    
+std::string InputFileEncoding;
+static cl::opt<std::string, true> InputFileOption("encoding", cl::location(InputFileEncoding), cl::init("(standard input)"), cl::desc("- UTF16 Input file encoding (default: UTF-16LE)"), cl::cat(Input_Options));
 /*
  *  C.  Grep output modes and options.
  */
-    
-    
+
+
 static cl::OptionCategory Output_Options("C. Output Options",
                                             "These options control the output.");
     

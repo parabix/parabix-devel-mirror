@@ -48,10 +48,10 @@ extern std::string FileFlag; // -f
 //extern bool BinaryFlag; // -U
 enum BinaryFilesMode {Binary, WithoutMatch, Text};
 extern BinaryFilesMode BinaryFilesFlag;
-    
+
 extern bool NullDataFlag; // -z
 extern bool UnicodeLinesFlag; // -Unicode-lines
-
+extern std::string InputFileEncoding; //-encoding
 
 /*
  *  C.  Grep output modes and options.

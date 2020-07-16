@@ -12,6 +12,10 @@
 #include <llvm/Support/raw_ostream.h>
 #include <boost/interprocess/mapped_region.hpp>
 
+#include <re/cc/cc_compiler.h>
+#include <re/cc/cc_compiler_target.h>
+#include <re/cc/cc_kernel.h>
+
 using namespace llvm;
 
 #ifndef NDEBUG
@@ -143,6 +147,7 @@ bool TimeKernelsIsEnabled;
 static cl::opt<bool, true> OptCompileTime("time-kernels", cl::location(TimeKernelsIsEnabled),
                                         cl::desc("Times each kernel, printing elapsed time for each on exit"), cl::init(false));
 
+cc::ByteNumbering byteNumbering;
 CodeGenOpt::Level OptLevel;
 CodeGenOpt::Level BackEndOptLevel;
 

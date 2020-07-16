@@ -11,6 +11,7 @@
 #include <llvm/Support/CodeGen.h>
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/Target/TargetMachine.h>
+#include <re/cc/cc_compiler_target.h>
 
 // #defines for comparison with LLVM_VERSION_INTEGER
 #define LLVM_VERSION_CODE(major, minor, point) ((10000 * major) + (100 * minor) + point)
@@ -76,6 +77,7 @@ extern unsigned GroupNum;
 extern std::string ProgramName;
 extern llvm::TargetOptions target_Options;
 extern bool TimeKernelsIsEnabled;
+extern cc::ByteNumbering byteNumbering; // set input file endianness
 
 void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
 
