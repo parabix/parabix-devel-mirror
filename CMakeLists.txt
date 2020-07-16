@@ -405,9 +405,25 @@ add_custom_target (greptest
     WORKING_DIRECTORY ${QA_DIR}
     COMMAND python greptest.py --random_flag_count=2 --tests_per_grepcase=2 "${BIN_DIR}/icgrep")
 
+add_custom_target (greptest-u16LE
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python greptest.py --UTF-16LE --random_flag_count=2 --tests_per_grepcase=2 "${BIN_DIR}/icgrep")
+
+add_custom_target (greptest-u16BE
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python greptest.py --UTF-16BE --random_flag_count=2 --tests_per_grepcase=2 "${BIN_DIR}/icgrep")
+
 add_custom_target (proptest
     WORKING_DIRECTORY ${QA_DIR}
     COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/proptest.xml "${BIN_DIR}/icgrep")
+
+add_custom_target (proptest-u16LE
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python greptest.py --UTF-16LE -d ${QA_DIR} -t ${QA_DIR}/proptest.xml "${BIN_DIR}/icgrep")
+
+add_custom_target (proptest-u16BE
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python greptest.py --UTF-16BE -d ${QA_DIR} -t ${QA_DIR}/proptest.xml "${BIN_DIR}/icgrep")
 
 add_custom_target (u8u16_test
     WORKING_DIRECTORY ${QA_DIR}/u8u16
