@@ -23,6 +23,7 @@
 #include "grep_interface.h"
 #include <fstream>
 #include <string>
+#include <grep/grep_toolchain.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/pablo_toolchain.h>
 #include <boost/filesystem.hpp>
@@ -35,6 +36,7 @@
 #include <langinfo.h>
 
 using namespace llvm;
+using namespace codegen;
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
@@ -153,6 +155,12 @@ int main(int argc, char *argv[]) {
     }
     if (argv::IgnoreCaseFlag) grep->setCaseInsensitive();
     if (argv::InvertMatchFlag) grep->setInvertMatches();
+    if ((argv::InputFileEncoding == "UTF16LE") || (argv::InputFileEncoding == "UTF-16LE")) {
+        codegen::byteNumbering = cc::ByteNumbering::LittleEndian;
+    } else {
+        if ((argv::InputFileEncoding == "UTF16BE") || (argv::InputFileEncoding == "UTF-16BE"))
+        codegen::byteNumbering = cc::ByteNumbering::BigEndian;
+    }
     if (argv::UnicodeLinesFlag) {
         grep->setRecordBreak(grep::GrepRecordBreakKind::Unicode);
     } else if (argv::NullDataFlag) {
