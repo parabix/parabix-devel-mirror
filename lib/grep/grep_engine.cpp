@@ -65,7 +65,6 @@
 #include <sys/stat.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <grep/grep_toolchain.h>
-#include <toolchain/toolchain.h>
 #include <kernel/util/debug_display.h>
 #include <util/aligned_allocator.h>
 
@@ -355,10 +354,18 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
     if (hasComponent(mExternalComponents, Component::S2P_16)) {
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS_U16, 1);
         if (PabloTransposition) {
-            P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
+            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian))
+                P->CreateKernelCall<S2P_16BEKernel>(ByteStream, BasisBits);
+            else
+                P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         }
         else {
-            P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits);
+            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::LittleEndian))
+                P->CreateKernelCall<S2P_16LEKernel>(ByteStream, BasisBits);
+            else if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian))
+                P->CreateKernelCall<S2P_16BEKernel>(ByteStream, BasisBits);
+            else
+                P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }
         return BasisBits;
     }
@@ -399,7 +406,7 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
             P->CreateKernelCall<UTF16_index>(SourceStream, mU8index); //invoke only UTF16 kernel
         }
          //run in UTF-16 mode - have the marker stream mark at the end of final code unit of every UTF-16 sequence*/
-        
+
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
             Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
             if (mNullMode == NullCharMode::Abort) {
@@ -703,7 +710,12 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
             setFileLabel(mFileNames[mCurrentFile]);
             if (!mTerminated) {
-                mResultStr->write("\n", 2);
+                if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+                    mResultStr->write("\00", 1);
+                    mResultStr->write("\n", 1);
+                }
+                else
+                    mResultStr->write("\n", 2);
                 mTerminated = true;
             }
             //llvm::errs() << "accumulate_match(" << lineNum << "), file " << mFileNames[mCurrentFile] << "\n";
@@ -711,7 +723,16 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
-        mResultStr->write("--\n", 6);
+        if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+            mResultStr->write("\00", 1);
+            mResultStr->write("-", 1);
+            mResultStr->write("\00", 1);
+            mResultStr->write("-", 1);
+            mResultStr->write("\00", 1);
+            mResultStr->write("\n", 1);
+        }
+        else
+            mResultStr->write("--\n", 6);
     }
     *mResultStr << mLinePrefix;
     if (mShowLineNumbers) {
@@ -723,44 +744,87 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
         size_t quotient;
         rem10 = lineNum/10;
         divisor = 1;
-        while(divisor <= rem10)               // skip to 1st digit
+        // skip to 1st digit
+        while(divisor <= rem10)
             divisor *= 10;
-        while(divisor) {                      // append UTF16 hex number to lineNumUF16
+        // append UTF16 hex number to lineNumUF16
+        while(divisor) {
             std::ostringstream ss;
             quotient = lineNum / divisor;
-            quotient += 48;                   //corresponding hex value of digit
-            mResultStr->write((const char*)&quotient, 2);     //treat as UTF-16 codepoint
+            //corresponding hex value of digit
+            quotient += 48;
+            //treat as UTF-16 codepoint
+            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+                mResultStr->write("\00",1);
+                mResultStr->write((const char*)&quotient,1);
+            }
+            else
+                mResultStr->write((const char*)&quotient, 2);
             lineNum %= divisor;
             divisor /= 10;
         }
         if (mInitialTab) {
-            mResultStr->write("\t", 2);     //treat as UTF-16 codepoint
+            //treat as UTF-16 codepoint
+            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+                mResultStr->write("\00",1);
+                mResultStr->write("\t", 1);
+            }
+            else
+                mResultStr->write("\t", 2);
         }
         else {
-            mResultStr->write(":", 2);      //treat as UTF-16 codepoint
+            //treat as UTF-16 codepoint
+            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+                mResultStr->write("\00",1);
+                mResultStr->write(":", 1);
+            }
+            else
+                mResultStr->write(":", 2);
         }
     }
-
     const auto bytes = line_end - line_start + 2;  //read an extra byte of UTF16 stream
     mResultStr->write(line_start, bytes);
     mLineCount++;
     mLineNum = lineNum;
-    unsigned last_byte = *line_end;
-    mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
-    if (LLVM_UNLIKELY(!mTerminated)) {
-        if (last_byte == 0x85) {  //  Possible NEL terminator.
-            mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x00); //NEL in UTF16 0085
+    if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+        unsigned last_byte = line_start[bytes-1];
+        mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
+        if (LLVM_UNLIKELY(!mTerminated)) {
+            if (last_byte == 0x85) {  //  Possible NEL terminator.
+                mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_start[bytes] == 0x85)); //NEL in UTF-16BE 8500
+            }
+            else {
+                // Possible LS or PS terminators. - UTF-16BE - 2820 and 2920
+                mTerminated = (bytes >= 2) && (static_cast<unsigned>(last_byte == 0x20))
+                                       && ((line_start[bytes] == 0x28) || (line_start[bytes] == 0x29));
+            }
         }
-        else {
-            // Possible LS or PS terminators. - UTF16 - 0x2028 and 0x2029
-            mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x20)
+    }
+    else {
+        unsigned last_byte = *line_end;
+        mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
+        if (LLVM_UNLIKELY(!mTerminated)) {
+            if (last_byte == 0x85) {  //  Possible NEL terminator.
+                mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x00); //NEL in UTF16 0085
+            }
+            else {
+                // Possible LS or PS terminators. - UTF16 - 0x2028 and 0x2029
+                mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x20)
                                        && ((last_byte == 0x28) || (last_byte == 0x29));
+            }
         }
     }
 }
 
 void EmitMatch::finalize_match(char * buffer_end) {
-    if (!mTerminated) mResultStr->write("\n", 2);
+    if (!mTerminated) {
+        if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+            mResultStr->write("\00",1);
+            mResultStr->write("\n", 1);
+        }
+        else
+            mResultStr->write("\n", 2);
+    }
 }
 
 void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, StreamSet * ByteStream, bool BatchMode) {
@@ -863,7 +927,12 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
 
         StreamSet * FilteredBasis = E->CreateStreamSet(16, 1); //modified to run in UTF16 default
-        E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis); //modified to run in UTF16 default
+        if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::LittleEndian))
+            E->CreateKernelCall<S2P_16LEKernel>(Filtered, FilteredBasis);
+        else if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian))
+            E->CreateKernelCall<S2P_16BEKernel>(Filtered, FilteredBasis);
+        else
+            E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
         //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
 
         // Baais bit streams expanded with 0 bits for each string to be inserted.
@@ -993,7 +1062,6 @@ uint64_t GrepEngine::doGrep(const std::vector<std::string> & fileNames, std::ost
         int32_t fileDescriptor = openFile(fileName, strm);
         if (fileDescriptor == -1) return 0;
         uint64_t grepResult = f(useMMap, fileDescriptor, &handler, mMaxCount);
-
         close(fileDescriptor);
         if (handler.binaryFileSignalled()) {
             llvm::errs() << "Binary file " << fileName << "\n";
@@ -1032,8 +1100,14 @@ void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
        for (auto ch : file) {
             std::ostringstream letter;
             letter << ch;
-            strm << letter.str();
-            strm.write("\00", 1);
+            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+                strm.write("\00", 1);
+                strm << letter.str();
+            }
+            else {
+                strm << letter.str();
+                strm.write("\00", 1);
+            }
        }
            //strm << linePrefix(fileName);
     }
