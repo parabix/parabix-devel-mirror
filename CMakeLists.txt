@@ -159,11 +159,11 @@ set(CMAKE_REQUIRED_FLAGS)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_VERSION='\"${Parabix_REVISION}\"'")
 
 # Use gold linker on Linux:gcc
-if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
-    endif()
-endif()
+#if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+#    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+#        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
+#    endif()
+#endif()
 
 
 # Use address sanitizer if desiered

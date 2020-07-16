@@ -1,0 +1,29 @@
+stages:
+  - build
+  - test
+
+image: luizperes/parabix:llvm-5.0.2
+
+build_llvm5:
+  stage: build
+  script:
+    - mkdir build && cd build
+    - cmake -DCMAKE_BUILD_TYPE=Release ..
+    - make -j4
+
+.test-default: &test-default
+  stage: test
+  script:
+    - mkdir -p build && cd build
+    - cmake -DCMAKE_BUILD_TYPE=Release ..
+    - make -j4 check && make kernel-tests
+
+test_llvm5:
+  <<: *test-default
+
+merge_request_llvm5:
+  <<: *test-default
+  rules:
+    # If there is a merge request
+    - if: '$CI_MERGE_REQUEST_IID'
+

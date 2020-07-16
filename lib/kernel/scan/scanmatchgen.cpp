@@ -216,14 +216,10 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     Value * const matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
     Value * matchRecordNum = nullptr;
     if (mLineNumbering) {
-        // We must handle cases (a), (b), (c)
-        // Get the line number for all positions up to and including the break word.
-        Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, breakWordIdx)), sizeTy);
-        // For case (a), we may need to subtract some breaks, if they are at the match end or later.
-        Value * extraBreaks = b->CreateXor(breakWord, b->CreateSelect(inWordCond, matchBreakWord, breakWord));
+        Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, matchWordIdx)), sizeTy);
+        // Subtract the number of remaining breaks in the match word to get the relative line number.
+        Value * extraBreaks = b->CreateXor(matchBreakWord, priorBreaksThisWord);
         lineCountInStride = b->CreateSub(lineCountInStride, b->CreatePopcount(extraBreaks));
-        // For case (c), there are no line breaks.
-        lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, ZERO);
         matchRecordNum = b->CreateAdd(pendingLineNum, lineCountInStride);
     }
 
@@ -536,14 +532,10 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     Value * const matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
     Value * matchRecordNum = nullptr;
     if (mLineNumbering) {
-        // We must handle cases (a), (b), (c)
-        // Get the line number for all positions up to and including the break word.
-        Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, breakWordIdx)), sizeTy);
-        // For case (a), we may need to subtract some breaks, if they are at the match end or later.
-        Value * extraBreaks = b->CreateXor(breakWord, b->CreateSelect(inWordCond, matchBreakWord, breakWord));
+        Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, matchWordIdx)), sizeTy);
+        // Subtract the number of remaining breaks in the match word to get the relative line number.
+        Value * extraBreaks = b->CreateXor(matchBreakWord, priorBreaksThisWord);
         lineCountInStride = b->CreateSub(lineCountInStride, b->CreatePopcount(extraBreaks));
-        // For case (c), there are no line breaks.
-        lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, ZERO);
         matchRecordNum = b->CreateAdd(pendingLineNum, lineCountInStride);
     }
 
@@ -830,16 +822,11 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
     b->CreateStore(matchStart, matchStartPtr);
     Value * const lineEndsPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi);
     b->CreateStore(matchEndPos, lineEndsPtr);
-
     if (mLineNumbering) {
-        // We must handle cases (a), (b), (c)
-        // Get the line number for all positions up to and including the break word.
-        Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, breakWordIdx)), sizeTy);
-        // For case (a), we may need to subtract some breaks, if they are at the match end or later.
-        Value * extraBreaks = b->CreateXor(breakWord, b->CreateSelect(inWordCond, matchBreakWord, breakWord));
+        Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, matchWordIdx)), sizeTy);
+        // Subtract the number of remaining breaks in the match word to get the relative line number.
+        Value * extraBreaks = b->CreateXor(matchBreakWord, priorBreaksThisWord);
         lineCountInStride = b->CreateSub(lineCountInStride, b->CreatePopcount(extraBreaks));
-        // For case (c), there are no line breaks.
-        lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, sz_ZERO);
         Value * lineNum = b->CreateAdd(pendingLineNum, lineCountInStride);
         b->CreateStore(lineNum, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_NUMBERS), matchNumPhi));
     }
