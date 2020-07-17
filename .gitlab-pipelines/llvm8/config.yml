@@ -2,10 +2,9 @@ stages:
   - build
   - test
 
-image: luizperes/parabix:llvm-8
-
 build_llvm8:
   stage: build
+  image: luizperes/parabix:llvm-8
   script:
     - mkdir build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -13,6 +12,7 @@ build_llvm8:
 
 .test-default: &test-default
   stage: test
+  image: luizperes/parabix:llvm-8
   script:
     - mkdir -p build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -23,6 +23,25 @@ test_llvm8:
 
 merge_request_llvm8:
   <<: *test-default
+  rules:
+    # If there is a merge request
+    - if: '$CI_MERGE_REQUEST_IID'
+
+.test-avx512-default: &test-avx512-default
+  stage: test
+  script:
+    - mkdir -p build && cd build
+    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
+    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm8 -DCMAKE_BUILD_TYPE=Release ..
+    - make -j4 check && make kernel-tests
+  tags:
+    - avx512
+
+test_avx512_llvm8:
+  <<: *test-avx512-default
+
+merge_request_avx512_llvm8:
+  <<: *test-avx512-default
   rules:
     # If there is a merge request
     - if: '$CI_MERGE_REQUEST_IID'
