@@ -1080,13 +1080,15 @@ modified
 <!--
 <grepcase regexp="7{4}" datafile="." flags="-include=7* -l -r" grepcount="7777"/>
 <grepcase regexp="7{4}" datafile="." flags="-include=7* -L -r" grepcount="7890"/>
+<grepcase regexp="\p{Age&lt;=9.0}" datafile="../All_good" flags="-c" grepcount="2158788"/>
+<grepcase regexp="\p{Age&gt;=2.0}" datafile="../All_good" flags="-c" grepcount="2125018"/>
 -->
 
 <grepcase regexp="[AI].*(?i:[AI])" datafile="simple1" greplines="2"/>
 <grepcase regexp="\p{Age&gt;9.0}" datafile="../All_good" flags="-c" grepcount="9202"/>
-<grepcase regexp="\p{Age&lt;=9.0}" datafile="../All_good" flags="-c" grepcount="2158788"/>
+<grepcase regexp="\p{Age&gt;=9.0}" datafile="../All_good" flags="-c" grepcount="16702"/>
 <grepcase regexp="\p{Age&lt;1.0}" datafile="../All_good" flags="-c" grepcount="0"/>
 <grepcase regexp="\p{Age&lt;2.0}" datafile="../All_good" flags="-c" grepcount="33944"/>
-<grepcase regexp="\p{Age&gt;=2.0}" datafile="../All_good" flags="-c" grepcount="2125018"/>
+<grepcase regexp="\p{Age&gt;=4.0}" datafile="../All_good" flags="-c" grepcount="42218"/>
 </greptest>
 

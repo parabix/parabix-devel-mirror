@@ -33,26 +33,36 @@ dataFileName = ""
 
 fileContents = {}
 
-def getFileContents(fileName):
+def getU16FileContents(fileName, data, encoding):
+    if encoding == "UTF-16LE":
+        outfpath = os.path.join(options.datafile_dir, fileName)
+        f = codecs.open(outfpath, 'w', encoding = 'utf-16le')
+        f.write(data)
+        f.close()
+    else:
+        outfpath = os.path.join(options.datafile_dir, fileName)
+        f = codecs.open(outfpath, 'w', encoding = 'utf-16be')
+        f.write(data)
+        f.close()
+    f = codecs.open(outfpath, 'r', encoding = encoding)
+    contents = f.read()
+    f.close()
+    return contents
+
+def getFileContents(fileName, encoding):
     if not fileName in fileContents:
         outfpath = os.path.join(options.datafile_dir, fileName)
-        if options.utf16le:
-            fileName_u8 = fileName.encode("utf-8")
-            if unicode(fileName_u8, "utf-8") == '../All_good':
-                outfpath = u'testfiles/../All_good.u16'
-                fileName = u'../All_good.u16'
-            f = codecs.open(outfpath, encoding='utf-16le', mode='r')
-        elif options.utf16be:
-            fileName_u8 = fileName.encode("utf-8")
-            if unicode(fileName_u8, "utf-8") == '../All_good':
-                outfpath = u'testfiles/../All_good_BE.u16'
-                fileName = u'../All_good_BE.u16'
-            f = codecs.open(outfpath, encoding='utf-16be', mode='r')
-        else:
-            f = codecs.open(outfpath, encoding='utf-8', mode='r')
+        f = codecs.open(outfpath, 'r', encoding = "UTF-8")
         fileContents[fileName] = f.read()
         f.close()
-    return fileContents[fileName]
+    if encoding != "UTF-8":
+        return getU16FileContents(fileName, fileContents[fileName], encoding)
+    else:
+        outfpath = os.path.join(options.datafile_dir, fileName)
+        f = codecs.open(outfpath, 'w', encoding = "UTF-8")
+        f.write(fileContents[fileName])
+        f.close()
+        return fileContents[fileName]
 
 def start_element_open_file(name, attrs):
     global outf
@@ -69,8 +79,7 @@ def start_element_open_file(name, attrs):
             print("Expecting id attribute for datafile, but none found.")
             exit(-1)
         outfpath = os.path.join(options.datafile_dir, dataFileName)
-        if options.utf16le: outf = codecs.open(outfpath, encoding='utf-16le', mode='w')
-        elif options.utf16be: outf = codecs.open(outfpath, encoding='utf-16be', mode='w')
+        if options.utf16: outf = codecs.open(outfpath, encoding='utf-16be', mode='w')
         else: outf = codecs.open(outfpath, encoding='utf-8', mode='w')
         in_datafile = True
 
@@ -80,7 +89,10 @@ def char_data_write_contents(data):
         outf.write(data)
 
 def expected_grep_results(fileName, grepLines, flags):
-    fileData = getFileContents(fileName)
+    encoding = "UTF-8"
+    if "-input-encoding" in flags:
+      encoding = flags["-input-encoding"]
+    fileData = getFileContents(fileName, encoding)
     if "-Unicode-lines" in flags and flags["-Unicode-lines"] != 0:
         allLines = fileData.splitlines(True)
     else:
@@ -147,41 +159,49 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
         if flags[f] == True: flag_string += f
         else: flag_string += f + "=" + flags[f]
     outfpath = os.path.join(options.datafile_dir, datafile)
-    if options.utf16le:
-        flag_string += " -encoding=UTF16LE"
-    if options.utf16be:
-        flag_string += " -encoding=UTF16BE"
+    #ensure correct encoding to run grep test
+    encoding = "UTF-8"
+    if "-input-encoding" in flags:
+        encoding = flags["-input-encoding"]
+    if unicode(datafile.encode("utf-8"), "utf-8") != ".":
+        data = getFileContents(datafile, encoding)
     grep_cmd = u"%s %s '%s' %s" % (grep_program_under_test, flag_string, escape_quotes(regexp), outfpath)
     if options.verbose:
         print("Doing: " + grep_cmd)
-    if options.utf16le or options.utf16be:
-        try:
-            grep_out = subprocess.check_output(grep_cmd, shell=True) 
-        except subprocess.CalledProcessError as e:
-            grep_out = codecs.decode(e.output, 'utf-8')
-        if "-c" not in flags:
-            testpath = os.path.join(options.datafile_dir, 'test_output.txt')
-            f = codecs.open(testpath, mode='w+')
-            f.write(grep_out)
-            f.close()
-            if options.utf16le:
-                f = codecs.open(testpath, encoding='utf-16le', mode='r')
-            else:
-                f = codecs.open(testpath, encoding='utf-16be', mode='r')
-            grep_out = f.read()
-            f.close()
-        if len(grep_out) > 1:
-            if grep_out[-2] == '\n':
-                grep_out = grep_out[:-2]
-            if grep_out[-1] == '\n':
-                grep_out = grep_out[:-1]
+    encoding = "UTF-8"
+    if "-input-encoding" in flags:
+      encoding = flags["-input-encoding"]
+      try:
+          grep_out = subprocess.check_output(grep_cmd, shell=True)
+      except subprocess.CalledProcessError as e:
+          grep_out = codecs.decode(e.output, 'utf-8')
+      if "-c" not in flags:
+          testpath = os.path.join(options.datafile_dir, 'test_output.txt')
+          f = codecs.open(testpath, mode='w+')
+          f.write(grep_out)
+          f.close()
+          if encoding == "UTF-16LE":
+              f = codecs.open(testpath, encoding='utf-16le', mode='r')
+          else:
+              f = codecs.open(testpath, encoding='utf-16be', mode='r')
+          grep_out = f.read()
+          f.close()
+      if len(grep_out) > 1:
+          if grep_out[-2] == '\n':
+              grep_out = grep_out[:-2]
+          if grep_out[-1] == '\n':
+              grep_out = grep_out[:-1]
     #print(":".join("{:x}".format(ord(c)) for c in expected_result), "expected_result")
     else:
         try:
             grep_out = codecs.decode(subprocess.check_output(grep_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True), 'utf-8')
         except subprocess.CalledProcessError as e:
             grep_out = codecs.decode(e.output, 'utf-8')
-        if len(grep_out) > 0 and grep_out[-1] == '\n': grep_out = grep_out[:-1]
+        if len(grep_out) > 1:
+            if grep_out[-2] == '\n':
+                grep_out = grep_out[:-2]
+            if grep_out[-1] == '\n':
+                grep_out = grep_out[:-1]
 
     if grep_out != expected_result:
         print(u"Test failure: {%s} expecting {%s} got {%s}" % (grep_cmd, expected_result, grep_out))
@@ -199,7 +219,8 @@ flag_map = {'-CarryMode' : ['Compressed', 'BitBlock'],
             '-DisableMatchStar' : [],
             '-segment-size' : ['8192', '16384', '32768'],
             '-ccc-type' : ['ternary'],
-            '-EnableTernaryOpt' : []}
+            '-EnableTernaryOpt' : [],
+            '-input-encoding' : ['UTF-16LE', 'UTF-16BE']}
 
 def add_random_flags(flags, fileLength):
     selected = {}
@@ -219,19 +240,6 @@ def add_random_flags(flags, fileLength):
             else: flags[choice] = True
 
 def start_element_do_test(name, attrs):
-    if 'datafile' in attrs:
-        if options.utf16le:
-            outfpath_u8 = attrs['datafile'].encode("utf-8")
-            if unicode(outfpath_u8, "utf-8") == '../All_good':
-                attrs['datafile'] = u'../All_good.u16'
-            if unicode(outfpath_u8, "utf-8") == 'All_good':
-                attrs['datafile'] = u'All_good.u16'
-        if options.utf16be:
-            outfpath_u8 = attrs['datafile'].encode("utf-8")
-            if unicode(outfpath_u8, "utf-8") == '../All_good':
-                attrs['datafile'] = u'../All_good_BE.u16'
-            if unicode(outfpath_u8, "utf-8") == 'All_good':
-                attrs['datafile'] = u'All_good_BE.u16'
     if name == 'grepcase':
         if not 'regexp' in attrs or not 'datafile' in attrs:
             print("Bad grepcase: missing regexp and/or datafile attributes.")
@@ -254,7 +262,10 @@ def start_element_do_test(name, attrs):
         else:
             if not 'greplines' in attrs:
                 raise Exception('Expecting grepcount or greplines in grepcase')
-            fileLength = len(getFileContents(attrs['datafile']))
+            encoding = "UTF-8"
+            if "-input-encoding" in flags:
+                encoding = flags["-input-encoding"]
+            fileLength = len(getFileContents(attrs['datafile'], encoding))
             lines = []
             if attrs['greplines'] != '':
                 lineFields = attrs['greplines'].split(' ')
@@ -300,12 +311,9 @@ if __name__ == '__main__':
     option_parser.add_option('-v', '--verbose',
                           dest = 'verbose', action='store_true', default=False,
                           help = 'verbose output: show successful tests')
-    option_parser.add_option('--U16-LE', '--UTF-16LE',
-                          dest = 'utf16le', action='store_true', default=False,
-                          help = 'test UTF-16LE processing')
-    option_parser.add_option('--U16-BE', '--UTF-16BE',
-                          dest = 'utf16be', action='store_true', default=False,
-                          help = 'test UTF-16BE processing')
+    option_parser.add_option('-U', '--UTF-16',
+                          dest = 'utf16', action='store_true', default=False,
+                          help = 'test UTF-16 processing')
     options, args = option_parser.parse_args(sys.argv[1:])
     if len(args) != 1:
         option_parser.print_usage()
