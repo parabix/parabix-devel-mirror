@@ -42,6 +42,7 @@ PabloAST * ScanToIndex(PabloAST * cursor, PabloAST * indexStrm, PabloBuilder & p
 void RE_Compiler::addAlphabet(const cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
     mBasisSets.push_back(basis_set);
+    PabloBuilder pb(mEntryScope);
     bool useDirectCC = basis_set[0]->getType()->getVectorElementType()->getIntegerBitWidth() > 1;
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (useDirectCC) {
@@ -49,9 +50,9 @@ void RE_Compiler::addAlphabet(const cc::Alphabet * a, std::vector<pablo::PabloAS
     } else {
         ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, basis_set);
     }
+    unsigned numOfStream = basis_set.size();
     mAlphabetCompilers.push_back(std::move(ccc));
-
-    if(isTernary) {
+    if(isTernary && numOfStream == 16) {
         std::unique_ptr<cc::CC_Compiler> ccc_u16_hi;
         std::unique_ptr<cc::CC_Compiler> ccc_u16_lo;
         //separate the 2 bytes into hi and lo 8 bits
@@ -148,17 +149,19 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
         if (marker.offset() == 0) {
             nextPos = pb.createIndexedAdvance(nextPos, mIndexStream, 1);
         }
-        if(isTernary) {
-            //only for a few codepoints having trouble with ternary compiler
+        unsigned numOfStream = mBasisSets[i].size();
+        if(isTernary && numOfStream == 16) {
+            //only for a few codepoints having trouble with ternary compiler in UTF16 mode
             bool surrogate = false;
             PabloAST * hi = pb.createZeroes();
             PabloAST * lo = pb.createZeroes();
+            //errs() << "cc " << ":\n" << Printer_RE::PrintRE(cc) << '\n';
             for (const interval_t & intr : *cc) {
                     codepoint_t lo_cp = lo_codepoint(intr);
                     auto  byte = lo_cp % 0x100;
                     lo = mAlphabetCompilers_lo[i]->compileCC(makeByte(byte), pb);
                     lo_cp = lo_cp / 0x100;
-                    if (lo_cp >= 0xA0) {
+                    if (lo_cp >= 0x1E) {
                         //errs() << "byte " << byte << "\n";
                         //errs() << "lo_cp " << lo_cp << "\n";
                         surrogate = true;
