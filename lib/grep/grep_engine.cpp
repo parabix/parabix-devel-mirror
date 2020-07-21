@@ -376,15 +376,15 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS_U16, 1);
         if (PabloTransposition) {
             if (mInputFileEncoding == argv::UTF16BE)
-                P->CreateKernelCall<S2P_16BEKernel>(ByteStream, BasisBits);
+                P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits, cc::ByteNumbering::BigEndian);
             else
                 P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         }
         else {
             if (mInputFileEncoding == argv::UTF16LE)
-                P->CreateKernelCall<S2P_16LEKernel>(ByteStream, BasisBits);
+                P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits, cc::ByteNumbering::LittleEndian);
             else if (mInputFileEncoding == argv::UTF16BE)
-                P->CreateKernelCall<S2P_16BEKernel>(ByteStream, BasisBits);
+                P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits, cc::ByteNumbering::BigEndian);
             else
                 P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }
@@ -1025,9 +1025,9 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
         else {
             if (mInputFileEncoding == argv::UTF16LE)
-                E->CreateKernelCall<S2P_16LEKernel>(Filtered, FilteredBasis);
+                E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, cc::ByteNumbering::LittleEndian);
             else
-                E->CreateKernelCall<S2P_16BEKernel>(Filtered, FilteredBasis);
+                E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, cc::ByteNumbering::BigEndian);
         }
         //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);

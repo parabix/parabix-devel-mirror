@@ -50,18 +50,13 @@ protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 };
 
-class S2P_16LEKernel final : public MultiBlockKernel {
+class S2P_16Kernel final : public MultiBlockKernel {
 public:
-    S2P_16LEKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
+    S2P_16Kernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::ByteNumbering endianness = cc::ByteNumbering::LittleEndian);
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
-};
-
-class S2P_16BEKernel final : public MultiBlockKernel {
-public:
-    S2P_16BEKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
-protected:
-    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
+private:
+    cc::ByteNumbering mByteNumbering;
 };
 
 class S2P_PabloKernel final : public pablo::PabloKernel {

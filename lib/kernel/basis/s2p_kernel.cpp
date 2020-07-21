@@ -335,13 +335,15 @@ void S2P_PabloKernel::generatePabloMethod() {
     }
 }
 
-//S2P_16-LE kernel
-S2P_16LEKernel::S2P_16LEKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
-: MultiBlockKernel(b, "s2p_16LE",
+//S2P_16 kernel
+S2P_16Kernel::S2P_16Kernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::ByteNumbering numbering)
+: MultiBlockKernel(b, "s2p_16" + cc::numberingSuffix(numbering),
 {Binding{"codeUnitStream", codeUnitStream, FixedRate(), Principal()}},
-    {Binding{"basisBits", BasisBits}}, {}, {}, {})  {}
+    {Binding{"basisBits", BasisBits}}, {}, {}, {})  {
+        mByteNumbering = numbering;
+    }
 
-void S2P_16LEKernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks) {
+void S2P_16Kernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * processBlock = kb->CreateBasicBlock("s2p16_loop");
     BasicBlock * s2pDone = kb->CreateBasicBlock("s2p16_done");
@@ -375,10 +377,16 @@ void S2P_16LEKernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfB
     s2p(kb, u16byte1, basisbits1);
 
     for (unsigned i = 0; i < 8; ++i) {
-        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits0[i]);
+        if (mByteNumbering == cc::ByteNumbering::BigEndian)
+            kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits1[i]);
+        else
+            kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits0[i]);
     }
     for (unsigned i = 0; i < 8; ++i) {
-        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i + 8), blockOffsetPhi, basisbits1[i]);
+        if (mByteNumbering == cc::ByteNumbering::BigEndian)
+            kb->storeOutputStreamBlock("basisBits", kb->getInt32(i + 8), blockOffsetPhi, basisbits0[i]);
+        else
+            kb->storeOutputStreamBlock("basisBits", kb->getInt32(i + 8), blockOffsetPhi, basisbits1[i]);
     }
 
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
@@ -388,58 +396,7 @@ void S2P_16LEKernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfB
     kb->CreateCondBr(moreToDo, processBlock, s2pDone);
     kb->SetInsertPoint(s2pDone);
 }
-//S2P_16LE kernel
-
-//S2P_16BE kernel
-S2P_16BEKernel::S2P_16BEKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
-: MultiBlockKernel(b, "s2p_16BE",
-{Binding{"codeUnitStream", codeUnitStream, FixedRate(), Principal()}},
-    {Binding{"basisBits", BasisBits}}, {}, {}, {})  {}
-
-void S2P_16BEKernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks) {
-    BasicBlock * entry = kb->GetInsertBlock();
-    BasicBlock * processBlock = kb->CreateBasicBlock("s2p16_loop");
-    BasicBlock * s2pDone = kb->CreateBasicBlock("s2p16_done");
-    Constant * const ZERO = kb->getSize(0);
-
-    kb->CreateBr(processBlock);
-
-    kb->SetInsertPoint(processBlock);
-    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
-    blockOffsetPhi->addIncoming(ZERO, entry);
-
-    //need only 2 bytes
-    Value * u16byte0[8];
-    Value * u16byte1[8];
-
-    for (unsigned i = 0; i < 8; i++) {
-        Value * UTF16units[2];
-        for (unsigned j = 0; j < 2; j++) {
-            UTF16units[j] = kb->loadInputStreamPack("codeUnitStream", ZERO, kb->getInt32(2 * i + j), blockOffsetPhi);
-        }
-        u16byte0[i] = kb->hsimd_packl(16, UTF16units[0], UTF16units[1]);   //consider every 16 bits and concatenate the low 8 bits
-	    u16byte1[i] = kb->hsimd_packh(16, UTF16units[0], UTF16units[1]);   //consider every 16 bits and concatenate the high 8 bits
-    }
-    Value * basisbits0[8];
-    Value * basisbits1[8];
-    s2p(kb, u16byte0, basisbits0);
-    s2p(kb, u16byte1, basisbits1);
-
-    for (unsigned i = 0; i < 8; ++i) {
-        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits1[i]);
-    }
-    for (unsigned i = 0; i < 8; ++i) {
-        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i + 8), blockOffsetPhi, basisbits0[i]);
-    }
-
-    Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
-    BasicBlock * const processBlockExit = kb->GetInsertBlock();
-    blockOffsetPhi->addIncoming(nextBlk, processBlockExit);
-    Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
-    kb->CreateCondBr(moreToDo, processBlock, s2pDone);
-    kb->SetInsertPoint(s2pDone);
-}
-//S2P_16BE kernel
+//S2P_16 kernel
 
 S2P_PabloKernel::S2P_PabloKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
 : PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitStream->getFieldWidth()),
