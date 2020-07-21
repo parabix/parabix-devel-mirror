@@ -155,12 +155,7 @@ int main(int argc, char *argv[]) {
     }
     if (argv::IgnoreCaseFlag) grep->setCaseInsensitive();
     if (argv::InvertMatchFlag) grep->setInvertMatches();
-    if ((argv::InputFileEncoding == "UTF16LE") || (argv::InputFileEncoding == "UTF-16LE")) {
-        codegen::byteNumbering = cc::ByteNumbering::LittleEndian;
-    } else {
-        if ((argv::InputFileEncoding == "UTF16BE") || (argv::InputFileEncoding == "UTF-16BE"))
-        codegen::byteNumbering = cc::ByteNumbering::BigEndian;
-    }
+    grep->InputFileEncodingOption(argv::InputEncodingFlag);
     if (argv::UnicodeLinesFlag) {
         grep->setRecordBreak(grep::GrepRecordBreakKind::Unicode);
     } else if (argv::NullDataFlag) {
