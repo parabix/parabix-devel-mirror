@@ -123,6 +123,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mBeforeContext(0),
     mAfterContext(0),
     mInitialTab(false),
+    mInputFileEncoding(argv::UTF8),
     mCaseInsensitive(false),
     mInvertMatches(false),
     mMaxCount(0),
@@ -268,10 +269,13 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     re::RE * anchorRE = mBreakCC;
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-        re::Name * anchorName = re::makeName("UTF16_LB", re::Name::Type::Unicode);
+        re::Name * anchorName = re::makeName("UTF_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
-        setComponent(mExternalComponents, Component::UTF16index);
+        if (mInputFileEncoding == argv::UTF8)
+            setComponent(mExternalComponents, Component::UTF8index);
+        else
+            setComponent(mExternalComponents, Component::UTF16index);
         mExternalNames.insert(anchorName);
     }
 
@@ -291,7 +295,8 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
-            //setComponent(mExternalComponents, Component::UTF8index);
+            if (mInputFileEncoding == argv::UTF8)
+                setComponent(mExternalComponents, Component::UTF8index);
             if (mColoring) {
                 UnicodeIndexing = true;
             }
@@ -299,8 +304,14 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (UnicodeIndexing) {
-        setComponent(mExternalComponents, Component::S2P_16);
-        setComponent(mExternalComponents, Component::UTF16index);
+        if (mInputFileEncoding == argv::UTF8) {
+            setComponent(mExternalComponents, Component::S2P);
+            setComponent(mExternalComponents, Component::UTF8index);
+        }
+        else {
+            setComponent(mExternalComponents, Component::S2P_16);
+            setComponent(mExternalComponents, Component::UTF16index);
+        }
     }
     if ((mEngineKind == EngineKind::EmitMatches) && mColoring && !mInvertMatches) {
         setComponent(mExternalComponents, Component::MatchStarts);
@@ -318,6 +329,8 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
         re::RE * notBreak = re::makeDiff(re::makeDiff(re::makeByte(0x00, 0xF8FF), re::makeByte(0xDC00, 0xDFFF)), toUTF16(mBreakCC));
+        if (mInputFileEncoding == argv::UTF8)
+            notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), toUTF8(mBreakCC));
         for (unsigned i = 0; i < mREs.size(); ++i) {
             if (!hasEndAnchor(mREs[i])) {
                 mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
@@ -332,21 +345,29 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     // can bypass transposition and use the Direct CC compiler.
     mPrefixRE = nullptr;
     mSuffixRE = nullptr;
-    //if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
-    //    mExternalNames.empty() && !UnicodeIndexing) {
-        /*if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
-            return;  // skip transposition
-        } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
-            return;  // skip transposition and set mPrefixRE, mSuffixRE
-        } else {
-            setComponent(mExternalComponents, Component::S2P_16);
+    if (mInputFileEncoding == argv::UTF8) {
+        if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
+            mExternalNames.empty() && !UnicodeIndexing) {
+            if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
+                return;  // skip transposition
+            } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
+                return;  // skip transposition and set mPrefixRE, mSuffixRE
+            } else {
+                setComponent(mExternalComponents, Component::S2P);
+            }
         }
-    } else {*/
-    //can directCC compiler be modified to support UTF16 encoding?
+        else {
+            setComponent(mExternalComponents, Component::S2P);
+        }
+        if (!mExternalNames.empty()) {
+            setComponent(mExternalComponents, Component::UTF8index);
+        }
+    } else {
+        //can directCC compiler be modified to support UTF16 encoding?
         setComponent(mExternalComponents, Component::S2P_16);
-    //}
-    if (!mExternalNames.empty()) {
-        setComponent(mExternalComponents, Component::UTF16index); 
+        if (!mExternalNames.empty()) {
+            setComponent(mExternalComponents, Component::UTF16index);
+        }
     }
 }
 
@@ -354,15 +375,15 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
     if (hasComponent(mExternalComponents, Component::S2P_16)) {
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS_U16, 1);
         if (PabloTransposition) {
-            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian))
+            if (mInputFileEncoding == argv::UTF16BE)
                 P->CreateKernelCall<S2P_16BEKernel>(ByteStream, BasisBits);
             else
                 P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         }
         else {
-            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::LittleEndian))
+            if (mInputFileEncoding == argv::UTF16LE)
                 P->CreateKernelCall<S2P_16LEKernel>(ByteStream, BasisBits);
-            else if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian))
+            else if (mInputFileEncoding == argv::UTF16BE)
                 P->CreateKernelCall<S2P_16BEKernel>(ByteStream, BasisBits);
             else
                 P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
@@ -401,7 +422,6 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
             P->CreateKernelCall<UTF8_index>(SourceStream, mU8index);
         } //run in UTF-8 mode - have the marker stream mark at the end of every byte of UTF-8 data
 
-        //if statement to invoke UTF-16 index kernel
         if (hasComponent(mExternalComponents, Component::UTF16index)) {
             P->CreateKernelCall<UTF16_index>(SourceStream, mU8index); //invoke only UTF16 kernel
         }
@@ -463,6 +483,11 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
             options->addExternal("\\b{g}", iGCB_stream, 1);
         }
     }
+    if (hasComponent(mExternalComponents, Component::UTF8index)) {
+        if (indexMask == nullptr) {
+            options->addExternal("UTF8_index", mU8index);
+        }
+    }
     if (hasComponent(mExternalComponents, Component::UTF16index)) {
         if (indexMask == nullptr) {
             options->addExternal("UTF16_index", mU8index);
@@ -470,11 +495,11 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
     }
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         if (indexMask == nullptr) {
-            options->addExternal("UTF16_LB", mLineBreakStream);
+            options->addExternal("UTF_LB", mLineBreakStream);
         } else {
             StreamSet * iU8_LB = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mLineBreakStream, iU8_LB);
-            options->addExternal("UTF16_LB", iU8_LB, 1);
+            options->addExternal("UTF_LB", iU8_LB, 1);
         }
     }
 }
@@ -605,7 +630,10 @@ StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, 
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(P, mREs[i], SourceStream, MatchResults);
         } else {
-            U16indexedGrep(P, mREs[i], SourceStream, MatchResults);
+            if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+                U16indexedGrep(P, mREs[i], SourceStream, MatchResults);
+            else
+                U8indexedGrep(P, mREs[i], SourceStream, MatchResults);
         }
     }
 
@@ -655,8 +683,11 @@ void GrepEngine::grepCodeGen() {
 
     Scalar * const useMMap = P->getInputScalar("useMMap");
     Scalar * const fileDescriptor = P->getInputScalar("fileDescriptor");
-
-    StreamSet * const ByteStream = P->CreateStreamSet(1, ENCODING_BITS_U16);
+    StreamSet * ByteStream;
+    if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+        ByteStream = P->CreateStreamSet(1, ENCODING_BITS_U16);
+    else
+        ByteStream = P->CreateStreamSet(1, ENCODING_BITS);
     P->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     StreamSet * const Matches = grepPipeline(P, ByteStream);
     P->CreateKernelCall<PopcountKernel>(Matches, P->getOutputScalar("countResult"));
@@ -710,12 +741,17 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
             setFileLabel(mFileNames[mCurrentFile]);
             if (!mTerminated) {
-                if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
-                    mResultStr->write("\00", 1);
-                    mResultStr->write("\n", 1);
+                if (mInputFileEncoding == argv::UTF8) {
+                    *mResultStr << "\n";
                 }
-                else
-                    mResultStr->write("\n", 2);
+                else {
+                    if (mInputFileEncoding == argv::UTF16BE) {
+                        mResultStr->write("\00", 1);
+                        mResultStr->write("\n", 1);
+                    }
+                    else
+                        mResultStr->write("\n", 2);
+                }
                 mTerminated = true;
             }
             //llvm::errs() << "accumulate_match(" << lineNum << "), file " << mFileNames[mCurrentFile] << "\n";
@@ -723,94 +759,128 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
-        if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
-            mResultStr->write("\00", 1);
-            mResultStr->write("-", 1);
-            mResultStr->write("\00", 1);
-            mResultStr->write("-", 1);
-            mResultStr->write("\00", 1);
-            mResultStr->write("\n", 1);
+        if (mInputFileEncoding == argv::UTF8) *mResultStr << "--\n";
+        else {
+            if (mInputFileEncoding == argv::UTF16BE) {
+                mResultStr->write("\00", 1);
+                mResultStr->write("-", 1);
+                mResultStr->write("\00", 1);
+                mResultStr->write("-", 1);
+                mResultStr->write("\00", 1);
+                mResultStr->write("\n", 1);
+            }
+            else
+                mResultStr->write("--\n", 6);
         }
-        else
-            mResultStr->write("--\n", 6);
     }
     *mResultStr << mLinePrefix;
     if (mShowLineNumbers) {
         // Internally line numbers are counted from 0.  For display, adjust
         // the line number so that lines are numbered from 1.
-        size_t lineNum = relLineNum+1;
-        size_t rem10;
-        size_t divisor;
-        size_t quotient;
-        rem10 = lineNum/10;
-        divisor = 1;
-        // skip to 1st digit
-        while(divisor <= rem10)
-            divisor *= 10;
-        // append UTF16 hex number to lineNumUF16
-        while(divisor) {
-            std::ostringstream ss;
-            quotient = lineNum / divisor;
-            //corresponding hex value of digit
-            quotient += 48;
-            //treat as UTF-16 codepoint
-            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
-                mResultStr->write("\00",1);
-                mResultStr->write((const char*)&quotient,1);
-            }
-            else
-                mResultStr->write((const char*)&quotient, 2);
-            lineNum %= divisor;
-            divisor /= 10;
-        }
-        if (mInitialTab) {
-            //treat as UTF-16 codepoint
-            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
-                mResultStr->write("\00",1);
-                mResultStr->write("\t", 1);
-            }
-            else
-                mResultStr->write("\t", 2);
-        }
-        else {
-            //treat as UTF-16 codepoint
-            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
-                mResultStr->write("\00",1);
-                mResultStr->write(":", 1);
-            }
-            else
-                mResultStr->write(":", 2);
-        }
-    }
-    const auto bytes = line_end - line_start + 2;  //read an extra byte of UTF16 stream
-    mResultStr->write(line_start, bytes);
-    mLineCount++;
-    mLineNum = lineNum;
-    if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
-        unsigned last_byte = line_start[bytes-1];
-        mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
-        if (LLVM_UNLIKELY(!mTerminated)) {
-            if (last_byte == 0x85) {  //  Possible NEL terminator.
-                mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_start[bytes] == 0x85)); //NEL in UTF-16BE 8500
+        if (mInputFileEncoding == argv::UTF8) {
+            if (mInitialTab) {
+                *mResultStr << relLineNum+1 << "\t:";
             }
             else {
-                // Possible LS or PS terminators. - UTF-16BE - 2820 and 2920
-                mTerminated = (bytes >= 2) && (static_cast<unsigned>(last_byte == 0x20))
-                                       && ((line_start[bytes] == 0x28) || (line_start[bytes] == 0x29));
+                *mResultStr << relLineNum+1 << ":";
+            }
+        }
+        else {
+            size_t lineNum = relLineNum+1;
+            size_t rem10;
+            size_t divisor;
+            size_t quotient;
+            rem10 = lineNum/10;
+            divisor = 1;
+            // skip to 1st digit
+            while(divisor <= rem10)
+                divisor *= 10;
+            // append UTF16 hex number to lineNumUF16
+            while(divisor) {
+                std::ostringstream ss;
+                quotient = lineNum / divisor;
+                //corresponding hex value of digit
+                quotient += 48;
+                //treat as UTF-16 codepoint
+                if (mInputFileEncoding == argv::UTF16BE) {
+                    mResultStr->write("\00",1);
+                    mResultStr->write((const char*)&quotient,1);
+                }
+                else
+                    mResultStr->write((const char*)&quotient, 2);
+                lineNum %= divisor;
+                divisor /= 10;
+            }
+            if (mInitialTab) {
+                //treat as UTF-16 codepoint
+                if (mInputFileEncoding == argv::UTF16BE) {
+                    mResultStr->write("\00",1);
+                    mResultStr->write("\t", 1);
+                }
+                else
+                    mResultStr->write("\t", 2);
+            }
+            else {
+                //treat as UTF-16 codepoint
+                if (mInputFileEncoding == argv::UTF16BE) {
+                    mResultStr->write("\00",1);
+                    mResultStr->write(":", 1);
+                }
+                else
+                    mResultStr->write(":", 2);
             }
         }
     }
-    else {
+
+    if (mInputFileEncoding == argv::UTF8) {
+        const auto bytes = line_end - line_start + 1;
+        mResultStr->write(line_start, bytes);
+        mLineCount++;
+        mLineNum = lineNum;
         unsigned last_byte = *line_end;
         mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
         if (LLVM_UNLIKELY(!mTerminated)) {
             if (last_byte == 0x85) {  //  Possible NEL terminator.
-                mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x00); //NEL in UTF16 0085
+                mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0xC2);
             }
             else {
-                // Possible LS or PS terminators. - UTF16 - 0x2028 and 0x2029
-                mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x20)
-                                       && ((last_byte == 0x28) || (last_byte == 0x29));
+                // Possible LS or PS terminators.
+                mTerminated = (bytes >= 3) && (static_cast<unsigned>(line_end[-2]) == 0xE2)
+                                           && (static_cast<unsigned>(line_end[-1]) == 0x80)
+                                           && ((last_byte == 0xA8) || (last_byte == 0xA9));
+            }
+        }
+    } else {
+        const auto bytes = line_end - line_start + 2;  //read an extra byte of UTF16 stream
+        mResultStr->write(line_start, bytes);
+        mLineCount++;
+        mLineNum = lineNum;
+        if (mInputFileEncoding == argv::UTF16BE) {
+            unsigned last_byte = line_start[bytes-1];
+            mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
+            if (LLVM_UNLIKELY(!mTerminated)) {
+                if (last_byte == 0x85) {  //  Possible NEL terminator.
+                    mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_start[bytes] == 0x85)); //NEL in UTF-16BE 8500
+                }
+                else {
+                    // Possible LS or PS terminators. - UTF-16BE - 2820 and 2920
+                    mTerminated = (bytes >= 2) && (static_cast<unsigned>(last_byte == 0x20))
+                                               && ((line_start[bytes] == 0x28) || (line_start[bytes] == 0x29));
+                }
+            }
+        }
+        else {
+            unsigned last_byte = *line_end;
+            mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
+            if (LLVM_UNLIKELY(!mTerminated)) {
+                if (last_byte == 0x85) {  //  Possible NEL terminator.
+                    mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x00); //NEL in UTF16 0085
+                }
+                else {
+                    // Possible LS or PS terminators. - UTF16 - 0x2028 and 0x2029
+                    mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0x20)
+                                           && ((last_byte == 0x28) || (last_byte == 0x29));
+                }
             }
         }
     }
@@ -818,11 +888,11 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
 
 void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) {
-        if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
+        if (mInputFileEncoding == argv::UTF8) *mResultStr << "\n";
+        else if (mInputFileEncoding == argv::UTF16BE) {
             mResultStr->write("\00",1);
             mResultStr->write("\n", 1);
-        }
-        else
+        } else
             mResultStr->write("\n", 2);
     }
 }
@@ -843,7 +913,10 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
         } else {
-            U16indexedGrep(E, mREs[i], SourceStream, MatchResults);
+            if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+                U16indexedGrep(E, mREs[i], SourceStream, MatchResults);
+            else
+                U8indexedGrep(E, mREs[i], SourceStream, MatchResults);
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
@@ -899,7 +972,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * MatchedLineStarts = E->CreateStreamSet(1, 1);
         SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);
 
-        StreamSet * Filtered = E->CreateStreamSet(1, 16); //modified to run in UTF16 default
+        StreamSet * Filtered;
+        if (mInputFileEncoding == argv::UTF8)
+            Filtered = E->CreateStreamSet(1, 8);
+        else
+            Filtered = E->CreateStreamSet(1, 16);
         E->CreateKernelCall<MatchFilterKernel>(MatchedLineStarts, mLineBreakStream, ByteStream, Filtered);
 
         StreamSet * MatchedLineSpans = E->CreateStreamSet(1, 1);
@@ -926,17 +1003,33 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, /*invert = */ true);
         //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
 
-        StreamSet * FilteredBasis = E->CreateStreamSet(16, 1); //modified to run in UTF16 default
-        if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::LittleEndian))
-            E->CreateKernelCall<S2P_16LEKernel>(Filtered, FilteredBasis);
-        else if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian))
-            E->CreateKernelCall<S2P_16BEKernel>(Filtered, FilteredBasis);
-        else
-            E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
-        //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
-
+        StreamSet * FilteredBasis;
         // Baais bit streams expanded with 0 bits for each string to be inserted.
-        StreamSet * ExpandedBasis = E->CreateStreamSet(16); //modified to run in UTF16 default
+        StreamSet * ExpandedBasis;
+        StreamSet * ColorizedBasis;
+        StreamSet * ColorizedBytes;
+        if (mInputFileEncoding == argv::UTF8) {
+            FilteredBasis = E->CreateStreamSet(8, 1);
+            ExpandedBasis = E->CreateStreamSet(8);
+            ColorizedBasis = E->CreateStreamSet(8);
+            ColorizedBytes  = E->CreateStreamSet(1, 8);
+        }
+        else {
+            FilteredBasis = E->CreateStreamSet(16, 1);
+            ExpandedBasis = E->CreateStreamSet(16);
+            ColorizedBasis = E->CreateStreamSet(16);
+            ColorizedBytes  = E->CreateStreamSet(1, 16);
+        }
+
+        if (mInputFileEncoding == argv::UTF8)
+            E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
+        else {
+            if (mInputFileEncoding == argv::UTF16LE)
+                E->CreateKernelCall<S2P_16LEKernel>(Filtered, FilteredBasis);
+            else
+                E->CreateKernelCall<S2P_16BEKernel>(Filtered, FilteredBasis);
+        }
+        //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
         //E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
 
@@ -944,12 +1037,18 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * ExpandedMarks = E->CreateStreamSet(2);
         SpreadByMask(E, SpreadMask, InsertMarks, ExpandedMarks);
 
-        StreamSet * ColorizedBasis = E->CreateStreamSet(16); //modified to run in UTF16 default
         E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
 
-        StreamSet * ColorizedBytes  = E->CreateStreamSet(1, 16); //modified to run in UTF16 default
-        cc::ByteNumbering byteNumbering = cc::ByteNumbering::LittleEndian;
-        E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes, byteNumbering);
+        if (mInputFileEncoding == argv::UTF8) {
+            E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
+        } else {
+            cc::ByteNumbering byteNumbering;
+            if (mInputFileEncoding == argv::UTF16LE)
+                byteNumbering = cc::ByteNumbering::LittleEndian;
+            else
+                byteNumbering = cc::ByteNumbering::BigEndian;
+            E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes, byteNumbering);
+        }
 
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
         E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
@@ -1011,7 +1110,11 @@ void EmitMatchesEngine::grepCodeGen() {
 
     Scalar * const useMMap = E1->getInputScalar("useMMap");
     Scalar * const fileDescriptor = E1->getInputScalar("fileDescriptor");
-    StreamSet * const ByteStream = E1->CreateStreamSet(1, ENCODING_BITS_U16);
+    StreamSet * ByteStream;
+    if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+        ByteStream = E1->CreateStreamSet(1, ENCODING_BITS_U16);
+    else
+        ByteStream = E1->CreateStreamSet(1, ENCODING_BITS);
     E1->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
     grepPipeline(E1, ByteStream);
     E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
@@ -1095,21 +1198,24 @@ void CountOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
 
 void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
     if (grepResult == mRequiredCount) {
-       std::string file = linePrefix(fileName).c_str();
-       //encoding fileName in UTF16
-       for (auto ch : file) {
-            std::ostringstream letter;
-            letter << ch;
-            if (LLVM_LIKELY(codegen::byteNumbering == cc::ByteNumbering::BigEndian)) {
-                strm.write("\00", 1);
-                strm << letter.str();
+        if (mInputFileEncoding == argv::UTF8)
+            strm << linePrefix(fileName);
+        else {
+            std::string file = linePrefix(fileName).c_str();
+            //encoding fileName in UTF16
+            for (auto ch : file) {
+                std::ostringstream letter;
+                letter << ch;
+                if (mInputFileEncoding == argv::UTF16BE) {
+                    strm.write("\00", 1);
+                    strm << letter.str();
+                }
+                else {
+                    strm << letter.str();
+                    strm.write("\00", 1);
+                }
             }
-            else {
-                strm << letter.str();
-                strm.write("\00", 1);
-            }
-       }
-           //strm << linePrefix(fileName);
+        }
     }
 }
 
@@ -1117,7 +1223,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
     if (fileNames.size() == 1) {
         typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
         auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, mInputFileEncoding);
         accum.setStringStream(&strm);
         bool useMMap;
         int32_t fileDescriptor;
@@ -1142,7 +1248,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
     } else {
         typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
         auto f = reinterpret_cast<GrepBatchFunctionType>(mBatchMethod);
-        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, mInputFileEncoding);
         accum.setStringStream(&strm);
         std::vector<int32_t> fileDescriptor(fileNames.size());
         std::vector<size_t> fileSize(fileNames.size(), 0);

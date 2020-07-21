@@ -77,7 +77,6 @@ extern unsigned GroupNum;
 extern std::string ProgramName;
 extern llvm::TargetOptions target_Options;
 extern bool TimeKernelsIsEnabled;
-extern cc::ByteNumbering byteNumbering; // set input file endianness
 
 void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
 
