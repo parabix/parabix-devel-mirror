@@ -162,8 +162,10 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
     encoding = "UTF-8"
     if "-input-encoding" in flags:
         encoding = flags["-input-encoding"]
-    if unicode(datafile.encode("utf-8"), "utf-8") != ".":
-        data = getFileContents(datafile, encoding)
+    file = datafile.encode('ascii', 'ignore')
+    if os.stat(outfpath).st_size < 2000000:
+        if file != '.':
+            data = getFileContents(datafile, encoding)
     grep_cmd = u"%s %s '%s' %s" % (grep_program_under_test, flag_string, escape_quotes(regexp), outfpath)
     if options.verbose:
         print("Doing: " + grep_cmd)
