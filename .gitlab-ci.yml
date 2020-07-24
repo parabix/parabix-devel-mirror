@@ -12,12 +12,6 @@ workflow:
     # If commit title starts with 'run-ci:'
     - if: '$CI_COMMIT_TITLE =~ /^(r|R)un-ci:/'
 
-trigger_llvm39:
-  stage: triggers
-  trigger:
-    include: .gitlab-pipelines/llvm39/config.yml
-    strategy: depend
-
 trigger_llvm5:
   stage: triggers
   trigger:
