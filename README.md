@@ -17,7 +17,7 @@ To build Parabix, you need a development environment that meets a few requiremen
 -  A modern C++ compiler supporting at least C++ 11.
 -  The [`cmake`](https://cmake.org/download/) build system version 2.8 or better.
 -  [`Boost`](https://www.boost.org/users/download/) libraries version `1.61` or better.
--  An [`LLVM`](https://releases.llvm.org/download.html) system version `3.9` or better.
+-  An [`LLVM`](https://releases.llvm.org/download.html) system version `5` or better.
 
 ### Build
 
@@ -54,5 +54,5 @@ In the configuration above, all compiled tools will then be found on `/path/to/p
 [Architectural Support for SIMD Text Processing with Parallel Bit Streams: The Inductive Doubling Principle](http://parabix.costar.sfu.ca/export/901/docs/ASPLOS09/asplos094-cameron.pdf), Fourteenth International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS '09), Washington, DC, March 2009.
 
 ### License
-LLVM files are governed by the LLVM Release License in [LLVM-LICENSE.txt](LLVM-LICENSE.txt). `Parabix` is governed by Open Software License `3.0` in [OSL-3.0.txt](OSL-3.0.txt).
+LLVM files are governed by the LLVM Release License in [LLVM-LICENSE.txt](LLVM-LICENSE.txt). `Parabix` is governed by Open Software License `3.0` in [OSL3.0.txt](OSL3.0.txt).
 
