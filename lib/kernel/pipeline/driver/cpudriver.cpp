@@ -101,6 +101,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
     mEngine->DisableSymbolSearching(false);
     mEngine->DisableLazyCompilation(true);
     mEngine->DisableGVCompilation(true);
+    codegen::setBestDefaultFlags(mTarget);
 
     auto triple = mTarget->getTargetTriple().getTriple();
     const DataLayout DL(mTarget->createDataLayout());

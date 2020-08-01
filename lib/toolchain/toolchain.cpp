@@ -239,4 +239,14 @@ void setTaskThreads(unsigned taskThreads) {
     //llvm::errs() << "Task threads: " << taskThreads << ", segment threads: " << SegmentThreads << "\n";
 }
 
+void setBestDefaultFlags(TargetMachine * const targetMachine) {
+    if (targetMachine->Options.EnableFastISel == cl::BOU_UNSET) {
+        if (targetMachine->getOptLevel() == CodeGenOpt::None) {
+            targetMachine->setO0WantsFastISel(true);
+        } else {
+            targetMachine->setFastISel(true);
+        }
+    }
+}
+
 }

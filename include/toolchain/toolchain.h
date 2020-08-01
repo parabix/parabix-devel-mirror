@@ -78,10 +78,10 @@ extern llvm::TargetOptions target_Options;
 extern bool TimeKernelsIsEnabled;
 
 void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
-
 void AddParabixVersionPrinter();
-
 void setTaskThreads(unsigned taskThreads);
+void setBestDefaultFlags(llvm::TargetMachine * const targetMachine);
+
 }
 
 #endif
