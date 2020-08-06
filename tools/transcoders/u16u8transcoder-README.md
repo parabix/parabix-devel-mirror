@@ -1,8 +1,8 @@
-## u32u8 Transcoder Using Parallel Bit Streams
+## u16u8 Transcoder Using Parallel Bit Streams
 
 ## Example
 
-As a simple running example, we use the following UTF-32 codepoints.
+As a simple running example, we use the following UTF-16 codepoints.
 ```
 𐀣 ॐ ā c
 ```
