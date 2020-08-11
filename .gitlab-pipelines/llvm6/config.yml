@@ -62,3 +62,12 @@ merge_request_avx512_llvm6:
   tags:
     - avx512
 
+perf_avx512_llvm6:
+  stage: test
+  # script should run tests and push changes onto GitLab
+  tags:
+    - avx512
+  rules:
+    # If there is a merge request
+    - if: '$FORCE_PERF_GITLAB_CI'
+

@@ -3,8 +3,9 @@ stages:
 
 workflow:
   rules:
-    # If `$FORCE_GITLAB_CI` is set, create a pipeline.
+    # If `$FORCE_GITLAB_CI` or `FORCE_PERF_GITLAB_CI` is set, create a pipeline.
     - if: '$FORCE_GITLAB_CI'
+    - if: '$FORCE_PERF_GITLAB_CI'
     # For merge requests, create a pipeline.
     - if: '$CI_MERGE_REQUEST_IID'
     # For tags, create a pipeline.

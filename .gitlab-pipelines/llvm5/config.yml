@@ -46,3 +46,12 @@ merge_request_avx512_llvm5:
     # If there is a merge request
     - if: '$CI_MERGE_REQUEST_IID'
 
+perf_avx512_llvm5:
+  stage: test
+  # script should run tests and push changes onto GitLab
+  tags:
+    - avx512
+  rules:
+    # If there is a merge request
+    - if: '$FORCE_PERF_GITLAB_CI'
+
