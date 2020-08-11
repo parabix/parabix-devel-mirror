@@ -625,34 +625,21 @@ unsigned EmitMatch::getFileCount() {
 size_t EmitMatch::getFileStartPos(unsigned fileNo) {
     if (mFileStartPositions.size() == 0) return 0;
     assert(fileNo < mFileStartPositions.size());
-    //llvm::errs() << "getFileStartPos(" << fileNo << ") = " << mFileStartPositions[fileNo] << "  file = " << mFileNames[fileNo] << "\n";
+    //llvm::errs() << "getFileStartPos(" << fileNo << ") = ";
+    //llvm::errs().write_hex(mFileStartPositions[fileNo]);
+    //llvm::errs() << "  file = " << mFileNames[fileNo] << "\n";
     return mFileStartPositions[fileNo];
 }
 
 void EmitMatch::setBatchLineNumber(unsigned fileNo, size_t batchLine) {
     //llvm::errs() << "setBatchLineNumber(" << fileNo << ", " << batchLine << ")  file = " << mFileNames[fileNo] << "\n";
-    mFileStartLineNumbers[fileNo] = batchLine;
-}
+    mFileStartLineNumbers[fileNo+1] = batchLine;
+    if (!mTerminated) *mResultStr << "\n";
+    mTerminated = true;
+    mCurrentFile++;
+    if (mCurrentFile < mFileNames.size()) setFileLabel(mFileNames[mCurrentFile]);}
 
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
-    unsigned nextFile = mCurrentFile + 1;
-    if (nextFile < mFileNames.size()) {
-        unsigned nextLine = mFileStartLineNumbers[nextFile];
-        if ((lineNum >= nextLine) && (nextLine != 0)) {
-            do {
-                mCurrentFile = nextFile;
-                nextFile++;
-                //llvm::errs() << "mCurrentFile = " << mCurrentFile << ", mFileStartLineNumbers[mCurrentFile] " << mFileStartLineNumbers[mCurrentFile] << "\n";
-                nextLine = mFileStartLineNumbers[nextFile];
-            } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
-            setFileLabel(mFileNames[mCurrentFile]);
-            if (!mTerminated) {
-                *mResultStr << "\n";
-                mTerminated = true;
-            }
-            //llvm::errs() << "accumulate_match(" << lineNum << "), file " << mFileNames[mCurrentFile] << "\n";
-        }
-    }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
         *mResultStr << "--\n";
