@@ -604,7 +604,8 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     pendingLimit = b->getScalarField("pendingFileLimit");
     //  We use a strictly greater than test here; if the pendingLimit is the availableLimit,
     //  this means that we are at the end of the available data, not necessarily a file end.
-    b->CreateUnlikelyCondBr(b->CreateICmpUGT(strideLimit, pendingLimit), nextInBatch2, strideFinal);
+    Value * notFinalFile = b->CreateICmpNE(b->getScalarField("batchFileNum"), maxFileNum);
+    b->CreateUnlikelyCondBr(b->CreateAnd(notFinalFile, b->CreateICmpUGT(strideLimit, pendingLimit)), nextInBatch2, strideFinal);
 
     b->SetInsertPoint(nextInBatch2);
     batchFileNum = b->getScalarField("batchFileNum");
