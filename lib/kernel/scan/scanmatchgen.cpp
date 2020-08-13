@@ -353,13 +353,6 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     Value * const avail = b->getAvailableItemCount("InputStream");
     Value * maxFileNum = b->CreateSub(b->CreateCall(getFileCount, {accumulator}), b->getInt32(1));
     //b->CallPrintInt("maxFileNum", maxFileNum);
-    Value * batchFileNum = b->getScalarField("batchFileNum");
-    Value * inFinalFile = b->CreateICmpEQ(batchFileNum, maxFileNum);
-    Value * availableLimit = b->getAvailableItemCount("matchResult");
-    Value * nextFileNum = b->CreateAdd(batchFileNum, b->getInt32(1));
-    Value * fileLimit = b->CreateCall(getFileStartPos, {accumulator, b->CreateSelect(inFinalFile, maxFileNum, nextFileNum)});
-    Value * pendingLimit = b->CreateSelect(inFinalFile, availableLimit, fileLimit);
-    b->setScalarField("pendingFileLimit", pendingLimit);
 
     Value * const initialLineStart = b->getProcessedItemCount("InputStream");
     Value * initialLineNum = nullptr;
@@ -395,6 +388,13 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     Value * breakWordBasePtr = b->getInputStreamBlockPtr("lineBreak", ZERO, strideBlockOffset);
     breakWordBasePtr = b->CreatePointerCast(breakWordBasePtr, sw.pointerTy);
     Value * nextStrideNo = b->CreateAdd(strideNo, ONE);
+    Value * batchFileNum = b->getScalarField("batchFileNum");
+    Value * inFinalFile = b->CreateICmpEQ(batchFileNum, maxFileNum);
+    Value * availableLimit = b->getAvailableItemCount("matchResult");
+    Value * nextFileNum = b->CreateAdd(batchFileNum, b->getInt32(1));
+    Value * fileLimit = b->CreateCall(getFileStartPos, {accumulator, b->CreateSelect(inFinalFile, maxFileNum, nextFileNum)});
+    Value * pendingLimit = b->CreateSelect(inFinalFile, availableLimit, fileLimit);
+    b->setScalarField("pendingFileLimit", pendingLimit);
     b->CreateBr(stridePrecomputation);
 
 
@@ -523,6 +523,7 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     batchFileNum = b->getScalarField("batchFileNum");
     pendingLimit = b->getScalarField("pendingFileLimit");
     //b->CallPrintInt("nextInBatch batchFileNum", batchFileNum);
+    //b->CallPrintInt("nextInBatch matchStart", matchStart);
     //b->CallPrintInt("nextInBatch pendingLimit", pendingLimit);
 
     if (mLineNumbering) {
