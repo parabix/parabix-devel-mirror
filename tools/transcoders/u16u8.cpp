@@ -111,11 +111,10 @@ void shuffle::generateDoBlockMethod(BuilderRef kb) {
 
     Value * prefix = kb->loadInputStreamBlock("prefix", kb->getSize(0));
     Value * suffix = kb->loadInputStreamBlock("suffix", kb->getSize(0));
-    Value * len4 = kb->loadInputStreamBlock("len4", kb->getSize(0));
 
     Value * basisbits0[10];
     Value * basisbits1[13];
-    unsigned k = 0;
+
     for (unsigned j = 0; j < 16; j++) {
         Value * bitBlock = kb->loadInputStreamBlock("basisBits", kb->getSize(j));              
         if (j < 8) {
@@ -177,7 +176,7 @@ u16u8FunctionType u16u8_gen (CPUDriver & driver) {
     P->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
                                             SelectOperationList{Select(u16Bits, streamutils::Range(0, 21))},
                                             u32basis);
-    P->CreateKernelCall<DebugDisplayKernel>("u32basis", u32basis);
+    //P->CreateKernelCall<DebugDisplayKernel>("u32basis", u32basis);
 
     // Buffers for calculated deposit masks.
     StreamSet * const u8fieldMask = P->CreateStreamSet();
@@ -199,29 +198,19 @@ u16u8FunctionType u16u8_gen (CPUDriver & driver) {
     // Calculate the u8final deposit mask.
     StreamSet * const extractionMask = P->CreateStreamSet();
     P->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask);
-    P->CreateKernelCall<DebugDisplayKernel>("u8fieldMask", u8fieldMask);
-    P->CreateKernelCall<DebugDisplayKernel>("extractionMask", extractionMask);
     P->CreateKernelCall<StreamCompressKernel>(extractionMask, u8fieldMask, u8final);
-    P->CreateKernelCall<DebugDisplayKernel>("u8final", u8final);
 
     P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
-    P->CreateKernelCall<DebugDisplayKernel>("u8initial", u8initial);
-    P->CreateKernelCall<DebugDisplayKernel>("u8mask12_17", u8mask12_17);
-    P->CreateKernelCall<DebugDisplayKernel>("u8mask6_11", u8mask6_11);
 
     SpreadByMask(P, u8initial, u32basis, deposit18_20, /* inputOffset = */ 18);
     SpreadByMask(P, u8mask12_17, u32basis, deposit12_17, /* inputOffset = */ 12);
     SpreadByMask(P, u8mask6_11, u32basis, deposit6_11, /* inputOffset = */ 6);
     SpreadByMask(P, u8final, u32basis, deposit0_5, /* inputOffset = */ 0);
-    P->CreateKernelCall<DebugDisplayKernel>("deposit18_20", deposit18_20);
-    P->CreateKernelCall<DebugDisplayKernel>("deposit12_17", deposit12_17);
-    P->CreateKernelCall<DebugDisplayKernel>("deposit6_11", deposit6_11);
-    P->CreateKernelCall<DebugDisplayKernel>("deposit0_5", deposit0_5);
 
     P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
                                       u8initial, u8final, u8mask6_11, u8mask12_17,
                                       u8basis);
-    P->CreateKernelCall<DebugDisplayKernel>("u8basis", u8basis);
+    //P->CreateKernelCall<DebugDisplayKernel>("u8basis", u8basis);
     P->CreateKernelCall<P2SKernel>(u8basis, u8bytes);
 
     P->CreateKernelCall<StdOutKernel>(u8bytes);
