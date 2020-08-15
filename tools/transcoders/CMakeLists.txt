@@ -75,3 +75,19 @@ DEPS
     re.cc
     toolchain
 )
+
+parabix_add_executable(
+NAME
+    u16u8
+SRC
+    u16u8.cpp
+DEPS
+    pablo.bixnum
+    kernel.basis
+    kernel.io
+    kernel.pipeline
+    kernel.streamutils
+    re.cc
+    toolchain
+    kernel.util
+)
