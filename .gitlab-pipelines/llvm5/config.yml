@@ -48,7 +48,10 @@ merge_request_avx512_llvm5:
 
 perf_avx512_llvm5:
   stage: test
-  # script should run tests and push changes onto GitLab
+    - mkdir -p build && cd build
+    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
+    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm5 -DCMAKE_BUILD_TYPE=Release ..
+    - make perf-tests
   tags:
     - avx512
   rules:
