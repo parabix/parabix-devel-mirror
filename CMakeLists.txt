@@ -338,6 +338,9 @@ add_subdirectory(tools/util)
 # Kernel Tests
 add_subdirectory(tests/kernel)
 
+# Perf Tests
+add_subdirectory(tests/perf)
+
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")
     target_link_libraries(${PARABIX_MONO_TARGET} ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
