@@ -14,7 +14,7 @@ build_llvm9:
   stage: test
   image: luizperes/parabix:llvm-9
   before_script:
-    - apt-get install -y python python3
+    - apt-get -y update && apt-get install -y python python3
   script:
     - mkdir -p build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release -DBOOST_INCLUDEDIR=/home/boost_1_68_0 ..
