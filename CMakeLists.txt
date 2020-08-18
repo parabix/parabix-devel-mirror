@@ -336,7 +336,7 @@ add_subdirectory(tools/ztf8)
 add_subdirectory(tools/util)
 
 # Kernel Tests
-add_subdirectory(tests)
+add_subdirectory(tests/kernel)
 
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")
