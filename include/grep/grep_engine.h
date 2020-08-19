@@ -100,7 +100,8 @@ public:
 
     void suppressFileMessages(bool b = true) {mSuppressFileMessages = b;}
     void setBinaryFilesOption(argv::BinaryFilesMode mode) {mBinaryFilesMode = mode;}
-    void InputFileEncodingOption(argv::InputFileEncoding encoding) {mInputFileEncoding = encoding;}
+    void InputFileEncodingOption(argv::InputFileEncoding::InputFileEncoding encoding) {mInputFileEncoding = encoding;}
+    void OutputEncodingOption(argv::OutputEncoding::OutputEncoding encoding) {mOutputEncoding = encoding;}
     void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(const std::vector<boost::filesystem::path> & filenames);
     bool haveFileBatch();
@@ -163,7 +164,8 @@ protected:
     unsigned mBeforeContext;
     unsigned mAfterContext;
     bool mInitialTab;
-    argv::InputFileEncoding mInputFileEncoding;
+    argv::InputFileEncoding::InputFileEncoding mInputFileEncoding;
+    argv::OutputEncoding::OutputEncoding mOutputEncoding;
     bool mCaseInsensitive;
     bool mInvertMatches;
     int mMaxCount;
@@ -216,7 +218,8 @@ public:
         mLineCount(0),
         mLineNum(0),
         mTerminated(true),
-        mInputFileEncoding(encoding) {}
+        mInputFileEncoding(encoding),
+        mOutputEncoding(encoding) {}
     void prepareBatch (const std::vector<std::string> & fileNames);
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
     void finalize_match(char * buffer_end) override;
@@ -235,6 +238,7 @@ protected:
     size_t mLineNum;
     bool mTerminated;
     int mInputFileEncoding;
+    int mOutputEncoding;
     // An EmitMatch object may be defined to work with a single buffer for a
     // batch of files concatenated together.  The following vectors hold information
     // for each file in the batch, namely, its name, its starting code unit

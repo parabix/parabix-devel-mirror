@@ -123,7 +123,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mBeforeContext(0),
     mAfterContext(0),
     mInitialTab(false),
-    mInputFileEncoding(argv::UTF8),
+    mInputFileEncoding(argv::InputFileEncoding::UTF8),
     mCaseInsensitive(false),
     mInvertMatches(false),
     mMaxCount(0),
@@ -272,7 +272,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::Name * anchorName = re::makeName("UTF_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
-        if (mInputFileEncoding == argv::UTF8)
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
             setComponent(mExternalComponents, Component::UTF8index);
         else
             setComponent(mExternalComponents, Component::UTF16index);
@@ -295,7 +295,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
-            if (mInputFileEncoding == argv::UTF8)
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
                 setComponent(mExternalComponents, Component::UTF8index);
             if (mColoring) {
                 UnicodeIndexing = true;
@@ -304,7 +304,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (UnicodeIndexing) {
-        if (mInputFileEncoding == argv::UTF8) {
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
             setComponent(mExternalComponents, Component::S2P);
             setComponent(mExternalComponents, Component::UTF8index);
         }
@@ -329,7 +329,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
         re::RE * notBreak = re::makeDiff(re::makeDiff(re::makeByte(0x00, 0xF8FF), re::makeByte(0xDC00, 0xDFFF)), toUTF16(mBreakCC));
-        if (mInputFileEncoding == argv::UTF8)
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
             notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), toUTF8(mBreakCC));
         for (unsigned i = 0; i < mREs.size(); ++i) {
             if (!hasEndAnchor(mREs[i])) {
@@ -345,7 +345,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     // can bypass transposition and use the Direct CC compiler.
     mPrefixRE = nullptr;
     mSuffixRE = nullptr;
-    if (mInputFileEncoding == argv::UTF8) {
+    if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
         if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
             mExternalNames.empty() && !UnicodeIndexing) {
             if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
@@ -375,15 +375,15 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
     if (hasComponent(mExternalComponents, Component::S2P_16)) {
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS_U16, 1);
         if (PabloTransposition) {
-            if (mInputFileEncoding == argv::UTF16BE)
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE)
                 P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits, cc::ByteNumbering::BigEndian);
             else
                 P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         }
         else {
-            if (mInputFileEncoding == argv::UTF16LE)
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE)
                 P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits, cc::ByteNumbering::LittleEndian);
-            else if (mInputFileEncoding == argv::UTF16BE)
+            else if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE)
                 P->CreateKernelCall<S2P_16Kernel>(ByteStream, BasisBits, cc::ByteNumbering::BigEndian);
             else
                 P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
@@ -630,7 +630,7 @@ StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, 
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(P, mREs[i], SourceStream, MatchResults);
         } else {
-            if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE || mInputFileEncoding == argv::InputFileEncoding::UTF16BE)
                 U16indexedGrep(P, mREs[i], SourceStream, MatchResults);
             else
                 U8indexedGrep(P, mREs[i], SourceStream, MatchResults);
@@ -684,7 +684,7 @@ void GrepEngine::grepCodeGen() {
     Scalar * const useMMap = P->getInputScalar("useMMap");
     Scalar * const fileDescriptor = P->getInputScalar("fileDescriptor");
     StreamSet * ByteStream;
-    if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+    if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE || mInputFileEncoding == argv::InputFileEncoding::UTF16BE)
         ByteStream = P->CreateStreamSet(1, ENCODING_BITS_U16);
     else
         ByteStream = P->CreateStreamSet(1, ENCODING_BITS);
@@ -741,11 +741,11 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
             setFileLabel(mFileNames[mCurrentFile]);
             if (!mTerminated) {
-                if (mInputFileEncoding == argv::UTF8) {
+                if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
                     *mResultStr << "\n";
                 }
                 else {
-                    if (mInputFileEncoding == argv::UTF16BE) {
+                    if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
                         mResultStr->write("\00", 1);
                         mResultStr->write("\n", 1);
                     }
@@ -759,9 +759,9 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
-        if (mInputFileEncoding == argv::UTF8) *mResultStr << "--\n";
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) *mResultStr << "--\n";
         else {
-            if (mInputFileEncoding == argv::UTF16BE) {
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
                 mResultStr->write("\00", 1);
                 mResultStr->write("-", 1);
                 mResultStr->write("\00", 1);
@@ -777,7 +777,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     if (mShowLineNumbers) {
         // Internally line numbers are counted from 0.  For display, adjust
         // the line number so that lines are numbered from 1.
-        if (mInputFileEncoding == argv::UTF8) {
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
             if (mInitialTab) {
                 *mResultStr << relLineNum+1 << "\t:";
             }
@@ -802,7 +802,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
                 //corresponding hex value of digit
                 quotient += 48;
                 //treat as UTF-16 codepoint
-                if (mInputFileEncoding == argv::UTF16BE) {
+                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
                     mResultStr->write("\00",1);
                     mResultStr->write((const char*)&quotient,1);
                 }
@@ -813,7 +813,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             }
             if (mInitialTab) {
                 //treat as UTF-16 codepoint
-                if (mInputFileEncoding == argv::UTF16BE) {
+                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
                     mResultStr->write("\00",1);
                     mResultStr->write("\t", 1);
                 }
@@ -822,7 +822,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             }
             else {
                 //treat as UTF-16 codepoint
-                if (mInputFileEncoding == argv::UTF16BE) {
+                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
                     mResultStr->write("\00",1);
                     mResultStr->write(":", 1);
                 }
@@ -832,7 +832,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
         }
     }
 
-    if (mInputFileEncoding == argv::UTF8) {
+    if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
         const auto bytes = line_end - line_start + 1;
         mResultStr->write(line_start, bytes);
         mLineCount++;
@@ -855,7 +855,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
         mResultStr->write(line_start, bytes);
         mLineCount++;
         mLineNum = lineNum;
-        if (mInputFileEncoding == argv::UTF16BE) {
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
             unsigned last_byte = line_start[bytes-1];
             mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
             if (LLVM_UNLIKELY(!mTerminated)) {
@@ -888,8 +888,8 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
 
 void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) {
-        if (mInputFileEncoding == argv::UTF8) *mResultStr << "\n";
-        else if (mInputFileEncoding == argv::UTF16BE) {
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) *mResultStr << "\n";
+        else if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
             mResultStr->write("\00",1);
             mResultStr->write("\n", 1);
         } else
@@ -913,7 +913,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
         } else {
-            if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE || mInputFileEncoding == argv::InputFileEncoding::UTF16BE)
                 U16indexedGrep(E, mREs[i], SourceStream, MatchResults);
             else
                 U8indexedGrep(E, mREs[i], SourceStream, MatchResults);
@@ -973,7 +973,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);
 
         StreamSet * Filtered;
-        if (mInputFileEncoding == argv::UTF8)
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
             Filtered = E->CreateStreamSet(1, 8);
         else
             Filtered = E->CreateStreamSet(1, 16);
@@ -1008,7 +1008,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * ExpandedBasis;
         StreamSet * ColorizedBasis;
         StreamSet * ColorizedBytes;
-        if (mInputFileEncoding == argv::UTF8) {
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
             FilteredBasis = E->CreateStreamSet(8, 1);
             ExpandedBasis = E->CreateStreamSet(8);
             ColorizedBasis = E->CreateStreamSet(8);
@@ -1021,10 +1021,10 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             ColorizedBytes  = E->CreateStreamSet(1, 16);
         }
 
-        if (mInputFileEncoding == argv::UTF8)
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
             E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
         else {
-            if (mInputFileEncoding == argv::UTF16LE)
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE)
                 E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, cc::ByteNumbering::LittleEndian);
             else
                 E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, cc::ByteNumbering::BigEndian);
@@ -1039,11 +1039,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
 
         E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
 
-        if (mInputFileEncoding == argv::UTF8) {
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
             E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
         } else {
             cc::ByteNumbering byteNumbering;
-            if (mInputFileEncoding == argv::UTF16LE)
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE)
                 byteNumbering = cc::ByteNumbering::LittleEndian;
             else
                 byteNumbering = cc::ByteNumbering::BigEndian;
@@ -1111,7 +1111,7 @@ void EmitMatchesEngine::grepCodeGen() {
     Scalar * const useMMap = E1->getInputScalar("useMMap");
     Scalar * const fileDescriptor = E1->getInputScalar("fileDescriptor");
     StreamSet * ByteStream;
-    if (mInputFileEncoding == argv::UTF16LE || mInputFileEncoding == argv::UTF16BE)
+    if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE || mInputFileEncoding == argv::InputFileEncoding::UTF16BE)
         ByteStream = E1->CreateStreamSet(1, ENCODING_BITS_U16);
     else
         ByteStream = E1->CreateStreamSet(1, ENCODING_BITS);
@@ -1198,7 +1198,7 @@ void CountOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
 
 void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
     if (grepResult == mRequiredCount) {
-        if (mInputFileEncoding == argv::UTF8)
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
             strm << linePrefix(fileName);
         else {
             std::string file = linePrefix(fileName).c_str();
@@ -1206,7 +1206,7 @@ void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
             for (auto ch : file) {
                 std::ostringstream letter;
                 letter << ch;
-                if (mInputFileEncoding == argv::UTF16BE) {
+                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
                     strm.write("\00", 1);
                     strm << letter.str();
                 }

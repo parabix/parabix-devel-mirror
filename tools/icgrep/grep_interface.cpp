@@ -101,12 +101,12 @@ static cl::opt<BinaryFilesMode, true> BinaryFilesOption("binary-files", cl::desc
                                                                 clEnumValN(Text, "text", "Treat binary files as text.")
                                                                 CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(WithoutMatch));
 
-InputFileEncoding InputEncodingFlag;
-static cl::opt<InputFileEncoding, true> InputFileOption("input-encoding", cl::desc("Input file encoding (default: UTF8)"),
-                                                     cl::values(clEnumValN(UTF8, "UTF8", "Input file is encoded in UTF8"),
-                                                                clEnumValN(UTF16LE, "UTF-16LE", "Input file is encoded in UTF16-LE"),
-                                                                clEnumValN(UTF16BE, "UTF-16BE", "Input file is encoded in UTF-16BE")
-                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(InputEncodingFlag), cl::init(UTF8));
+InputFileEncoding::InputFileEncoding InputEncodingFlag;
+static cl::opt<InputFileEncoding::InputFileEncoding, true> InputFileOption("input-encoding", cl::desc("Input file encoding (default: UTF8)"),
+                                                     cl::values(clEnumValN(InputFileEncoding::UTF8, "UTF8", "Input file is encoded in UTF8"),
+                                                                clEnumValN(InputFileEncoding::UTF16LE, "UTF-16LE", "Input file is encoded in UTF-16LE"),
+                                                                clEnumValN(InputFileEncoding::UTF16BE, "UTF-16BE", "Input file is encoded in UTF-16BE")
+                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(InputEncodingFlag), cl::init(InputFileEncoding::UTF8));
 
 /*
  *  C.  Grep output modes and options.
@@ -194,6 +194,14 @@ static cl::opt<ColoringType, true> Color("colors", cl::desc("Set colorization of
                                             clEnumValN(neverColor,  "never", "Disable colorization")
                                             CL_ENUM_VAL_SENTINEL));
 static cl::alias ColorAlias("colours", cl::desc("Alias for -color"), cl::aliasopt(Color));
+
+OutputEncoding::OutputEncoding OutputEncodingFlag;
+
+static cl::opt<OutputEncoding::OutputEncoding, true> OutputEncodingOption("output-encoding", cl::desc("ICgrep output encoding (default: UTF8)"),
+                                                     cl::values(clEnumValN(OutputEncoding::UTF8, "UTF8", "Match output is encoded in UTF8"),
+                                                                clEnumValN(OutputEncoding::UTF16LE, "UTF-16LE", "Match output is encoded in UTF-16LE"),
+                                                                clEnumValN(OutputEncoding::UTF16BE, "UTF-16BE", "Match output is encoded in UTF-16BE")
+                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Output_Options), cl::location(OutputEncodingFlag), cl::init(OutputEncoding::UTF8));
 
 //
 // Handler for errors reported through llvm::report_fatal_error.  Report

@@ -156,6 +156,7 @@ int main(int argc, char *argv[]) {
     if (argv::IgnoreCaseFlag) grep->setCaseInsensitive();
     if (argv::InvertMatchFlag) grep->setInvertMatches();
     grep->InputFileEncodingOption(argv::InputEncodingFlag);
+    grep->OutputEncodingOption(argv::OutputEncodingFlag);
     if (argv::UnicodeLinesFlag) {
         grep->setRecordBreak(grep::GrepRecordBreakKind::Unicode);
     } else if (argv::NullDataFlag) {

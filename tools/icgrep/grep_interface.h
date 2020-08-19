@@ -49,8 +49,10 @@ extern std::string FileFlag; // -f
 enum BinaryFilesMode {Binary, WithoutMatch, Text};
 extern BinaryFilesMode BinaryFilesFlag;
 
-enum InputFileEncoding {UTF8, UTF16LE, UTF16BE};
-extern InputFileEncoding InputEncodingFlag; //-encoding
+namespace InputFileEncoding {
+    enum InputFileEncoding {UTF8, UTF16LE, UTF16BE};
+}
+extern InputFileEncoding::InputFileEncoding InputEncodingFlag; //-encoding
 
 extern bool NullDataFlag; // -z
 extern bool UnicodeLinesFlag; // -Unicode-lines
@@ -68,6 +70,11 @@ extern GrepModeType Mode;
 
 enum ColoringType {alwaysColor, autoColor, neverColor};
 extern ColoringType ColorFlag;
+
+namespace OutputEncoding {
+    enum OutputEncoding {UTF8, UTF16LE, UTF16BE};
+}
+extern OutputEncoding::OutputEncoding OutputEncodingFlag; //-encoding
 
 extern bool WithFilenameFlag; // -H
 extern bool NoFilenameFlag; // -h
