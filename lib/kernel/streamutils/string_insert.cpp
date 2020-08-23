@@ -92,6 +92,7 @@ void StringReplaceKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     BixNumCompiler bnc(pb);
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
+    unsigned bitStreamSize = basis.size();
     PabloAST * spreadMask = getInputStreamSet("spreadMask")[0];
     std::vector<PabloAST *> insertMarks = getInputStreamSet("insertMarks");
     std::vector<PabloAST *> runIndex = getInputStreamSet("runIndex");
@@ -105,7 +106,7 @@ void StringReplaceKernel::generatePabloMethod() {
         PabloAST * span = pb.createMatchStar(stringStart, runMask);
         insertSpans[i] = pb.createAnd(span, runMask);
     }
-    for (unsigned bit = 0; bit < 16; bit++) { //run for loop for 16 bits of basis stream
+    for (unsigned bit = 0; bit < bitStreamSize; bit++) {
         PabloAST * updated = basis[bit];
         for (unsigned i = 0; i < mInsertStrings.size(); i++) {
             PabloAST * stringMarks = mMultiplexing ? bnc.EQ(insertSpans, i) : insertSpans[i];
