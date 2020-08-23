@@ -46,6 +46,7 @@
 #include <kernel/streamutils/pdep_kernel.h>
 #include <kernel/io/stdout_kernel.h>
 #include <pablo/pablo_kernel.h>
+#include <pablo/bixnum/utf8gen.h>
 #include <re/adt/adt.h>
 #include <re/adt/re_utility.h>
 #include <re/adt/printer_re.h>
@@ -124,6 +125,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mAfterContext(0),
     mInitialTab(false),
     mInputFileEncoding(argv::InputFileEncoding::UTF8),
+    mOutputEncoding(argv::OutputEncoding::UTF8),
     mCaseInsensitive(false),
     mInvertMatches(false),
     mMaxCount(0),
@@ -1020,7 +1022,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             ColorizedBasis = E->CreateStreamSet(16);
             ColorizedBytes  = E->CreateStreamSet(1, 16);
         }
-
         if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
             E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
         else {
@@ -1029,7 +1030,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             else
                 E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, cc::ByteNumbering::BigEndian);
         }
-        //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
         //E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
 
@@ -1040,16 +1040,88 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
 
         if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
-            E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
+            if(mOutputEncoding == argv::OutputEncoding::UTF8)
+                E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
+            else {
+                cc::ByteNumbering byteNumbering;
+                if (mOutputEncoding == argv::OutputEncoding::UTF16LE)
+                    byteNumbering = cc::ByteNumbering::LittleEndian;
+                else
+                    byteNumbering = cc::ByteNumbering::BigEndian;
+                StreamSet * selectors = E->CreateStreamSet();
+                StreamSet * u8bits = E->CreateStreamSet(16);
+                StreamSet * u16bits = E->CreateStreamSet(16);
+                ColorizedBytes  = E->CreateStreamSet(1, 16);
+                E->CreateKernelCall<U8U16Kernel>(ColorizedBasis, u8bits, selectors);
+                E->CreateKernelCall<DebugDisplayKernel>("u8bits", u8bits);
+                E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                                 SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
+                                                 u16bits,
+                                                 8);
+                E->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, ColorizedBytes, byteNumbering);
+                E->CreateKernelCall<DebugDisplayKernel>("u16bits", u16bits);
+                //E->CreateKernelCall<P2S16Kernel>(u16bits, ColorizedBytes, byteNumbering);
+                E->CreateKernelCall<DebugDisplayKernel>("ColorizedBytes", ColorizedBytes);
+            }
         } else {
-            cc::ByteNumbering byteNumbering;
-            if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE)
-                byteNumbering = cc::ByteNumbering::LittleEndian;
-            else
-                byteNumbering = cc::ByteNumbering::BigEndian;
-            E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes, byteNumbering);
-        }
+            if(mOutputEncoding == argv::OutputEncoding::UTF8) {
+                ColorizedBytes  = E->CreateStreamSet(1, 8);
+                StreamSet * const prefix = E->CreateStreamSet();
+                StreamSet * const suffix = E->CreateStreamSet();
+                StreamSet * const len4 = E->CreateStreamSet();
+                StreamSet * selectors = E->CreateStreamSet();
 
+                E->CreateKernelCall<U16U8index>(ColorizedBasis, prefix, suffix, len4, selectors);
+
+                StreamSet * u16Bits = E->CreateStreamSet(21);
+                StreamSet * u32basis = E->CreateStreamSet(21);
+                E->CreateKernelCall<shuffle>(ColorizedBasis, u16Bits, prefix, suffix, len4);
+                E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                                        SelectOperationList{Select(u16Bits, streamutils::Range(0, 21))},
+                                                        u32basis);
+                // Buffers for calculated deposit masks.
+                StreamSet * const u8fieldMask = E->CreateStreamSet();
+                StreamSet * const u8final = E->CreateStreamSet();
+                StreamSet * const u8initial = E->CreateStreamSet();
+                StreamSet * const u8mask12_17 = E->CreateStreamSet();
+                StreamSet * const u8mask6_11 = E->CreateStreamSet();
+
+                // Intermediate buffers for deposited bits
+                StreamSet * const deposit18_20 = E->CreateStreamSet(3);
+                StreamSet * const deposit12_17 = E->CreateStreamSet(6);
+                StreamSet * const deposit6_11 = E->CreateStreamSet(6);
+                StreamSet * const deposit0_5 = E->CreateStreamSet(6);
+
+                // Final buffers for computed UTF-8 basis bits and byte stream.
+                StreamSet * const u8basis = E->CreateStreamSet(8);
+
+                // Calculate the u8final deposit mask.
+                StreamSet * const extractionMask = E->CreateStreamSet();
+                E->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask);
+                E->CreateKernelCall<StreamCompressKernel>(extractionMask, u8fieldMask, u8final);
+
+                E->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
+
+                SpreadByMask(E, u8initial, u32basis, deposit18_20, /* inputOffset = */ 18);
+                SpreadByMask(E, u8mask12_17, u32basis, deposit12_17, /* inputOffset = */ 12);
+                SpreadByMask(E, u8mask6_11, u32basis, deposit6_11, /* inputOffset = */ 6);
+                SpreadByMask(E, u8final, u32basis, deposit0_5, /* inputOffset = */ 0);
+
+                E->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
+                                                  u8initial, u8final, u8mask6_11, u8mask12_17,
+                                                  u8basis);
+                E->CreateKernelCall<P2SKernel>(u8basis, ColorizedBytes);
+            }
+            else {
+                cc::ByteNumbering byteNumbering;
+                if (mOutputEncoding == argv::OutputEncoding::UTF16LE)
+                    byteNumbering = cc::ByteNumbering::LittleEndian;
+                else
+                    byteNumbering = cc::ByteNumbering::BigEndian;
+                E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes, byteNumbering);
+            }
+        }
+        E->CreateKernelCall<DebugDisplayKernel>("ColorizedBasis", ColorizedBasis);
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
         E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
 
