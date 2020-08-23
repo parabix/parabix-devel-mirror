@@ -84,4 +84,26 @@ protected:
     void generatePabloMethod() override;
 };
 
+class U8U16Kernel final: public pablo::PabloKernel {
+public:
+    U8U16Kernel(BuilderRef b, kernel::StreamSet * BasisBits, kernel::StreamSet * u8bits, kernel::StreamSet * DelMask);
+protected:
+    void generatePabloMethod() override;
+};
+
+class U16U8index : public pablo::PabloKernel {
+public:
+    U16U8index(BuilderRef b, kernel::StreamSet * u16basis, kernel::StreamSet * u8len4, kernel::StreamSet * u8len3, kernel::StreamSet * u8len2, kernel::StreamSet * selectors);
+protected:
+    void generatePabloMethod() override;
+};
+
+class shuffle final : public  kernel::BlockOrientedKernel {
+public:
+    shuffle(BuilderRef b,  kernel::StreamSet * const codeUnitStream,  kernel::StreamSet * const BasisBits,  kernel::StreamSet * const prefix,  kernel::StreamSet * const suffix,  kernel::StreamSet * const len4);
+protected:
+    void generateDoBlockMethod(BuilderRef kb) override;
+};
+
+
 #endif
