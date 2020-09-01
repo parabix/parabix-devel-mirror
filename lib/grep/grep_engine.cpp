@@ -125,7 +125,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mAfterContext(0),
     mInitialTab(false),
     mInputFileEncoding(argv::InputFileEncoding::UTF8),
-    mOutputEncoding(argv::OutputEncoding::UTF8),
+    mOutputEncoding(),
     mCaseInsensitive(false),
     mInvertMatches(false),
     mMaxCount(0),
@@ -743,11 +743,11 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
             setFileLabel(mFileNames[mCurrentFile]);
             if (!mTerminated) {
-                if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
+                if (mOutputEncoding == argv::OutputEncoding::UTF8) {
                     *mResultStr << "\n";
                 }
                 else {
-                    if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+                    if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
                         mResultStr->write("\00", 1);
                         mResultStr->write("\n", 1);
                     }
@@ -761,9 +761,9 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
-        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) *mResultStr << "--\n";
+        if (mOutputEncoding == argv::OutputEncoding::UTF8) *mResultStr << "--\n";
         else {
-            if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+            if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
                 mResultStr->write("\00", 1);
                 mResultStr->write("-", 1);
                 mResultStr->write("\00", 1);
@@ -779,7 +779,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     if (mShowLineNumbers) {
         // Internally line numbers are counted from 0.  For display, adjust
         // the line number so that lines are numbered from 1.
-        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
+        if (mOutputEncoding == argv::OutputEncoding::UTF8) {
             if (mInitialTab) {
                 *mResultStr << relLineNum+1 << "\t:";
             }
@@ -804,7 +804,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
                 //corresponding hex value of digit
                 quotient += 48;
                 //treat as UTF-16 codepoint
-                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+                if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
                     mResultStr->write("\00",1);
                     mResultStr->write((const char*)&quotient,1);
                 }
@@ -815,7 +815,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             }
             if (mInitialTab) {
                 //treat as UTF-16 codepoint
-                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+                if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
                     mResultStr->write("\00",1);
                     mResultStr->write("\t", 1);
                 }
@@ -824,7 +824,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             }
             else {
                 //treat as UTF-16 codepoint
-                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+                if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
                     mResultStr->write("\00",1);
                     mResultStr->write(":", 1);
                 }
@@ -833,8 +833,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
             }
         }
     }
-
-    if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
+    if (mOutputEncoding == argv::OutputEncoding::UTF8) {
         const auto bytes = line_end - line_start + 1;
         mResultStr->write(line_start, bytes);
         mLineCount++;
@@ -857,7 +856,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
         mResultStr->write(line_start, bytes);
         mLineCount++;
         mLineNum = lineNum;
-        if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+        if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
             unsigned last_byte = line_start[bytes-1];
             mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
             if (LLVM_UNLIKELY(!mTerminated)) {
@@ -890,8 +889,8 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
 
 void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) {
-        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) *mResultStr << "\n";
-        else if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+        if (mOutputEncoding == argv::OutputEncoding::UTF8) *mResultStr << "\n";
+        else if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
             mResultStr->write("\00",1);
             mResultStr->write("\n", 1);
         } else
@@ -909,16 +908,17 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     const auto numOfREs = mREs.size();
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
     unsigned matchResultStreamCount = (mColoring && !mInvertMatches) ? 2 : 1;
+    //unsigned matchResultStreamCount = (mInputFileEncoding != mOutputEncoding || (mColoring && !mInvertMatches)) ? 2 : 1;
     for(unsigned i = 0; i < numOfREs; ++i) {
         StreamSet * const MatchResults = E->CreateStreamSet(matchResultStreamCount, 1);
         MatchResultsBufs[i] = MatchResults;
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
         } else {
-            if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE || mInputFileEncoding == argv::InputFileEncoding::UTF16BE)
-                U16indexedGrep(E, mREs[i], SourceStream, MatchResults);
-            else
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
                 U8indexedGrep(E, mREs[i], SourceStream, MatchResults);
+            else
+                U16indexedGrep(E, mREs[i], SourceStream, MatchResults);
         }
     }
     StreamSet * Matches = MatchResultsBufs[0];
@@ -952,8 +952,9 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<UntilNkernel>(maxCount, MatchedLineEnds, TruncatedMatches);
         MatchedLineEnds = TruncatedMatches;
     }
-
-    if (mColoring && !mInvertMatches) {
+    //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
+    if (mInputFileEncoding != mOutputEncoding || (mColoring && !mInvertMatches)) {
+        cc::ByteNumbering byteNumbering;
         StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
         FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);
 
@@ -975,110 +976,113 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);
 
         StreamSet * Filtered;
-        if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
-            Filtered = E->CreateStreamSet(1, 8);
-        else
-            Filtered = E->CreateStreamSet(1, 16);
-        E->CreateKernelCall<MatchFilterKernel>(MatchedLineStarts, mLineBreakStream, ByteStream, Filtered);
-
-        StreamSet * MatchedLineSpans = E->CreateStreamSet(1, 1);
-        E->CreateKernelCall<LineSpansKernel>(MatchedLineStarts, MatchedLineEnds, MatchedLineSpans);
-        //E->CreateKernelCall<DebugDisplayKernel>("MatchedLineSpans", MatchedLineSpans);
-
-        StreamSet * InsertMarks = E->CreateStreamSet(2, 1);
-        FilterByMask(E, MatchedLineSpans, Matches, InsertMarks);
-        //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
-
-        std::string ESC = "\x1B";
-        std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
-        unsigned insertLengthBits = 4;
-
-        StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
-        E->CreateKernelCall<StringInsertBixNum>(colorEscapes, InsertMarks, InsertBixNum);
-        //E->CreateKernelCall<DebugDisplayKernel>("InsertBixNum", InsertBixNum);
-        StreamSet * const SpreadMask = InsertionSpreadMask(E, InsertBixNum, InsertPosition::Before);
-        //E->CreateKernelCall<DebugDisplayKernel>("SpreadMask", SpreadMask);
-
-        // For each run of 0s marking insert positions, create a parallel
-        // bixnum sequentially numbering the string insert positions.
-        StreamSet * const InsertIndex = E->CreateStreamSet(insertLengthBits);
-        E->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, /*invert = */ true);
-        //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
-
         StreamSet * FilteredBasis;
-        // Baais bit streams expanded with 0 bits for each string to be inserted.
-        StreamSet * ExpandedBasis;
         StreamSet * ColorizedBasis;
-        StreamSet * ColorizedBytes;
+        StreamSet * MatchedBytes;
         if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
+            Filtered = E->CreateStreamSet(1, 8);
             FilteredBasis = E->CreateStreamSet(8, 1);
-            ExpandedBasis = E->CreateStreamSet(8);
-            ColorizedBasis = E->CreateStreamSet(8);
-            ColorizedBytes  = E->CreateStreamSet(1, 8);
         }
         else {
+            Filtered = E->CreateStreamSet(1, 16);
             FilteredBasis = E->CreateStreamSet(16, 1);
-            ExpandedBasis = E->CreateStreamSet(16);
-            ColorizedBasis = E->CreateStreamSet(16);
-            ColorizedBytes  = E->CreateStreamSet(1, 16);
         }
+        E->CreateKernelCall<MatchFilterKernel>(MatchedLineStarts, mLineBreakStream, ByteStream, Filtered);
+        //E->CreateKernelCall<DebugDisplayKernel>("Filtered", Filtered);
         if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
             E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
         else {
             if (mInputFileEncoding == argv::InputFileEncoding::UTF16LE)
-                E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, cc::ByteNumbering::LittleEndian);
+                byteNumbering = cc::ByteNumbering::LittleEndian;
             else
-                E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, cc::ByteNumbering::BigEndian);
+                byteNumbering = cc::ByteNumbering::BigEndian;
+            E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, byteNumbering);
         }
-        SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
-        //E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
+        //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
+        if (mColoring && !mInvertMatches) {
+            StreamSet * MatchedLineSpans = E->CreateStreamSet(1, 1);
+            E->CreateKernelCall<LineSpansKernel>(MatchedLineStarts, MatchedLineEnds, MatchedLineSpans);
+            //E->CreateKernelCall<DebugDisplayKernel>("MatchedLineSpans", MatchedLineSpans);
 
-        // Map the match start/end marks to their positions in the expanded basis.
-        StreamSet * ExpandedMarks = E->CreateStreamSet(2);
-        SpreadByMask(E, SpreadMask, InsertMarks, ExpandedMarks);
+            StreamSet * InsertMarks = E->CreateStreamSet(2, 1);
+            FilterByMask(E, MatchedLineSpans, Matches, InsertMarks);
+            //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
 
-        E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
+            std::string ESC = "\x1B";
+            std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
+            unsigned insertLengthBits = 4;
 
-        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
-            if(mOutputEncoding == argv::OutputEncoding::UTF8)
-                E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
-            else {
-                cc::ByteNumbering byteNumbering;
-                if (mOutputEncoding == argv::OutputEncoding::UTF16LE)
-                    byteNumbering = cc::ByteNumbering::LittleEndian;
-                else
-                    byteNumbering = cc::ByteNumbering::BigEndian;
-                StreamSet * selectors = E->CreateStreamSet();
-                StreamSet * u8bits = E->CreateStreamSet(16);
-                StreamSet * u16bits = E->CreateStreamSet(16);
-                ColorizedBytes  = E->CreateStreamSet(1, 16);
-                E->CreateKernelCall<U8U16Kernel>(ColorizedBasis, u8bits, selectors);
-                E->CreateKernelCall<DebugDisplayKernel>("u8bits", u8bits);
-                E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
-                                                 SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
-                                                 u16bits,
-                                                 8);
-                E->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, ColorizedBytes, byteNumbering);
-                E->CreateKernelCall<DebugDisplayKernel>("u16bits", u16bits);
-                //E->CreateKernelCall<P2S16Kernel>(u16bits, ColorizedBytes, byteNumbering);
-                E->CreateKernelCall<DebugDisplayKernel>("ColorizedBytes", ColorizedBytes);
+            StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
+            E->CreateKernelCall<StringInsertBixNum>(colorEscapes, InsertMarks, InsertBixNum);
+            //E->CreateKernelCall<DebugDisplayKernel>("InsertBixNum", InsertBixNum);
+            StreamSet * const SpreadMask = InsertionSpreadMask(E, InsertBixNum, InsertPosition::Before);
+            //E->CreateKernelCall<DebugDisplayKernel>("SpreadMask", SpreadMask);
+
+            // For each run of 0s marking insert positions, create a parallel
+            // bixnum sequentially numbering the string insert positions.
+            StreamSet * const InsertIndex = E->CreateStreamSet(insertLengthBits);
+            E->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, /*invert = */ true);
+            //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
+
+            // Baais bit streams expanded with 0 bits for each string to be inserted.
+            StreamSet * ExpandedBasis;
+            if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
+                ExpandedBasis = E->CreateStreamSet(8);
+                ColorizedBasis = E->CreateStreamSet(8);
             }
-        } else {
+            else {
+                ExpandedBasis = E->CreateStreamSet(16);
+                ColorizedBasis = E->CreateStreamSet(16);
+            }
+            SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
+            //E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
+
+            //Map the match start/end marks to their positions in the expanded basis.
+            StreamSet * ExpandedMarks = E->CreateStreamSet(2);
+            SpreadByMask(E, SpreadMask, InsertMarks, ExpandedMarks);
+
+            E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
+        }
+        if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
+            StreamSet * selectors = E->CreateStreamSet();
+            StreamSet * u8bits = E->CreateStreamSet(16);
+            StreamSet * u16bits = E->CreateStreamSet(16);
+            MatchedBytes  = E->CreateStreamSet(1, 16);
+            /*if (ColorizedBasis) {
+                E->CreateKernelCall<U8U16Kernel>(ColorizedBasis, u8bits, selectors);
+            }
+            else {*/
+                E->CreateKernelCall<U8U16Kernel>(FilteredBasis, u8bits, selectors);
+            //}
+            //E->CreateKernelCall<DebugDisplayKernel>("u8bits", u8bits);
+            E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                             SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
+                                             u16bits, 8);
+            E->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, MatchedBytes, byteNumbering);
+        }
+        else {
             if(mOutputEncoding == argv::OutputEncoding::UTF8) {
-                ColorizedBytes  = E->CreateStreamSet(1, 8);
+                MatchedBytes  = E->CreateStreamSet(1, 8);
                 StreamSet * const prefix = E->CreateStreamSet();
                 StreamSet * const suffix = E->CreateStreamSet();
                 StreamSet * const len4 = E->CreateStreamSet();
                 StreamSet * selectors = E->CreateStreamSet();
-
-                E->CreateKernelCall<U16U8index>(ColorizedBasis, prefix, suffix, len4, selectors);
-
                 StreamSet * u16Bits = E->CreateStreamSet(21);
                 StreamSet * u32basis = E->CreateStreamSet(21);
-                E->CreateKernelCall<shuffle>(ColorizedBasis, u16Bits, prefix, suffix, len4);
+                /*if (ColorizedBasis) {
+                    E->CreateKernelCall<U16U8index>(ColorizedBasis, prefix, suffix, len4, selectors);
+                    E->CreateKernelCall<shuffle>(ColorizedBasis, u16Bits, prefix, suffix, len4);
+                }
+                else {*/
+                    E->CreateKernelCall<U16U8index>(FilteredBasis, prefix, suffix, len4, selectors);
+                    E->CreateKernelCall<shuffle>(FilteredBasis, u16Bits, prefix, suffix, len4);
+                //}
+                //E->CreateKernelCall<DebugDisplayKernel>("selectors", selectors);
+                //E->CreateKernelCall<DebugDisplayKernel>("u16Bits", u16Bits);
                 E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
-                                                        SelectOperationList{Select(u16Bits, streamutils::Range(0, 21))},
-                                                        u32basis);
+                                                         SelectOperationList{Select(u16Bits, streamutils::Range(0, 21))},
+                                                         u32basis);
+                //E->CreateKernelCall<DebugDisplayKernel>("u32basis", u32basis);
                 // Buffers for calculated deposit masks.
                 StreamSet * const u8fieldMask = E->CreateStreamSet();
                 StreamSet * const u8final = E->CreateStreamSet();
@@ -1110,29 +1114,34 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
                 E->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
                                                   u8initial, u8final, u8mask6_11, u8mask12_17,
                                                   u8basis);
-                E->CreateKernelCall<P2SKernel>(u8basis, ColorizedBytes);
+                E->CreateKernelCall<P2SKernel>(u8basis, MatchedBytes);
             }
             else {
-                cc::ByteNumbering byteNumbering;
-                if (mOutputEncoding == argv::OutputEncoding::UTF16LE)
-                    byteNumbering = cc::ByteNumbering::LittleEndian;
-                else
-                    byteNumbering = cc::ByteNumbering::BigEndian;
-                E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, ColorizedBytes, byteNumbering);
+                MatchedBytes  = E->CreateStreamSet(1, 16);
+                /*if (ColorizedBasis) {
+                    E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, MatchedBytes, byteNumbering);
+                }
+                else {*/
+                    E->CreateKernelCall<P2S16Kernel>(FilteredBasis, MatchedBytes, byteNumbering);
+                //}
             }
         }
-        E->CreateKernelCall<DebugDisplayKernel>("ColorizedBasis", ColorizedBasis);
+        //E->CreateKernelCall<DebugDisplayKernel>("ColorizedBasis", ColorizedBasis);
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
-        E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
-
+        /*if (ColorizedBasis) {
+            E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
+        }
+        else {*/
+            E->CreateKernelCall<UnixLinesKernelBuilder>(FilteredBasis, ColorizedBreaks);
+        //}
         StreamSet * ColorizedCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
         E->CreateKernelCall<MatchCoordinatesKernel>(ColorizedBreaks, ColorizedBreaks, ColorizedCoords, 1);
-
+        //E->CreateKernelCall<DebugDisplayKernel>("MatchedBytes", MatchedBytes);
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
-        Kernel * const matchK = E->CreateKernelCall<ColorizedReporter>(ColorizedBytes, SourceCoords, ColorizedCoords, callbackObject);
+        Kernel * const matchK = E->CreateKernelCall<ColorizedReporter>(MatchedBytes, SourceCoords, ColorizedCoords, callbackObject);
         matchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
         matchK->link("finalize_match_wrapper", finalize_match_wrapper);
-    } else { // Non colorized output
+    } else { // Non colorized, non transcoded output
         if ((mAfterContext != 0) || (mBeforeContext != 0)) {
             StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
             FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);
@@ -1270,7 +1279,7 @@ void CountOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
 
 void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
     if (grepResult == mRequiredCount) {
-        if (mInputFileEncoding == argv::InputFileEncoding::UTF8)
+        if (mOutputEncoding == argv::OutputEncoding::UTF8)
             strm << linePrefix(fileName);
         else {
             std::string file = linePrefix(fileName).c_str();
@@ -1278,7 +1287,7 @@ void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
             for (auto ch : file) {
                 std::ostringstream letter;
                 letter << ch;
-                if (mInputFileEncoding == argv::InputFileEncoding::UTF16BE) {
+                if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
                     strm.write("\00", 1);
                     strm << letter.str();
                 }
@@ -1295,7 +1304,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
     if (fileNames.size() == 1) {
         typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
         auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, mInputFileEncoding);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, mOutputEncoding);
         accum.setStringStream(&strm);
         bool useMMap;
         int32_t fileDescriptor;
@@ -1320,7 +1329,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
     } else {
         typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
         auto f = reinterpret_cast<GrepBatchFunctionType>(mBatchMethod);
-        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, mInputFileEncoding);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, mOutputEncoding);
         accum.setStringStream(&strm);
         std::vector<int32_t> fileDescriptor(fileNames.size());
         std::vector<size_t> fileSize(fileNames.size(), 0);

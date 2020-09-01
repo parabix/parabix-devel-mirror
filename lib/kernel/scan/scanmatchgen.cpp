@@ -974,7 +974,7 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
 MatchFilterKernel::MatchFilterKernel(BuilderRef b,
                                      StreamSet * const MatchStarts, StreamSet * const LineBreakStream,
                                      StreamSet * const InputStream, StreamSet * Output, unsigned strideBlocks)
-: MultiBlockKernel(b, "matchFilter" + std::to_string(strideBlocks),
+: MultiBlockKernel(b, "matchFilter" + std::to_string(strideBlocks) + "x" + std::to_string(InputStream->getFieldWidth()),
 {Binding{"matchStarts", MatchStarts}, Binding{"lineBreak", LineBreakStream}, Binding{"InputStream", InputStream}},
 {Binding{"Output", Output, BoundedRate(0,1)}},
 {},
