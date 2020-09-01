@@ -156,7 +156,18 @@ int main(int argc, char *argv[]) {
     if (argv::IgnoreCaseFlag) grep->setCaseInsensitive();
     if (argv::InvertMatchFlag) grep->setInvertMatches();
     grep->InputFileEncodingOption(argv::InputEncodingFlag);
-    grep->OutputEncodingOption(argv::OutputEncodingFlag);
+    if (argv::OutputEncodingFlag) {
+        grep->OutputEncodingOption(argv::OutputEncodingFlag);
+    }
+    //keep output encoding same as input encoding if OutputEncodingFlag not set
+    else {
+        if (argv::InputEncodingFlag == argv::InputFileEncoding::InputFileEncoding::UTF8)
+            grep->OutputEncodingOption(argv::OutputEncoding::OutputEncoding::UTF8);
+        else if (argv::InputEncodingFlag == argv::InputFileEncoding::InputFileEncoding::UTF16BE)
+            grep->OutputEncodingOption(argv::OutputEncoding::OutputEncoding::UTF16BE);
+        else
+            grep->OutputEncodingOption(argv::OutputEncoding::OutputEncoding::UTF16LE);
+    }
     if (argv::UnicodeLinesFlag) {
         grep->setRecordBreak(grep::GrepRecordBreakKind::Unicode);
     } else if (argv::NullDataFlag) {
