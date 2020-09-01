@@ -118,8 +118,9 @@ def mkname(regex, target, buildfolder):
     return command
 
 def save(res, outfile):
-    val = "vrau" + ", " + " ".join(command)
-    saveInFile(runFile, val)
+    now = datetime.now().strftime("%m/%d/%Y")
+    val = now + ", " + " ".join(res)
+    saveInFile(outfile, val)
 
 
 if __name__ == '__main__':
