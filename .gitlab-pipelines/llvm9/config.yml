@@ -47,17 +47,3 @@ merge_request_avx512_llvm9:
   rules:
     # If there is a merge request
     - if: '$CI_MERGE_REQUEST_IID'
-
-perf_avx512_llvm9:
-  stage: test
-  script:
-    - mkdir -p build && cd build
-    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
-    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm9 -DCMAKE_BUILD_TYPE=Release ..
-    - make perf-tests
-  tags:
-    - avx512
-  rules:
-    # If there is a merge request
-    - if: '$FORCE_PERF_GITLAB_CI'
-
