@@ -52,10 +52,11 @@ using BuilderRef = Kernel::BuilderRef;
 
 static cl::OptionCategory u16u8Options("u16u8 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u16u8Options));
+static cl::opt<std::string> InputEncoding("encoding", cl::desc("Input encoding (default: UTF-16BE)"), cl::init("UTF-16BE"), cl::cat(u16u8Options));
 
 typedef void (*u16u8FunctionType)(uint32_t fd);
 
-u16u8FunctionType u16u8_gen (CPUDriver & driver) {
+u16u8FunctionType u16u8_gen (CPUDriver & driver, cc::ByteNumbering byteNumbering) {
 
     auto & b = driver.getBuilder();
     Type * const int32Ty = b->getInt32Ty();
@@ -69,7 +70,7 @@ u16u8FunctionType u16u8_gen (CPUDriver & driver) {
 
     // Source buffers for transposed UTF-16 basis bits.
     StreamSet * const u16basis = P->CreateStreamSet(16);
-    P->CreateKernelCall<S2P_16Kernel>(codeUnitStream, u16basis, cc::ByteNumbering::LittleEndian);
+    P->CreateKernelCall<S2P_16Kernel>(codeUnitStream, u16basis, byteNumbering);
     //P->CreateKernelCall<DebugDisplayKernel>("u16basis", u16basis);
     
     StreamSet * const prefix = P->CreateStreamSet();
@@ -78,10 +79,11 @@ u16u8FunctionType u16u8_gen (CPUDriver & driver) {
     StreamSet * selectors = P->CreateStreamSet();
 
     P->CreateKernelCall<U16U8index>(u16basis, prefix, suffix, len4, selectors);
-
+    //P->CreateKernelCall<DebugDisplayKernel>("selectors", selectors);
     StreamSet * u16Bits = P->CreateStreamSet(21);
     StreamSet * u32basis = P->CreateStreamSet(21);
     P->CreateKernelCall<shuffle>(u16basis, u16Bits, prefix, suffix, len4);
+
     P->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
                                             SelectOperationList{Select(u16Bits, streamutils::Range(0, 21))},
                                             u32basis);
@@ -129,8 +131,18 @@ u16u8FunctionType u16u8_gen (CPUDriver & driver) {
 
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv, {&u16u8Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
+    cc::ByteNumbering byteNumbering;
+    if ((InputEncoding == "UTF16LE") || (InputEncoding == "UTF-16LE")) {
+        byteNumbering = cc::ByteNumbering::LittleEndian;
+    } else if ((InputEncoding == "UTF16BE") || (InputEncoding == "UTF-16BE")) {
+        byteNumbering = cc::ByteNumbering::BigEndian;
+    } else if ((InputEncoding == "UTF16") || (InputEncoding == "UTF-16")) {
+        byteNumbering = cc::ByteNumbering::BigEndian;
+    } else {
+        llvm::report_fatal_error("Unrecognized encoding.");
+    }
     CPUDriver pxDriver("u16u8");
-    auto u16u8Function = u16u8_gen(pxDriver);
+    auto u16u8Function = u16u8_gen(pxDriver, byteNumbering);
     const int fd = open(inputFile.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
         errs() << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
