@@ -33,12 +33,6 @@ Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
 
 void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
-    b->CallPrintRegister("fileExtentMask", fileExtentMask);
-    Value * basis0 = b->loadInputStreamBlock("basis", b->getSize(0));
-    b->CallPrintRegister("basis0", basis0);
-    Value * basisMask = b->bitblock_any(fileExtentMask);
-    //fileExtentMask = b->CreateAnd(fileExtentMask, basisMask);
-    //b->CallPrintRegister("basisMask", basisMask);
     // If any of bits 16 through 20 are 1, a four-byte UTF-8 sequence is required.
     Value * u8len4 = b->loadInputStreamBlock("basis", b->getSize(16), b->getSize(0));
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(17), b->getSize(0)));
@@ -61,6 +55,18 @@ void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(9), b->getSize(0)));
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(10), b->getSize(0)), "nonASCII");
     nonASCII = b->CreateAnd(nonASCII, fileExtentMask);
+
+    //TOOD: Receive basisExtent as an input parameter for the kernel
+    //as it is needed only during transcoding u16 to u8
+    Value * basisExtent = nonASCII;
+    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(6), b->getSize(0)));
+    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(5), b->getSize(0)));
+    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(4), b->getSize(0)));
+    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(3), b->getSize(0)));
+    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(2), b->getSize(0)));
+    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(1), b->getSize(0)));
+    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(0), b->getSize(0)));
+    fileExtentMask = b->CreateAnd(fileExtentMask, basisExtent);
     //
     //  UTF-8 sequence length:    1     2     3       4
     //  extraction mask        1000  1100  1110    1111
@@ -109,10 +115,10 @@ void UTF8_DepositMasks::generatePabloMethod() {
     PabloAST * u8final = pb.createExtract(getInputStreamVar("u8final"), pb.getInteger(0));
     PabloAST * nonFinal = pb.createNot(u8final, "nonFinal");
     PabloAST * initial = pb.createInFile(pb.createNot(pb.createAdvance(nonFinal, 1)), "u8initial");
-    pb.createDebugPrint(pb.createAdvance(nonFinal, 1), "pb.createAdvance(nonFinal, 1)");
+    //pb.createDebugPrint(pb.createAdvance(nonFinal, 1), "pb.createAdvance(nonFinal, 1)");
     PabloAST * ASCII = pb.createAnd(u8final, initial);
     PabloAST * lookAheadFinal = pb.createLookahead(u8final, 1, "lookaheadFinal");
-    pb.createDebugPrint(lookAheadFinal, "lookAheadFinal");
+    //pb.createDebugPrint(lookAheadFinal, "lookAheadFinal");
     // Eliminate lookahead positions that are the final position of the prior unit.
     PabloAST * secondLast = pb.createAnd(lookAheadFinal, nonFinal);
     PabloAST * u8mask6_11 = pb.createInFile(pb.createOr(secondLast, ASCII, "u8mask6_11"));
@@ -389,10 +395,10 @@ void U8U16Kernel::generatePabloMethod() {
 U16U8index::U16U8index(BuilderRef b, StreamSet * u16basis, StreamSet * u8len4, StreamSet * u8len3, StreamSet * u8len2, StreamSet * selectors)
 : PabloKernel(b, "u8indexMask",
 {Binding{"basis", u16basis}},
-{Binding{"len4", u8len4, FixedRate(4)},
-Binding{"len3", u8len3, FixedRate(4)},
-Binding{"len2", u8len2, FixedRate(4)},
-Binding{"selectors", selectors, FixedRate(4)}}) {}
+{Binding{"len4", u8len4},
+Binding{"len3", u8len3},
+Binding{"len2", u8len2},
+Binding{"selectors", selectors}}) {}
 
 void U16U8index::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -408,7 +414,6 @@ void U16U8index::generatePabloMethod() {
     PabloAST * fileExtent = ccc->compileCC(makeByte(0, 0xFFFF));
     //Remove BOM from u32basis, if exists
     PabloAST * toSel = pb.createAnd(fileExtent, pb.createAnd(pb.createNot(prefix), pb.createNot(BOM)));
-    pb.createDebugPrint(toSel, "toSel");
     pb.createAssign(pb.createExtract(getOutputStreamVar("len4"), pb.getInteger(0)), prefix);
     pb.createAssign(pb.createExtract(getOutputStreamVar("len3"), pb.getInteger(0)), suffix);
     pb.createAssign(pb.createExtract(getOutputStreamVar("len2"), pb.getInteger(0)), len4);
