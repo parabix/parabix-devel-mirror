@@ -33,18 +33,6 @@ def stripString(s, begin, end, startFrom=None):
     posE = decoded.find(end, posB)
     return decoded[posB:posE]
 
-def stripVersions(s):
-    llvmVersion = stripString(s, "LLVM version ", "\\n")
-    unicodeVersion = stripString(s, "Unicode version ", "\\n")
-    parabixRevision = stripString(s, "Parabix revision ", "\\n")
-    hostCPU = stripString(s, "Host CPU: ", "\\n")
-    target = stripString(s, "Default target: ", "\\n")
-    return [llvmVersion, unicodeVersion, parabixRevision, hostCPU, target]
-
-def stripIcGrepCompileTime(s):
-    out = stripString(s, "Execution Time: ", " seconds", "Kernel Generation\\n")
-    return [out.strip()]
-
 def stripPerfStatTime(s, padding="per insn"):
     spaces = " " * len(padding)
     out = stripString(s, "\\n\\n", " seconds", "of all branches" + spaces)
@@ -72,44 +60,18 @@ def crashIfNotAllNumbers(arr):
 
 # Append to the CSV file in the format
 #
-# datetime, filename, regular expression, LLVM version, Unicode version, parabix revision,
-# host CPU, target triple, full command, opt level, compile time, total time, asm size
-def run(what, filename, regex, delimiter=", ", timeout=30, asmFile="asm", optLevels=[], otherFlags=[]):
-    baseOutput = [str(datetime.now()), filename, regex]
-    versionCmd = what + ["--version"]
-    baseOutput += stripVersions(subprocess.check_output(versionCmd))
-    logging.info("version command: " + " ".join(versionCmd))
+# datetime, runtime
+def run(what, filename, regex, delimiter=", ", timeout=30, otherFlags=[]):
     command = what + otherFlags + ["-enable-object-cache=0"]
-    baseOutput += [" ".join(command)]
-    runtime = []
-    allOutputs = [copy.deepcopy(baseOutput) for _ in range(len(optLevels))]
-    for (idx, optLevel) in enumerate(optLevels):
-        try:
-            allOutputs[idx] += [optLevel]
-            commandOptLevel = command + ["-backend-optimization-level=" + optLevel]
-            timeKernelCmd = commandOptLevel + ["-time-kernels"]
-            icgrepCompTime = stripIcGrepCompileTime(runProc(timeKernelCmd, timeout=timeout))
-            crashIfNotAllNumbers(icgrepCompTime)
-            allOutputs[idx] += icgrepCompTime
-            logging.info("time kernel command: " + " ".join(timeKernelCmd))
-            perfCmd = ["perf", "stat"] + commandOptLevel
-            (time, out) = stripPerfStatTime(runProc(perfCmd, timeout=timeout))
-            allOutputs[idx] += out
-            runtime += [(time, commandOptLevel)]
-            logging.info("perf stat command: " + " ".join(perfCmd))
-            asmCmd = commandOptLevel + ["-ShowASM=" + asmFile]
-            allOutputs[idx] += runAndReturnSizeFile(runProc(asmCmd, timeout=timeout), asmFile)
-            logging.info("asm command: " + " ".join(perfCmd))
-        except Exception as e:
-            # 3 represents the values for compile time, total time and asm size
-            allOutputs[idx] += ["inf"] * 3
-            runtime += [(sys.maxsize, command)]
-            logging.error("error raised: ", e)
-            continue
-    finalOutputs = []
-    for output in allOutputs:
-        finalOutputs += [delimiter.join(output)]
-    return (runtime, finalOutputs)
+    runtimeStr = ""
+    try:
+        (time, out) = stripPerfStatTime(runProc(command, timeout=timeout))
+        runtimeStr = str(out)
+        logging.info("runtime out: " + runtimeStr)
+    except Exception as e:
+        runtimeStr = str(sys.maxsize)
+        logging.error("error raised: ", e)
+    return runtimeStr
 
 def mkname(regex, target, buildfolder):
     buildpath = os.path.join(buildfolder, "bin/icgrep")
