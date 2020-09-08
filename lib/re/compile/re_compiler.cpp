@@ -151,6 +151,7 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
         }
         unsigned numOfStream = mBasisSets[i].size();
         if(isTernary && numOfStream == 16) {
+            //TODO: fix this!
             //only for a few codepoints having trouble with ternary compiler in UTF16 mode
             bool surrogate = false;
             PabloAST * hi = pb.createZeroes();
@@ -161,7 +162,7 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
                     auto  byte = lo_cp % 0x100;
                     lo = mAlphabetCompilers_lo[i]->compileCC(makeByte(byte), pb);
                     lo_cp = lo_cp / 0x100;
-                    if (lo_cp >= 0x1E) {
+                    if (lo_cp >= 0xA0) {
                         //errs() << "byte " << byte << "\n";
                         //errs() << "lo_cp " << lo_cp << "\n";
                         surrogate = true;
