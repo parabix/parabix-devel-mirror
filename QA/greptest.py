@@ -32,40 +32,31 @@ dataFileName = ""
 
 fileContents = {}
 
-def getU16FileContents(fileName, data, encoding):
-    if encoding == "UTF-16LE":
-        outfpath = os.path.join(options.datafile_dir, fileName)
-        f = codecs.open(outfpath, 'w', encoding = 'utf-16le')
-        f.write(data)
-        f.close()
-    else:
-        outfpath = os.path.join(options.datafile_dir, fileName)
-        f = codecs.open(outfpath, 'w', encoding = 'utf-16be')
-        f.write(data)
-        f.close()
-    f = codecs.open(outfpath, 'r', encoding = encoding)
-    contents = f.read()
-    f.close()
-    return contents
-
 def getFileContents(fileName, encoding):
-    if not fileName in fileContents:
-        outfpath = os.path.join(options.datafile_dir, fileName)
-        f = codecs.open(outfpath, 'r', encoding = "UTF-8")
-        fileContents[fileName] = f.read()
-        f.close()
     if encoding != "UTF-8":
-        return getU16FileContents(fileName, fileContents[fileName], encoding)
+        if not fileName+"."+encoding in fileContents:
+            outfpath = os.path.join(options.datafile_dir_u16, fileName+"."+encoding)
+            f = codecs.open(outfpath, 'r', encoding = encoding)
+            fileContents[fileName+"."+encoding] = f.read()
+            f.close()
     else:
-        outfpath = os.path.join(options.datafile_dir, fileName)
-        f = codecs.open(outfpath, 'w', encoding = "UTF-8")
-        f.write(fileContents[fileName])
-        f.close()
+        if not fileName in fileContents:
+            outfpath = os.path.join(options.datafile_dir, fileName)
+            f = codecs.open(outfpath, 'r', encoding = "UTF-8")
+            fileContents[fileName] = f.read()
+            f.close()
+    if encoding != "UTF-8":
+        return fileContents[fileName+"."+encoding]
+    else:
         return fileContents[fileName]
 
 def start_element_open_file(name, attrs):
     global outf
+    global outfU16LE
+    global outfU16BE
     global outfpath
+    global outfpathU16LE
+    global outfpathU16BE
     global in_datafile
     global dataFileName
     if name == 'datafile':
@@ -78,20 +69,30 @@ def start_element_open_file(name, attrs):
             print("Expecting id attribute for datafile, but none found.")
             exit(-1)
         outfpath = os.path.join(options.datafile_dir, dataFileName)
+        outfpathU16LE = os.path.join(options.datafile_dir_u16, dataFileName+".UTF-16LE")
+        outfpathU16BE = os.path.join(options.datafile_dir_u16, dataFileName+".UTF-16BE")
         if options.utf16: outf = codecs.open(outfpath, encoding='utf-16be', mode='w')
-        else: outf = codecs.open(outfpath, encoding='utf-8', mode='w')
+        else:
+            outf = codecs.open(outfpath, encoding='utf-8', mode='w')
+            outfU16LE = codecs.open(outfpathU16LE, encoding='utf-16le', mode='w')
+            outfU16BE = codecs.open(outfpathU16BE, encoding='utf-16be', mode='w')
         in_datafile = True
 
 def char_data_write_contents(data):
     global in_datafile
     if in_datafile:
         outf.write(data)
+        outfU16LE.write(data)
+        outfU16BE.write(data)
 
 def expected_grep_results(fileName, grepLines, flags):
-    encoding = "UTF-8"
+    input_encoding = "UTF-8"
+    output_encoding = "UTF-8"
     if "-input-encoding" in flags:
-      encoding = flags["-input-encoding"]
-    fileData = getFileContents(fileName, encoding)
+        input_encoding = flags["-input-encoding"]
+    if "-output-encoding" in flags:
+        output_encoding = flags["-output-encoding"]
+    fileData = getFileContents(fileName, input_encoding)
     if "-Unicode-lines" in flags and flags["-Unicode-lines"] != 0:
         allLines = fileData.splitlines(True)
     else:
@@ -108,10 +109,14 @@ def expected_grep_results(fileName, grepLines, flags):
         grepLines = invLines
     if "-l" in flags:
         if len(grepLines) > 0:
+            if input_encoding != "UTF-8":
+                return os.path.join(options.datafile_dir_u16, fileName+"."+input_encoding)
             return os.path.join(options.datafile_dir, fileName)
         else: return u""
     if "-L" in flags:
         if len(grepLines) == 0:
+            if input_encoding != "UTF-8":
+                return os.path.join(options.datafile_dir_u16, fileName+"."+input_encoding)
             return os.path.join(options.datafile_dir, fileName)
         else: return u""
     if "-m" in flags:
@@ -131,11 +136,17 @@ def expected_grep_results(fileName, grepLines, flags):
 
 def end_element_close_file(name):
     global outf
+    global outfU16LE
+    global outfU16BE
     global outfpath
+    global outfpathU16LE
+    global outfpathU16BE
     global in_datafile
     global dataFileName
     if name == 'datafile' and in_datafile:
         outf.close()
+        outfU16LE.close()
+        outfU16BE.close()
         os.chmod(outfpath, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
         in_datafile = False
 
@@ -157,55 +168,45 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
         if flag_string != "": flag_string += u" "
         if flags[f] == True: flag_string += f
         else: flag_string += f + "=" + flags[f]
-    outfpath = os.path.join(options.datafile_dir, datafile)
-    #ensure correct encoding to run grep test
     encoding = "UTF-8"
     if "-input-encoding" in flags:
         encoding = flags["-input-encoding"]
+        outfpath = os.path.join(options.datafile_dir_u16, datafile+"."+encoding)
+    else:
+        outfpath = os.path.join(options.datafile_dir, datafile)
+    #ensure correct encoding to run grep test
     file = datafile.encode('ascii', 'ignore')
-    if os.stat(outfpath).st_size < 2000000:
-        if file != '.':
-            data = getFileContents(datafile, encoding)
     grep_cmd = u"%s %s '%s' %s" % (grep_program_under_test, flag_string, escape_quotes(regexp), outfpath)
     if options.verbose:
         print("Doing: " + grep_cmd)
-    encoding = "UTF-8"
-    if "-input-encoding" in flags:
-      encoding = flags["-input-encoding"]
-      try:
-          grep_out = subprocess.check_output(grep_cmd, shell=True)
-      except subprocess.CalledProcessError as e:
-          grep_out = codecs.decode(e.output, 'utf-8')
-      if "-c" not in flags:
-          testpath = os.path.join(options.datafile_dir, 'test_output.txt')
-          f = codecs.open(testpath, mode='w+')
-          f.write(grep_out)
-          f.close()
-          if encoding == "UTF-16LE":
-              f = codecs.open(testpath, encoding='utf-16le', mode='r')
-          else:
-              f = codecs.open(testpath, encoding='utf-16be', mode='r')
-          grep_out = f.read()
-          f.close()
-      if len(grep_out) > 1:
-          if grep_out[-2] == '\n':
-              grep_out = grep_out[:-2]
-          if grep_out[-1] == '\n':
-              grep_out = grep_out[:-1]
-    #print(":".join("{:x}".format(ord(c)) for c in expected_result), "expected_result")
-    else:
-        try:
-            grep_out = codecs.decode(subprocess.check_output(grep_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True), 'utf-8')
-        except subprocess.CalledProcessError as e:
-            grep_out = codecs.decode(e.output, 'utf-8')
-        if len(grep_out) > 1:
-            if grep_out[-2] == '\n':
-                grep_out = grep_out[:-2]
-            if grep_out[-1] == '\n':
-                grep_out = grep_out[:-1]
-
+    try:
+        grep_out = subprocess.check_output(grep_cmd, shell=True)
+    except subprocess.CalledProcessError as e:
+        grep_out = codecs.decode(e.output, 'utf-8')
+    if "-c" not in flags:
+        testpath = os.path.join(options.datafile_dir, 'test_output.txt')
+        f = codecs.open(testpath, mode='w+')
+        f.write(grep_out)
+        f.close()
+        if "-output-encoding" in flags:
+            encoding = flags["-output-encoding"]
+        if encoding == "UTF-16LE":
+            f = codecs.open(testpath, encoding='utf-16le', mode='r')
+        elif encoding == "UTF-16BE":
+            f = codecs.open(testpath, encoding='utf-16be', mode='r')
+        else:
+            f = codecs.open(testpath, encoding='utf-8', mode='r')
+        grep_out = f.read()
+        f.close()
+    if len(grep_out) > 1:
+        if grep_out[-2] == '\n':
+            grep_out = grep_out[:-2]
+        if grep_out[-1] == '\n':
+            grep_out = grep_out[:-1]
     if grep_out != expected_result:
         print(u"Test failure: {%s} expecting {%s} got {%s}" % (grep_cmd, expected_result, grep_out))
+        #print(":".join("{:x}".format(ord(c)) for c in grep_out), "grep_out")
+        #print(":".join("{:x}".format(ord(c)) for c in expected_result), "expected_result")
         failure_count += 1
     else:
         if options.verbose:
@@ -221,7 +222,8 @@ flag_map = {'-CarryMode' : ['Compressed', 'BitBlock'],
             '-segment-size' : ['8192', '16384', '32768'],
             '-ccc-type' : ['ternary'],
             '-EnableTernaryOpt' : [],
-            '-input-encoding' : ['UTF-16LE', 'UTF-16BE']}
+            '-input-encoding' : ['UTF-16LE', 'UTF-16BE'],
+            '-output-encoding' : ['UTF-8', 'UTF-16LE', 'UTF-16BE']}
 
 def add_random_flags(flags, fileLength):
     selected = {}
@@ -295,6 +297,9 @@ if __name__ == '__main__':
     option_parser.add_option('-d', '--datafile_dir',
                           dest = 'datafile_dir', type='string', default='testfiles',
                           help = 'directory for test files.')
+    option_parser.add_option('--dirU16', '--datafile_dir_u16',
+                          dest = 'datafile_dir_u16', type='string', default='testfilesU16',
+                          help = 'directory for UTF-16 test files.')
     option_parser.add_option('-t', '--testcases',
                           dest = 'testcases', type='string', default='greptest.xml',
                           help = 'grep test case file (XML format).')
@@ -324,6 +329,11 @@ if __name__ == '__main__':
         os.mkdir(options.datafile_dir)
     if not os.path.isdir(options.datafile_dir):
         print("Cannot use %s as working test file directory.\n" % options.datafile_dir)
+        sys.exit(1)
+    if not os.path.exists(options.datafile_dir_u16):
+        os.mkdir(options.datafile_dir_u16)
+    if not os.path.isdir(options.datafile_dir_u16):
+        print("Cannot use %s as working test file directory.\n" % options.datafile_dir_u16)
         sys.exit(1)
     random.seed(options.random_seed)
     grep_program_under_test = args[0]
