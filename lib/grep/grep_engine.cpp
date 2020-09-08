@@ -731,34 +731,6 @@ void EmitMatch::setBatchLineNumber(unsigned fileNo, size_t batchLine) {
 }
 
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
-    unsigned nextFile = mCurrentFile + 1;
-    if (nextFile < mFileNames.size()) {
-        unsigned nextLine = mFileStartLineNumbers[nextFile];
-        if ((lineNum >= nextLine) && (nextLine != 0)) {
-            do {
-                mCurrentFile = nextFile;
-                nextFile++;
-                //llvm::errs() << "mCurrentFile = " << mCurrentFile << ", mFileStartLineNumbers[mCurrentFile] " << mFileStartLineNumbers[mCurrentFile] << "\n";
-                nextLine = mFileStartLineNumbers[nextFile];
-            } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
-            setFileLabel(mFileNames[mCurrentFile]);
-            if (!mTerminated) {
-                if (mOutputEncoding == argv::OutputEncoding::UTF8) {
-                    *mResultStr << "\n";
-                }
-                else {
-                    if (mOutputEncoding == argv::OutputEncoding::UTF16BE) {
-                        mResultStr->write("\00", 1);
-                        mResultStr->write("\n", 1);
-                    }
-                    else
-                        mResultStr->write("\n", 2);
-                }
-                mTerminated = true;
-            }
-            //llvm::errs() << "accumulate_match(" << lineNum << "), file " << mFileNames[mCurrentFile] << "\n";
-        }
-    }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
         if (mOutputEncoding == argv::OutputEncoding::UTF8) *mResultStr << "--\n";
@@ -998,7 +970,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
                 byteNumbering = cc::ByteNumbering::BigEndian;
             E->CreateKernelCall<S2P_16Kernel>(Filtered, FilteredBasis, byteNumbering);
         }
-        //E->CreateKernelCall<DebugDisplayKernel>("FilteredBasis", FilteredBasis);
         if (mColoring && !mInvertMatches) {
             StreamSet * MatchedLineSpans = E->CreateStreamSet(1, 1);
             E->CreateKernelCall<LineSpansKernel>(MatchedLineStarts, MatchedLineEnds, MatchedLineSpans);
@@ -1044,21 +1015,37 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
         }
         if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
-            StreamSet * selectors = E->CreateStreamSet();
-            StreamSet * u8bits = E->CreateStreamSet(16);
-            StreamSet * u16bits = E->CreateStreamSet(16);
-            MatchedBytes  = E->CreateStreamSet(1, 16);
-            /*if (ColorizedBasis) {
-                E->CreateKernelCall<U8U16Kernel>(ColorizedBasis, u8bits, selectors);
+            if(mOutputEncoding == argv::OutputEncoding::UTF8) {
+                MatchedBytes  = E->CreateStreamSet(1, 8);
+                if (mColoring) {
+                    E->CreateKernelCall<P2SKernel>(ColorizedBasis, MatchedBytes);
+                    //E->CreateKernelCall<DebugDisplayKernel>("ColorizedBasis", ColorizedBasis);
+                }
+                else {
+                    E->CreateKernelCall<P2SKernel>(FilteredBasis, MatchedBytes);
+                }
             }
-            else {*/
-                E->CreateKernelCall<U8U16Kernel>(FilteredBasis, u8bits, selectors);
-            //}
-            //E->CreateKernelCall<DebugDisplayKernel>("u8bits", u8bits);
-            E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
-                                             SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
-                                             u16bits, 8);
-            E->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, MatchedBytes, byteNumbering);
+            else {
+                StreamSet * selectors = E->CreateStreamSet();
+                StreamSet * u8bits = E->CreateStreamSet(16);
+                StreamSet * u16bits = E->CreateStreamSet(16);
+                MatchedBytes  = E->CreateStreamSet(1, 16);
+                if (mColoring) {
+                    E->CreateKernelCall<U8U16Kernel>(ColorizedBasis, u8bits, selectors);
+                }
+                else {
+                    E->CreateKernelCall<U8U16Kernel>(FilteredBasis, u8bits, selectors);
+                }
+                //E->CreateKernelCall<DebugDisplayKernel>("u8bits", u8bits);
+                E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                                 SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
+                                                 u16bits, 8);
+                if (mOutputEncoding == argv::OutputEncoding::UTF16LE)
+                    byteNumbering = cc::ByteNumbering::LittleEndian;
+                else
+                    byteNumbering = cc::ByteNumbering::BigEndian;
+                E->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, MatchedBytes, byteNumbering);
+            }
         }
         else {
             if(mOutputEncoding == argv::OutputEncoding::UTF8) {
@@ -1069,14 +1056,14 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
                 StreamSet * selectors = E->CreateStreamSet();
                 StreamSet * u16Bits = E->CreateStreamSet(21);
                 StreamSet * u32basis = E->CreateStreamSet(21);
-                /*if (ColorizedBasis) {
+                if (mColoring) {
                     E->CreateKernelCall<U16U8index>(ColorizedBasis, prefix, suffix, len4, selectors);
                     E->CreateKernelCall<shuffle>(ColorizedBasis, u16Bits, prefix, suffix, len4);
                 }
-                else {*/
+                else {
                     E->CreateKernelCall<U16U8index>(FilteredBasis, prefix, suffix, len4, selectors);
                     E->CreateKernelCall<shuffle>(FilteredBasis, u16Bits, prefix, suffix, len4);
-                //}
+                }
                 //E->CreateKernelCall<DebugDisplayKernel>("selectors", selectors);
                 //E->CreateKernelCall<DebugDisplayKernel>("u16Bits", u16Bits);
                 E->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
@@ -1101,7 +1088,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
 
                 // Calculate the u8final deposit mask.
                 StreamSet * const extractionMask = E->CreateStreamSet();
-                E->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask);
+                E->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask, /*u16u8 = */true);
                 E->CreateKernelCall<StreamCompressKernel>(extractionMask, u8fieldMask, u8final);
 
                 E->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
@@ -1118,26 +1105,34 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             }
             else {
                 MatchedBytes  = E->CreateStreamSet(1, 16);
-                /*if (ColorizedBasis) {
+                if (mOutputEncoding == argv::OutputEncoding::UTF16LE)
+                    byteNumbering = cc::ByteNumbering::LittleEndian;
+                if (mOutputEncoding == argv::OutputEncoding::UTF16BE)
+                    byteNumbering = cc::ByteNumbering::BigEndian;
+                if (mColoring) {
                     E->CreateKernelCall<P2S16Kernel>(ColorizedBasis, MatchedBytes, byteNumbering);
                 }
-                else {*/
+                else {
                     E->CreateKernelCall<P2S16Kernel>(FilteredBasis, MatchedBytes, byteNumbering);
-                //}
+                }
             }
         }
         //E->CreateKernelCall<DebugDisplayKernel>("ColorizedBasis", ColorizedBasis);
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
-        /*if (ColorizedBasis) {
-            E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
+        if (mColoring) {
+            E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks/*, UnterminatedLineAtEOF::Add1*/);
         }
-        else {*/
-            E->CreateKernelCall<UnixLinesKernelBuilder>(FilteredBasis, ColorizedBreaks);
-        //}
+        else {
+            //add a line break for unterminated match
+            E->CreateKernelCall<UnixLinesKernelBuilder>(FilteredBasis, ColorizedBreaks, UnterminatedLineAtEOF::Add1);
+        }
+        //E->CreateKernelCall<DebugDisplayKernel>("ColorizedBreaks", ColorizedBreaks);
         StreamSet * ColorizedCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
         E->CreateKernelCall<MatchCoordinatesKernel>(ColorizedBreaks, ColorizedBreaks, ColorizedCoords, 1);
-        //E->CreateKernelCall<DebugDisplayKernel>("MatchedBytes", MatchedBytes);
+        //E->CreateKernelCall<DebugDisplayKernel>("SourceCoords", SourceCoords);
+        //E->CreateKernelCall<DebugDisplayKernel>("ColorizedCoords", ColorizedCoords);
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
+        //E->CreateKernelCall<DebugDisplayKernel>("MatchedBytes", MatchedBytes);
         Kernel * const matchK = E->CreateKernelCall<ColorizedReporter>(MatchedBytes, SourceCoords, ColorizedCoords, callbackObject);
         matchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
         matchK->link("finalize_match_wrapper", finalize_match_wrapper);
