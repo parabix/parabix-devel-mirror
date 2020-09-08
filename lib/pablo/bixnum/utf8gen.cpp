@@ -22,14 +22,15 @@ using namespace kernel;
 using namespace llvm;
 using namespace re;
 
-UTF8fieldDepositMask::UTF8fieldDepositMask(BuilderRef b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth)
+UTF8fieldDepositMask::UTF8fieldDepositMask(BuilderRef b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth, bool u16u8)
 : BlockOrientedKernel(b, "u8depositMask",
 {Binding{"basis", u32basis}},
 {Binding{"fieldDepositMask", u8fieldMask, FixedRate(4)},
 Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
 {}, {},
 {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}})
-, mDepositFieldWidth(depositFieldWidth) {}
+, mDepositFieldWidth(depositFieldWidth)
+, mU16U8(u16u8) {}
 
 void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
@@ -58,15 +59,17 @@ void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
 
     //TOOD: Receive basisExtent as an input parameter for the kernel
     //as it is needed only during transcoding u16 to u8
-    Value * basisExtent = nonASCII;
-    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(6), b->getSize(0)));
-    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(5), b->getSize(0)));
-    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(4), b->getSize(0)));
-    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(3), b->getSize(0)));
-    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(2), b->getSize(0)));
-    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(1), b->getSize(0)));
-    basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(0), b->getSize(0)));
-    fileExtentMask = b->CreateAnd(fileExtentMask, basisExtent);
+    if (mU16U8) {
+        Value * basisExtent = nonASCII;
+        basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(6), b->getSize(0)));
+        basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(5), b->getSize(0)));
+        basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(4), b->getSize(0)));
+        basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(3), b->getSize(0)));
+        basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(2), b->getSize(0)));
+        basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(1), b->getSize(0)));
+        basisExtent = b->CreateOr(basisExtent, b->loadInputStreamBlock("basis", b->getSize(0), b->getSize(0)));
+        fileExtentMask = b->CreateAnd(fileExtentMask, basisExtent);
+    }
     //
     //  UTF-8 sequence length:    1     2     3       4
     //  extraction mask        1000  1100  1110    1111
@@ -115,10 +118,8 @@ void UTF8_DepositMasks::generatePabloMethod() {
     PabloAST * u8final = pb.createExtract(getInputStreamVar("u8final"), pb.getInteger(0));
     PabloAST * nonFinal = pb.createNot(u8final, "nonFinal");
     PabloAST * initial = pb.createInFile(pb.createNot(pb.createAdvance(nonFinal, 1)), "u8initial");
-    //pb.createDebugPrint(pb.createAdvance(nonFinal, 1), "pb.createAdvance(nonFinal, 1)");
     PabloAST * ASCII = pb.createAnd(u8final, initial);
     PabloAST * lookAheadFinal = pb.createLookahead(u8final, 1, "lookaheadFinal");
-    //pb.createDebugPrint(lookAheadFinal, "lookAheadFinal");
     // Eliminate lookahead positions that are the final position of the prior unit.
     PabloAST * secondLast = pb.createAnd(lookAheadFinal, nonFinal);
     PabloAST * u8mask6_11 = pb.createInFile(pb.createOr(secondLast, ASCII, "u8mask6_11"));

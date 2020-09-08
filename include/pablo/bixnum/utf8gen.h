@@ -51,11 +51,12 @@
 
 class UTF8fieldDepositMask final : public kernel::BlockOrientedKernel {
 public:
-    UTF8fieldDepositMask(BuilderRef b, kernel::StreamSet * u32basis, kernel::StreamSet * u8fieldMask, kernel::StreamSet * u8unitCounts, unsigned depositFieldWidth = sizeof(size_t) * 8);
+    UTF8fieldDepositMask(BuilderRef b, kernel::StreamSet * u32basis, kernel::StreamSet * u8fieldMask, kernel::StreamSet * u8unitCounts, unsigned depositFieldWidth = sizeof(size_t) * 8, bool u16u8 = false);
 private:
     void generateDoBlockMethod(BuilderRef b) override;
     void generateFinalBlockMethod(BuilderRef b, llvm::Value * const remainingBytes) override;
     const unsigned mDepositFieldWidth;
+    bool mU16U8;
 };
 
 //
