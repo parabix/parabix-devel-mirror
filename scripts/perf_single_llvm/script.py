@@ -36,7 +36,7 @@ def stripString(s, begin, end, startFrom=None):
 def stripPerfStatTime(s, padding="per insn"):
     spaces = " " * len(padding)
     out = stripString(s, "\\n\\n", " seconds", "of all branches" + spaces)
-    return (float(out.strip()), [out.strip()])
+    return (float(out.strip()), out.strip())
 
 def runAndReturnSizeFile(s, filename):
     out = str(os.path.getsize(filename))
@@ -65,7 +65,8 @@ def run(what, filename, regex, delimiter=", ", timeout=30, otherFlags=[]):
     command = what + otherFlags + ["-enable-object-cache=0"]
     runtimeStr = ""
     try:
-        (time, out) = stripPerfStatTime(runProc(command, timeout=timeout))
+        perfCmd = ["perf", "stat"] + command
+        (time, out) = stripPerfStatTime(runProc(perfCmd, timeout=timeout))
         runtimeStr = str(out)
         logging.info("runtime out: " + runtimeStr)
     except Exception as e:
@@ -81,7 +82,7 @@ def mkname(regex, target, buildfolder):
 
 def save(res, outfile):
     now = datetime.now().strftime("%m/%d/%Y")
-    val = now + ", " + " ".join(res)
+    val = now + ", " + res
     saveInFile(outfile, val)
 
 
@@ -99,6 +100,6 @@ if __name__ == '__main__':
     pipe(
         mkname(args.regex, args.target, args.buildfolder),
         lambda c: run(c, args.target, args.regex, otherFlags=otherFlags),
-        lambda res: save(res, args.finalfile)
+        lambda res: save(res, args.csvfile)
     )
 
