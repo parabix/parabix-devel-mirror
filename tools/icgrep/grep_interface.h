@@ -72,7 +72,7 @@ enum ColoringType {alwaysColor, autoColor, neverColor};
 extern ColoringType ColorFlag;
 
 namespace OutputEncoding {
-    enum OutputEncoding {UTF8, UTF16LE, UTF16BE};
+    enum OutputEncoding {UTF8, UTF16LE, UTF16BE, None};
 }
 extern OutputEncoding::OutputEncoding OutputEncodingFlag; //-encoding
 

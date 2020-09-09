@@ -200,8 +200,9 @@ OutputEncoding::OutputEncoding OutputEncodingFlag;
 static cl::opt<OutputEncoding::OutputEncoding, true> OutputEncodingOption("output-encoding", cl::desc("ICgrep output encoding (default: same as input encoding)"),
                                                      cl::values(clEnumValN(OutputEncoding::UTF8, "UTF-8", "Match output is encoded in UTF-8"),
                                                                 clEnumValN(OutputEncoding::UTF16LE, "UTF-16LE", "Match output is encoded in UTF-16LE"),
-                                                                clEnumValN(OutputEncoding::UTF16BE, "UTF-16BE", "Match output is encoded in UTF-16BE")
-                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Output_Options), cl::location(OutputEncodingFlag), cl::init(OutputEncoding::UTF8));
+                                                                clEnumValN(OutputEncoding::UTF16BE, "UTF-16BE", "Match output is encoded in UTF-16BE"),
+                                                                clEnumValN(OutputEncoding::None, "Default", "Same as Input encoding")
+                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Output_Options), cl::location(OutputEncodingFlag), cl::init(OutputEncoding::None));
 
 //
 // Handler for errors reported through llvm::report_fatal_error.  Report
