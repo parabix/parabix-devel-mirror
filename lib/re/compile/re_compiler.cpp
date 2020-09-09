@@ -130,6 +130,7 @@ Marker RE_Compiler::process(RE * const re, Marker marker, PabloBuilder & pb) {
         return compileEnd(marker, pb);
     } else if (isa<CC>(re)) {
         // CCs may be passed through the toolchain directly to the compiler.
+        //pb.createDebugPrint(marker.stream(), "marker.stream()");
         return compileCC(cast<CC>(re), marker, pb);
     } else {
         UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
@@ -156,17 +157,20 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
             bool surrogate = false;
             PabloAST * hi = pb.createZeroes();
             PabloAST * lo = pb.createZeroes();
-            //errs() << "cc " << ":\n" << Printer_RE::PrintRE(cc) << '\n';
+            //errs() << "cc " << ":" << Printer_RE::PrintRE(cc) << '\n';
             for (const interval_t & intr : *cc) {
                     codepoint_t lo_cp = lo_codepoint(intr);
                     auto  byte = lo_cp % 0x100;
                     lo = mAlphabetCompilers_lo[i]->compileCC(makeByte(byte), pb);
+                    //pb.createDebugPrint(lo, "lo");
                     lo_cp = lo_cp / 0x100;
-                    if (lo_cp >= 0xA0) {
-                        //errs() << "byte " << byte << "\n";
+                    if (( byte == 0xA && lo_cp == 0) || lo_cp >= 0xA0) {
                         //errs() << "lo_cp " << lo_cp << "\n";
+                        //errs() << "byte " << byte << "\n";
+                        //in cc 0xa03, byte is 0xa and lo_codepoint is 0x03
                         surrogate = true;
                         hi = mAlphabetCompilers_hi[i]->compileCC(makeByte(lo_cp), pb);
+                        //pb.createDebugPrint(pb.createAnd(nextPos, pb.createAnd(hi, lo)), "sur marker");
                 }
             }
             if(surrogate) return Marker(pb.createAnd(nextPos, pb.createAnd(hi, lo)));

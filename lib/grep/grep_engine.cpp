@@ -1022,13 +1022,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         if (mInputFileEncoding == argv::InputFileEncoding::UTF8) {
             if(mOutputEncoding == argv::OutputEncoding::UTF8) {
                 MatchedBytes  = E->CreateStreamSet(1, 8);
-                if (mColoring) {
-                    E->CreateKernelCall<P2SKernel>(ColorizedBasis, MatchedBytes);
-                    //E->CreateKernelCall<DebugDisplayKernel>("ColorizedBasis", ColorizedBasis);
-                }
-                else {
-                    E->CreateKernelCall<P2SKernel>(FilteredBasis, MatchedBytes);
-                }
+                E->CreateKernelCall<P2SKernel>(ColorizedBasis, MatchedBytes);
             }
             else {
                 StreamSet * selectors = E->CreateStreamSet();
@@ -1050,6 +1044,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
                 else
                     byteNumbering = cc::ByteNumbering::BigEndian;
                 E->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, MatchedBytes, byteNumbering);
+                //E->CreateKernelCall<StdOutKernel>(MatchedBytes);
             }
         }
         else {
@@ -1107,6 +1102,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
                                                   u8initial, u8final, u8mask6_11, u8mask12_17,
                                                   u8basis);
                 E->CreateKernelCall<P2SKernel>(u8basis, MatchedBytes);
+                //E->CreateKernelCall<StdOutKernel>(MatchedBytes);
             }
             else {
                 MatchedBytes  = E->CreateStreamSet(1, 16);
