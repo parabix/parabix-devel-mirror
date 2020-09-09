@@ -22,7 +22,7 @@ using namespace kernel;
 using namespace llvm;
 using namespace re;
 
-UTF8fieldDepositMask::UTF8fieldDepositMask(BuilderRef b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth, bool u16u8)
+UTF8fieldDepositMask::UTF8fieldDepositMask(BuilderRef b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, bool u16u8, unsigned depositFieldWidth )
 : BlockOrientedKernel(b, "u8depositMask",
 {Binding{"basis", u32basis}},
 {Binding{"fieldDepositMask", u8fieldMask, FixedRate(4)},

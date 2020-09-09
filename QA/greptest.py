@@ -190,12 +190,7 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
         f.close()
         if "-output-encoding" in flags:
             encoding = flags["-output-encoding"]
-        if encoding == "UTF-16LE":
-            f = codecs.open(testpath, encoding='utf-16le', mode='r')
-        elif encoding == "UTF-16BE":
-            f = codecs.open(testpath, encoding='utf-16be', mode='r')
-        else:
-            f = codecs.open(testpath, encoding='utf-8', mode='r')
+        f = codecs.open(testpath, encoding=encoding, mode='r')
         grep_out = f.read()
         f.close()
     if len(grep_out) > 1:
