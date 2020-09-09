@@ -6,7 +6,7 @@ set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
 set(TEST_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TEST_BIN_DIR})
 set(SCRIPT_DIR ${PROJECT_SOURCE_DIR}/scripts/perf_single_llvm)
-set(DATA_DIR ${CMAKE_CURRENT_BINARY_DIR}/data)
+set(ARTIFACTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/artifacts)
 
 set(BEST_FLAGS "--regalloc=basic --optimize-regalloc--fast-isel=true --disable-x86-domain-reassignment=true --disable-machine-licm --disable-machine-cse --disable-lsr --disable-phi-elim-edge-splitting")
 
@@ -18,7 +18,7 @@ function(parabix_add_perf_test NAME REGEX TARGET_FILE)
     set(PERF_TEST_TARGET_LIST ${PERF_TEST_TARGET_LIST} ${NAME} PARENT_SCOPE)
     add_test(NAME "${NAME}"
         WORKING_DIRECTORY ${BIN_DIR}
-        COMMAND python3 ${SCRIPT_DIR}/script.py -b ${PROJECT_BINARY_DIR} -x ${REGEX} -t ${TARGET_FILE} -f ${DATA_DIR}/${NAME}/${ARCH}.csv ${BEST_FLAGS}
+        COMMAND python3 ${SCRIPT_DIR}/script.py -b ${PROJECT_BINARY_DIR} -x ${REGEX} -t ${TARGET_FILE} -f ${ARTIFACTS_DIR}/${NAME}/${ARCH}.csv ${BEST_FLAGS}
         CONFIGURATIONS perfonly
         DEPENDS icgrep)
 endfunction(parabix_add_perf_test)
