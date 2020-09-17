@@ -79,7 +79,7 @@ def run(what, filename, regex, delimiter=", ", timeout=30, otherFlags=[]):
     except Exception as e:
         runtimeStr = str(sys.maxsize)
         logging.error("error raised: ", e)
-    return [runtimeStr] + versionInfo
+    return (runtimeStr, versionInfo)
 
 def mkname(regex, target, buildfolder):
     buildpath = os.path.join(buildfolder, "bin/icgrep")
@@ -87,9 +87,9 @@ def mkname(regex, target, buildfolder):
     logging.info("root command: " + " ".join(command))
     return command
 
-def save(res, outfile):
+def save(runtime, regex, versionInfo, outfile):
     now = datetime.now().strftime("%m/%d/%Y")
-    val = now + ", " + ", ".join(res)
+    val = now + ", " + runtime + ", " + ", ".join(versionInfo)
     saveInFile(outfile, val)
 
 
@@ -107,6 +107,6 @@ if __name__ == '__main__':
     pipe(
         mkname(args.regex, args.target, args.buildfolder),
         lambda c: run(c, args.target, args.regex, otherFlags=otherFlags),
-        lambda res: save(res + otherFlags, args.csvfile)
+        lambda res: save(res[0], args.regex, res[1] + otherFlags, args.csvfile)
     )
 
