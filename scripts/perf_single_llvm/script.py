@@ -38,6 +38,14 @@ def stripPerfStatTime(s, padding="per insn"):
     out = stripString(s, "\\n\\n", " seconds", "of all branches" + spaces)
     return (float(out.strip()), out.strip())
 
+def stripVersions(s):
+    llvmVersion = stripString(s, "LLVM version ", "\\n")
+    unicodeVersion = stripString(s, "Unicode version ", "\\n")
+    parabixRevision = stripString(s, "Parabix revision ", "\\n")
+    hostCPU = stripString(s, "Host CPU: ", "\\n")
+    target = stripString(s, "Default target: ", "\\n")
+    return [llvmVersion, unicodeVersion, parabixRevision, hostCPU, target]
+
 def runAndReturnSizeFile(s, filename):
     out = str(os.path.getsize(filename))
     return [out]
@@ -58,10 +66,9 @@ def crashIfNotAllNumbers(arr):
         except Exception as e:
             raise e
 
-# Append to the CSV file in the format
-#
-# datetime, runtime
 def run(what, filename, regex, delimiter=", ", timeout=30, otherFlags=[]):
+    versionCmd = what + ["--version"]
+    versionInfo = stripVersions(subprocess.check_output(versionCmd))
     command = what + otherFlags + ["-enable-object-cache=0"]
     runtimeStr = ""
     try:
@@ -72,7 +79,7 @@ def run(what, filename, regex, delimiter=", ", timeout=30, otherFlags=[]):
     except Exception as e:
         runtimeStr = str(sys.maxsize)
         logging.error("error raised: ", e)
-    return runtimeStr
+    return [runtimeStr] + versionInfo
 
 def mkname(regex, target, buildfolder):
     buildpath = os.path.join(buildfolder, "bin/icgrep")
@@ -82,7 +89,7 @@ def mkname(regex, target, buildfolder):
 
 def save(res, outfile):
     now = datetime.now().strftime("%m/%d/%Y")
-    val = now + ", " + res
+    val = now + ", " + ", ".join(res)
     saveInFile(outfile, val)
 
 
@@ -100,6 +107,6 @@ if __name__ == '__main__':
     pipe(
         mkname(args.regex, args.target, args.buildfolder),
         lambda c: run(c, args.target, args.regex, otherFlags=otherFlags),
-        lambda res: save(res, args.csvfile)
+        lambda res: save(res + otherFlags, args.csvfile)
     )
 
