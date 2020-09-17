@@ -87,9 +87,9 @@ def mkname(regex, target, buildfolder):
     logging.info("root command: " + " ".join(command))
     return command
 
-def save(runtime, regex, versionInfo, outfile):
+def save(runtime, testname, regex, versionInfo, outfile):
     now = datetime.now().strftime("%m/%d/%Y")
-    val = ",".join([now, runtime, regex] + versionInfo)
+    val = ",".join([now, runtime, testname, regex] + versionInfo)
     saveInFile(outfile, val)
 
 
@@ -100,6 +100,7 @@ if __name__ == '__main__':
     argparser.add_argument("-x", "--expression", dest="regex", default="[a-c]", help="Regular expression")
     argparser.add_argument("-t", "--target", dest="target", default=os.path.join('.', 'script.py'), help="File target for comparison")
     argparser.add_argument("-z", "--logfile", dest="logfile", default=os.path.join('.', 'log'), help="log file for debugging")
+    argparser.add_argument("-n", "--testname", dest="testname", default="unnamed", help="The alias for the test")
     args, otherFlags = argparser.parse_known_args()
 
     logging.basicConfig(filename=args.logfile, filemode='w', level=logging.DEBUG)
@@ -107,6 +108,6 @@ if __name__ == '__main__':
     pipe(
         mkname(args.regex, args.target, args.buildfolder),
         lambda c: run(c, args.target, args.regex, otherFlags=otherFlags),
-        lambda res: save(res[0], args.regex, res[1] + otherFlags, args.csvfile)
+        lambda res: save(res[0], args.testname, args.regex, res[1] + otherFlags, args.csvfile)
     )
 

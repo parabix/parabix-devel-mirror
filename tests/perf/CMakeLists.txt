@@ -18,7 +18,7 @@ function(parabix_add_perf_test NAME REGEX TARGET_FILE)
     set(PERF_TEST_TARGET_LIST ${PERF_TEST_TARGET_LIST} ${NAME} PARENT_SCOPE)
     add_test(NAME "${NAME}"
         WORKING_DIRECTORY ${BIN_DIR}
-        COMMAND python3 ${SCRIPT_DIR}/script.py -b ${PROJECT_BINARY_DIR} -x ${REGEX} -t ${TARGET_FILE} -f ${ARTIFACTS_DIR}/${NAME}/${ARCH}.csv ${BEST_FLAGS}
+        COMMAND python3 ${SCRIPT_DIR}/script.py -b ${PROJECT_BINARY_DIR} -x ${REGEX} -t ${TARGET_FILE} -f ${ARTIFACTS_DIR}/results.csv -n ${NAME} ${BEST_FLAGS}
         CONFIGURATIONS perfonly
         DEPENDS icgrep)
 endfunction(parabix_add_perf_test)
