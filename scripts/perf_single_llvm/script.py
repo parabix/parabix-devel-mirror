@@ -89,7 +89,7 @@ def mkname(regex, target, buildfolder):
 
 def save(runtime, regex, versionInfo, outfile):
     now = datetime.now().strftime("%m/%d/%Y")
-    val = now + ", " + runtime + ", " + ", ".join(versionInfo)
+    val = ",".join([now, runtime, regex] + versionInfo)
     saveInFile(outfile, val)
 
 
