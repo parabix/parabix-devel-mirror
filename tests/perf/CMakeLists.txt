@@ -10,9 +10,6 @@ set(ARTIFACTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/artifacts)
 
 set(BEST_FLAGS "--regalloc=basic --optimize-regalloc--fast-isel=true --disable-x86-domain-reassignment=true --disable-machine-licm --disable-machine-cse --disable-lsr --disable-phi-elim-edge-splitting")
 
-# only SSE now as to check if it works properly
-set(ARCH sse)
-
 # Add a new perf-test target.
 function(parabix_add_perf_test NAME REGEX TARGET_FILE)
     set(PERF_TEST_TARGET_LIST ${PERF_TEST_TARGET_LIST} ${NAME} PARENT_SCOPE)
