@@ -14,7 +14,7 @@ using namespace llvm;
 
 namespace kernel {
 
-SingleStreamScanKernelTemplate::ScanWordContext::ScanWordContext(BuilderRef b, unsigned strideWidth) 
+SingleStreamScanKernelTemplate::ScanWordContext::ScanWordContext(BuilderRef b, unsigned strideWidth)
 : width(std::max(minScanWordWidth, strideWidth / strideMaskWidth))
 , wordsPerBlock(b->getBitBlockWidth() / width)
 , wordsPerStride(strideMaskWidth)
@@ -84,7 +84,7 @@ void SingleStreamScanKernelTemplate::generateMultiBlockLogic(BuilderRef b, Value
     PHINode * const processingMask = b->CreatePHI(mSW.StrideMaskTy, 2, "processingMask");
     mProcessingMask = processingMask;
     processingMask->addIncoming(strideMask, mMaskReady);
-    Value * const wordOffset = b->CreateCountForwardZeroes(processingMask, true);
+    Value * const wordOffset = b->CreateCountForwardZeroes(processingMask, "wordOffset", true);
     mWordOffset = wordOffset;
     Value * const strideOffset = b->CreateMul(strideNo, mSW.NUM_BLOCKS_PER_STRIDE);
     Value * const blockNumOfWord = b->CreateUDiv(wordOffset, mSW.WORDS_PER_BLOCK);
@@ -100,7 +100,7 @@ void SingleStreamScanKernelTemplate::generateMultiBlockLogic(BuilderRef b, Value
     PHINode * const processingWord = b->CreatePHI(mSW.Ty, 2, "processingWord");
     processingWord->addIncoming(word, mProcessMask);
     mProcessingWord = processingWord;
-    Value * const bitIndex_InWord = b->CreateZExt(b->CreateCountForwardZeroes(processingWord, true), sizeTy);
+    Value * const bitIndex_InWord = b->CreateZExt(b->CreateCountForwardZeroes(processingWord, "inWord", true), sizeTy);
     Value * const wordIndex_InStride = b->CreateMul(wordOffset, mSW.WIDTH);
     Value * const strideIndex = b->CreateAdd(scanStreamProcessedItemCount, b->CreateMul(strideNo, b->getSize(mStride)));
     Value * const absoluteWordIndex = b->CreateAdd(strideIndex, wordIndex_InStride);
