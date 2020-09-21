@@ -66,7 +66,7 @@ def crashIfNotAllNumbers(arr):
         except Exception as e:
             raise e
 
-def run(what, filename, regex, delimiter=", ", timeout=30, otherFlags=[]):
+def run(what, filename, regex, delimiter=", ", timeout=300, otherFlags=[]):
     versionCmd = what + ["--version"]
     versionInfo = stripVersions(subprocess.check_output(versionCmd))
     command = what + otherFlags + ["-enable-object-cache=0"]
