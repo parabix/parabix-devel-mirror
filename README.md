@@ -34,7 +34,10 @@ To build Parabix, you need a development environment that meets a few requiremen
 `cmake -DCMAKE_PREFIX_PATH=path/to/libllvm -DCMAKE_BUILD_TYPE=Release ..`
 - `make`
 - If you wish to run the test suite, while you are still in the build directory, run the following command:
-`make check`
+  `make check`
+- If you wish to run performance tests, run the following commands:
+  - `cmake -DCMAKE_BUILD_TYPE=Release -DBENCH_DIR=/path/to/bench ..`
+  - `make perf-tests`
 
 In the configuration above, all compiled tools will then be found on `/path/to/parabix-devel/build/bin`
 
