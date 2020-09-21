@@ -252,7 +252,7 @@ void PipelineAnalysis::computeDataFlowRates() {
                     report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
                 }
 
-                __int64 num, denom;
+                int64_t num, denom;
                 if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
                     report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
                 }
@@ -437,7 +437,7 @@ void PipelineAnalysis::computeDataFlowRates() {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
 
-        __int64 num, denom;
+        int64_t num, denom;
         if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
@@ -477,7 +477,7 @@ void PipelineAnalysis::computeDataFlowRates() {
                         report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
                     }
 
-                    __int64 num, denom;
+                    int64_t num, denom;
                     if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
                         report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
                     }
@@ -792,7 +792,7 @@ void PipelineAnalysis::computeDataFlowRates() {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
 
-        __int64 num, denom;
+        int64_t num, denom;
         if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
@@ -834,7 +834,7 @@ void PipelineAnalysis::computeDataFlowRates() {
                         report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
                     }
 
-                    __int64 num, denom;
+                    int64_t num, denom;
                     if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
                         report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
                     }
