@@ -6,6 +6,7 @@
 
 template <typename T>
 struct PtrWrapper {
+
     PtrWrapper(const std::unique_ptr<T> & p) noexcept : mReference(p.get()) {  }
     PtrWrapper(const PtrWrapper<T> & p) noexcept : mReference(p.get()) { }
     PtrWrapper(T * const ref) noexcept : mReference(ref) { }
@@ -21,6 +22,10 @@ private:
     T * const mReference;
 };
 
+template <typename T>
+constexpr inline bool operator< (const PtrWrapper<T> & a, const PtrWrapper<T> & b) {
+    return a.get() < b.get();
+}
 
 
 #endif // PTRWRAPPER_HPP

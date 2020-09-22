@@ -34,6 +34,8 @@ struct Binding : public AttributeSet {
     Binding(llvm::Type * const scalarType, std::string name, Relationship * const value, ProcessingRate r, Attribute && attribute);
     Binding(llvm::Type * const scalarType, std::string name, Relationship * const value, ProcessingRate r, std::initializer_list<Attribute> attributes);
 
+    Binding(const Binding & original, ProcessingRate r);
+
     const std::string & getName() const LLVM_READNONE {
         return mName;
     }
@@ -72,10 +74,6 @@ struct Binding : public AttributeSet {
 
     LLVM_READNONE unsigned getFieldWidth() const;
 
-protected:
-
-    Binding(const Binding & original, ProcessingRate r);
-
     void print(const Kernel * const kernel, llvm::raw_ostream & out) const noexcept;
 
 private:
@@ -87,14 +85,10 @@ private:
 
 using Bindings = std::vector<Binding>;
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isCountable
  ** ------------------------------------------------------------------------------------------------------------- */
 LLVM_READNONE inline bool isCountable(const Binding & binding) {
-    if (LLVM_UNLIKELY(binding.isDeferred())) {
-        return false;
-    }
     const ProcessingRate & rate = binding.getRate();
     switch (rate.getKind()) {
         case ProcessingRate::KindId::Fixed:
@@ -112,9 +106,6 @@ LLVM_READNONE inline bool isCountable(const Binding & binding) {
  * @brief isNonFixedCountable
  ** ------------------------------------------------------------------------------------------------------------- */
 LLVM_READNONE inline bool isNonFixedCountable(const Binding & binding) {
-    if (LLVM_UNLIKELY(binding.isDeferred())) {
-        return false;
-    }
     const ProcessingRate & rate = binding.getRate();
     switch (rate.getKind()) {
         case ProcessingRate::KindId::PopCount:
