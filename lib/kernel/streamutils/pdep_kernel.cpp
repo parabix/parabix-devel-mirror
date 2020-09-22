@@ -248,7 +248,8 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
         kb->SetInsertPoint(processBlock);
         PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
         blockOffsetPhi->addIncoming(ZERO, entry);
-        std::vector<Value *> mask(fieldsPerBlock);
+
+        SmallVector<Value *, 16> mask(fieldsPerBlock);
         //  When operating on fields individually, we can use vector load/store with
         //  extract/insert element operations, or we can use individual field load
         //  and stores.   Individual field operations require fewer total operations,
@@ -264,6 +265,7 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
             mask[i] = kb->CreateLoad(kb->CreateGEP(depositMaskPtr, kb->getInt32(i)));
         }
 #else
+
         Value * depositMask = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi));
         for (unsigned i = 0; i < fieldsPerBlock; i++) {
             mask[i] = kb->CreateExtractElement(depositMask, kb->getInt32(i));
@@ -274,7 +276,8 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
             Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
             inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
 #else
-            Value * inputStrm = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi));
+            Value * const input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+            Value * inputStrm = kb->fwCast(fieldWidth, input);
 #endif
 #ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
             Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);

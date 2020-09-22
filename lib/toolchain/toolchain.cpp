@@ -20,6 +20,10 @@ using namespace llvm;
 #define IN_DEBUG_MODE false
 #endif
 
+// #define FORCE_ASSERTIONS
+
+// #define DISABLE_OBJECT_CACHE
+
 namespace codegen {
 
 inline unsigned getPageSize() {
@@ -174,6 +178,9 @@ const cl::OptionCategory * LLVM_READONLY codegen_flags() {
 }
 
 bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
+    #ifdef FORCE_ASSERTIONS
+    if (flag == DebugFlags::EnableAsserts) return true;
+    #endif
     return DebugOptions.isSet(flag);
 }
 
@@ -181,6 +188,9 @@ bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
 std::string ProgramName;
 
 inline bool disableObjectCacheDueToCommandLineOptions() {
+    #ifdef DISABLE_OBJECT_CACHE
+    return true;
+    #else
     if (!TraceOption.empty()) return true;
     // if (!DebugOptions.empty()) return true;
     if (ShowIROption != OmittedOption) return true;
@@ -191,6 +201,7 @@ inline bool disableObjectCacheDueToCommandLineOptions() {
     if (pablo::ShowPabloOption != OmittedOption) return true;
     if (pablo::ShowOptimizedPabloOption != OmittedOption) return true;
     return false;
+    #endif
 }
 
 void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {

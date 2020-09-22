@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2020 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -45,35 +45,14 @@ using namespace llvm;
 using namespace codegen;
 using namespace kernel;
 
-//  Given a Unicode character class (set of Unicode characters), ucount
-//  counts the number of occurrences of characters in that class within
-//  given input files.
-
 static cl::OptionCategory ucFlags("Command Flags", "ucount options");
 
-//  The character class expression may be a single character, a bracketted expression
-//  listing characters (e.g., [aeiou] or [A-Za-z0-9]) or a character class corresponding
-//  to a Unicode property (e.g., \p{Greek}.
 static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Unicode character class expression>"), cl::Required, cl::cat(ucFlags));
-
-//  Multiple input files are allowed on the command line; counts are produced
-//  for each file.
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(ucFlags));
 
 std::vector<fs::path> allFiles;
 
 typedef uint64_t (*UCountFunctionType)(uint32_t fd);
-
-//
-//  This is the function that generates and compiles a Parabix pipeline to
-//  perform the character counting task on a single input file.   The program
-//  takes a re::Name object whose definition includes the UnicodeSet defining
-//  the character class.    The compiled pipeline program is returned.
-//
-//  The compiled pipeline may then be executed.   When executed, it must be given
-//  an integer "file descriptor" as its input, and will produce the count of
-//  the number of characters of the given character class as a result.
-//
 
 UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
 
@@ -110,10 +89,6 @@ UCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
     return reinterpret_cast<UCountFunctionType>(P->compile());
 }
 
-//
-//  Given a compiled pipeline program for counting  the characters of a class,
-//  as well as an index into the global vector of inputFiles,  open the
-//  given file and execute the compiled program to produce the count result.
 uint64_t ucount1(UCountFunctionType fn_ptr, const uint32_t fileIdx) {
     std::string fileName = allFiles[fileIdx].string();
     struct stat sb;
@@ -135,9 +110,9 @@ uint64_t ucount1(UCountFunctionType fn_ptr, const uint32_t fileIdx) {
         close(fd);
         return 0;
     }
-    uint64_t theCount = fn_ptr(fd);
+    auto r = fn_ptr(fd);
     close(fd);
-    return theCount;
+    return r;
 }
 
 int main(int argc, char *argv[]) {

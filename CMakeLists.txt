@@ -20,10 +20,9 @@ enable_testing()
 
 ###   Build Options   ###
 
-option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
-option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
+option(LLVM_PATH "LLVM root directory")
 
 # Build Artifact Configuration
 set(ARTIFACT_MODE "Multiple" CACHE STRING "Build framework into a single artifact (Single) or multiple artifacts (Multiple)")
@@ -55,14 +54,13 @@ add_version_info_from_vcs(Parabix_REVISION)
 message(STATUS "Parabix Revision: ${Parabix_REVISION}")
 
 
-
 ###   Import Dependency: LLVM   ###
-
+if (LLVM_PATH)
+find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_PATH} NO_DEFAULT_PATH)
+else()
 find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
-if (LLVM_VERSION VERSION_LESS 5)
-    message(FATAL_ERROR "LLVM version must be at least 5.0.0!")
 endif()
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
 set(LLVM_ALL_TARGETS X86)
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
 include_directories(${LLVM_INCLUDE_DIRS})
@@ -81,23 +79,16 @@ set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost 1.61 REQUIRED COMPONENTS system filesystem iostreams)
-message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
+message(STATUS "Found Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
 include_directories("${Boost_INCLUDE_DIRS}")
-link_directories(${Boost_LIBRARY_DIR})
+link_directories(${Boost_LIBRARY_DIRS})
 
 
 
 ###   Import Dependency: Z3   ###
 
-if(ENABLE_MULTIPLEXING)
-    message(STATUS "Enabling Multiplexing")
-    find_package(Z3 REQUIRED)
-    include_directories(${Z3_INCLUDE_DIRS})
-    # target_link_libraries(PabloADT ${Z3_LIBRARIES})
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
-endif()
-
-
+find_package(Z3 REQUIRED) # libz3-dev
+include_directories(${Z3_INCLUDE_DIRS})
 
 ###   Project Configuration   ###
 
@@ -116,9 +107,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
 # Parabix Object Cache default
 set(PARABIX_OBJECT_CACHE "$ENV{HOME}/.cache/parabix/")
-if (NOT EXISTS(${PARABIX_OBJECT_CACHE}))
-    file(MAKE_DIRECTORY ${PARABIX_OBJECT_CACHE})
-endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_OBJECT_CACHE='\"${PARABIX_OBJECT_CACHE}\"'")
 
 # Use @rpath for dylibs on macOS
@@ -162,11 +150,11 @@ set(CMAKE_REQUIRED_FLAGS)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_VERSION='\"${Parabix_REVISION}\"'")
 
 # Use gold linker on Linux:gcc
-#if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-#    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-#        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
-#    endif()
-#endif()
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
+    endif()
+endif()
 
 
 # Use address sanitizer if desiered
@@ -190,45 +178,35 @@ endfunction(parabix_set_library_name)
 
 include(CMakeParseArguments)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ARTIFACT_TYPE STREQUAL "Static")
-    set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-
-    # Add assertion debug symbol support checks
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     include(CheckIncludeFileCXX)
-    CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
-    IF (HAS_MACH_VM_TYPES)
-      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")
-    ELSE()
-      UNSET(LIBUNWIND_FOUND CACHE)
-      find_package(Libunwind)
-      IF (LIBUNWIND_FOUND)
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
-        include_directories(${LIBUNWIND_INCLUDE_DIR})
-        target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
-      ELSE()
-        CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
-        IF (HAS_EXECINFO)
-           SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
-        ENDIF()
-      ENDIF()
-    ENDIF()
+    CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
+    if (HAS_EXECINFO)
+        ###   Import Dependency: DWARF   ###
+        #find_package(LibDwarf) # libelf-dev libdwarf-dev
+        #if (LIBDWARF_FOUND)
+        #    include_directories(${LIBDWARF_INCLUDE_DIRS})
+        #    link_directories(${LIBDWARF_LIBRARIES})
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_ASSERTION_TRACE")
+        #endif()
+    endif()
 endif()
 
 # Release & Debug flags
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 function(parabix_add_module)
     cmake_parse_arguments(
-        ARG         # resultant argument prefix
-        ""          # boolean args
-        "NAME"      # mono-valued arguments:
-                    #   NAME: target name
-        "SRC;DEPS"  # multi-valued arguments:
-                    #   SRC:  source file list
-                    #   DEPS: target dependencies
-        ${ARGN}     # arguments to parse
+        ARG             # resultant argument prefix
+        "USES_Z3"       # boolean args
+        "NAME"          # mono-valued arguments:
+                        #   NAME: target name
+        "SRC;DEPS"      # multi-valued arguments:
+                        #   SRC:  source file list
+                        #   DEPS: target dependencies
+        ${ARGN}         # arguments to parse
     )
     if(NOT ARG_NAME)
         message(FATAL_ERROR "parabix_add_module: A target name is required")
@@ -245,6 +223,9 @@ function(parabix_add_module)
         endif()
         parabix_set_library_name(${ARG_NAME})
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
+        if (ARG_USES_Z3)
+            target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
+        endif()
     endif()
 endfunction(parabix_add_module)
 
@@ -268,6 +249,9 @@ function(parabix_add_executable)
     else()
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
     endif()
+    if(ARTIFACT_MODE STREQUAL "Single")
+        target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
+    endif()
 endfunction(parabix_add_executable)
 
 # Creates a pablo source target which copies pablo source files to the parabix
@@ -279,7 +263,7 @@ function(parabix_add_pablo_src NAME)
     foreach(PABLO_FILE ${ARGN})
         list(APPEND FILE_LIST "${CMAKE_CURRENT_SOURCE_DIR}/${PABLO_FILE}")
     endforeach(PABLO_FILE)
-    
+
     add_custom_target(${NAME}
         COMMAND cp ${FILE_LIST} ${PARABIX_OBJECT_CACHE}
         DEPENDS ${ARGN})
