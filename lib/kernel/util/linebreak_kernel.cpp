@@ -70,7 +70,6 @@ UnixLinesKernelBuilder::UnixLinesKernelBuilder(BuilderRef b,
 mEOFmode(eofMode),
 mNullMode(nullMode) {
     if (nullMode == NullCharMode::Abort) {
-        addAttribute(CanTerminateEarly());
         addAttribute(MayFatallyTerminate());
         addAttribute(SideEffecting());
     }

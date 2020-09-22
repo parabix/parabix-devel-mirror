@@ -183,10 +183,12 @@ const String & Statement::getName() const {
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
             MAKE_PREFIX(Ternary, "ternary");
-
             case ClassTypeId::IntrinsicCall:
-                prefix = cast<IntrinsicCall>(this)->getIntrinsicName().lower().c_str();
-                length = __length(prefix);
+                {
+                    const auto nm = cast<IntrinsicCall>(this)->getIntrinsicName();
+                    prefix = nm.data();
+                    length = nm.size();
+                }
                 break;
             default: llvm_unreachable("invalid statement type");
         }
