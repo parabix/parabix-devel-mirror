@@ -901,7 +901,7 @@ found:  ++i;
     // shares the same kernels as the first partition of another and we can schedule one after the other,
     // this may improve I-Cache utilization.
 
-    if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
+    if (Z3_optimize_check(ctx, solver, 0, nullptr) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a partition ordering solution");
     }
 
@@ -1183,7 +1183,7 @@ found:  ++i;
 
     END_SCOPED_REGION
 
-    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE) {
+    if (Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE) {
         report_fatal_error("Z3 failed to find a kernel ordering solution");
     }
 

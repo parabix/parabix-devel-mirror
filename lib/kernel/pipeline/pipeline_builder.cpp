@@ -561,12 +561,12 @@ OptimizationBranchBuilder::OptimizationBranchBuilder(
 , mNonZeroBranch(std::unique_ptr<PipelineBuilder>(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
-                    mInputStreamSets, std::move(replaceManagedWithSharedManagedBuffers(mOutputStreamSets)),
+                    mInputStreamSets, replaceManagedWithSharedManagedBuffers(mOutputStreamSets),
                     mInputScalars, mOutputScalars)))
 , mAllZeroBranch(std::unique_ptr<PipelineBuilder>(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
-                    mInputStreamSets, std::move(replaceManagedWithSharedManagedBuffers(mOutputStreamSets)),
+                    mInputStreamSets, sreplaceManagedWithSharedManagedBuffers(mOutputStreamSets),
                     mInputScalars, mOutputScalars))) {
 
 }

@@ -14,7 +14,7 @@
 #       target_link_libraries(<mylib> ${REQ_LLVM_LIBRARIES})
 
 cmake_minimum_required(VERSION 2.8)
-
+set(CMAKE_C_STANDARD_REQUIRED 11)
 project(parabix)
 enable_testing()
 

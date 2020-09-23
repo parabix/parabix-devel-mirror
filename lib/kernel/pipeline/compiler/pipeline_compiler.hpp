@@ -665,7 +665,7 @@ protected:
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
-: PipelineCompiler(pipelineKernel, std::move(PipelineAnalysis::analyze(b, pipelineKernel))) {
+: PipelineCompiler(pipelineKernel, PipelineAnalysis::analyze(b, pipelineKernel)) {
     // Use a delegating constructor to compute the pipeline graph data once and pass it to
     // the compiler. Although a const function attribute ought to suffice, gcc 8.2 does not
     // resolve it correctly and clang requires -O2 or better.
