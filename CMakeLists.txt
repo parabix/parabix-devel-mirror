@@ -15,6 +15,12 @@
 
 cmake_minimum_required(VERSION 2.8)
 
+# Require that compilers support all features of C11 and C++14.
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 14)
+
 project(parabix)
 enable_testing()
 
