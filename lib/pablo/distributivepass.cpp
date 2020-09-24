@@ -1067,7 +1067,7 @@ repeat: getReverseTopologicalOrdering();
 
             bool unchanged = true;
 
-            for (const auto factor : factors) {
+            for (const auto & factor : factors) {
                 const auto sources = std::get<1>(factor);
                 assert (sources.size() > 1);
                 const auto targets = std::get<0>(factor);
@@ -1126,7 +1126,7 @@ repeat: getReverseTopologicalOrdering();
             }
 
             if (unchanged) {
-                for (const auto factor : factors) {
+                for (const auto & factor : factors) {
                     const auto targets = std::get<0>(factor);
                     for (const auto u : targets) {
                         const auto f = std::lower_bound(associative.begin(), associative.end(), u);

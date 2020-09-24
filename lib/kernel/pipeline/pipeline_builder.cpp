@@ -566,7 +566,7 @@ OptimizationBranchBuilder::OptimizationBranchBuilder(
 , mAllZeroBranch(std::unique_ptr<PipelineBuilder>(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
-                    mInputStreamSets, sreplaceManagedWithSharedManagedBuffers(mOutputStreamSets),
+                    mInputStreamSets, replaceManagedWithSharedManagedBuffers(mOutputStreamSets),
                     mInputScalars, mOutputScalars))) {
 
 }

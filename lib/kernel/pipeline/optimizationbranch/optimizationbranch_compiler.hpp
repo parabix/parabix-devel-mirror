@@ -915,7 +915,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     SmallVector<Value *, 16> currentProcessedItemCount(mEnableAsserts ? numOfInputs : 0U);
 
-    for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+    for (const auto e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
         const RelationshipRef & host = mStreamSetGraph[e];
         const RelationshipRef & path = mStreamSetGraph[parent(e, mStreamSetGraph)];
         const StreamSetBuffer * const buffer = getInputStreamSetBuffer(host.Index);
@@ -935,7 +935,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     PointerType * const voidPtrPtrTy = voidPtrTy->getPointerTo();
 
-    for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+    for (const auto e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
         const RelationshipRef & host = mStreamSetGraph[e];
         const auto & buffer = mStreamSetOutputBuffers[host.Index];
 
@@ -983,7 +983,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     if (LLVM_UNLIKELY(mEnableAsserts)) {
 
-        for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & host = mStreamSetGraph[e];
             Value * const current = b->CreateLoad(mProcessedInputItemPtr[host.Index]);
             Value * const prior = mCurrentProcessedItemCount[host.Index];
@@ -994,7 +994,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
                             bindingName, current, prior);
         }
 
-        for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & host = mStreamSetGraph[e];
             Value * const current = b->CreateLoad(mProducedOutputItemPtr[host.Index]);
             Value * const prior = mCurrentProducedItemCount[host.Index];
@@ -1120,7 +1120,7 @@ void OptimizationBranchCompiler::enterBranch(BuilderRef b, const unsigned branch
 
         const auto numOfInputs = in_degree(branchType, mStreamSetGraph);
         mCurrentProcessedItemCount.resize(numOfInputs);
-        for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & host = mStreamSetGraph[e];
             Value * const processedPtr = mProcessedInputItemPtr[host.Index];
             mCurrentProcessedItemCount[host.Index] = b->CreateLoad(processedPtr);
@@ -1128,7 +1128,7 @@ void OptimizationBranchCompiler::enterBranch(BuilderRef b, const unsigned branch
 
         const auto numOfOutputs = out_degree(branchType, mStreamSetGraph);
         mCurrentProducedItemCount.resize(numOfOutputs);
-        for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & host = mStreamSetGraph[e];
             Value * const processedPtr = mProducedOutputItemPtr[host.Index];
             mCurrentProducedItemCount[host.Index] = b->CreateLoad(processedPtr);

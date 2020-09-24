@@ -288,7 +288,7 @@ void PabloCompiler::compileIf(BuilderRef b, const If * const ifStatement) {
 
     mCarryManager->leaveIfScope(b, ifEntryBlock, ifExitBlock);
 
-    for (const auto i : incoming) {
+    for (const auto & i : incoming) {
         const Var * var; Value * incoming;
         std::tie(var, incoming) = i;
 

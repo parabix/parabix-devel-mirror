@@ -131,7 +131,7 @@ OptimizationBranch::OptimizationBranch(BuilderRef b,
 : Kernel(b, TypeId::OptimizationBranch, std::move(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
-         std::move(makeInternalScalars(b, stream_inputs, stream_outputs)))
+         makeInternalScalars(b, stream_inputs, stream_outputs))
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {
