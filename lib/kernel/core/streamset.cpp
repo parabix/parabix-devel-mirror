@@ -820,9 +820,9 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
             Value * const bytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
 
-            b->CallPrintInt("consumed", consumed);
-            b->CallPrintInt("CHUNK_SIZE", CHUNK_SIZE);
-            b->CallPrintInt("bytesToCopy", bytesToCopy);
+            //b->CallPrintInt("consumed", consumed);
+            //b->CallPrintInt("CHUNK_SIZE", CHUNK_SIZE);
+            //b->CallPrintInt("bytesToCopy", bytesToCopy);
 
             BasicBlock * const copyBack = BasicBlock::Create(C, "copyBack", func);
             BasicBlock * const expandAndCopyBack = BasicBlock::Create(C, "expandAndCopyBack", func);

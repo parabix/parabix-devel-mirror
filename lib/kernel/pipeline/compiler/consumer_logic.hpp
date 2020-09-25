@@ -179,7 +179,7 @@ Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t strea
                 Value * const external = getConsumedOutputItems(externalPort.Port.Number); assert (external);
 
                 const Binding & binding = externalPort.Binding;
-                b->CallPrintInt(binding.getName() + "_externalConsumed", external);
+                //b->CallPrintInt(binding.getName() + "_externalConsumed", external);
 
                 consumed = b->CreateUMin(consumed, external);
                 foundAny = true;

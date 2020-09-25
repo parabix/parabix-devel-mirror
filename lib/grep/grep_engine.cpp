@@ -214,6 +214,13 @@ std::vector<std::vector<std::string>> formFileGroups(std::vector<fs::path> paths
     return groups;
 }
 
+bool GrepEngine::haveFileBatch() {
+    for (auto & b : mFileGroups) {
+        if (b.size() > 1) return true;
+    }
+    return false;
+}
+
 void GrepEngine::initFileResult(const std::vector<boost::filesystem::path> & paths) {
     const unsigned n = paths.size();
     mResultStrs.resize(n);
@@ -454,9 +461,6 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::Unicode);
     auto lengths = getLengthRange(re, &cc::Unicode);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
-
-    StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
-
     if (UnicodeSets.empty()) {
         // All inputs will be externals.   Do not register a source stream.
         options->setRE(re);
@@ -467,16 +471,17 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         auto mpx_basis = mpx->getMultiplexedCCs();
         StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
         StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
-        P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);  // u8CharClasses length L
-        FilterByMask(P, mU8index, u8CharClasses, CharClasses);   // CharClasses length L'
-        P->AssertEqualLength(CharClasses, MatchResults);
+        P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
+        FilterByMask(P, mU8index, u8CharClasses, CharClasses);
         options->setSource(CharClasses);
         options->addAlphabet(mpx, CharClasses);
     }
+    StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
     options->setResults(MatchResults);
     addExternalStreams(P, options, re, mU8index);
-    P->CreateKernelCall<ICGrepKernel>(std::move(options));  // MatchResults length L'
-
+    P->CreateKernelCall<ICGrepKernel>(std::move(options));
+    StreamSet * u8index1 = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<AddSentinel>(mU8index, u8index1);
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
         StreamSet * u8initial = P->CreateStreamSet(1, 1);
         P->CreateKernelCall<LineStartsKernel>(mU8index, u8initial);
@@ -484,10 +489,7 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, MatchPairs);
         SpreadByMask(P, u8initial, MatchPairs, Results);
     } else {
-        StreamSet * u8index1 = P->CreateStreamSet(1, 1);
-        P->CreateKernelCall<AddSentinel>(mU8index, u8index1);
-        SpreadByMask(P, u8index1, MatchResults, Results);   // Results length L
-        P->AssertEqualLength(Source, Results);
+        SpreadByMask(P, u8index1, MatchResults, Results);
     }
 }
 
@@ -623,38 +625,22 @@ unsigned EmitMatch::getFileCount() {
 size_t EmitMatch::getFileStartPos(unsigned fileNo) {
     if (mFileStartPositions.size() == 0) return 0;
     assert(fileNo < mFileStartPositions.size());
-    // llvm::errs() << "getFileStartPos(" << fileNo << ") = " << mFileStartPositions[fileNo] << "  file = " << mFileNames[fileNo] << "\n";
+    //llvm::errs() << "getFileStartPos(" << fileNo << ") = ";
+    //llvm::errs().write_hex(mFileStartPositions[fileNo]);
+    //llvm::errs() << "  file = " << mFileNames[fileNo] << "\n";
     return mFileStartPositions[fileNo];
 }
 
 void EmitMatch::setBatchLineNumber(unsigned fileNo, size_t batchLine) {
-    // llvm::errs() << "setBatchLineNumber(" << fileNo << ", " << batchLine << ")  file = " << mFileNames[fileNo] << "\n";
-    mFileStartLineNumbers[fileNo] = batchLine;
-}
+    //llvm::errs() << "setBatchLineNumber(" << fileNo << ", " << batchLine << ")  file = " << mFileNames[fileNo] << "\n";
+    mFileStartLineNumbers[fileNo+1] = batchLine;
+    if (!mTerminated) *mResultStr << "\n";
+    mTerminated = true;
+    mCurrentFile++;
+    if (mCurrentFile < mFileNames.size()) setFileLabel(mFileNames[mCurrentFile]);}
 
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
-    auto nextFile = mCurrentFile + 1U;
-    const auto n = mFileNames.size();
-    size_t startLineNum = 0;
-    for (;;) {
-        if (nextFile >= n) {
-            break;
-        }
-        assert (mFileStartLineNumbers.size() > nextFile);
-        const auto nextLine = mFileStartLineNumbers[nextFile];
-        if (lineNum < nextLine) {
-            setFileLabel(mFileNames[mCurrentFile]);
-            startLineNum = mFileStartLineNumbers[mCurrentFile];
-            if (!mTerminated) {
-                *mResultStr << "\n";
-                mTerminated = true;
-            }
-            break;
-        }
-        mCurrentFile = nextFile++;
-    }
-
-    const auto relLineNum = lineNum - startLineNum;
+    size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
         *mResultStr << "--\n";
     }
@@ -693,7 +679,7 @@ void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) *mResultStr << "\n";
 }
 
-void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, StreamSet * ByteStream) {
+void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, StreamSet * ByteStream, bool BatchMode) {
     StreamSet * SourceStream = getBasis(E, ByteStream);
 
     grepPrologue(E, SourceStream);
@@ -703,8 +689,9 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     const auto numOfREs = mREs.size();
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
 
+    unsigned matchResultStreamCount = (mColoring && !mInvertMatches) ? 2 : 1;
     for(unsigned i = 0; i < numOfREs; ++i) {
-        StreamSet * const MatchResults = E->CreateStreamSet((mColoring && !mInvertMatches) ? 2 : 1 , 1);
+        StreamSet * const MatchResults = E->CreateStreamSet(matchResultStreamCount, 1);
         MatchResultsBufs[i] = MatchResults;
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
@@ -714,7 +701,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     }
     StreamSet * Matches = MatchResultsBufs[0];
     if (MatchResultsBufs.size() > 1) {
-        StreamSet * const MergedMatches = E->CreateStreamSet();
+        StreamSet * const MergedMatches = E->CreateStreamSet(matchResultStreamCount);
         E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
         Matches = MergedMatches;
     }
@@ -747,14 +734,13 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
     if (mColoring && !mInvertMatches) {
 
         StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
-        FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);   // Reduce MatchLineEnds to MatchesByLine as length M (1 per line)
+        FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);
 
         if ((mAfterContext != 0) || (mBeforeContext != 0)) {
             StreamSet * ContextByLine = E->CreateStreamSet(1, 1);
             E->CreateKernelCall<ContextSpan>(MatchesByLine, ContextByLine, mBeforeContext, mAfterContext);
             StreamSet * SelectedLines = E->CreateStreamSet(1, 1);
-            SpreadByMask(E, mLineBreakStream, ContextByLine, SelectedLines);  // Expand from length M to original length L (1 code unit)
-            E->AssertEqualLength(SelectedLines, MatchedLineEnds);
+            SpreadByMask(E, mLineBreakStream, ContextByLine, SelectedLines);
             MatchedLineEnds = SelectedLines;
             MatchesByLine = ContextByLine;
         }
@@ -765,8 +751,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * LineStarts = E->CreateStreamSet(1, 1);
         E->CreateKernelCall<LineStartsKernel>(mLineBreakStream, LineStarts);
         StreamSet * MatchedLineStarts = E->CreateStreamSet(1, 1);
-        SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);  // Expand MatchesBy Line to original length L
-        E->AssertEqualLength(MatchedLineStarts, SourceStream);
+        SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);
 
         StreamSet * Filtered = E->CreateStreamSet(1, 8);
         E->CreateKernelCall<MatchFilterKernel>(MatchedLineStarts, mLineBreakStream, ByteStream, Filtered);
@@ -820,8 +805,6 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<MatchCoordinatesKernel>(ColorizedBreaks, ColorizedBreaks, ColorizedCoords, 1);
 
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
-        E->AssertEqualLength(SourceCoords, ColorizedCoords);
-
         Kernel * const matchK = E->CreateKernelCall<ColorizedReporter>(ColorizedBytes, SourceCoords, ColorizedCoords, callbackObject);
         matchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
         matchK->link("finalize_match_wrapper", finalize_match_wrapper);
@@ -843,13 +826,20 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             matchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
             matchK->link("finalize_match_wrapper", finalize_match_wrapper);
         } else {
-            Scalar * const callbackObject = E->getInputScalar("callbackObject");
-            Kernel * const scanBatchK = E->CreateKernelCall<ScanBatchKernel>(MatchedLineEnds, mLineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
-            scanBatchK->link("get_file_count_wrapper", get_file_count_wrapper);
-            scanBatchK->link("get_file_start_pos_wrapper", get_file_start_pos_wrapper);
-            scanBatchK->link("set_batch_line_number_wrapper", set_batch_line_number_wrapper);
-            scanBatchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
-            scanBatchK->link("finalize_match_wrapper", finalize_match_wrapper);
+            if (BatchMode) {
+                Scalar * const callbackObject = E->getInputScalar("callbackObject");
+                Kernel * const scanBatchK = E->CreateKernelCall<ScanBatchKernel>(MatchedLineEnds, mLineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
+                scanBatchK->link("get_file_count_wrapper", get_file_count_wrapper);
+                scanBatchK->link("get_file_start_pos_wrapper", get_file_start_pos_wrapper);
+                scanBatchK->link("set_batch_line_number_wrapper", set_batch_line_number_wrapper);
+                scanBatchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
+                scanBatchK->link("finalize_match_wrapper", finalize_match_wrapper);
+            } else {
+                Scalar * const callbackObject = E->getInputScalar("callbackObject");
+                Kernel * const matchK = E->CreateKernelCall<ScanMatchKernel>(MatchedLineEnds, mLineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
+                matchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
+                matchK->link("finalize_match_wrapper", finalize_match_wrapper);
+            }
         }
     }
     //E->CreateKernelCall<StdOutKernel>(ColorizedBytes);
@@ -875,22 +865,24 @@ void EmitMatchesEngine::grepCodeGen() {
     E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
     mMainMethod = E1->compile();
 
-    auto E2 = mGrepDriver.makePipeline(
-                // inputs
-                {Binding{idb->getInt8PtrTy(), "buffer"},
-                Binding{idb->getSizeTy(), "length"},
-                Binding{idb->getIntAddrTy(), "callbackObject"},
-                Binding{idb->getSizeTy(), "maxCount"}}
-                ,// output
-                {Binding{idb->getInt64Ty(), "countResult"}});
+    if (haveFileBatch()) {
+        auto E2 = mGrepDriver.makePipeline(
+                    // inputs
+                    {Binding{idb->getInt8PtrTy(), "buffer"},
+                    Binding{idb->getSizeTy(), "length"},
+                    Binding{idb->getIntAddrTy(), "callbackObject"},
+                    Binding{idb->getSizeTy(), "maxCount"}}
+                    ,// output
+                    {Binding{idb->getInt64Ty(), "countResult"}});
 
-    Scalar * const buffer = E2->getInputScalar("buffer");
-    Scalar * const length = E2->getInputScalar("length");
-    StreamSet * const InternalBytes = E2->CreateStreamSet(1, 8);
-    E2->CreateKernelCall<MemorySourceKernel>(buffer, length, InternalBytes);
-    grepPipeline(E2, InternalBytes);
-    E2->setOutputScalar("countResult", E2->CreateConstant(idb->getInt64(0)));
-    mBatchMethod = E2->compile();
+        Scalar * const buffer = E2->getInputScalar("buffer");
+        Scalar * const length = E2->getInputScalar("length");
+        StreamSet * const InternalBytes = E2->CreateStreamSet(1, 8);
+        E2->CreateKernelCall<MemorySourceKernel>(buffer, length, InternalBytes);
+        grepPipeline(E2, InternalBytes, /* BatchMode = */ true);
+        E2->setOutputScalar("countResult", E2->CreateConstant(idb->getInt64(0)));
+        mBatchMethod = E2->compile();
+    }
 }
 
 //
@@ -957,121 +949,92 @@ void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
 }
 
 uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) {
-
-    typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
-
-    typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
-
-    EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
-    accum.setStringStream(&strm);
-
-    const auto n = fileNames.size();
-
-    bool useMMap = false;
-    int32_t fileDescriptor = 0;
-
-    if (n == 1) {
-
+    if (fileNames.size() == 1) {
+        typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
+        auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
+        accum.setStringStream(&strm);
+        bool useMMap;
+        int32_t fileDescriptor;
         if (fileNames[0] == "-") {
             fileDescriptor = STDIN_FILENO;
             accum.setFileLabel(mStdinLabel);
             useMMap = false;
         } else {
-            fileDescriptor = openFile(fileNames[0], strm);
+            fileDescriptor= openFile(fileNames[0], strm);
             if (fileDescriptor == -1) return 0;
             accum.setFileLabel(fileNames[0]);
             useMMap = mPreferMMap && canMMap(fileNames[0]);
         }
-
+        f(useMMap, fileDescriptor, &accum, mMaxCount);
+        close(fileDescriptor);
+        if (accum.binaryFileSignalled()) {
+            accum.mResultStr->clear();
+            accum.mResultStr->str("");
+        }
+        if (accum.mLineCount > 0) grepMatchFound = true;
+        return accum.mLineCount;
     } else {
-
+        typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
         auto f = reinterpret_cast<GrepBatchFunctionType>(mBatchMethod);
-
-        std::vector<int32_t> fileDescriptors(n);
-        std::vector<size_t> fileSizes(n, 0);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
+        accum.setStringStream(&strm);
+        std::vector<int32_t> fileDescriptor(fileNames.size());
+        std::vector<size_t> fileSize(fileNames.size(), 0);
         size_t cumulativeSize = 0;
         unsigned filesOpened = 0;
-        for (unsigned i = 0; i < n; i++) {
-            fileDescriptors[i] = openFile(fileNames[i], strm);
-            if (fileDescriptors[i] == -1) continue;  // File error; skip.
+        for (unsigned i = 0; i < fileNames.size(); i++) {
+            fileDescriptor[i] = openFile(fileNames[i], strm);
+            if (fileDescriptor[i] == -1) continue;  // File error; skip.
             struct stat st;
-            if (fstat(fileDescriptors[i], &st) != 0) continue;
-            fileSizes[i] = st.st_size;
+            if (fstat(fileDescriptor[i], &st) != 0) continue;
+            fileSize[i] = st.st_size;
             cumulativeSize += st.st_size;
             filesOpened++;
         }
+        cumulativeSize += filesOpened;  // Add an extra byte per file for possible '\n'.
+        size_t aligned_size = (cumulativeSize + batch_alignment - 1) & -batch_alignment;
 
-        if (LLVM_UNLIKELY(filesOpened <= 1)) {
-
-            if (LLVM_UNLIKELY(filesOpened == 0)) {
-                return 0;
-            }
-
-            fileDescriptor = fileDescriptors[0];
-        } else {
-            cumulativeSize += filesOpened;  // Add an extra byte per file for possible '\n'.
-
-            const auto aligned_size = (cumulativeSize + batch_alignment - 1) & -batch_alignment;
-            AlignedAllocator<char, batch_alignment> alloc;
-            accum.mBatchBuffer = alloc.allocate(aligned_size, 0);
-            if (accum.mBatchBuffer == nullptr) {
-                llvm::report_fatal_error("Unable to allocate batch buffer of size: " + std::to_string(aligned_size));
-            }
-            char * current_base = accum.mBatchBuffer;
-            size_t current_start_position = 0;
-            accum.mFileNames.reserve(filesOpened);
-            accum.mFileStartPositions.reserve(filesOpened);
-
-            for (unsigned i = 0; i < filesOpened; i++) {
-                ssize_t bytes_read = read(fileDescriptors[i], current_base, fileSizes[i]);
-                close(fileDescriptors[i]);
-                if (bytes_read <= 0) continue; // No data or error reading the file; skip.
-                if (mBinaryFilesMode == argv::WithoutMatch) {
-                    auto null_byte_ptr = memchr(current_base, char (0), bytes_read);
-                    if (null_byte_ptr != nullptr) {
-                        continue;  // Binary file; skip.
-                    }
-                }
-                accum.mFileNames.push_back(fileNames[i]);
-                accum.mFileStartPositions.push_back(current_start_position);
-
-                current_base += bytes_read;
-                current_start_position += bytes_read;
-                if (*(current_base - 1) != '\n') {
-                    *current_base = '\n';
-                    current_base++;
-                    current_start_position++;
-                }
-            }
-
-            const auto m = accum.mFileNames.size();
-            assert (accum.mFileStartPositions.size() == m);
-            if (LLVM_LIKELY(m > 0)) {
-                accum.mFileStartLineNumbers.resize(m + 1);
-                // add a sentinal start line number
-                accum.mFileStartLineNumbers[m] = std::numeric_limits<size_t>::max();
-                accum.setFileLabel(accum.mFileNames[0]);
-                f(accum.mBatchBuffer, current_start_position, &accum, mMaxCount);
-            }
-
-            alloc.deallocate(accum.mBatchBuffer, 0);
-            if (accum.mLineCount > 0) grepMatchFound = true;
-            return accum.mLineCount;
+        AlignedAllocator<char, batch_alignment> alloc;
+        accum.mBatchBuffer = alloc.allocate(aligned_size, 0);
+        if (accum.mBatchBuffer == nullptr) {
+            llvm::report_fatal_error("Unable to allocate batch buffer of size: " + std::to_string(aligned_size));
         }
+        char * current_base = accum.mBatchBuffer;
+        size_t current_start_position = 0;
+        accum.mFileNames.reserve(filesOpened);
+        accum.mFileStartPositions.reserve(filesOpened);
+
+        for (unsigned i = 0; i < fileNames.size(); i++) {
+            if (fileDescriptor[i] == -1) continue;  // Error opening file; skip.
+            ssize_t bytes_read = read(fileDescriptor[i], current_base, fileSize[i]);
+            close(fileDescriptor[i]);
+            if (bytes_read <= 0) continue; // No data or error reading the file; skip.
+            if (mBinaryFilesMode == argv::WithoutMatch) {
+                auto null_byte_ptr = memchr(current_base, char (0), bytes_read);
+                if (null_byte_ptr != nullptr) {
+                    continue;  // Binary file; skip.
+                }
+            }
+            accum.mFileNames.push_back(fileNames[i]);
+            accum.mFileStartPositions.push_back(current_start_position);
+            current_base += bytes_read;
+            current_start_position += bytes_read;
+            if (*(current_base - 1) != '\n') {
+                *current_base = '\n';
+                current_base++;
+                current_start_position++;
+            }
+        }
+        if (accum.mFileNames.size() > 0) {
+            accum.setFileLabel(accum.mFileNames[0]);
+            accum.mFileStartLineNumbers.resize(accum.mFileNames.size());
+            f(accum.mBatchBuffer, current_start_position, &accum, mMaxCount);
+        }
+        alloc.deallocate(accum.mBatchBuffer, 0);
+        if (accum.mLineCount > 0) grepMatchFound = true;
+        return accum.mLineCount;
     }
-
-    // Handle one file
-
-    auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-    f(useMMap, fileDescriptor, &accum, mMaxCount);
-    close(fileDescriptor);
-    if (accum.binaryFileSignalled()) {
-        accum.mResultStr->clear();
-        accum.mResultStr->str("");
-    }
-
-    if (accum.mLineCount > 0) grepMatchFound = true;
-    return accum.mLineCount;
 }
 
 // Open a file and return its file desciptor.
@@ -1212,10 +1175,10 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
         breakCC = re::makeCC(0x0A, &cc::Unicode);
     }
 
-    matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
-    matchingRE = regular_expression_passes(matchingRE);
     matchingRE = re::exclude_CC(matchingRE, breakCC);
     matchingRE = resolveAnchors(matchingRE, breakCC);
+    matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
+    matchingRE = regular_expression_passes(matchingRE);
     matchingRE = toUTF8(matchingRE);
 
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
@@ -1320,9 +1283,9 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
         auto options = make_unique<GrepKernelOptions>();
 
         auto r = resolveCaseInsensitiveMode(patterns[i].second, mCaseInsensitive);
-        r = regular_expression_passes(r);
         r = re::exclude_CC(r, breakCC);
         r = resolveAnchors(r, breakCC);
+        r = regular_expression_passes(r);
         r = toUTF8(r);
 
         options->setRE(r);

@@ -33,12 +33,10 @@ RE * UnicodeNameResolver::transformName(Name * name) {
         if (UCD::resolvePropertyDefinition(name)) {
             name->setDefinition(transform(name->getDefinition()));
         } else {
-
-
-            llvm::errs() << "resolveUnicodeSet: " << name->getName() << ":\n\n";
+            //llvm::errs() << "resolveUnicodeSet: " << name->getName() << ":\n\n";
             auto CC = grep::resolveUnicodeSet(name);
-            CC.print(llvm::errs());
-            llvm::errs() << "\n\n";
+            //CC.print(llvm::errs());
+            //llvm::errs() << "\n\n";
 
             // name->setDefinition(makeCC(std::move(CC), &cc::Unicode));
 

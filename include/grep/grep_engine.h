@@ -102,6 +102,7 @@ public:
     void setBinaryFilesOption(argv::BinaryFilesMode mode) {mBinaryFilesMode = mode;}
     void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(const std::vector<boost::filesystem::path> & filenames);
+    bool haveFileBatch();
     void initREs(std::vector<re::RE *> & REs);
     virtual void grepCodeGen();
     bool searchAllFiles();
@@ -215,16 +216,11 @@ public:
     unsigned getFileCount() override;
     size_t getFileStartPos(unsigned fileNo) override;
     void setBatchLineNumber(unsigned fileNo, size_t batchLine) override;
-
-    void reserve(const size_t expected);
-    void resize(const size_t capacity);
-
-private:
-    const bool mShowFileNames;
-    const bool mShowLineNumbers;
-    const bool mContextGroups;
-    const bool mInitialTab;
-
+protected:
+    bool mShowFileNames;
+    bool mShowLineNumbers;
+    bool mContextGroups;
+    bool mInitialTab;
     unsigned mCurrentFile;
     size_t mLineCount;
     size_t mLineNum;
@@ -244,7 +240,7 @@ private:
 class EmitMatchesEngine final : public GrepEngine {
 public:
     EmitMatchesEngine(BaseDriver & driver);
-    void grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
+    void grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream, bool BatchMode = false);
     void grepCodeGen() override;
 private:
     uint64_t doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) override;

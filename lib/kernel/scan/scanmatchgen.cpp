@@ -237,18 +237,15 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     Value * const startPtr = b->getRawInputPointer("InputStream", matchStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchEndPos);
 
+//    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//        Value * const A = b->CreateSub(matchEndPos, matchStart);
+//        Value * const B = b->CreatePtrDiff(endPtr, startPtr);
+//        b->CreateAssert(b->CreateICmpEQ(A, B), "InputStream is not contiguous");
+//    }
+
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        IntegerType * const sizeTy = b->getSizeTy();
-        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
-        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
-        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
-        b->CheckAddress(startPtr, size, "ScanMatch: dispatcher");
-    }
-
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
 
     //  We've dealt with the match, now prepare for the next one, if any.
@@ -575,15 +572,6 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        IntegerType * const sizeTy = b->getSizeTy();
-        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
-        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
-        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
-        b->CheckAddress(startPtr, size, "ScanBatch: dispatcher");
-    }
-
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
 
     //  We've dealt with the match, now prepare for the next one, if any.
@@ -1012,15 +1000,6 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        IntegerType * const sizeTy = b->getSizeTy();
-        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
-        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
-        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
-        b->CheckAddress(startPtr, size, "MatchReporter: dispatcher");
-    }
-
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
     Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
     phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
@@ -1226,7 +1205,6 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * const partialLineOutputPtr = b->getRawOutputPointer("Output", partialProducedPhi);
     b->CreateMemCpy(partialLineOutputPtr, partialLineStartPtr, partialLineBytes, 1);
     Value * partialProducedPos = b->CreateAdd(partialProducedPhi, partialLineBytes, "partialProducedPos");
-
     strideNo->addIncoming(nextStrideNo, strideEndMatch);
     pendingMatchPhi->addIncoming(ConstantInt::get(pendingMatch->getType(), 1), strideEndMatch);
     strideProducedPhi->addIncoming(partialProducedPos, strideEndMatch);
@@ -1237,7 +1215,6 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     strideFinalProduced->addIncoming(nextProducedPos, inStrideMatch);
     strideFinalProduced->addIncoming(producedPos1, strideInitialMatch);
     strideFinalProduced->addIncoming(strideProducedPhi, strideMasksReady);
-
     strideNo->addIncoming(nextStrideNo, strideMatchesDone);
     pendingMatchPhi->addIncoming(Constant::getNullValue(pendingMatch->getType()), strideMatchesDone);
     strideProducedPhi->addIncoming(strideFinalProduced, strideMatchesDone);
@@ -1316,15 +1293,6 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        IntegerType * const sizeTy = b->getSizeTy();
-        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
-        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
-        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
-        b->CheckAddress(startPtr, size, "ColorizedReporter: dispatcher");
-    }
-
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
     Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
     phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
@@ -1344,106 +1312,5 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     b->SetInsertPoint(scanReturn);
 
 }
-
-#if 0
-
-ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, StreamSet * const SourceCoords, StreamSet * const ColorizedCoords, Scalar * const callbackObject)
-: SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()) + std::to_string(ColorizedCoords->getNumElements()),
-// inputs
-{Binding{"InputStream", ByteStream, GreedyRate(), Deferred() }
-,Binding{"SourceCoords", SourceCoords, FixedRate(1), Deferred()}
-,Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1), Deferred()}},
-// outputs
-{},
-// input scalars
-{Binding{"accumulator_address", callbackObject}},
-// output scalars
-{},
-// kernel state
-{}) {
-    setStride(1);
-    addAttribute(SideEffecting());
-}
-
-// TO DO:  investigate add linebreaks as input:  set consumed by the last linebreak?
-
-void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
-    Module * const m = b->getModule();
-    BasicBlock * const processMatchCoordinates = b->CreateBasicBlock("processMatchCoordinates");
-    BasicBlock * const dispatch = b->CreateBasicBlock("dispatch");
-    BasicBlock * const coordinatesDone = b->CreateBasicBlock("coordinatesDone");
-    BasicBlock * const callFinalizeScan = b->CreateBasicBlock("callFinalizeScan");
-    BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
-
-    Value * accumulator = b->getScalarField("accumulator_address");
-    Value * const inputProcessed = b->getProcessedItemCount("InputStream");
-    Value * const inputAvail = b->getAvailableItemCount("InputStream");
-
-    Value * const matchesProcessed = b->getProcessedItemCount("SourceCoords");
-    Value * const matchesAvail = b->getAvailableItemCount("SourceCoords");
-
-    Constant * const sz_ONE = b->getSize(1);
-
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-    b->CreateCondBr(b->CreateICmpNE(matchesProcessed, matchesAvail), processMatchCoordinates, coordinatesDone);
-
-    b->SetInsertPoint(processMatchCoordinates);
-    PHINode * const phiMatchNum = b->CreatePHI(b->getSizeTy(), 2, "matchNum");
-    phiMatchNum->addIncoming(matchesProcessed, entryBlock);
-
-    Value * const matchRecordStart = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_STARTS), phiMatchNum), "matchStartLoad");
-    Value * const bufLimit = b->CreateSub(inputAvail, sz_ONE);
-    Value * const truncMatchRecordStart = b->CreateUMin(matchRecordStart, bufLimit);
-    Value * const matchRecordEnd = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_ENDS), phiMatchNum), "matchEndLoad");
-
-//    // It is possible that the matchRecordEnd position is one past EOF. Make sure not to access past EOF.
-
-//    Value * const matchRecordEndAtEOF = b->CreateUMin(srcMatchRecordEnd, bufLimit);
-//    Value * const matchRecordEnd = b->CreateSelect(b->isFinal(), srcMatchRecordEnd, matchRecordEndAtEOF);
-    b->CreateLikelyCondBr(b->CreateICmpULE(matchRecordEnd, inputAvail), dispatch, coordinatesDone);
-
-    b->SetInsertPoint(dispatch);
-    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
-    Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
-    Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
-    auto argi = dispatcher->arg_begin();
-    const auto matchRecNumArg = &*(argi++);
-    Value * const matchRecordNum = b->CreateLoad(b->getRawInputPointer("SourceCoords", b->getInt32(LINE_NUMBERS), phiMatchNum), "matchNumLoad");
-    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
-
-    Value * const nextMatchNum = b->CreateAdd(phiMatchNum, sz_ONE);
-    Value * const haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
-    phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
-    b->CreateCondBr(haveMoreMatches, processMatchCoordinates, coordinatesDone);
-
-    b->SetInsertPoint(coordinatesDone);
-    PHINode * const finalMatchNum = b->CreatePHI(b->getSizeTy(), 2);
-    finalMatchNum->addIncoming(matchesProcessed, entryBlock);
-    finalMatchNum->addIncoming(phiMatchNum, processMatchCoordinates);
-    finalMatchNum->addIncoming(nextMatchNum, dispatch);
-    PHINode * const finalInputProcessed = b->CreatePHI(b->getSizeTy(), 2);
-    finalInputProcessed->addIncoming(inputProcessed, entryBlock);
-    finalInputProcessed->addIncoming(truncMatchRecordStart, processMatchCoordinates);
-    finalInputProcessed->addIncoming(matchRecordEnd, dispatch);
-
-    b->setProcessedItemCount("ColorizedCoords", finalMatchNum);
-    b->setProcessedItemCount("SourceCoords", finalMatchNum);
-
-    b->setProcessedItemCount("InputStream", finalInputProcessed);
-    b->CreateUnlikelyCondBr(b->isFinal(), callFinalizeScan, scanReturn);
-
-    b->SetInsertPoint(callFinalizeScan);
-    Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
-    Value * const bufferEnd = b->getRawInputPointer("InputStream", inputAvail);
-    b->CreateCall(finalizer, {accumulator, bufferEnd});
-    b->CreateBr(scanReturn);
-
-    b->SetInsertPoint(scanReturn);
-
-
-}
-
-#endif
 
 }
