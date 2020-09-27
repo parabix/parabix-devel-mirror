@@ -5,6 +5,10 @@
 
 namespace kernel {
 
+#ifndef MSC_VER
+typedef long long int __int64;
+#endif
+
 template <typename T, unsigned n = 16>
 using Vec = SmallVector<T, n>;
 

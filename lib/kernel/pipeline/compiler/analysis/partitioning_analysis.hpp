@@ -2,6 +2,7 @@
 #define PARTITIONING_ANALYSIS_HPP
 
 #include "pipeline_analysis.hpp"
+#include <toolchain/toolchain.h>
 #include <util/slab_allocator.h>
 
 namespace kernel {
@@ -901,7 +902,12 @@ found:  ++i;
     // shares the same kernels as the first partition of another and we can schedule one after the other,
     // this may improve I-Cache utilization.
 
-    if (Z3_optimize_check(ctx, solver, 0, nullptr) != Z3_L_TRUE) {
+#if Z3_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 8, 0)
+    if (Z3_optimize_check(ctx, solver, 0, nullptr) != Z3_L_TRUE)
+#else
+    if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE)
+#endif
+    {
         report_fatal_error("Z3 failed to find a partition ordering solution");
     }
 
@@ -921,11 +927,11 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, var, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
-        int64_t num;
+        __int64 num;
         if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        assert (num >= 0 && num < static_cast<int64_t>(numOfContractedPartitions));
+        assert (num >= 0 && num < static_cast<__int64>(numOfContractedPartitions));
         assert (partition_order[num] == -1U);
         partition_order[num] = i;
     }
@@ -1182,14 +1188,18 @@ found:  ++i;
     }
 
     END_SCOPED_REGION
-
-    if (Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE) {
+#if Z3_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 8, 0)
+    if (Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE)
+#else
+    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE)
+#endif
+    {
         report_fatal_error("Z3 failed to find a kernel ordering solution");
     }
 
     std::vector<unsigned> ordering(numOfContractedKernels);
     #ifndef NDEBUG
-    std::vector<int64_t> test(numOfKernels);
+    std::vector<__int64> test(numOfKernels);
     #endif
 
     #ifndef NDEBUG
@@ -1206,11 +1216,11 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, var, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
-        int64_t num;
+        __int64 num;
         if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        assert (num >= 0 && num < static_cast<int64_t>(numOfContractedKernels));
+        assert (num >= 0 && num < static_cast<__int64>(numOfContractedKernels));
         assert (ordering[num] == -1U);
         ordering[num] = i;
         #ifndef NDEBUG
@@ -1335,7 +1345,7 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
 
     for (auto u = PartitionCount; u--; ) { // forward topological ordering
         assert (out_degree(u, G) > 0);
-        M.set(0, PartitionCount, true);
+        M.set();
         assert (M.count() == PartitionCount);
         for (const auto e : make_iterator_range(out_edges(u, G))) {
             const auto v = target(e, G);
