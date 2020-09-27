@@ -15,12 +15,6 @@
 
 cmake_minimum_required(VERSION 2.8)
 
-# Require that compilers support all features of C11 and C++14.
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 14)
-
 project(parabix)
 enable_testing()
 
@@ -94,13 +88,21 @@ link_directories(${Boost_LIBRARY_DIRS})
 ###   Import Dependency: Z3   ###
 
 find_package(Z3 REQUIRED) # libz3-dev
+message(STATUS "Found Z3 ${Z3_VERSION_STRING} in: ${Z3_INCLUDE_DIR}")
 include_directories(${Z3_INCLUDE_DIRS})
+string(REGEX REPLACE "([0-9]+)[.].*" "\\1" Z3_VERSION_MAJOR "${Z3_VERSION_STRING}")
+string(REGEX REPLACE "[0-9]+[.]([0-9]+).*" "\\1" Z3_VERSION_MINOR "${Z3_VERSION_STRING}")
+string(REGEX REPLACE "[0-9]+[.][0-9]+[.]([0-9]+).*" "\\1" Z3_VERSION_PATCH "${Z3_VERSION_STRING}")
+math(EXPR Z3_VERSION_INTEGER "${Z3_VERSION_MAJOR} * 10000 + ${Z3_VERSION_MINOR} * 100 + ${Z3_VERSION_PATCH}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DZ3_VERSION_INTEGER=${Z3_VERSION_INTEGER}")
 
 ###   Project Configuration   ###
 
-# Use C++ 11, fail if unable to do so.
+# Require that compilers support all features of C11 and C++11.
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 # Define `CXX_STANDARD` to enable conditional compilation based on standard version.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCXX_STANDARD=${CMAKE_CXX_STANDARD}")
