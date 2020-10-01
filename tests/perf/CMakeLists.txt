@@ -12,7 +12,7 @@ if(NOT BENCH_DIR)
     message(WARNING "You did not set `-DBENCH_DIR=/path/to/bench`, so you won't be able to run performance tests.")
 endif()
 
-set(BEST_FLAGS "--regalloc=basic --optimize-regalloc --fast-isel --disable-x86-domain-reassignment --disable-machine-licm --disable-machine-cse --disable-lsr --disable-phi-elim-edge-splitting")
+set(BEST_FLAGS --regalloc=basic --optimize-regalloc --fast-isel --disable-x86-domain-reassignment --disable-machine-licm --disable-machine-cse --disable-lsr --disable-phi-elim-edge-splitting)
 
 # Add a new perf-test target.
 function(parabix_add_perf_test NAME REGEX TARGET_FILE)
