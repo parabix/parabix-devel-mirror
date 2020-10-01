@@ -17,6 +17,7 @@ To build Parabix, you need a development environment that meets a few requiremen
 -  A modern C++ compiler supporting at least C++ 11.
 -  The [`cmake`](https://cmake.org/download/) build system version 2.8 or better.
 -  [`Boost`](https://www.boost.org/users/download/) libraries version `1.61` or better.
+-  [`Z3`](https://github.com/Z3Prover/z3) Theorem Prover.
 -  An [`LLVM`](https://releases.llvm.org/download.html) system version `5` or better.
 
 ### Build
