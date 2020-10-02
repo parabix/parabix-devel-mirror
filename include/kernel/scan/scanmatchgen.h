@@ -36,6 +36,15 @@ private:
     void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
 };
 
+class BatchCoordinatesKernel : public MultiBlockKernel {
+public:
+    BatchCoordinatesKernel(BuilderRef b,
+                           StreamSet * const Matches, StreamSet * const LineBreakStream,
+                           StreamSet * const Coordinates, Scalar * const callbackObject, unsigned strideBlocks = 1);
+private:
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
+};
+
 class MatchReporter : public SegmentOrientedKernel {
 public:
     MatchReporter(BuilderRef b,

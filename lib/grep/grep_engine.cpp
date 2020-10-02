@@ -618,6 +618,7 @@ void EmitMatch::setStringStream(std::ostringstream * s) {
 }
 
 unsigned EmitMatch::getFileCount() {
+    mCurrentFile = 0;
     if (mFileNames.size() == 0) return 1;
     return mFileNames.size();
 }
@@ -636,10 +637,15 @@ void EmitMatch::setBatchLineNumber(unsigned fileNo, size_t batchLine) {
     mFileStartLineNumbers[fileNo+1] = batchLine;
     if (!mTerminated) *mResultStr << "\n";
     mTerminated = true;
-    mCurrentFile++;
-    if (mCurrentFile < mFileNames.size()) setFileLabel(mFileNames[mCurrentFile]);}
+}
 
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
+    //llvm::errs() << "lineNum = " << lineNum << "\n";
+    while ((mCurrentFile + 1 < mFileStartPositions.size()) && (mFileStartLineNumbers[mCurrentFile + 1] <= lineNum)) {
+        mCurrentFile++;
+        //llvm::errs() << "mCurrentFile = " << mCurrentFile << "\n";
+        setFileLabel(mFileNames[mCurrentFile]);
+    }
     size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
         *mResultStr << "--\n";
@@ -745,8 +751,20 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
             MatchesByLine = ContextByLine;
         }
 
-        StreamSet * SourceCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
-        E->CreateKernelCall<MatchCoordinatesKernel>(MatchedLineEnds, mLineBreakStream, SourceCoords, 1);
+        StreamSet * SourceCoords = nullptr;
+        if (BatchMode) {
+            //llvm::errs() << "Batch mode calling BatchCoordinatesKernel\n";
+            SourceCoords = E->CreateStreamSet(1, sizeof(size_t) * 8);
+            Scalar * const callbackObject = E->getInputScalar("callbackObject");
+            Kernel * const batchK = E->CreateKernelCall<BatchCoordinatesKernel>(MatchedLineEnds, mLineBreakStream, SourceCoords, callbackObject);
+            batchK->link("get_file_count_wrapper", get_file_count_wrapper);
+            batchK->link("get_file_start_pos_wrapper", get_file_start_pos_wrapper);
+            batchK->link("set_batch_line_number_wrapper", set_batch_line_number_wrapper);
+            //E->CreateKernelCall<DebugDisplayKernel>("SourceCoords", SourceCoords);
+        } else {
+            SourceCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
+            E->CreateKernelCall<MatchCoordinatesKernel>(MatchedLineEnds, mLineBreakStream, SourceCoords, 1);
+        }
 
         StreamSet * LineStarts = E->CreateStreamSet(1, 1);
         E->CreateKernelCall<LineStartsKernel>(mLineBreakStream, LineStarts);
@@ -975,6 +993,8 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
         if (accum.mLineCount > 0) grepMatchFound = true;
         return accum.mLineCount;
     } else {
+        //llvm::errs() << "filenames.size() = " << fileNames.size() << "\n";
+        //for (auto & name : fileNames) { llvm::errs() << name << "\n";}
         typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
         auto f = reinterpret_cast<GrepBatchFunctionType>(mBatchMethod);
         EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
@@ -1029,6 +1049,12 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
         if (accum.mFileNames.size() > 0) {
             accum.setFileLabel(accum.mFileNames[0]);
             accum.mFileStartLineNumbers.resize(accum.mFileNames.size());
+            // Initialize to the maximum integer value so that tests
+            // will not rule that we are past a given file until the
+            // actual limit is computed.
+            for (unsigned i = 0; i < accum.mFileStartLineNumbers.size(); i++) {
+                accum.mFileStartLineNumbers[i] = ~static_cast<size_t>(0);
+            }
             f(accum.mBatchBuffer, current_start_position, &accum, mMaxCount);
         }
         alloc.deallocate(accum.mBatchBuffer, 0);
