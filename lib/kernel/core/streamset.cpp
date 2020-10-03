@@ -525,6 +525,7 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * const produce
         indices[0] = b->getInt32(0);
         indices[1] = b->getInt32(EffectiveCapacity);
         Value * const capacityField = b->CreateInBoundsGEP(mHandle, indices);
+        Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
 
         indices[1] = b->getInt32(BaseAddress);
         Value * const virtualBaseField = b->CreateInBoundsGEP(mHandle, indices);
@@ -535,12 +536,13 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * const produce
         Value * const mallocedAddrField = b->CreateInBoundsGEP(mHandle, indices);
         Value * const bufferStart = b->CreateLoad(mallocedAddrField);
 
-        Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
+
+
+
         Value * const newBaseAddress = b->CreateGEP(bufferStart, b->CreateNeg(consumedChunks));
+        Value * const effectiveCapacity = b->CreateAdd(consumedChunks, b->getSize(mCapacity));
+
         b->CreateStore(newBaseAddress, virtualBaseField);
-
-        Value * const effectiveCapacity = b->CreateAdd(consumedChunks, getInternalCapacity(b));
-
         b->CreateStore(effectiveCapacity, capacityField);
     }
 }
@@ -796,8 +798,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
         indices[1] = b->getInt32(EffectiveCapacity);
 
         Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
-        Value * const capacity = b->CreateLoad(capacityField);       
-
+        Value * const capacity = b->CreateLoad(capacityField);
         Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
         Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
         Value * const requiredCapacity = b->CreateAdd(produced, required);
@@ -819,10 +820,6 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             Value * const mallocAddress = b->CreateLoad(mallocAddrField);
 
             Value * const bytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
-
-            //b->CallPrintInt("consumed", consumed);
-            //b->CallPrintInt("CHUNK_SIZE", CHUNK_SIZE);
-            //b->CallPrintInt("bytesToCopy", bytesToCopy);
 
             BasicBlock * const copyBack = BasicBlock::Create(C, "copyBack", func);
             BasicBlock * const expandAndCopyBack = BasicBlock::Create(C, "expandAndCopyBack", func);

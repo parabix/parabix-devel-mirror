@@ -479,29 +479,6 @@ inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort po
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isSafeToUseProcessedItemCountDirectly
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::isSafeToUseProcessedItemCountDirectly(const unsigned streamSet) const {
-    const BufferNode & bn = mBufferGraph[streamSet];
-    if (bn.isExternal()) {
-        bool alreadyHasOneUse = false;
-        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const auto consumer = target(e, mBufferGraph);
-            // We can only safely use the processed item count if it's the last use of it
-            if (consumer > mKernelId) {
-                return false;
-            } else if (consumer == mKernelId) {
-                // If we have more than one use of this count in the same kernel, we cannot
-                // safely reuse it.
-                if (alreadyHasOneUse) return false;
-                alreadyHasOneUse = true;
-            }
-        }
-    }
-    return true;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief reset
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename Vec>
@@ -523,8 +500,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mAnyRemainingInput = nullptr;
     mExhaustedPipelineInputPhi = nullptr;
     mExhaustedInputAtJumpPhi = nullptr;
-    mExecutedAtLeastOnceAtLoopEntryPhi = nullptr;
-    mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
 
     mKernelIsFinal = nullptr;
     mKernelIsPenultimate = nullptr;

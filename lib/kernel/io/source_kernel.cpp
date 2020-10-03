@@ -169,24 +169,20 @@ void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
 
 void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
 
-    ConstantInt * const strideItems = b->getSize(stride);
+    ConstantInt * const itemsToRead = b->getSize(stride);
     ConstantInt * const codeUnitBytes = b->getSize(codeUnitWidth / 8);
-    Constant * const strideBytes = ConstantExpr::getMul(strideItems, codeUnitBytes);
 
-    BasicBlock * const entryBB = b->GetInsertBlock();
     BasicBlock * const moveData = b->CreateBasicBlock("MoveData");
     BasicBlock * const prepareBuffer = b->CreateBasicBlock("PrepareBuffer");
     BasicBlock * const readData = b->CreateBasicBlock("ReadData");
-    BasicBlock * const readIncomplete = b->CreateBasicBlock("readIncomplete");
     BasicBlock * const setTermination = b->CreateBasicBlock("SetTermination");
     BasicBlock * const readExit = b->CreateBasicBlock("ReadExit");
 
     // Can we append to our existing buffer without impacting any subsequent kernel?
     Value * const produced = b->getProducedItemCount("sourceBuffer");
-    Value * const itemsPending = b->CreateAdd(produced, strideItems);
+    Value * const itemsPending = b->CreateAdd(produced, itemsToRead);
     Value * const effectiveCapacity = b->getScalarField("effectiveCapacity");
     Value * const baseBuffer = b->getScalarField("buffer");
-    Value * const fd = b->getScalarField("fileDescriptor");
 
     Value * const permitted = b->CreateICmpULT(itemsPending, effectiveCapacity);
     b->CreateLikelyCondBr(permitted, readData, moveData);
@@ -211,7 +207,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     Value * const unreadItems = b->CreateSub(produced, consumed);
     Value * const unreadData = b->getRawOutputPointer("sourceBuffer", consumed);
-    Value * const potentialItems = b->CreateAdd(unreadItems, strideItems);
+    Value * const potentialItems = b->CreateAdd(unreadItems, itemsToRead);
 
     Value * const toWrite = b->CreateGEP(baseBuffer, potentialItems);
     Value * const canCopy = b->CreateICmpULT(toWrite, unreadData);
@@ -269,33 +265,16 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->CreateBr(readData);
 
     // Regardless of whether we're simply appending data or had to allocate a new buffer, read a new page
-    // of data into the input source buffer. This may involve multiple read calls.
+    // of data into the input source buffer. If we fail to read a full page ...
     b->SetInsertPoint(readData);
-    PHINode * const bytesToRead = b->CreatePHI(strideBytes->getType(), 3);
-    bytesToRead->addIncoming(strideBytes, entryBB);
-    bytesToRead->addIncoming(strideBytes, prepareBuffer);
-    PHINode * const producedSoFar = b->CreatePHI(produced->getType(), 3);
-    producedSoFar->addIncoming(produced, entryBB);
-    producedSoFar->addIncoming(produced, prepareBuffer);
-    Value * const sourceBuffer = b->getRawOutputPointer("sourceBuffer", producedSoFar);
+    Value * const sourceBuffer = b->getRawOutputPointer("sourceBuffer", produced);
+    Value * const fd = b->getScalarField("fileDescriptor");
+    Constant * const bytesToRead = ConstantExpr::getMul(itemsToRead, codeUnitBytes);
     Value * const bytesRead = b->CreateReadCall(fd, sourceBuffer, bytesToRead);
-    // There are 4 possibile results from read:
-    // bytesRead == -1: an error occurred
-    // bytesRead == 0: EOF, no bytes read
-    // 0 < bytesRead < bytesToRead:  some data read (more may be available)
-    // bytesRead == bytesToRead, the full amount requested was read.
-    b->CreateUnlikelyCondBr(b->CreateICmpNE(bytesToRead, bytesRead), readIncomplete, readExit);
-
-    b->SetInsertPoint(readIncomplete);
-    // Keep reading until a the full stride is read, or there is no more data.
-    Value * moreToRead = b->CreateSub(bytesToRead, bytesRead);
-    Value * readSoFar = b->CreateSub(strideBytes, moreToRead);
-    Value * const itemsRead = b->CreateUDiv(readSoFar, codeUnitBytes);
+    Value * const itemsRead = b->CreateUDiv(bytesRead, codeUnitBytes);
     Value * const itemsBuffered = b->CreateAdd(produced, itemsRead);
-    bytesToRead->addIncoming(moreToRead, readIncomplete);
-    producedSoFar->addIncoming(itemsBuffered, readIncomplete);
-    b->CreateCondBr(b->CreateICmpSGT(bytesRead, b->getSize(0)), readData, setTermination);
-    
+    b->CreateUnlikelyCondBr(b->CreateICmpULT(itemsBuffered, itemsPending), setTermination, readExit);
+
     // ... set the termination signal.
     b->SetInsertPoint(setTermination);
     Value * const bytesToZero = b->CreateMul(b->CreateSub(itemsPending, itemsBuffered), codeUnitBytes);

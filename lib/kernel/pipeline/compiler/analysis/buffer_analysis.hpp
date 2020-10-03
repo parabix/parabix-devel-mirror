@@ -58,6 +58,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
+        bn.Type |= BufferType::External;
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & input = rate.Binding;
@@ -70,6 +71,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
+        bn.Type |= BufferType::External;
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
@@ -295,8 +297,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
 
             BufferPort bp(port, binding, lb, ub);
 
-            bp.Countable = isCountable(binding);
-
             if (LLVM_UNLIKELY(rate.getKind() == RateId::Unknown)) {
                 bp.IsManaged = true;
             }
@@ -323,13 +323,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                         break;
                     case AttrId::Deferred:
                         bp.IsDeferred = true;
-                        if (LLVM_UNLIKELY(!bp.Countable)) {
-                            SmallVector<char, 256> tmp;
-                            raw_svector_ostream out(tmp);
-                            out << kernelObj->getName() << "." << binding.getName()
-                                << " cannot be both a Deferred and Non-Countable rate.";
-                            report_fatal_error(out.str());
-                        }
                         break;
                     case AttrId::SharedManagedBuffer:
                         bp.IsShared = true;
@@ -340,7 +333,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                     default: break;
                 }
             }
-
             return bp;
         };
 
@@ -488,22 +480,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             }
         }
     }
-
-    // fill in any unmanaged pipeline input buffers
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const auto streamSet = target(e, mBufferGraph);
-        BufferNode & bn = mBufferGraph[streamSet];
-        bn.Type |= BufferType::External;
-    }
-
-    // and pipeline output buffers ...
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const auto streamSet = source(e, mBufferGraph);
-        BufferNode & bn = mBufferGraph[streamSet];
-        bn.Type |= BufferType::External;
-    }
-
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -639,72 +615,6 @@ void PipelineAnalysis::identifyLinearBuffers() {
         }
     }
 #endif
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief identifyDirectUpdatesToStateObjects
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::identifyDirectUpdatesToStateObjects() {
-
-    // We can only safely use the processed item count if it's the last use of it
-    // and that consumer only uses it once.
-    SmallVector<unsigned, 64> lastConsumer(LastStreamSet - FirstStreamSet + 1U);
-    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
-        bool multipleUsages = false;
-        auto lastKernel = PipelineInput;
-        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const auto consumer = target(e, mBufferGraph);
-            if (consumer > lastKernel) {
-                lastKernel = consumer;
-                multipleUsages = false;
-            } else if (LLVM_UNLIKELY(consumer == lastKernel)) {
-                multipleUsages = true;
-            }
-        }
-        lastConsumer[streamSet - FirstStreamSet] = multipleUsages ? -1U : lastKernel;
-    }
-
-    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
-
-        const Kernel * const kernelObj = getKernel(kernel);
-
-        const auto isInternallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
-        const auto canTerminateEarly = kernelObj->canSetTerminateSignal();
-        const auto passOutputByAddress = isInternallySynchronized || canTerminateEarly;
-
-        for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-            const auto streamSet = source(e, mBufferGraph);
-            assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
-            const BufferNode & bn = mBufferGraph[streamSet];
-            BufferPort & rt = mBufferGraph[e];
-            // All uses of an external item count refer to the same processed field.
-            bool safeToUpdate = true;
-            if (LLVM_UNLIKELY(bn.isExternal())) {
-                const auto lastConsumedId = lastConsumer[streamSet - FirstStreamSet];
-                safeToUpdate = (lastConsumedId == kernel);
-            }
-            const auto takeInputAddress = isInternallySynchronized || rt.IsDeferred;
-            const auto nonCountable = !rt.Countable;
-            rt.Addressable = (takeInputAddress || nonCountable);
-            rt.DirectlyUpdatesInternalState = safeToUpdate && (nonCountable || isInternallySynchronized);
-            rt.StoreItemCount = safeToUpdate && (rt.IsDeferred || !rt.DirectlyUpdatesInternalState);
-        }
-
-        for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-            BufferPort & rt = mBufferGraph[e];
-            const auto streamSet = target(e, mBufferGraph);
-            assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
-            const auto takeOutputAddress = passOutputByAddress || rt.IsDeferred;
-            const auto nonCountable = !rt.Countable;
-            rt.Addressable = takeOutputAddress || nonCountable;
-            rt.StoreItemCount = true;
-            // If this kernel can terminate early, we need to store the item count
-            // that it may end up returning in the case of an unexpected termination.
-            rt.DirectlyUpdatesInternalState =
-                (nonCountable && !canTerminateEarly) || isInternallySynchronized;
-        }
-
-    }
 }
 
 

@@ -5,10 +5,6 @@
 
 namespace kernel {
 
-#ifndef MSC_VER
-typedef long long int __int64;
-#endif
-
 template <typename T, unsigned n = 16>
 using Vec = SmallVector<T, n>;
 
@@ -162,6 +158,10 @@ struct OutputPortVector {
 private:
     FixedVector<T> mArray;
 };
+
+
+template <typename T>
+using OwningVec = std::vector<std::unique_ptr<T>>;
 
 #ifndef NDEBUG
 static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const bool allowNull = true) {

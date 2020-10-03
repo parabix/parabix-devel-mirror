@@ -379,6 +379,8 @@ u8u16FunctionType generatePipelineWithOptimizationBranch(CPUDriver & pxDriver, c
     P->CreateKernelCall<CharacterClassKernelBuilder>(
         std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
 
+    P->CreateKernelCall<DebugDisplayKernel>("nonAscii", nonAscii);
+
     auto B = P->CreateOptimizationBranch(nonAscii,
         {Binding{"ByteStream", ByteStream}, Binding{"condition", nonAscii}},
         {Binding{"u16bytes", u16bytes, BoundedRate(0, 1), ManagedBuffer()}});

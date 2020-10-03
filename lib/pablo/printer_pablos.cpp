@@ -332,7 +332,7 @@ void PabloPrinter::print(PabloAST const * node, raw_ostream & out) noexcept {
 }
 
 void PabloPrinter::print(PabloBlock const * block, raw_ostream & out, const bool expandNested, unsigned indent) noexcept {
-    for (auto const stmt : *block) {
+    for (auto const & stmt : *block) {
         PrintStatement(stmt, out, expandNested, indent);
     }
 }

@@ -12,6 +12,75 @@
 
 namespace kernel {
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readPipelineIOItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
+
+    // TODO: this needs to be considered more: if we have multiple consumers of a pipeline input and
+    // they process the input data at differing rates, how do we ensure that we always resume processing
+    // at the correct position? We can store the actual item counts / delta of the consumed count
+    // internally but this would be problematic for optimization branches as we may have processed data
+    // using the alternate path and any internally stored counts/deltas are irrelevant.
+
+    // Would a simple "reset" be enough?
+
+    mKernelId = PipelineInput;
+
+    ConstantInt * const ZERO = b->getSize(0);
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        mLocallyAvailableItems[streamSet] = ZERO;
+    }
+
+    // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const StreamSetPort inputPort = mBufferGraph[e].Port;
+        assert (inputPort.Type == PortType::Output);
+        Value * const available = getAvailableInputItems(inputPort.Number);
+        setLocallyAvailableItemCount(b, inputPort, available);
+        initializeConsumedItemCount(b, inputPort, available);
+    }
+
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+
+        const auto buffer = target(e, mBufferGraph);
+        const StreamSetPort inputPort = mBufferGraph[e].Port;
+        assert (inputPort.Type == PortType::Output);
+
+        Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
+        Value * const processed = b->CreateLoad(inPtr);
+        for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
+            const BufferPort & rd = mBufferGraph[e];
+            const auto kernelIndex = target(e, mBufferGraph);
+            const auto prefix = makeBufferName(kernelIndex, rd.Port);
+            Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
+            b->CreateStore(processed, ptr);
+        }
+    }
+
+    mKernelId = PipelineOutput;
+
+    // NOTE: all inputs of PipelineOutput node are outputs of the PipelineKernel
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+        const auto buffer = source(e, mBufferGraph);
+        const StreamSetPort outputPort = mBufferGraph[e].Port;
+        assert (outputPort.Type == PortType::Input);
+        Value * outPtr = getProducedOutputItemsPtr(outputPort.Number);
+        Value * const produced = b->CreateLoad(outPtr);
+        for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
+            const BufferPort & rd = mBufferGraph[e];
+            const auto kernelId = source(e, mBufferGraph);
+            const auto prefix = makeBufferName(kernelId, rd.Port);
+            Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
+            b->CreateStore(produced, ptr);
+        }
+    }
+
+
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief detemineMaximumNumberOfStrides
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -54,7 +123,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     Value * numOfLinearStrides = nullptr;
 
-    if (mCurrentNumOfStridesAtLoopEntryPhi && mMaximumNumOfStrides) {
+    if (mMayLoopToEntry && !ExternallySynchronized) {
         numOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStridesAtLoopEntryPhi);
     } else {
         numOfLinearStrides = mMaximumNumOfStrides;
@@ -108,11 +177,11 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             const auto check = (bn.NonLocal || bn.NonLinear) && unchecked(br.LocalPortId);
 
             if (LLVM_LIKELY(check)) {
-                Value * const strides = getNumOfAccessibleStrides(b, br, numOfInputStrides, false);
+                Value * const strides = getNumOfAccessibleStrides(b, br, numOfInputStrides);
                 numOfInputStrides = b->CreateUMin(numOfInputStrides, strides);
             }
             if (LLVM_UNLIKELY(CheckAssertions)) {
-                Value * const strides = getNumOfAccessibleStrides(b, br, numOfActualInputStrides, true);
+                Value * const strides = getNumOfAccessibleStrides(b, br, numOfActualInputStrides);
                 numOfActualInputStrides = b->CreateUMin(numOfActualInputStrides, strides);
             }
         }
@@ -134,7 +203,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                     ConstantInt * const ONE = b->getSize(1);
                     numOfOutputStrides = b->CreateUMax(numOfInputStrides, ONE);
                 }
-                Value * const strides = getNumOfWritableStrides(b, br, numOfOutputStrides, false);
+                Value * const strides = getNumOfWritableStrides(b, br, numOfOutputStrides);
                 if (strides) {
                     Value * const minStrides = b->CreateUMin(numOfOutputStrides, strides);
                     Value * const isZero = b->CreateICmpEQ(strides, ZERO);
@@ -172,7 +241,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                ConstantInt * const ONE = b->getSize(1);
                numOfActualOutputStrides = b->CreateUMax(numOfActualInputStrides, ONE);
            }
-           Value * const strides = getNumOfWritableStrides(b, br, numOfActualOutputStrides, true);
+           Value * const strides = getNumOfWritableStrides(b, br, numOfActualOutputStrides);
            if (strides) {
                Value * const minStrides = b->CreateUMin(numOfActualOutputStrides, strides);
                Value * const isZero = b->CreateICmpEQ(strides, ZERO);
@@ -669,6 +738,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const BufferPort
 
 
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, overflow);
+
 //    if (LLVM_UNLIKELY(CheckAssertions)) {
 //        Value * intCapacity = buffer->getInternalCapacity(b);
 //        if (overflow) {
@@ -694,11 +764,6 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const BufferPort
         Value * const exhausted = b->CreateICmpUGE(processed, available);
         Value * const useZeroExtend = b->CreateAnd(closed, exhausted);
         mIsInputZeroExtended[inputPort] = useZeroExtend;
-
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_zeroExtended = %" PRIu64, mIsInputZeroExtended[inputPort]);
-        #endif
-
         if (LLVM_LIKELY(mHasZeroExtendedInput == nullptr)) {
             mHasZeroExtendedInput = useZeroExtend;
         } else {
@@ -742,8 +807,7 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
 
     const BufferNode & bn = mBufferGraph[streamSet];
 
-
-    if (LLVM_UNLIKELY(bn.isOwned() && bn.isDynamic())) {
+    if (LLVM_UNLIKELY(bn.isOwned())) {
 
         const auto prefix = makeBufferName(mKernelId, outputPort);
         const StreamSetBuffer * const buffer = bn.Buffer;
@@ -760,6 +824,7 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
         const auto beforeExpansion = mWritableOutputItems[outputPort.Number];
 
         Value * const hasEnoughSpace = b->CreateICmpULE(required, beforeExpansion[WITH_OVERFLOW]);
+
         BasicBlock * const noExpansionExit = b->GetInsertBlock();
         b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
 
@@ -781,7 +846,6 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
         buffer->reserveCapacity(b, produced, consumed, required);
 
         recordBufferExpansionHistory(b, outputPort, buffer);
-
         if (cycleCounterAccumulator) {
             Value * const cycleCounterEnd = b->CreateReadCycleCounter();
             Value * const duration = b->CreateSub(cycleCounterEnd, cycleCounterStart);
@@ -908,8 +972,7 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const BufferPort 
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b,
                                                     const BufferPort & port,
-                                                    Value * const numOfLinearStrides,
-                                                    const bool debug) {
+                                                    Value * const numOfLinearStrides) {
     const auto inputPort = port.Port;
     assert (inputPort.Type == PortType::Input);
     const Binding & input = port.Binding;
@@ -917,12 +980,6 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b,
     Value * numOfStrides = nullptr;
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelId, inputPort);
-    Constant * prefixSymbol = nullptr;
-    if (debug) {
-        prefixSymbol = b->GetString(prefix + "_debug");
-    } else {
-        prefixSymbol = b->GetString(prefix);
-    }
     #endif
     if (LLVM_UNLIKELY(rate.isPartialSum())) {
         numOfStrides = getMaximumNumOfPartialSumStrides(b, port, numOfLinearStrides);
@@ -932,8 +989,8 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b,
         Value * const accessible = getAccessibleInputItems(b, port); assert (accessible);
         Value * const strideLength = getInputStrideLength(b, port); assert (strideLength);
         #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "< %s_accessible = %" PRIu64, prefixSymbol, accessible);
-        debugPrint(b, "< %s_strideLength = %" PRIu64, prefixSymbol, strideLength);
+        debugPrint(b, "< " + prefix + "_accessible = %" PRIu64, accessible);
+        debugPrint(b, "< " + prefix + "_strideLength = %" PRIu64, strideLength);
         #endif
         numOfStrides = b->CreateUDiv(subtractLookahead(b, port, accessible), strideLength);
     }
@@ -942,7 +999,7 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b,
         numOfStrides = b->CreateSelect(ze, numOfLinearStrides, numOfStrides, "numOfZeroExtendedStrides");
     }
     #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, "< %s_numOfStrides = %" PRIu64, prefixSymbol, numOfStrides);
+    debugPrint(b, "< " + prefix + "_numOfStrides = %" PRIu64, numOfStrides);
     #endif
     return numOfStrides;
 }
@@ -952,8 +1009,7 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b,
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b,
                                                   const BufferPort & port,
-                                                  Value * const numOfLinearStrides,
-                                                  const bool debug) {
+                                                  Value * const numOfLinearStrides) {
 
     const auto outputPort = port.Port;
     assert (outputPort.Type == PortType::Output);
@@ -962,15 +1018,6 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b,
     if (LLVM_UNLIKELY(bn.isUnowned())) {
         return nullptr;
     }
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelId, outputPort);
-    Constant * prefixSymbol = nullptr;
-    if (debug) {
-        prefixSymbol = b->GetString(prefix + "_debug");
-    } else {
-        prefixSymbol = b->GetString(prefix);
-    }
-    #endif
     const Binding & output = port.Binding;
     Value * numOfStrides = nullptr;
     if (LLVM_UNLIKELY(output.getRate().isPartialSum())) {
@@ -981,7 +1028,8 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b,
         numOfStrides = b->CreateUDiv(writable, strideLength);
     }
     #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, "> %s_numOfStrides = %" PRIu64, prefixSymbol, numOfStrides);
+    const auto prefix = makeBufferName(mKernelId, outputPort);
+    debugPrint(b, "> " + prefix + "_numOfStrides = %" PRIu64, numOfStrides);
     #endif
     return numOfStrides;
 }

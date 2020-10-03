@@ -100,14 +100,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
                 b->CreateCall(func, params);
             }
         }
-        // and allocate any output buffers        
-        #ifdef PRINT_DEBUG_MESSAGES
-        Constant * const pipelineName = b->GetString(mTarget->getName());
-        SmallVector<char, 256> tmp;
-        raw_svector_ostream out(tmp);
-        out << i << "." << getKernel(i)->getName();
-        Constant * const kernelName = b->GetString(out.str());
-        #endif
+        // and allocate any output buffers
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto streamSet = target(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
@@ -124,12 +117,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
             assert ("a threadlocal buffer cannot be external" && (bn.isInternal() || nonLocal));
             assert (buffer->getHandle());
             assert (isFromCurrentFunction(b, buffer->getHandle(), false));
-            buffer->allocateBuffer(b, expectedNumOfStrides);           
-            #ifdef PRINT_DEBUG_MESSAGES
-            const BufferPort & rd = mBufferGraph[e];
-            const Binding & binding = rd.Binding;
-            debugPrint(b, "%s:%s.%s capacity = %" PRId64, pipelineName, kernelName, b->GetString(binding.getName()), buffer->getCapacity(b));
-            #endif
+            buffer->allocateBuffer(b, expectedNumOfStrides);
         }
     }
 
@@ -230,51 +218,16 @@ void PipelineCompiler::readProcessedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferPort & br = mBufferGraph[e];
         const auto inputPort = br.Port;
-        const auto streamSet = source(e, mBufferGraph);
-        const BufferNode & node = mBufferGraph[streamSet];
-        #ifndef STORE_EXTERNAL_PROCESSED_ITEM_COUNTS
-        if (LLVM_UNLIKELY(node.isExternal())) {
-            bool found = true;
-            for (const auto f : make_iterator_range(in_edges(streamSet, mBufferGraph))) {
-                if (source(f, mBufferGraph) == PipelineInput) {
-                    const BufferPort & external = mBufferGraph[f];
-                    Value * const processed = getProcessedInputItemsPtr(external.Port.Number);
-                    mProcessedItemCountPtr[inputPort] = processed;
-                    // mProcessedItemCountPtr[inputPort] = mExternallyProcessedItemPtr[streamSet];
-                    // assert (mInitiallyProcessedExternalItems[streamSet]);
-                    // mInitiallyProcessedItemCount[inputPort] = mInitiallyProcessedExternalItems[streamSet];
-                    mInitiallyProcessedItemCount[inputPort] = b->CreateLoad(processed);
-                    break;
-                }
-            }
-            assert("cannot locate external processed item count?" && found);
-        } else { // internal item count
-        #endif
-            const auto prefix = makeBufferName(mKernelId, inputPort);
-            Value * const processed = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
-            mProcessedItemCountPtr[inputPort] = processed;
-            mInitiallyProcessedItemCount[inputPort] = b->CreateLoad(processed);
-            if (br.IsDeferred) {
-                Value * const deferred = b->getScalarFieldPtr(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-                mProcessedDeferredItemCountPtr[inputPort] = deferred;
-                mInitiallyProcessedDeferredItemCount[inputPort] = b->CreateLoad(deferred);
-            }
-        #ifndef STORE_EXTERNAL_PROCESSED_ITEM_COUNTS
+        const auto prefix = makeBufferName(mKernelId, inputPort);
+        Value * const processed = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
+        mProcessedItemCountPtr[inputPort] = processed;
+        mInitiallyProcessedItemCount[inputPort] = b->CreateLoad(processed);
+        if (br.IsDeferred) {
+            Value * const deferred = b->getScalarFieldPtr(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+            mProcessedDeferredItemCountPtr[inputPort] = deferred;
+            mInitiallyProcessedDeferredItemCount[inputPort] = b->CreateLoad(deferred);
         }
-        #endif
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeExternalProcessedItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeExternalProcessedItemCounts(BuilderRef b) {
-//    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-//        const auto streamSet = target(e, mBufferGraph);
-//        Value * const ptr = b->CreateAllocaAtEntryPoint(b->getSizeTy());
-//        b->CreateStore(b->getSize(0), ptr);
-//        mExternallyProcessedItemPtr[streamSet] = ptr;
-//    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -283,32 +236,17 @@ void PipelineCompiler::writeExternalProcessedItemCounts(BuilderRef b) {
 void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & br = mBufferGraph[e];
+        const auto outputPort = br.Port;
+        const auto prefix = makeBufferName(mKernelId, outputPort);
         const auto streamSet = target(e, mBufferGraph);
-        const BufferPort & output = mBufferGraph[e];
-        const auto outputPort = output.Port;
-        const BufferNode & node = mBufferGraph[streamSet];
-        if (LLVM_UNLIKELY(node.isExternal())) {
-            bool found = true;
-            for (const auto f : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-                if (target(f, mBufferGraph) == PipelineOutput) {
-                    const BufferPort & external = mBufferGraph[f];
-                    Value * const produced = getProducedOutputItemsPtr(external.Port.Number);
-                    mProducedItemCountPtr[outputPort] = produced;
-                    mInitiallyProducedItemCount[streamSet] = b->CreateLoad(produced);
-                    break;
-                }
-            }
-            assert("cannot locate external produced item count?" && found);
-        } else { // internal item count
-            const auto prefix = makeBufferName(mKernelId, outputPort);
-            Value * const produced = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
-            mProducedItemCountPtr[outputPort] = produced;
-            mInitiallyProducedItemCount[streamSet] = b->CreateLoad(produced);
-            if (output.IsDeferred) {
-                Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-                mProducedDeferredItemCountPtr[outputPort] = deferred;
-                mInitiallyProducedDeferredItemCount[streamSet] = b->CreateLoad(deferred);
-            }
+        Value * const produced = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
+        mProducedItemCountPtr[outputPort] = produced;
+        mInitiallyProducedItemCount[streamSet] = b->CreateLoad(produced);
+        if (br.IsDeferred) {
+            Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+            mProducedDeferredItemCountPtr[outputPort] = deferred;
+            mInitiallyProducedDeferredItemCount[streamSet] = b->CreateLoad(deferred);
         }
     }
 }
@@ -352,59 +290,44 @@ void PipelineCompiler::setLocallyAvailableItemCount(BuilderRef /* b */, const St
     mLocallyAvailableItems[streamSet] = available;
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeUpdatedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
 
+    if (mKernelIsInternallySynchronized) {
+        return;
+    }
+
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferPort & br = mBufferGraph[e];
-        if (br.StoreItemCount) {
-            const StreamSetPort inputPort = br.Port;
+        const StreamSetPort inputPort = br.Port;
+        b->CreateStore(mUpdatedProcessedPhi[inputPort], mProcessedItemCountPtr[inputPort]);
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeBufferName(mKernelId, inputPort);
+        debugPrint(b, " @ writing " + prefix + "_processed = %" PRIu64, mUpdatedProcessedPhi[inputPort]);
+        #endif
+
+        if (br.IsDeferred) {
+            b->CreateStore(mUpdatedProcessedDeferredPhi[inputPort], mProcessedDeferredItemCountPtr[inputPort]);
             #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = b->GetString(makeBufferName(mKernelId, inputPort));
-            #endif
-            if (br.IsDeferred) {
-                // If this kernel has a deferred rate and we directly pass the state object's item count field
-                // to the kernel, that kernel will update the deferred count but still leave the undeferred
-                // count untouched.
-                if (!br.DirectlyUpdatesInternalState) {
-                    b->CreateStore(mUpdatedProcessedDeferredPhi[inputPort], mProcessedDeferredItemCountPtr[inputPort]);
-                    #ifdef PRINT_DEBUG_MESSAGES
-                    debugPrint(b, " @ writing %s_processed(deferred) = %" PRIu64, prefix, mUpdatedProcessedDeferredPhi[inputPort]);
-                    #endif
-                }
-            } else if (br.DirectlyUpdatesInternalState) {
-                continue;
-            }
-            b->CreateStore(mUpdatedProcessedPhi[inputPort], mProcessedItemCountPtr[inputPort]);
-            #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, " @ writing %s_processed = %" PRIu64, prefix, mUpdatedProcessedPhi[inputPort]);
+            debugPrint(b, " @ writing " + prefix + "_processed(deferred) = %" PRIu64, mUpdatedProcessedDeferredPhi[inputPort]);
             #endif
         }
     }
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const BufferPort & br = mBufferGraph[e];
-        if (br.StoreItemCount) {
-            const StreamSetPort outputPort = br.Port;
+        const StreamSetPort outputPort = br.Port;
+        b->CreateStore(mUpdatedProducedPhi[outputPort], mProducedItemCountPtr[outputPort]);
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeBufferName(mKernelId, outputPort);
+        debugPrint(b, " @ writing " + prefix + "_produced = %" PRIu64, mUpdatedProducedPhi[outputPort]);
+        #endif
+        if (br.IsDeferred) {
+            b->CreateStore(mUpdatedProducedDeferredPhi[outputPort], mProducedDeferredItemCountPtr[outputPort]);
             #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = b->GetString(makeBufferName(mKernelId, outputPort));
-            #endif
-            if (br.IsDeferred) {
-                if (!br.DirectlyUpdatesInternalState) {
-                    b->CreateStore(mUpdatedProducedDeferredPhi[outputPort], mProducedDeferredItemCountPtr[outputPort]);
-                    #ifdef PRINT_DEBUG_MESSAGES
-                    debugPrint(b, " @ writing %s_produced(deferred) = %" PRIu64, prefix, mUpdatedProducedDeferredPhi[outputPort]);
-                    #endif
-                }
-            } else if (br.DirectlyUpdatesInternalState) {
-                continue;
-            }
-            b->CreateStore(mUpdatedProducedPhi[outputPort], mProducedItemCountPtr[outputPort]);
-            #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, " @ writing %s_produced = %" PRIu64, prefix, mUpdatedProducedPhi[outputPort]);
+            debugPrint(b, " @ writing " + prefix + "_produced(deferred) = %" PRIu64, mUpdatedProducedDeferredPhi[outputPort]);
             #endif
         }
     }

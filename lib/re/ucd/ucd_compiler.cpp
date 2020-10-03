@@ -162,7 +162,7 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
     // Generate them first so that computed subexpressions may be shared
     // with calculations within the if hierarchy.
     const auto enclosed = rangeIntersect(ifRanges, lo, hi);
-    for (const auto & rg : rangeGaps(enclosed, lo, hi)) {
+    for (const auto rg : rangeGaps(enclosed, lo, hi)) {
         generateSubRanges(lo_codepoint(rg), hi_codepoint(rg), builder);
     }
 
@@ -184,7 +184,7 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
 
     Values nonIntersectingTargets;
 
-    for (const auto & range : outer) {
+    for (const auto range : outer) {
 
         // Split our current target list into two sets: the intersecting and non-intersecting ones. Any non-
         // intersecting set will be removed from the current map to eliminate the possibility of it being

@@ -372,8 +372,6 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     const auto internallySynchronized = mTarget->hasAttribute(AttrId::InternallySynchronized);
     const auto greedy = mTarget->isGreedy();
 
-    const auto kernelPrefix = getName();
-
     Rational fixedRateLCM{0};
     mFixedRateFactor = nullptr;
     if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
@@ -408,6 +406,10 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     #ifdef CHECK_IO_ADDRESS_RANGE
     auto checkStreamRange = [&](const std::unique_ptr<StreamSetBuffer> & buffer, const Binding & binding, Value * const startItemCount) {
 
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << "StreamSet " << getName() << ":" << binding.getName();
+
         PointerType * const int8PtrTy = b->getInt8PtrTy();
 
         ConstantInt * const ZERO = b->getSize(0);
@@ -416,7 +418,6 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         Value * const fromIndex = b->CreateUDiv(startItemCount, BLOCK_WIDTH);
         Value * const baseAddress = buffer->getBaseAddress(b);
         Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, fromIndex);
-
         Value * const start = b->CreatePointerCast(startPtr, int8PtrTy);
         Value * const toIndex = b->CreateCeilUDiv(buffer->getCapacity(b), BLOCK_WIDTH);
         Value * const endPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, toIndex);
@@ -438,9 +439,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         auto & buffer = mStreamSetInputBuffers[i];
         assert (buffer.get() && buffer->isLinear());
         const Binding & input = mInputStreamSets[i];
-
         Value * const virtualBaseAddress = b->CreatePointerCast(nextArg(), buffer->getPointerType());
-
         Value * const localHandle = b->CreateAllocaAtEntryPoint(buffer->getHandleType(b));
         buffer->setHandle(localHandle);
         buffer->setBaseAddress(b, virtualBaseAddress);
@@ -460,43 +459,36 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         const ProcessingRate & rate = input.getRate();
         Value * processed = nullptr;
         if (internallySynchronized || isAddressable(input)) {
-            mProcessedInputItemPtr[i] = nextArg();
-            processed = b->CreateLoad(mProcessedInputItemPtr[i]);
-
-        } else {
-            if (LLVM_LIKELY(isCountable(input))) {
-                processed = nextArg();
-            } else { // isRelative
-                const auto port = getStreamPort(rate.getReference());
-                assert (port.Type == PortType::Input && port.Number < i);
-                assert (mProcessedInputItemPtr[port.Number]);
-                Value * const ref = b->CreateLoad(mProcessedInputItemPtr[port.Number]);
-                processed = b->CreateMulRate(ref, rate.getRate());
-            }
-            assert (processed);
-            assert (processed->getType() == sizeTy);
-            AllocaInst * const processedItems = b->CreateAllocaAtEntryPoint(sizeTy);
-            b->CreateStore(processed, processedItems);
-            mProcessedInputItemPtr[i] = processedItems;
+            mUpdatableProcessedInputItemPtr[i] = nextArg();
+            processed = b->CreateLoad(mUpdatableProcessedInputItemPtr[i]);
+        } else if (LLVM_LIKELY(isCountable(input))) {
+            processed = nextArg();
+        } else { // isRelative
+            const auto port = getStreamPort(rate.getReference());
+            assert (port.Type == PortType::Input && port.Number < i);
+            assert (mProcessedInputItemPtr[port.Number]);
+            Value * const ref = b->CreateLoad(mProcessedInputItemPtr[port.Number]);
+            processed = b->CreateMulRate(ref, rate.getRate());
         }
-
+        assert (processed);
+        assert (processed->getType() == sizeTy);
+        AllocaInst * const processedItems = b->CreateAllocaAtEntryPoint(sizeTy);
+        b->CreateStore(processed, processedItems);
+        mProcessedInputItemPtr[i] = processedItems;
         /// ----------------------------------------------------
         /// accessible item count
         /// ----------------------------------------------------
-        Value * accessible = nullptr;        
+        Value * accessible = nullptr;
         if (LLVM_UNLIKELY(internallySynchronized || requiresItemCount(input))) {
             accessible = nextArg();
         } else {
             accessible = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
         }
-
         assert (accessible);
         assert (accessible->getType() == sizeTy);
-
         mAccessibleInputItems[i] = accessible;
         Value * avail = b->CreateAdd(processed, accessible);
         mAvailableInputItems[i] = avail;
-
         if (input.hasLookahead()) {
             avail = b->CreateAdd(avail, b->getSize(input.getLookahead()));
         }
@@ -527,7 +519,6 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i];
         assert (buffer.get() && buffer->isLinear());
         const Binding & output = mOutputStreamSets[i];
-
         const auto isShared = output.hasAttribute(AttrId::SharedManagedBuffer);
         const auto isLocal = internallySynchronized || isShared || Kernel::isLocalBuffer(output, false);
 
@@ -560,29 +551,26 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         const ProcessingRate & rate = output.getRate();
         Value * produced = nullptr;
         if (LLVM_LIKELY(internallySynchronized || canTerminate || isAddressable(output))) {
-            mProducedOutputItemPtr[i] = nextArg();
-            produced = b->CreateLoad(mProducedOutputItemPtr[i]);
-        } else {
-            if (LLVM_LIKELY(isCountable(output))) {
-                produced = nextArg();
-            } else { // isRelative
-                // For now, if something is produced at a relative rate to another stream in a kernel that
-                // may terminate, its final item count is inherited from its reference stream and cannot
-                // be set independently. Should they be independent at early termination?
-                const auto port = getStreamPort(rate.getReference());
-                assert (port.Type == PortType::Input || (port.Type == PortType::Output && port.Number < i));
-                const auto & items = (port.Type == PortType::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
-                Value * const ref = b->CreateLoad(items[port.Number]);
-                produced = b->CreateMulRate(ref, rate.getRate());
-            }
-            AllocaInst * const producedItems = b->CreateAllocaAtEntryPoint(sizeTy);
-            b->CreateStore(produced, producedItems);
-            mProducedOutputItemPtr[i] = producedItems;
+            mUpdatableProducedOutputItemPtr[i] = nextArg();
+            produced = b->CreateLoad(mUpdatableProducedOutputItemPtr[i]);
+        } else if (LLVM_LIKELY(isCountable(output))) {
+            produced = nextArg();
+        } else { // isRelative
+            // For now, if something is produced at a relative rate to another stream in a kernel that
+            // may terminate, its final item count is inherited from its reference stream and cannot
+            // be set independently. Should they be independent at early termination?
+            const auto port = getStreamPort(rate.getReference());
+            assert (port.Type == PortType::Input || (port.Type == PortType::Output && port.Number < i));
+            const auto & items = (port.Type == PortType::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
+            Value * const ref = b->CreateLoad(items[port.Number]);
+            produced = b->CreateMulRate(ref, rate.getRate());
         }
         assert (produced);
         assert (produced->getType() == sizeTy);
         mInitiallyProducedOutputItems[i] = produced;
-
+        AllocaInst * const producedItems = b->CreateAllocaAtEntryPoint(sizeTy);
+        b->CreateStore(produced, producedItems);
+        mProducedOutputItemPtr[i] = producedItems;
         /// ----------------------------------------------------
         /// writable / consumed item count
         /// ----------------------------------------------------
@@ -604,14 +592,15 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             Value * capacity = nullptr;
             if (writable) {
                 capacity = b->CreateAdd(produced, writable);
-                buffer->setCapacity(b, capacity);
                 #ifdef CHECK_IO_ADDRESS_RANGE
                 if (LLVM_UNLIKELY(enableAsserts)) {
                     checkStreamRange(buffer, output, produced);
                 }
                 #endif
+            } else {
+                capacity = ConstantExpr::getNeg(b->getSize(1));
             }
-
+            buffer->setCapacity(b, capacity);
         }
         mWritableOutputItems[i] = writable;
     }
@@ -755,7 +744,7 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
     args.reserve(mCurrentMethod->arg_size());
     for (auto ArgI = mCurrentMethod->arg_begin(); ArgI != mCurrentMethod->arg_end(); ++ArgI) {
         args.push_back(&(*ArgI));
-    } 
+    }
     setDoSegmentProperties(b, args);
     END_SCOPED_REGION
 
@@ -769,16 +758,14 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
         b->CreateMProtect(mSharedHandle, CBuilder::Protect::READ);
     }
 
-//    #error advance processed item counts for internally syncrhronized kernels? pipeline should handle it but didn't seem to?
+    const auto numOfInputs = getNumOfStreamInputs();
 
-//    const auto numOfInputs = getNumOfStreamInputs();
-
-//    for (unsigned i = 0; i < numOfInputs; i++) {
-//        if (mUpdatableProcessedInputItemPtr[i]) {
-//            Value * const items = b->CreateLoad(mProcessedInputItemPtr[i]);
-//            b->CreateStore(items, mUpdatableProcessedInputItemPtr[i]);
-//        }
-//    }
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        if (mUpdatableProcessedInputItemPtr[i]) {
+            Value * const items = b->CreateLoad(mProcessedInputItemPtr[i]);
+            b->CreateStore(items, mUpdatableProcessedInputItemPtr[i]);
+        }
+    }
 
     const auto numOfOutputs = getNumOfStreamOutputs();
 
@@ -798,21 +785,21 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
             Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
             Constant * const ZERO = b->getSize(0);
             Value * produced = mInitiallyProducedOutputItems[i];
-//            // TODO: will LLVM optimizations replace the following with the already loaded value?
-//            // If not, re-loading it here may reduce register pressure / compilation time.
-//            if (mProducedOutputItemPtr[i]) {
-//                produced = b->CreateLoad(mProducedOutputItemPtr[i]);
-//            }
+            // TODO: will LLVM optimizations replace the following with the already loaded value?
+            // If not, re-loading it here may reduce register pressure / compilation time.
+            if (mUpdatableProducedOutputItemPtr[i]) {
+                produced = b->CreateLoad(mUpdatableProducedOutputItemPtr[i]);
+            }
             Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
             Value * vba = buffer->getStreamLogicalBasePtr(b.get(), baseAddress, ZERO, blockIndex);
             vba = b->CreatePointerCast(vba, b->getVoidPtrTy());
 
             b->CreateStore(vba, mUpdatableOutputBaseVirtualAddressPtr[i]);
         }
-//        if (mUpdatableProducedOutputItemPtr[i]) {
-//            Value * const items = b->CreateLoad(mProducedOutputItemPtr[i]);
-//            b->CreateStore(items, mUpdatableProducedOutputItemPtr[i]);
-//        }
+        if (mUpdatableProducedOutputItemPtr[i]) {
+            Value * const items = b->CreateLoad(mProducedOutputItemPtr[i]);
+            b->CreateStore(items, mUpdatableProducedOutputItemPtr[i]);
+        }
     }
 
     // return the termination signal (if one exists)
@@ -834,7 +821,7 @@ std::vector<Value *> KernelCompiler::storeDoSegmentState() const {
     const auto numOfOutputs = getNumOfStreamOutputs();
 
     std::vector<Value *> S;
-    S.resize(8 + numOfInputs * 3 + numOfOutputs * 5);
+    S.resize(8 + numOfInputs * 4 + numOfOutputs * 6);
 
     auto o = S.begin();
 
@@ -858,11 +845,14 @@ std::vector<Value *> KernelCompiler::storeDoSegmentState() const {
     copy(mProcessedInputItemPtr, numOfInputs);
     copy(mAccessibleInputItems, numOfInputs);
     copy(mAvailableInputItems, numOfInputs);
+    copy(mUpdatableProcessedInputItemPtr, numOfInputs);
+
 
     copy(mProducedOutputItemPtr, numOfOutputs);
     copy(mInitiallyProducedOutputItems, numOfOutputs);
     copy(mWritableOutputItems, numOfOutputs);
     copy(mConsumedOutputItems, numOfOutputs);
+    copy(mUpdatableProducedOutputItemPtr, numOfOutputs);
     copy(mUpdatableOutputBaseVirtualAddressPtr, numOfOutputs);
 
     assert (o == S.end());
@@ -902,12 +892,14 @@ void KernelCompiler::restoreDoSegmentState(const std::vector<Value *> & S) {
     revert(mProcessedInputItemPtr, numOfInputs);
     revert(mAccessibleInputItems, numOfInputs);
     revert(mAvailableInputItems, numOfInputs);
+    revert(mUpdatableProcessedInputItemPtr, numOfInputs);
 
     const auto numOfOutputs = getNumOfStreamOutputs();
     revert(mProducedOutputItemPtr, numOfOutputs);
     revert(mInitiallyProducedOutputItems, numOfOutputs);
     revert(mWritableOutputItems, numOfOutputs);
     revert(mConsumedOutputItems, numOfOutputs);
+    revert(mUpdatableProducedOutputItemPtr, numOfOutputs);
     revert(mUpdatableOutputBaseVirtualAddressPtr, numOfOutputs);
 
     assert (o == S.end());

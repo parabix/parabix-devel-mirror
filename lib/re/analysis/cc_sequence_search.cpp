@@ -86,9 +86,9 @@ stateVector_t ccSequenceSearchObject::search_from_state(RE * re, stateVector_t v
             CC_matches |= (cc->intersects(*mCCseq[i])) << i;
         }
         return ((CC_matches & v) << 1) | mInitState;
+    } else {
+        llvm::report_fatal_error("failed to process " + Printer_RE::PrintRE(re));
     }
-    llvm::report_fatal_error("failed to process " + Printer_RE::PrintRE(re));
-    return 0;
 }
 
 bool ccSequenceSearchObject::search(RE * re) {

@@ -87,12 +87,8 @@ void PipelineCompiler::incrementCurrentSegNo(BuilderRef /* b */, BasicBlock * co
  * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned kernelId) {
-    #ifdef FORCE_SYNCHRONIZATION_FOR_ALL_KERNELS
-    const auto required = true;
-    #else
-    const auto required = RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized);
-    #endif
-    if (LLVM_LIKELY(required)) {
+
+    if (LLVM_LIKELY(RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized))) {
         const auto prefix = makeKernelName(kernelId);
         const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
         const unsigned waitingOnIdx = serialize ? LastKernel : kernelId;
@@ -113,9 +109,9 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
             Value * const pendingOrReady = b->CreateICmpULE(currentSegNo, mSegNo);
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);
-            out << "%s: pending logical segment number is %" PRIu64 " "
-                   "but was expected to be [0,%" PRIu64 "] (T: %" PRIx64 ")";
-            b->CreateAssert(pendingOrReady, out.str(), mKernelName[kernelId], currentSegNo, mSegNo, b->CreatePThreadSelf());
+            out << "%s: logical segment number is %" PRIu64 " "
+                   "but was expected to be [0,%" PRIu64 "]";
+            b->CreateAssert(pendingOrReady, out.str(), mCurrentKernelName, currentSegNo, mSegNo);
         }
         Value * const ready = b->CreateICmpEQ(mSegNo, currentSegNo);
         b->CreateLikelyCondBr(ready, acquired, acquire);
@@ -129,54 +125,31 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief acquireCurrentSegment
- *
- * Before the segment is processed, this loads the segment number of the kernel state and ensures the previous
- * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::verifyAcquiredSynchronizationLock(BuilderRef b, const unsigned kernelId) {
-    const auto toCheck = CheckAssertions && RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized);
-    if (LLVM_LIKELY(toCheck)) {
-        const auto prefix = makeKernelName(kernelId);
-        Value * const waitingOnPtr = getScalarFieldPtr(b.get(), prefix + LOGICAL_SEGMENT_SUFFIX);
-        Value * const currentSegNo = b->CreateAtomicLoadAcquire(waitingOnPtr);
-        Value * const pendingOrReady = b->CreateICmpEQ(currentSegNo, mSegNo);
-        SmallVector<char, 256> tmp;
-        raw_svector_ostream out(tmp);
-        out << "%s: acquired logical segment number is %" PRIu64 " "
-               "but was expected to be %" PRIu64 " (T: %" PRIx64 ")";
-        b->CreateAssert(pendingOrReady, out.str(), mKernelName[kernelId], currentSegNo, mSegNo, b->CreatePThreadSelf());
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief releaseCurrentSegment
  *
  * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned kernelId) {
-    #ifdef FORCE_SYNCHRONIZATION_FOR_ALL_KERNELS
-    const auto required = true;
-    #else
     const auto required = RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized);
-    #endif
-    if (LLVM_LIKELY(required || TraceProducedItemCounts || TraceUnconsumedItemCounts)) {            
+    if (LLVM_LIKELY(required || TraceProducedItemCounts || TraceUnconsumedItemCounts)) {
         const auto prefix = makeKernelName(kernelId);
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), prefix + LOGICAL_SEGMENT_SUFFIX);
-        if (LLVM_UNLIKELY(CheckAssertions && required)) {
-            Value * const currentSegNo = b->CreateAtomicLoadAcquire(waitingOnPtr);
-
-            Value * const unchanged = b->CreateICmpEQ(mSegNo, currentSegNo);
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "%s: released logical segment number is %" PRIu64
-                   " but was expected to be %" PRIu64 " (T: %" PRIx64 ")";
-            b->CreateAssert(unchanged, out.str(), mKernelName[kernelId], currentSegNo, mSegNo, b->CreatePThreadSelf());
+        Value * currentSegNo = nullptr;
+        if (LLVM_UNLIKELY(CheckAssertions)) {
+            currentSegNo = b->CreateLoad(waitingOnPtr);
         }
         b->CreateAtomicStoreRelease(mNextSegNo, waitingOnPtr);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, prefix + ": released %" PRIu64, mSegNo);
         #endif
+        if (LLVM_UNLIKELY(CheckAssertions && required)) {
+            Value * const unchanged = b->CreateICmpEQ(mSegNo, currentSegNo);
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "%s: logical segment number is %" PRIu64
+                   " but was expected to be %" PRIu64;
+            b->CreateAssert(unchanged, out.str(), mKernelName[kernelId], currentSegNo, mSegNo);
+        }
     }
 }
 

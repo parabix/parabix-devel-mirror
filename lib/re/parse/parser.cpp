@@ -105,16 +105,14 @@ RE * RE_Parser::parse_seq() {
 }
 
 RE * createStart(ModeFlagSet flags) {
-    // FIXME: deal with single-line mode properly 
-    //if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("^s");  //single-line mode
+    if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("^s");  //single-line mode
     if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
         return makeAlt({makeNegativeLookBehindAssertion(makeByte(0, 0xFF)), makeLookBehindAssertion(makeCC(0x0A, &cc::Unicode))});
     }
     return makeStart();
 }
 RE * createEnd(ModeFlagSet flags) {
-    // FIXME: deal with single-line mode properly
-    //if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("$s");  //single-line mode
+    if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("$s");  //single-line mode
     if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
         return makeAlt({makeNegativeLookAheadAssertion(makeByte(0, 0xFF)), makeLookAheadAssertion(makeCC(0x0A, &cc::Unicode))});
     }

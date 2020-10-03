@@ -2,7 +2,6 @@
 #define PARTITIONING_ANALYSIS_HPP
 
 #include "pipeline_analysis.hpp"
-#include <toolchain/toolchain.h>
 #include <util/slab_allocator.h>
 
 namespace kernel {
@@ -902,12 +901,7 @@ found:  ++i;
     // shares the same kernels as the first partition of another and we can schedule one after the other,
     // this may improve I-Cache utilization.
 
-#if Z3_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 8, 0)
-    if (Z3_optimize_check(ctx, solver, 0, nullptr) != Z3_L_TRUE)
-#else
-    if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE)
-#endif
-    {
+    if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a partition ordering solution");
     }
 
@@ -1188,12 +1182,8 @@ found:  ++i;
     }
 
     END_SCOPED_REGION
-#if Z3_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 8, 0)
-    if (Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE)
-#else
-    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE)
-#endif
-    {
+
+    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE) {
         report_fatal_error("Z3 failed to find a kernel ordering solution");
     }
 
@@ -1345,7 +1335,7 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
 
     for (auto u = PartitionCount; u--; ) { // forward topological ordering
         assert (out_degree(u, G) > 0);
-        M.set();
+        M.set(0, PartitionCount, true);
         assert (M.count() == PartitionCount);
         for (const auto e : make_iterator_range(out_edges(u, G))) {
             const auto v = target(e, G);

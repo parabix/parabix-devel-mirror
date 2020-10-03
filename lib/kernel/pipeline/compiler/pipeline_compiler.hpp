@@ -35,8 +35,6 @@ enum CycleCounter {
   , NUM_OF_STORED_COUNTERS
 };
 
-// TODO: what is the impact of replacing . with \0 for the suffix/prefix combos to
-// reduce the chance of duplicate keys?
 
 const static std::string ZERO_EXTENDED_BUFFER = "ZeB";
 const static std::string ZERO_EXTENDED_SPACE = "ZeS";
@@ -122,6 +120,7 @@ public:
 
     void readPipelineIOItemCounts(BuilderRef b);
     void updateInternalPipelineItemCount(BuilderRef b);
+    void writeExternalProducedItemCounts(BuilderRef b);
 
 // internal pipeline functions
 
@@ -155,8 +154,6 @@ public:
     void checkForPartitionExit(BuilderRef b);
 
 // inter-kernel codegen functions
-
-    void writeExternalProcessedItemCounts(BuilderRef b);
 
     void readProcessedItemCounts(BuilderRef b);
     void readProducedItemCounts(BuilderRef b);
@@ -193,8 +190,10 @@ public:
 
     void writeKernelCall(BuilderRef b);
     ArgVec buildKernelCallArgumentList(BuilderRef b);
-    void readOrUpdateProcessedAndProducedItemCounts(BuilderRef b);
+    void updateProcessedAndProducedItemCounts(BuilderRef b);
     void readReturnedOutputVirtualBaseAddresses(BuilderRef b) const;
+    Value * addItemCountArg(BuilderRef b, const BufferPort &binding, const bool addressable, Value * const itemCount, ArgVec &args);
+    Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args);
 
     void normalCompletionCheck(BuilderRef b);
 
@@ -235,8 +234,8 @@ public:
     Value * calculateStrideLength(BuilderRef b, const BufferPort & port);
     Value * calculateNumOfLinearItems(BuilderRef b, const BufferPort &port, Value * const adjustment);
     Value * getAccessibleInputItems(BuilderRef b, const BufferPort & inputPort, const bool useOverflow = true);
-    Value * getNumOfAccessibleStrides(BuilderRef b, const BufferPort & inputPort, Value * const numOfLinearStrides, const bool debug);
-    Value * getNumOfWritableStrides(BuilderRef b, const BufferPort & outputPort, Value * const numOfLinearStrides, const bool debug);
+    Value * getNumOfAccessibleStrides(BuilderRef b, const BufferPort & inputPort, Value * const numOfLinearStrides);
+    Value * getNumOfWritableStrides(BuilderRef b, const BufferPort & outputPort, Value * const numOfLinearStrides);
     Value * getWritableOutputItems(BuilderRef b, const BufferPort & outputPort, const bool useOverflow = true);
     Value * addLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount) const;
     Value * subtractLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount);
@@ -282,6 +281,7 @@ public:
     void readConsumedItemCounts(BuilderRef b);
     Value * readConsumedItemCount(BuilderRef b, const size_t streamSet, const bool useFinalCount = false);
     void setConsumedItemCount(BuilderRef b, const size_t bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
+    void writeExternalConsumedItemCounts(BuilderRef b);
 
 // buffer management codegen functions
 
@@ -357,7 +357,6 @@ public:
     void obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock);
     void incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId);
-    void verifyAcquiredSynchronizationLock(BuilderRef b, const unsigned kernelId);
     void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId);
 
 // family functions
@@ -398,8 +397,6 @@ public:
     using PipelineCommonGraphFunctions::getReference;
 
     const StreamSetPort getReference(const StreamSetPort port) const;
-
-    bool isSafeToUseProcessedItemCountDirectly(const unsigned streamSet) const;
 
     using PipelineCommonGraphFunctions::getInputBufferVertex;
     using PipelineCommonGraphFunctions::getInputBuffer;
@@ -508,7 +505,6 @@ protected:
     Vec<AllocaInst *, 16>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 16>                       mVirtualBaseAddressPtr;
     Vec<AllocaInst *, 4>                        mTruncatedInputBuffer;
-
     FixedVector<PHINode *>                      mInitiallyAvailableItemsPhi;
     FixedVector<Value *>                        mLocallyAvailableItems;
 
@@ -602,7 +598,6 @@ protected:
 
     OverflowItemCounts                          mAccessibleInputItems;
     InputPortVector<PHINode *>                  mLinearInputItemsPhi;
-
     InputPortVector<Value *>                    mReturnedProcessedItemCountPtr; // written by the kernel
     InputPortVector<Value *>                    mProcessedItemCountPtr; // exiting the segment loop
     InputPortVector<Value *>                    mProcessedItemCount;
@@ -655,9 +650,10 @@ protected:
 
     // misc.
 
-    OwningVector<Kernel>                        mInternalKernels;
-    OwningVector<Binding>                       mInternalBindings;
-    OwningVector<StreamSetBuffer>               mInternalBuffers;
+    OwningVec<Kernel>                           mInternalKernels;
+    OwningVec<Binding>                          mInternalBindings;
+    OwningVec<StreamSetBuffer>                  mInternalBuffers;
+
 
 };
 
@@ -665,7 +661,7 @@ protected:
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
-: PipelineCompiler(pipelineKernel, PipelineAnalysis::analyze(b, pipelineKernel)) {
+: PipelineCompiler(pipelineKernel, std::move(PipelineAnalysis::analyze(b, pipelineKernel))) {
     // Use a delegating constructor to compute the pipeline graph data once and pass it to
     // the compiler. Although a const function attribute ought to suffice, gcc 8.2 does not
     // resolve it correctly and clang requires -O2 or better.
@@ -677,9 +673,7 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, PipelineAnalysis && P)
 : KernelCompiler(pipelineKernel)
 , PipelineCommonGraphFunctions(mStreamGraph, mBufferGraph)
-#if defined(DISABLE_PIPELINE_ASSERTIONS)
-, CheckAssertions(false)
-#elif defined(FORCE_PIPELINE_ASSERTIONS)
+#ifdef FORCE_PIPELINE_ASSERTIONS
 , CheckAssertions(true)
 #else
 , CheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
