@@ -1345,7 +1345,7 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
 
     for (auto u = PartitionCount; u--; ) { // forward topological ordering
         assert (out_degree(u, G) > 0);
-        M.set(0, PartitionCount, true);
+        M.set();
         assert (M.count() == PartitionCount);
         for (const auto e : make_iterator_range(out_edges(u, G))) {
             const auto v = target(e, G);

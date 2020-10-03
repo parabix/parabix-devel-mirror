@@ -950,7 +950,6 @@ void BatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
     Constant * const sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * const sz_ZERO = b->getSize(0);
     Constant * const sz_ONE = b->getSize(1);
-    Constant * const sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * const sz_MAXBIT = b->getSize(SIZE_T_BITS - 1);
     Type * const sizeTy = b->getSizeTy();
 
@@ -1114,13 +1113,13 @@ void BatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
     Value * breakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, breakWordIdx)), sizeTy);
     // For case (a), we use the previously masked value of the break word.
     breakWord = b->CreateSelect(inWordCond, priorBreaksThisWord, breakWord);   // cases (a) and (b)
-    Value * matchRecordNum = nullptr;
+    //Value * matchRecordNum = nullptr;
     if (mLineNumbering) {
         Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, matchWordIdx)), sizeTy);
         // Subtract the number of remaining breaks in the match word to get the relative line number.
         Value * extraBreaks = b->CreateXor(matchBreakWord, priorBreaksThisWord);
         lineCountInStride = b->CreateSub(lineCountInStride, b->CreatePopcount(extraBreaks));
-        matchRecordNum = b->CreateAdd(pendingLineNum, lineCountInStride);
+        //matchRecordNum = b->CreateAdd(pendingLineNum, lineCountInStride);
     }
 
     pendingLimit = b->getScalarField("pendingFileLimit");
