@@ -4,6 +4,7 @@
 # module: kernel.pipeline
 
 parabix_add_module(
+USES_Z3
 NAME
     kernel.pipeline
 SRC

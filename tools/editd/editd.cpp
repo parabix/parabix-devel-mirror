@@ -164,7 +164,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
 
 //TODO: make a "CBuffer" class to abstract away the complexity of making these function typedefs.
 
-typedef void (*preprocessFunctionType)(size_t, char * output_data, size_t output_size, const uint32_t fd);
+typedef void (*preprocessFunctionType)(char * output_data, size_t output_size, const uint32_t fd);
 
 static char * chStream;
 static size_t fsize;
@@ -238,7 +238,7 @@ char * preprocess(preprocessFunctionType preprocess) {
     const size_t n = round_up_to(fsize, 8 * ALIGNMENT);
     const auto m = (4 * n) / 8;
     chStream = alloc.allocate(m);
-    preprocess(n, chStream, 0, fd);
+    preprocess(chStream, 0, fd);
     close(fd);
     return chStream;
 }
@@ -258,7 +258,6 @@ LLVM_READNONE std::string createName(const std::vector<std::string> & patterns) 
 class PatternKernel final : public pablo::PabloKernel {
 public:
     PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
-
     StringRef getSignature() const override {
         return mSignature;
     }

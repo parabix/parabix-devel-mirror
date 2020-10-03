@@ -29,14 +29,14 @@ public:
                StreamSet * const breaks,
                StreamSet * const matches)
     : MultiBlockKernel(b
-                       , "gitignoreC" + std::to_string(codegen::SegmentSize)
+                       , "gitignoreC"
                        // inputs
                        , {{"BasisBits", BasisBits}, {"u8index", u8index}, {"breaks", breaks}}
                        // outputs
                        , {{"matches", matches, FixedRate(), Add1()}}
                        // scalars
                        , {}, {}, {}) {
-        setStride(codegen::SegmentSize);
+
     }
 
 
@@ -49,7 +49,7 @@ protected:
         Value * const source = b->CreatePointerCast(b->getRawInputPointer("breaks", processed), int8PtrTy);
         Value * const produced = b->getProducedItemCount("matches");
         Value * const target = b->CreatePointerCast(b->getRawOutputPointer("matches", produced), int8PtrTy);
-        Value * const toCopy = b->CreateMul(numOfStrides, b->getSize(codegen::SegmentSize));
+        Value * const toCopy = b->CreateMul(numOfStrides, b->getSize(getStride()));
         b->CreateMemCpy(target, source, toCopy, b->getBitBlockWidth() / 8);
     }
 
@@ -67,23 +67,19 @@ public:
                              Kernel * const outerKernel,
                              const re::PatternVector & patterns,
                              const bool caseInsensitive,
-                             re::CC * const breakCC,
-
-                             const bool requiresInternalSynchronization)
+                             re::CC * const breakCC)
         : PipelineKernel(driver
                          // signature
                          , [&]() -> std::string {
                             std::string tmp;
                             raw_string_ostream out(tmp);
-                            out << "gitignore" << codegen::SegmentSize << (outerKernel == nullptr ? 'R' : 'N');
+                            out << "gitignore" << (outerKernel == nullptr ? 'R' : 'N');
                             out.write_hex(patterns.size());                            
                             out.flush();
                             return tmp;
                          }()
                          // num of threads
                          , 1
-                         // num of segments (is num of threads)
-                         , codegen::SegmentThreads
                          // make kernel list
                          , [&]() -> Kernels {
                              Kernels kernels;
@@ -145,12 +141,12 @@ public:
                          // stream inputs
                          , {{"basis", BasisBits}, {"u8index", u8index}, {"breaks", breaks}}
                          // stream outputs
-                         , {{"matches", matches, FixedRate(), Add1()}}
+                         , {{"matches", matches, FixedRate(), { Add1(), ManagedBuffer() }}}
                          // scalars
-                         , {}, {}) {
-        if (requiresInternalSynchronization) {
-            addAttribute(InternallySynchronized());
-        }
+                         , {}, {}
+                         // length assertions
+                         , {}) {
+        addAttribute(InternallySynchronized());
     }
 
     bool hasFamilyName() const override { return true; }
@@ -214,8 +210,7 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
                                               mBasisBits, mU8index, mBreaks,
                                               mMatches,
                                               mNested.back(), // outer kernel
-                                              patterns, mCaseInsensitive, mBreakCC,
-                                              mNumOfThreads > 1);
+                                              patterns, mCaseInsensitive, mBreakCC);
     }
 
     mGrepDriver.generateUncachedKernels();

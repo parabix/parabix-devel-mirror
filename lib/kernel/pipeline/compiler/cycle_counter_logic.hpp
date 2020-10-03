@@ -7,18 +7,21 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelCycleCountProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned kernel) {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned kernel, const bool isRoot) {
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
         // TODO: make these thread local to prevent false sharing and enable
         // analysis of thread distributions?
         IntegerType * const int64Ty = b->getInt64Ty();
 
         const auto prefix = makeKernelName(kernel) + STATISTICS_CYCLE_COUNT_SUFFIX;
-        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
-        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));
-        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_COPY));
-        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
-        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::FINAL));
+        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::KERNEL_SYNCHRONIZATION));
+        if (isRoot) {
+            mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::PARTITION_JUMP_SYNCHRONIZATION));
+        }
+        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));        
+        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::BUFFER_COPY));
+        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::KERNEL_EXECUTION));
+        mTarget->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::TOTAL_TIME));
     }
 
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
@@ -27,20 +30,21 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
         IntegerType * const int64Ty = b->getInt64Ty();
 
         // total # of segments processed by kernel
-        mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_SEGMENT_COUNT_SUFFIX);
+        mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_SEGMENT_COUNT_SUFFIX, kernel);
 
         // # of blocked I/O channel attempts in which no strides
         // were possible (i.e., blocked on first iteration)
-        const auto numOfInputs = getNumOfStreamInputs(kernel);
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Input, i});
-            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX);
+
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const auto port = mBufferGraph[e].Port;
+            const auto prefix = makeBufferName(kernel, port);
+            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX, kernel);
         }
-        const auto numOfOutputs = getNumOfStreamOutputs(kernel);
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
+        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
             // TODO: ignore dynamic buffers
-            const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Output, i});
-            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX);
+            const auto port = mBufferGraph[e].Port;
+            const auto prefix = makeBufferName(kernel, port);
+            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX, kernel);
         }
     }
 
@@ -55,15 +59,15 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
 
         // # of blocked I/O channel attempts in which no strides
         // were possible (i.e., blocked on first iteration)
-        const auto numOfInputs = getNumOfStreamInputs(kernel);
+        const auto numOfInputs = numOfStreamInputs(kernel);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Input, i});
-            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
+            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX, kernel);
         }
-        const auto numOfOutputs = getNumOfStreamOutputs(kernel);
+        const auto numOfOutputs = numOfStreamOutputs(kernel);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Output, i});
-            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
+            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX, kernel);
         }
 
     }
@@ -72,11 +76,12 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief startOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        assert ((unsigned)type < mCycleCounters.size());
-        mCycleCounters[(unsigned)type] = b->CreateReadCycleCounter();
+Value * PipelineCompiler::startCycleCounter(BuilderRef b) {
+    Value * counter = nullptr;
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
+        counter = b->CreateReadCycleCounter();
     }
+    return counter;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -84,8 +89,8 @@ void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) 
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
     Value * ptr = nullptr;
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        const auto prefix = makeKernelName(mKernelIndex) + STATISTICS_CYCLE_COUNT_SUFFIX;
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
+        const auto prefix = makeKernelName(mKernelId) + STATISTICS_CYCLE_COUNT_SUFFIX;
         ptr = b->getScalarFieldPtr(prefix + std::to_string(BUFFER_EXPANSION));
     }
     return ptr;
@@ -94,14 +99,15 @@ Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief updateOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        Value * const endCount = b->CreateReadCycleCounter();
-        Value * const duration = b->CreateSub(endCount, mCycleCounters[start]);
-        const auto prefix = makeKernelName(mKernelIndex) + STATISTICS_CYCLE_COUNT_SUFFIX;
-        Value * const counterPtr = b->getScalarFieldPtr(prefix + std::to_string(end));
+void PipelineCompiler::updateCycleCounter(BuilderRef b, const unsigned kernelId, Value * const start, const CycleCounter type) const {
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
+        Value * const end = b->CreateReadCycleCounter();
+        Value * const duration = b->CreateSub(end, start);
+        const auto prefix = makeKernelName(kernelId);
+        const auto field = prefix + STATISTICS_CYCLE_COUNT_SUFFIX + std::to_string(type);
+        Value * const counterPtr = b->getScalarFieldPtr(field);
         Value * const runningCount = b->CreateLoad(counterPtr);
-        Value * const updatedCount = b->CreateAdd(runningCount, duration);
+        Value * const updatedCount = b->CreateAdd(runningCount, duration); // , out.str()
         b->CreateStore(updatedCount, counterPtr);
     }
 }
@@ -116,9 +122,10 @@ StreamSetPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned 
         return StreamSetPort{PortType::Output, 0};
     } else {
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const Binding & input = getInputBinding(kernel, i);
+            const auto inputPort = StreamSetPort{PortType::Input, i};
+            const Binding & input = getInputBinding(kernel, inputPort);
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                return StreamSetPort{PortType::Input, i};
+                return inputPort;
             }
         }
         return StreamSetPort{PortType::Input, 0};
@@ -129,7 +136,7 @@ StreamSetPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned 
  * @brief printOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
 
         // Print the title line
 
@@ -151,8 +158,9 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         title << "     ITEMS " // items processed;
                  "    CYCLES " // CPU cycles,
                  "      RATE " // cycles per item,
-                 " SYNC " // synchronization %,
-                 " BUFF " // buffer expansion %,
+                 " SYNC " // kernel synchronization %,
+                 " PART " // partition synchronization %,
+                 " EXPD " // buffer expansion %,
                  " COPY " // look ahead + copy back + look behind %,
                  " PIPE " // pipeline overhead %,
                  "  EXEC " // execution %,
@@ -174,28 +182,40 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
                 "%10.2E " // items processed;
                 "%10.2E " // CPU cycles,
                 "%10.2f " // cycles per item,
-                "%5.1f " // synchronization %,
+                "%5.1f " // kernel synchronization %,
+                "%5.1f " // partition synchronization %,
                 "%5.1f " // buffer expansion %,
                 "%5.1f " // look ahead + copy back + look behind %,
                 "%5.1f " // overhead %,
                 "%6.1f " // execution %,
                 "%5.1f\n"; // % of Total CPU Cycles.
 
-        FixedArray<Value *, 13> args;
+        FixedArray<Value *, 14> args;
         args[0] = STDERR;
         args[1] = b->GetString(line.str());
 
-        Value * totalCycles = b->getInt64(0);
+        Value * fTotalCycles = nullptr;
 
-        for (auto i = FirstKernel; i <= LastKernel; ++i) {
-            const auto prefix = makeKernelName(i) + STATISTICS_CYCLE_COUNT_SUFFIX;
-            Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::FINAL));
-            totalCycles = b->CreateAdd(totalCycles, cycles);
-        }
+        SmallVector<Value *, 64> fKernelCycles(LastKernel + 1);
 
         Type * const doubleTy = b->getDoubleTy();
         Constant * const fOneHundred = ConstantFP::get(doubleTy, 100.0);
-        Value * const fTotalCycles = b->CreateUIToFP(totalCycles, doubleTy);
+
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            const auto prefix = makeKernelName(i) + STATISTICS_CYCLE_COUNT_SUFFIX;
+            Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::TOTAL_TIME));
+            Value * const fCycles = b->CreateUIToFP(cycles, doubleTy);
+            fKernelCycles[i] = fCycles;
+            if (i == FirstKernel) {
+                fTotalCycles = fCycles;
+            } else {
+                fTotalCycles = b->CreateFAdd(fTotalCycles, fCycles);
+            }
+        }
+
+        auto priorPartitionId = -1U;
+
+        ConstantInt * const i64_ZERO = b->getInt64(0);
 
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
 
@@ -203,60 +223,61 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             Value * const items = b->getScalarField(makeBufferName(i, binding) + ITEM_COUNT_SUFFIX);
             Value * const fItems = b->CreateUIToFP(items, doubleTy);
 
+            const auto partitionId = KernelPartitionId[i];
+            const auto isRoot = (partitionId != priorPartitionId);
+            priorPartitionId = partitionId;
+
             const auto prefix = makeKernelName(i) + STATISTICS_CYCLE_COUNT_SUFFIX;
-            Value * const synchronizationCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
-            Value * const fSynchronizationCycles = b->CreateUIToFP(synchronizationCycles, doubleTy);
-            Value * const fSynchronizationCycles100 = b->CreateFMul(fSynchronizationCycles, fOneHundred);
 
-            Value * const bufferExpandCycles = b->getScalarField(prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));
-            Value * const fBufferExpandCycles = b->CreateUIToFP(bufferExpandCycles, doubleTy);
-            Value * const fBufferExpandCycles100 = b->CreateFMul(fBufferExpandCycles, fOneHundred);
+            auto getCycles = [&](CycleCounter fieldType) {
+                return b->getScalarField(prefix + std::to_string(fieldType));
+            };
 
-            Value * iKnownOverheads = b->CreateAdd(synchronizationCycles, bufferExpandCycles);
+            Value * const fKernelSynchronizationCycles = getCycles(CycleCounter::KERNEL_SYNCHRONIZATION);
 
-            Value * const executionCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
-            Value * const fExecutionCycles = b->CreateUIToFP(executionCycles, doubleTy);
-            Value * const fExecutionCycles100 = b->CreateFMul(fExecutionCycles, fOneHundred);
+            Value * fKnownOverheads = fKernelSynchronizationCycles;
 
-            iKnownOverheads = b->CreateAdd(iKnownOverheads, executionCycles);
+            Value * fPartitionSynchronizationCycles = i64_ZERO;
 
-            Value * const copyCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_COPY));
-            Value * const fCopyCycles = b->CreateUIToFP(copyCycles, doubleTy);
-            Value * const fCopyCycles100 = b->CreateFMul(fCopyCycles, fOneHundred);
+            if (isRoot) {
+                fPartitionSynchronizationCycles = getCycles(CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
+                fKnownOverheads = b->CreateAdd(fKnownOverheads, fPartitionSynchronizationCycles);
+            }
 
-            iKnownOverheads = b->CreateAdd(iKnownOverheads, copyCycles);
+            Value * const fBufferExpandCycles = getCycles(CycleCounter::BUFFER_EXPANSION);
 
-            Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::FINAL));
-            Value * const fCycles = b->CreateUIToFP(cycles, doubleTy);
+            fKnownOverheads = b->CreateAdd(fKnownOverheads, fBufferExpandCycles);
 
-            Value * const iInternalOverhead = b->CreateSub(cycles, iKnownOverheads);
+            Value * const fExecutionCycles = getCycles(CycleCounter::KERNEL_EXECUTION);
 
-            Value * const fSynchronizationPerc = b->CreateFDiv(fSynchronizationCycles100, fCycles);
-            Value * const fBufferExpandPerc = b->CreateFDiv(fBufferExpandCycles100, fCycles);
-            Value * const fCopyPerc = b->CreateFDiv(fCopyCycles100, fCycles);
-            Value * const fExecutionPerc = b->CreateFDiv(fExecutionCycles100, fCycles);
+            fKnownOverheads = b->CreateAdd(fKnownOverheads, fExecutionCycles);
 
-            Value * const fCyclesPerItem = b->CreateFDiv(fCycles, fItems);
-            Value * const fCycles100 = b->CreateFMul(fCycles, fOneHundred);
+            Value * const fCopyCycles = getCycles(CycleCounter::BUFFER_COPY);
+            fKnownOverheads = b->CreateAdd(fKnownOverheads, fCopyCycles);
 
-            Value * const fUnknownOverheads = b->CreateUIToFP(iInternalOverhead, doubleTy);
-            Value * const fUnknownOverheads100 = b->CreateFMul(fUnknownOverheads, fOneHundred);
-            Value * const fUnknownOverhead = b->CreateFDiv(fUnknownOverheads100, fCycles);
+            Value * const fCycles = fKernelCycles[i];
 
-            Value * const fPercentageOfTotal = b->CreateFDiv(fCycles100, fTotalCycles);
+            auto getPerc = [&](Value * const value) {
+                Value * fValue = b->CreateUIToFP(value, doubleTy);
+                return b->CreateFMul(b->CreateFDiv(fValue, fCycles), fOneHundred);
+            };
+
+            fKnownOverheads = b->CreateUIToFP(fKnownOverheads, doubleTy);
+            Value * const fPipelineCycles = b->CreateFSub(fCycles, fKnownOverheads);
 
             const Kernel * const kernel = getKernel(i);
             args[2] = b->getInt32(i);
             args[3] = b->GetString(kernel->getName());
             args[4] = fItems;
             args[5] = fCycles;
-            args[6] = fCyclesPerItem;
-            args[7] = fSynchronizationPerc;
-            args[8] = fBufferExpandPerc;
-            args[9] = fCopyPerc;
-            args[10] = fUnknownOverhead;
-            args[11] = fExecutionPerc;
-            args[12] = fPercentageOfTotal;
+            args[6] = b->CreateFDiv(fCycles, fItems);
+            args[7] = getPerc(fKernelSynchronizationCycles);
+            args[8] = getPerc(fPartitionSynchronizationCycles);
+            args[9] = getPerc(fBufferExpandCycles);
+            args[10] = getPerc(fCopyCycles);
+            args[11] = getPerc(fPipelineCycles);
+            args[12] = getPerc(fExecutionCycles);
+            args[13] = b->CreateFMul(b->CreateFDiv(fCycles, fTotalCycles), fOneHundred);
 
             b->CreateCall(b->GetDprintf(), args);
         }
@@ -274,7 +295,7 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
 void PipelineCompiler::incrementNumberOfSegmentsCounter(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
         const auto fieldName =
-            makeKernelName(mKernelIndex) + STATISTICS_SEGMENT_COUNT_SUFFIX;
+            makeKernelName(mKernelId) + STATISTICS_SEGMENT_COUNT_SUFFIX;
         Value * const counterPtr = b->getScalarFieldPtr(fieldName);
         Value * const runningCount = b->CreateLoad(counterPtr);
         Value * const updatedCount = b->CreateAdd(runningCount, b->getInt64(1));
@@ -287,7 +308,7 @@ void PipelineCompiler::incrementNumberOfSegmentsCounter(BuilderRef b) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordBlockingIO(BuilderRef b, const StreamSetPort port) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
-        const auto prefix = makeBufferName(mKernelIndex, port);
+        const auto prefix = makeBufferName(mKernelId, port);
         Value * const counterPtr = b->getScalarFieldPtr(prefix + STATISTICS_BLOCKING_IO_SUFFIX);
         Value * const runningCount = b->CreateLoad(counterPtr);
         Value * const updatedCount = b->CreateAdd(runningCount, b->getSize(1));
@@ -295,7 +316,7 @@ void PipelineCompiler::recordBlockingIO(BuilderRef b, const StreamSetPort port) 
     }
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceBlockedIO))) {
 
-        const auto prefix = makeBufferName(mKernelIndex, port);
+        const auto prefix = makeBufferName(mKernelId, port);
         Value * const historyPtr = b->getScalarFieldPtr(prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
 
         Constant * const ZERO = b->getInt32(0);
@@ -355,12 +376,12 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
             const Kernel * const kernel = getKernel(i);
             maxKernelLength = std::max(maxKernelLength, kernel->getName().size());
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
@@ -416,6 +437,9 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
         Type * const doubleTy = b->getDoubleTy();
         Constant * const fOneHundred = ConstantFP::get(doubleTy, 100.0);
 
+        Constant * const I = b->getInt8('I');
+        Constant * const O = b->getInt8('O');
+
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
 
             const auto prefix = makeKernelName(i);
@@ -428,7 +452,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
 
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
 
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 args.push_back(STDERR);
                 if (kernelName) {
                     args.push_back(firstLine);
@@ -438,8 +462,8 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
                 } else {
                     args.push_back(remainingLines);
                 }
-                args.push_back(b->getInt8('I'));
-                const auto inputPort = binding.inputPort();
+                args.push_back(I);
+                const auto inputPort = binding.Port.Number;
                 args.push_back(b->getInt32(inputPort));
                 const Binding & ref = binding.Binding;
 
@@ -462,7 +486,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
 
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
 
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 args.push_back(STDERR);
                 if (kernelName) {
                     args.push_back(firstLine);
@@ -472,8 +496,8 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
                 } else {
                     args.push_back(remainingLines);
                 }
-                args.push_back(b->getInt8('O'));
-                const auto outputPort = binding.outputPort();
+                args.push_back(O);
+                const auto outputPort = binding.Port.Number;
                 args.push_back(b->getInt32(outputPort));
                 const Binding & ref = binding.Binding;
                 args.push_back(b->GetString(ref.getName()));
@@ -530,7 +554,9 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
             std::string temp = kernel->getName();
             boost::replace_all(temp, "\"", "\\\"");
             format << ",\"" << i << " " << temp << "\"";
-            const auto numOfPorts = getNumOfStreamInputs(i) + getNumOfStreamOutputs(i);
+            const auto numOfInputs = in_degree(i, mBufferGraph);
+            const auto numOfOutputs = out_degree(i, mBufferGraph);
+            const auto numOfPorts = numOfInputs + numOfOutputs;
             for (unsigned j = 1; j < numOfPorts; ++j) {
                 format.write(',');
             }
@@ -568,7 +594,9 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         format << "%" PRIu64; // seg #
         unsigned fieldCount = 0;
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
-            const auto numOfPorts = getNumOfStreamInputs(i) + getNumOfStreamOutputs(i);
+            const auto numOfInputs = in_degree(i, mBufferGraph);
+            const auto numOfOutputs = out_degree(i, mBufferGraph);
+            const auto numOfPorts = numOfInputs + numOfOutputs;
             fieldCount += numOfPorts;
             for (unsigned j = 0; j < numOfPorts; ++j) {
                 format << ",%" PRIu64; // strides
@@ -589,9 +617,8 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         SmallVector<Value *, 64> updatedIndex(fieldCount);
 
         for (unsigned i = FirstKernel, j = 0; i <= LastKernel; ++i) {
-            const auto numOfInputs = getNumOfStreamInputs(i);
-            const auto numOfOutputs = getNumOfStreamOutputs(i);
-
+            const auto numOfInputs = in_degree(i, mBufferGraph);
+            const auto numOfOutputs = out_degree(i, mBufferGraph);
             for (unsigned k = 0; k < numOfInputs; ++k, ++j) {
                 const auto prefix = makeBufferName(i, StreamSetPort{PortType::Input, k});
                 Value * const historyPtr = b->getScalarFieldPtr(prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
@@ -715,7 +742,7 @@ void PipelineCompiler::initializeBufferExpansionHistory(BuilderRef b) const {
             if (LLVM_LIKELY(bn.isOwned())) {
                 const auto pe = in_edge(i, mBufferGraph);
                 const auto p = source(pe, mBufferGraph);
-                const BufferRateData & rd = mBufferGraph[pe];
+                const BufferPort & rd = mBufferGraph[pe];
                 const auto prefix = makeBufferName(p, rd.Port);
                 const StreamSetBuffer * const buffer = bn.Buffer; assert (buffer);
 
@@ -744,12 +771,12 @@ void PipelineCompiler::initializeBufferExpansionHistory(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordBufferExpansionHistory
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const unsigned outputPort,
+void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const StreamSetPort outputPort,
                                                     const StreamSetBuffer * const buffer) const {
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
-        assert (isa<DynamicBuffer>(buffer));
 
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, outputPort});
+    if (LLVM_UNLIKELY(mTraceDynamicBuffers && isa<DynamicBuffer>(buffer))) {
+
+        const auto prefix = makeBufferName(mKernelId, outputPort);
 
         Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
         Type * const traceDataTy = traceData->getType()->getPointerElementType();
@@ -807,12 +834,12 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
             const Kernel * const kernel = getKernel(i);
             maxKernelLength = std::max(maxKernelLength, kernel->getName().size());
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
@@ -910,7 +937,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
 
             for (const auto output : make_iterator_range(out_edges(i, mBufferGraph))) {
-                const BufferRateData & br = mBufferGraph[output];
+                const BufferPort & br = mBufferGraph[output];
                 const auto buffer = target(output, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[buffer];
                 if (isa<DynamicBuffer>(bn.Buffer)) {
@@ -919,13 +946,13 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
 
                     expansionArgs[2] = b->getInt32(i);
                     expansionArgs[3] = b->GetString(getKernel(i)->getName());
-                    const auto outputPort = br.outputPort();
+                    const auto outputPort = br.Port.Number;
                     expansionArgs[4] = b->getInt32(outputPort);
                     const Binding & binding = br.Binding;
                     expansionArgs[5] = b->GetString(binding.getName());
                     expansionArgs[6] = b->getInt32(buffer);
 
-                    const auto prefix = makeBufferName(i, StreamSetPort{PortType::Output, outputPort});
+                    const auto prefix = makeBufferName(i, br.Port);
                     Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
 
                     Value * const traceArrayField = b->CreateGEP(traceData, {ZERO, ZERO});
@@ -1029,7 +1056,7 @@ void PipelineCompiler::initializeStridesPerSegment(BuilderRef b) const {
 
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
 
-        const auto prefix = makeKernelName(mKernelIndex);
+        const auto prefix = makeKernelName(mKernelId);
 
         Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_STRIDES_PER_SEGMENT_SUFFIX);
         Type * const traceDataTy = traceData->getType()->getPointerElementType();
@@ -1060,7 +1087,7 @@ void PipelineCompiler::recordStridesPerSegment(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
         // NOTE: this records only the change to attempt to reduce the memory usage of this log.
 
-        const auto prefix = makeKernelName(mKernelIndex);
+        const auto prefix = makeKernelName(mKernelId);
         Value * const kernelTraceLog = b->getScalarFieldPtr(prefix + STATISTICS_STRIDES_PER_SEGMENT_SUFFIX);
 
         Module * const m = b->getModule();
@@ -1292,7 +1319,7 @@ void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, unsigned kernel) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceProducedItemCounts)) {
         addItemCountDeltaProperties(b, kernel, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1301,8 +1328,20 @@ void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, unsigne
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
-        recordItemCountDeltas(b, mFullyProducedItemCount, mInitiallyProducedItemCount, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
+    if (LLVM_UNLIKELY(TraceProducedItemCounts)) {
+        const auto n = out_degree(mKernelId, mBufferGraph);
+        if (LLVM_UNLIKELY(n == 0)) {
+            return;
+        }
+        Vec<Value *> current(n);
+        Vec<Value *> prior(n);
+        for (unsigned i = 0; i != n; ++i) {
+            const StreamSetPort port(PortType::Output, i);
+            const auto streamSet = getOutputBufferVertex(port);
+            current[i] = mFullyProducedItemCount[port];
+            prior[i] = mInitiallyProducedItemCount[streamSet];
+        }
+        recordItemCountDeltas(b, current, prior, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
 }
 
@@ -1310,7 +1349,7 @@ void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
  * @brief printOptionalStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printProducedItemCountDeltas(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceProducedItemCounts)) {
         printItemCountDeltas(b, "PRODUCED ITEM COUNT DELTAS PER SEGMENT:", STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1319,7 +1358,7 @@ void PipelineCompiler::printProducedItemCountDeltas(BuilderRef b) const {
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, unsigned kernel) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceUnconsumedItemCounts)) {
         addItemCountDeltaProperties(b, kernel, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1328,8 +1367,20 @@ void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, unsigned k
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
-        recordItemCountDeltas(b, mInitiallyProducedItemCount, mConsumedItemCount, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
+    if (LLVM_UNLIKELY(TraceUnconsumedItemCounts)) {
+        const auto n = out_degree(mKernelId, mBufferGraph);
+        if (LLVM_UNLIKELY(n == 0)) {
+            return;
+        }
+        Vec<Value *> current(n);
+        Vec<Value *> prior(n);
+        for (unsigned i = 0; i != n; ++i) {
+            const StreamSetPort port(PortType::Output, i);
+            const auto streamSet = getOutputBufferVertex(port);
+            current[i] = mInitiallyProducedItemCount[streamSet];
+            prior[i] = mInitialConsumedItemCount[streamSet];
+        }
+        recordItemCountDeltas(b, current, prior, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
 
@@ -1337,7 +1388,7 @@ void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
  * @brief printOptionalStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printUnconsumedItemCounts(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceUnconsumedItemCounts)) {
         printItemCountDeltas(b, "UNCONSUMED ITEM COUNTS PER SEGMENT:", STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1345,22 +1396,18 @@ void PipelineCompiler::printUnconsumedItemCounts(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-template <typename VecA, typename VecB>
-void PipelineCompiler::recordItemCountDeltas(BuilderRef b, const VecA & current, const VecB & prior, const StringRef suffix) const {
+void PipelineCompiler::recordItemCountDeltas(BuilderRef b,
+                                             const Vec<Value *> & current,
+                                             const Vec<Value *> & prior,
+                                             const StringRef suffix) const {
 
-    const auto n = out_degree(mKernelIndex, mBufferGraph);
-    if (LLVM_UNLIKELY(n == 0)) {
-        return;
-    }
-
-    const auto fieldName = (makeKernelName(mKernelIndex) + suffix).str();
+    const auto fieldName = (makeKernelName(mKernelId) + suffix).str();
     Value * const trace = b->getScalarFieldPtr(fieldName);
 
     BasicBlock * const expand = b->CreateBasicBlock("");
     BasicBlock * const record = b->CreateBasicBlock("");
 
     Value * const offset = b->CreateURem(mSegNo, b->getSize(ITEM_COUNT_DELTA_CHUNK_LENGTH));
-
     Constant * const ZERO = b->getInt32(0);
     Constant * const ONE = b->getInt32(1);
 
@@ -1371,7 +1418,7 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b, const VecA & current,
     b->SetInsertPoint(expand);
     Type * const logTy = currentLog->getType()->getPointerElementType();
     Value * const newLog = b->CreateCacheAlignedMalloc(logTy);
-    PointerType * const voidPtrTy = b->getVoidPtrTy();
+    PointerType * const voidPtrTy = b->getVoidPtrTy();   
     b->CreateStore(b->CreatePointerCast(currentLog, voidPtrTy), b->CreateGEP(newLog, { ZERO, ONE}));
     b->CreateStore(newLog, trace);
     BasicBlock * const expandExit = b->GetInsertBlock();
@@ -1387,8 +1434,8 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b, const VecA & current,
     indices[1] = ZERO;
     indices[2] = offset;
 
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
-        const BufferRateData & out = mBufferGraph[e];
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & out = mBufferGraph[e];
         const auto i = out.Port.Number;
         Value * const delta = b->CreateSub(current[i], prior[i]);
         indices[3] = b->getInt32(i);
@@ -1399,11 +1446,8 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b, const VecA & current,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addItemCountDeltaProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addItemCountDeltaProperties(BuilderRef b, unsigned kernel, const StringRef suffix) const {
+void PipelineCompiler::addItemCountDeltaProperties(BuilderRef b, const unsigned kernel, const StringRef suffix) const {
     const auto n = out_degree(kernel, mBufferGraph);
-    if (LLVM_UNLIKELY(n == 0)) {
-        return;
-    }
     LLVMContext & C = b->getContext();
     IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const voidPtrTy = b->getVoidPtrTy();
@@ -1411,7 +1455,7 @@ void PipelineCompiler::addItemCountDeltaProperties(BuilderRef b, unsigned kernel
     StructType * const logChunkTy = StructType::get(C, { logTy, voidPtrTy } );
     PointerType * const traceTy = logChunkTy->getPointerTo();
     const auto fieldName = (makeKernelName(kernel) + suffix).str();
-    mTarget->addInternalScalar(traceTy, fieldName);
+    mTarget->addInternalScalar(traceTy, fieldName, kernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1441,7 +1485,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
         boost::replace_all(kernelName, "\"", "\\\"");
 
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const Binding & out = br.Binding;
             format << "," << target(e, mBufferGraph)
                    << " " << kernelName
@@ -1486,16 +1530,17 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
     }
 
     Constant * const CHUNK_LENGTH = b->getSize(ITEM_COUNT_DELTA_CHUNK_LENGTH);
+    Value * const chunkCount = b->CreateCeilUDiv(mSegNo, CHUNK_LENGTH);
+    if (LLVM_UNLIKELY(CheckAssertions)) {
+        b->CreateAssert(mSegNo, "final segment number cannot be zero");
+    }
 
-    Value * const chunkCount = b->CreateCeilUDiv(mSegNo,CHUNK_LENGTH);
     // Start printing the data lines
     BasicBlock * const loopEntry = b->GetInsertBlock();
     BasicBlock * const loopStart = b->CreateBasicBlock("reportStridesPerSegment");
     BasicBlock * const getNextLogChunk = b->CreateBasicBlock("getNextLogChunk");
     BasicBlock * const selectLogChunk = b->CreateBasicBlock("getNextLogChunk");
     BasicBlock * const printLogEntry = b->CreateBasicBlock("getNextLogChunk");
-
-
     b->CreateBr(loopStart);
 
     b->SetInsertPoint(loopStart);
@@ -1527,6 +1572,8 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
         subsequentChunk[i] = b->CreatePHI(ty, 2);
         subsequentChunk[i]->addIncoming(traceLogArray[i], loopStart);
     }
+
+
     FixedArray<Value *, 2> nextChunkIndices;
     nextChunkIndices[0] = ZERO;
     nextChunkIndices[1] = ONE;
@@ -1572,7 +1619,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
         if (LLVM_UNLIKELY(currentChunkPhi[i] == nullptr)) continue;
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto idx = target(e, mBufferGraph) - FirstStreamSet + 3;
-            const BufferRateData & out = mBufferGraph[e];
+            const BufferPort & out = mBufferGraph[e];
             indices[3] = b->getInt32(out.Port.Number);
             args[idx] = b->CreateLoad(b->CreateGEP(currentChunkPhi[i], indices));
         }

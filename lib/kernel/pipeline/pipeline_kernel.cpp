@@ -64,13 +64,34 @@ void PipelineKernel::addKernelDeclarations(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineKernel::allocatesInternalStreamSets() const {
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateSharedInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    COMPILER->generateAllocateSharedInternalStreamSetsMethod(b, expectedNumOfStrides);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateThreadLocalInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    COMPILER->generateAllocateThreadLocalInternalStreamSetsMethod(b, expectedNumOfStrides);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief linkExternalMethods
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::linkExternalMethods(BuilderRef b) {
     for (const auto & k : mKernels) {
         k->linkExternalMethods(b);
     }
-    for (CallBinding & call : mCallBindings) {
+    for (const CallBinding & call : mCallBindings) {
         call.Callee = b->LinkFunction(call.Name, call.Type, call.FunctionPointer);
     }
 }
@@ -79,9 +100,10 @@ void PipelineKernel::linkExternalMethods(BuilderRef b) {
  * @brief addAdditionalFunctions
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::addAdditionalFunctions(BuilderRef b) {
-    if (!externallyInitialized()) {
-        addOrDeclareMainFunction(b, Kernel::AddExternal);
+    if (hasAttribute(AttrId::InternallySynchronized) || externallyInitialized()) {
+        return;
     }
+    addOrDeclareMainFunction(b, Kernel::AddExternal);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -109,12 +131,12 @@ void PipelineKernel::addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes 
             if (LLVM_LIKELY(kernel->isStateful())) {
                 n += 1;
             }
-            if (LLVM_LIKELY(kernel->hasFamilyName())) {
-                unsigned m = 2;
-                if (LLVM_UNLIKELY(kernel->hasThreadLocal())) {
-                    m = 4;
-                }
-                n += m;
+            if (kernel->hasFamilyName()) {
+                const auto ai = kernel->allocatesInternalStreamSets();
+                const auto k1 = ai ? 3U : 2U;
+                const auto tl = kernel->hasThreadLocal();
+                const auto k2 = tl ? (k1 * 2U) : k1;
+                n += k2;
             }
         }
     }
@@ -133,6 +155,13 @@ void PipelineKernel::recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & 
         }
     }
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief runOptimizationPasses
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::runOptimizationPasses(BuilderRef b) const {
+    COMPILER->runOptimizationPasses(b);
 }
 
 #define JOIN3(X,Y,Z) BOOST_JOIN(X,BOOST_JOIN(Y,Z))
@@ -180,8 +209,8 @@ void PipelineKernel::setOutputScalarAt(const unsigned i, Scalar * const value) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
-std::unique_ptr<KernelCompiler> PipelineKernel::instantiateKernelCompiler(BuilderRef b) const noexcept {
-    return llvm::make_unique<PipelineCompiler>(b, const_cast<PipelineKernel *>(this));
+std::unique_ptr<KernelCompiler> PipelineKernel::instantiateKernelCompiler(BuilderRef b) const {
+    return make_unique<PipelineCompiler>(b, const_cast<PipelineKernel *>(this));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -189,17 +218,17 @@ std::unique_ptr<KernelCompiler> PipelineKernel::instantiateKernelCompiler(Builde
  ** ------------------------------------------------------------------------------------------------------------- */
 PipelineKernel::PipelineKernel(BaseDriver & driver,
                                std::string && signature,
-                               const unsigned numOfThreads, const unsigned numOfSegments,
+                               const unsigned numOfThreads,
                                Kernels && kernels, CallBindings && callBindings,
                                Bindings && stream_inputs, Bindings && stream_outputs,
-                               Bindings && scalar_inputs, Bindings && scalar_outputs)
+                               Bindings && scalar_inputs, Bindings && scalar_outputs,
+                               LengthAssertions && lengthAssertions)
 : Kernel(driver.getBuilder(), TypeId::Pipeline,
          [&] () {
              std::string tmp;
              tmp.reserve(32);
-             llvm::raw_string_ostream name(tmp);
+             raw_string_ostream name(tmp);
              name << 'P' << numOfThreads
-                  << 'B' << numOfSegments
                   << '_' << Kernel::getStringHash(signature);
              name.flush();
              return tmp;
@@ -207,10 +236,10 @@ PipelineKernel::PipelineKernel(BaseDriver & driver,
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs), {})
 , mNumOfThreads(numOfThreads)
-, mNumOfSegments(numOfSegments)
+, mSignature(std::move(signature))
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))
-, mSignature(std::move(signature)) {
+, mLengthAssertions(std::move(lengthAssertions)) {
 
 }
 

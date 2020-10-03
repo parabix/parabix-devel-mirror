@@ -75,6 +75,8 @@ public:
 
     size_t getOverflowCapacity(BuilderPtr b) const;
 
+    bool isEmptySet() const;
+
     virtual ~StreamSetBuffer() = 0;
 
     llvm::Value * getHandle() const {
@@ -85,7 +87,7 @@ public:
         mHandle = handle;
     }
 
-    virtual void allocateBuffer(BuilderPtr b) = 0;
+    virtual void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) = 0;
 
     virtual void releaseBuffer(BuilderPtr b) const = 0;
 
@@ -108,6 +110,8 @@ public:
 
     virtual llvm::Value * getBaseAddress(BuilderPtr b) const = 0;
 
+    virtual llvm::Value * getMallocAddress(BuilderPtr b) const = 0;
+
     virtual void setBaseAddress(BuilderPtr b, llvm::Value * addr) const = 0;
 
     virtual llvm::Value * getOverflowAddress(BuilderPtr b) const = 0;
@@ -116,15 +120,17 @@ public:
 
     virtual llvm::Value * getCapacity(BuilderPtr b) const = 0;
 
+    virtual llvm::Value * getInternalCapacity(BuilderPtr b) const = 0;
+
     virtual llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const = 0;
 
     virtual llvm::Value * getRawItemPointer(BuilderPtr b, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     virtual llvm::Value * getStreamLogicalBasePtr(BuilderPtr b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
-    virtual llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const = 0;
+    virtual void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const = 0;
 
-    virtual void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const = 0;
+    virtual void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const = 0;
 
     static llvm::Type * resolveType(BuilderPtr b, llvm::Type * const streamSetType);
 
@@ -149,7 +155,7 @@ protected:
     const unsigned                  mUnderflow;
     const unsigned                  mAddressSpace;
     llvm::Type * const              mBaseType;
-    const bool                      mLinear;
+    const bool                      mLinear; 
 };
 
 class ExternalBuffer final : public StreamSetBuffer {
@@ -158,11 +164,11 @@ public:
         return b->getBufferKind() == BufferKind::ExternalBuffer;
     }
 
-    enum Field {BaseAddress, Capacity};
+    enum Field { BaseAddress, EffectiveCapacity };
 
     ExternalBuffer(BuilderPtr b, llvm::Type * const type, const bool linear, const unsigned AddressSpace);
 
-    void allocateBuffer(BuilderPtr b) override;
+    void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
     void releaseBuffer(BuilderPtr b) const override;
 
@@ -176,19 +182,23 @@ public:
 
     llvm::Value * getBaseAddress(BuilderPtr b) const override;
 
+    llvm::Value * getMallocAddress(BuilderPtr b) const override;
+
     void setCapacity(BuilderPtr b, llvm::Value * capacity) const override;
 
     llvm::Value * getCapacity(BuilderPtr b) const override;
 
+    llvm::Value * getInternalCapacity(BuilderPtr b) const override;
+
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const override;
 
-    llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+    void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
+
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
     void setBaseAddress(BuilderPtr b, llvm::Value * addr) const override;
 
     llvm::Value * getOverflowAddress(BuilderPtr b) const override;
-
-    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
 
 private:
 
@@ -234,15 +244,17 @@ public:
                  const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
                  const bool linear, const unsigned AddressSpace);
 
-    enum Field { BaseAddress, InitialAddress };
+    enum Field { BaseAddress, EffectiveCapacity, MallocedAddress, InternalCapacity, PriorAddress };
 
-    void allocateBuffer(BuilderPtr b) override;
+    void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
     void releaseBuffer(BuilderPtr b) const override;
 
     llvm::Type * getHandleType(BuilderPtr b) const override;
 
     llvm::Value * getBaseAddress(BuilderPtr b) const override;
+
+    llvm::Value * getMallocAddress(BuilderPtr b) const override;
 
     void setBaseAddress(BuilderPtr b, llvm::Value * addr) const override;
 
@@ -252,11 +264,13 @@ public:
 
     llvm::Value * getCapacity(BuilderPtr b) const override;
 
+    llvm::Value * getInternalCapacity(BuilderPtr b) const override;
+
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
-    llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+    void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
 
-    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
     size_t getCapacity() const {
         return mCapacity;
@@ -270,7 +284,7 @@ private:
 
 class DynamicBuffer final : public InternalBuffer {
 
-    enum Field {BaseAddress, Capacity, PriorBaseAddress};
+    enum Field { BaseAddress, EffectiveCapacity, MallocedAddress, InternalCapacity, PriorAddress };
 
 public:
 
@@ -282,19 +296,23 @@ public:
                   const size_t overflowSize, const size_t underflowSize,
                   const bool linear, const unsigned AddressSpace);
 
-    void allocateBuffer(BuilderPtr b) override;
+    void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
     void releaseBuffer(BuilderPtr b) const override;
 
+    llvm::Value * getMallocAddress(BuilderPtr b) const override;
+
     llvm::Value * getCapacity(BuilderPtr b) const override;
+
+    llvm::Value * getInternalCapacity(BuilderPtr b) const override;
 
     void setCapacity(BuilderPtr b, llvm::Value * capacity) const override;
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
-    llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+    void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
 
-    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
     size_t getInitialCapacity() const {
         return mInitialCapacity;

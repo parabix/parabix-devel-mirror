@@ -52,6 +52,7 @@ public:
         , BlockOriented
         , Pipeline
         , OptimizationBranch
+        , PopCountKernel
     };
 
     using InitArgs = llvm::SmallVector<llvm::Value *, 32>;
@@ -128,8 +129,6 @@ public:
 
     using InternalScalars = std::vector<InternalScalar>;
 
-    using ScalarValueMap = llvm::StringMap<llvm::Value *>;
-
     enum class PortType { Input, Output };
 
     struct StreamSetPort {
@@ -137,8 +136,13 @@ public:
         unsigned Number;
 
         StreamSetPort() : Type(PortType::Input), Number(0) { }
-        explicit StreamSetPort(PortType Type, unsigned Number) : Type(Type), Number(Number) { }
-
+        StreamSetPort(const PortType Type, const unsigned Number) : Type(Type), Number(Number) { }
+        StreamSetPort(const StreamSetPort & other) = default;
+        StreamSetPort & operator = (const StreamSetPort & other) {
+            Type = other.Type;
+            Number = other.Number;
+            return *this;
+        }
         bool operator < (const StreamSetPort other) const {
             if (Type == other.Type) {
                 return Number < other.Number;
@@ -166,9 +170,6 @@ public:
     // mechanisms that are short, inexpensive to compute and guarantee uniqueness
     // based on the semantics of the kernel.
     //
-    // If no other mechanism is available, the default makeSignature() method uses the
-    // full LLVM IR (before optimization) of the kernel instance.
-    //
     // A kernel Module ID is short string that is used as a name for a particular kernel
     // instance.  Kernel Module IDs are used to look up and retrieve cached kernel
     // instances and so should be highly likely to uniquely identify a kernel instance.
@@ -176,16 +177,6 @@ public:
     // The ideal case is that a kernel Module ID serves as a full kernel signature thus
     // guaranteeing uniqueness.  In this case, hasSignature() should return false.
     //
-
-    //
-    // Kernel builder subtypes define their logic of kernel construction
-    // in terms of 3 virtual methods for
-    // (a) preparing the Kernel state data structure
-    // (c) defining the logic of the finalBlock function.
-    //
-    // Note: the kernel state data structure must only be finalized after
-    // all scalar fields have been added.   If there are no fields to
-    // be added, the default method for preparing kernel state may be used.
 
     LLVM_READNONE const llvm::StringRef getName() const {
         return mKernelName;
@@ -222,6 +213,8 @@ public:
     LLVM_READNONE bool hasThreadLocal() const {
         return mThreadLocalStateType  != nullptr;
     }
+
+    virtual bool requiresExplicitPartialFinalStride() const;
 
     unsigned getStride() const { return mStride; }
 
@@ -367,9 +360,13 @@ public:
     template <typename ExternalFunctionType>
     void link(llvm::StringRef name, ExternalFunctionType & functionPtr);
 
+    static bool isLocalBuffer(const Binding & output, const bool includeShared = true);
+
+    LLVM_READNONE bool canSetTerminateSignal() const;
+
     virtual void addKernelDeclarations(BuilderRef b);
 
-    virtual std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
+    virtual std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const;
 
     virtual ~Kernel() = 0;
 
@@ -379,9 +376,19 @@ protected:
 
     llvm::Function * addInitializeDeclaration(BuilderRef b) const;
 
+    LLVM_READNONE virtual bool allocatesInternalStreamSets() const;
+
+    llvm::Function * getAllocateSharedInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addAllocateSharedInternalStreamSetsDeclaration(BuilderRef b) const;
+
     llvm::Function * getInitializeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
     llvm::Function * addInitializeThreadLocalDeclaration(BuilderRef b) const;
+
+    llvm::Function * getAllocateThreadLocalInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addAllocateThreadLocalInternalStreamSetsDeclaration(BuilderRef b) const;
 
     llvm::Function * addDoSegmentDeclaration(BuilderRef b) const;
 
@@ -396,6 +403,8 @@ protected:
     llvm::Function * getFinalizeFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
     llvm::Function * addFinalizeDeclaration(BuilderRef b) const;
+
+    virtual void runOptimizationPasses(BuilderRef b) const;
 
 public:
 
@@ -427,15 +436,9 @@ protected:
 
     LLVM_READNONE std::string getDefaultFamilyName() const;
 
-    LLVM_READNONE bool canSetTerminateSignal() const;
+    LLVM_READNONE bool hasFixedRateInput() const;
 
-    static bool isLocalBuffer(const Binding & output);
-
-    static bool requiresExplicitPartialFinalStride(const Kernel * const kernel);
-
-    LLVM_READNONE bool hasFixedRate() const;
-
-    LLVM_READNONE Rational getFixedRateLCM() const;
+    LLVM_READNONE bool isGreedy() const;
 
     virtual void addInternalProperties(BuilderRef) { }
 
@@ -449,15 +452,15 @@ protected:
 
     virtual void generateInitializeThreadLocalMethod(BuilderRef) { }
 
+    virtual void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
+
+    virtual void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
+
     virtual void generateKernelMethod(BuilderRef) = 0;
 
     virtual void generateFinalizeThreadLocalMethod(BuilderRef) { }
 
     virtual void generateFinalizeMethod(BuilderRef) { }
-
-private:
-
-    LLVM_READNONE bool supportsInternalSynchronization() const;
 
 protected:
 
@@ -570,7 +573,7 @@ public:
 
     static bool classof(const void *) { return false; }
 
-    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const;
 
 protected:
 
@@ -588,8 +591,6 @@ protected:
     void RepeatDoBlockLogic(BuilderRef b);
 
     virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingItems);
-
-
 
     BlockOrientedKernel(BuilderRef b,
                         std::string && kernelName,

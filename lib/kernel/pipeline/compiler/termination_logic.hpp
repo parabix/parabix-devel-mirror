@@ -2,133 +2,62 @@
 #define TERMINATION_LOGIC_HPP
 
 #include "pipeline_compiler.hpp"
-#include <boost/graph/topological_sort.hpp>
-#include <boost/graph/edmonds_karp_max_flow.hpp>
-
-#define DISABLE_TERMINATION_SIGNAL_COUNTING_VARIABLES
 
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeTerminationGraph
- *
- * The termination graph is a minimum vertex-disjoint path cover of the transitive reduction of I/O dependencies.
- * It "kernel path" models which kernels to are controlled by a specific termination "counter" and the incoming
- * edges to the P_{out} vertex indicates which counters must be checked by the pipeline to determine whether the
- * work has finished.
+ * @brief addTerminationProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-TerminationGraph PipelineCompiler::makeTerminationGraph() {
-
-    TerminationGraph G(PipelineOutput + 1);
-
-    for (unsigned consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
-        for (const auto e : make_iterator_range(in_edges(consumer, mBufferGraph))) {
-            const auto buffer = source(e, mBufferGraph);
-            const auto producer = parent(buffer, mBufferGraph);
-            const BufferRateData & rd = mBufferGraph[e];
-            const auto mayConsumeNoInput = (rd.Minimum.numerator() == 0) && (consumer != PipelineOutput);
-            if (LLVM_UNLIKELY(mayConsumeNoInput)) {
-                continue;
-            }
-            add_edge(producer, consumer, G);
-        }
+inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const size_t kernel) {
+    const auto id = KernelPartitionId[kernel];
+    IntegerType * const sizeTy = b->getSizeTy();
+    mTarget->addInternalScalar(sizeTy, TERMINATION_PREFIX + std::to_string(id), kernel);
+    if (in_degree(id, mTerminationPropagationGraph) > 0) {
+        mTarget->addInternalScalar(sizeTy, CONSUMER_TERMINATION_COUNT_PREFIX + std::to_string(id), kernel);
     }
-
-    for (unsigned consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
-        for (const auto relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
-            const auto r = source(relationship, mScalarGraph);
-            for (const auto producer : make_iterator_range(in_edges(r, mScalarGraph))) {
-                const auto k = source(producer, mScalarGraph);
-                assert ("cannot occur" && k != PipelineOutput);
-                add_edge(k, PipelineOutput, G);
-            }
-        }
-    }
-
-    auto any_termination = [](const Kernel * const kernel) {
-        for (const Attribute & attr : kernel->getAttributes()) {
-            switch (attr.getKind()) {
-                case AttrId::CanTerminateEarly:
-                case AttrId::MustExplicitlyTerminate:
-                case AttrId::MayFatallyTerminate:
-                case AttrId::SideEffecting:
-                    return true;
-                default: break;
-            }
-        }
-        return false;
-    };
-
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        if (any_termination(getKernel(i))) {
-            add_edge(i, PipelineOutput, false, G);
-        }
-    }
-
-    transitive_reduction_dag(G);
-
-    clear_out_edges(PipelineInput, G);
-
-    // we are only interested in the incoming edges of the pipeline output
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        clear_in_edges(i, G);
-    }
-
-    // hard terminations
-
-    auto hard_termination = [](const Kernel * const kernel) {
-        for (const Attribute & attr : kernel->getAttributes()) {
-            switch (attr.getKind()) {
-                case AttrId::MayFatallyTerminate:
-                    return true;
-                default: break;
-            }
-        }
-        return false;
-    };
-
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        if (hard_termination(getKernel(i))) {
-            // incase we already have the edge in G, set the
-            // hard termination flag to true after "adding" it.
-            G[add_edge(i, PipelineOutput, true, G).first] = true;
-        }
-    }
-
-    mTerminationSignals.resize(LastKernel + 1, nullptr);
-
-    assert ("a pipeline with no sinks ought to produce no observable data"
-            && in_degree(PipelineOutput, G) > 0);
-    assert ("termination graph construction error?"
-            && out_degree(PipelineOutput, G) == 0);
-
-    return G;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addTerminationProperties
+ * @brief hasKernelTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const unsigned kernel) {
-    mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(kernel));
+void PipelineCompiler::initializePipelineInputTerminationSignal(BuilderRef b) {
+    // any pipeline input streams are considered produced by the P_{in} vertex.
+    if (out_degree(PipelineInput, mBufferGraph) > 0) {
+        assert (KernelPartitionId[PipelineInput] == 0);
+        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+        Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+        mPartitionTerminationSignal[0] = b->CreateSelect(mIsFinal, completed, unterminated);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setCurrentTerminationSignal
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::setCurrentTerminationSignal(BuilderRef /* b */, Value * const signal) {
+    assert (mCurrentPartitionId == KernelPartitionId[mKernelId]);
+    mPartitionTerminationSignal[mCurrentPartitionId] = signal;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getCurrentTerminationSignal
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::getCurrentTerminationSignal() const {
+    assert (mCurrentPartitionId == KernelPartitionId[mKernelId]);
+    return mPartitionTerminationSignal[mCurrentPartitionId];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasKernelTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally) const {
-    // any pipeline input streams are considered produced by the P_{in} vertex.
-    if (LLVM_UNLIKELY(kernel == PipelineInput)) {
-        return isFinal();
+    const auto partitionId = KernelPartitionId[kernel];
+    Value * const signal = mPartitionTerminationSignal[partitionId]; assert (signal);
+    if (normally) {
+        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+        return b->CreateICmpEQ(signal, completed);
     } else {
-        assert (kernel != PipelineOutput);
-        Value * const terminated = mTerminationSignals[kernel];
-        if (normally) {
-            Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-            return b->CreateICmpEQ(terminated, completed);
-        } else {
-            Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
-            return b->CreateICmpNE(terminated, unterminated);
-        }
+        Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+        return b->CreateICmpNE(signal, unterminated);
     }
 }
 
@@ -137,29 +66,40 @@ Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel,
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
 
-    Value * hard = mIsFinal;
-    Value * soft = b->getTrue();
+    Value * hard = mExhaustedInput;
+    Value * soft = nullptr;
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
     Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
     Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
 
-    // check whether every sink has terminated
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mTerminationGraph))) {
-        const auto kernel = source(e, mTerminationGraph);
-        Value * const signal = mTerminationSignals[kernel];
-        assert (signal);
-        assert (signal->getType() == unterminated->getType());
-        // if this is a hard termination, such as a fatal error, any can terminate the pipeline.
-        // however, a kernel that can terminate with a fatal error, may not necessarily do so.
-        // otherwise its a soft termination and all must agree that the pipeline has terminated
-        if (mTerminationGraph[e]) {
-            hard = b->CreateOr(hard, b->CreateICmpEQ(signal, fatal));
+    for (auto partitionId = 0u; partitionId < PartitionCount; ++partitionId) {
+        Value * const signal = mPartitionTerminationSignal[partitionId];
+        const auto type = mTerminationCheck[partitionId];
+        if (type & TerminationCheckFlag::Hard) {
+            Value * const final = b->CreateICmpEQ(signal, fatal);
+            if (hard) {
+                hard = b->CreateOr(hard, final);
+            } else {
+                hard = final;
+            }
         }
-        soft = b->CreateAnd(soft, b->CreateICmpNE(signal, unterminated));
+        if (type & TerminationCheckFlag::Soft) {
+            Value * const final = b->CreateICmpNE(signal, unterminated);
+            if (soft) {
+                soft = b->CreateAnd(soft, final);
+            } else {
+                soft = final;
+            }
+        }
     }
+    assert (soft);
+    Value * signal = b->CreateSelect(soft, aborted, unterminated);
+    if (hard) {
+        signal = b->CreateSelect(hard, fatal, signal);
+    }
+    return signal;
 
-    return b->CreateSelect(hard, fatal, b->CreateSelect(soft, aborted, unterminated));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -180,16 +120,24 @@ void PipelineCompiler::signalAbnormalTermination(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosed
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned inputPort) {
+Value * PipelineCompiler::isClosed(BuilderRef b, const StreamSetPort inputPort) const {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
     return hasKernelTerminated(b, producer, false);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isClosed
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned streamSet) const {
+    const auto producer = parent(streamSet, mBufferGraph);
+    return hasKernelTerminated(b, producer, false);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosedNormally
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::isClosedNormally(BuilderRef b, const unsigned inputPort) {
+Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inputPort) const {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
     const Kernel * const kernel = getKernel(producer);
@@ -206,40 +154,49 @@ Value * PipelineCompiler::isClosedNormally(BuilderRef b, const unsigned inputPor
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief updateTerminationSignal
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::updateTerminationSignal(Value * const signal) {
-    mTerminationSignals[mKernelIndex] = signal;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initiallyTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
-    Value * const signal = readTerminationSignal(b);
-    updateTerminationSignal(signal);
-    mTerminatedInitially = signal;
-    return hasKernelTerminated(b, mKernelIndex);
+    if (mIsPartitionRoot) {
+        const auto id = KernelPartitionId[mKernelId];
+        Value * const signal = readTerminationSignal(b, id);
+
+        mTerminatedInitially = signal; assert (signal);
+        setCurrentTerminationSignal(b, signal);
+        Value * terminated = hasKernelTerminated(b, mKernelId);
+
+        const auto n = in_degree(id, mTerminationPropagationGraph);
+        if (LLVM_UNLIKELY(n > 0)) {
+            Value * const ptr = b->getScalarFieldPtr(CONSUMER_TERMINATION_COUNT_PREFIX + std::to_string(id));
+            Value * const conSignal = b->CreateLoad(ptr);
+            Value * const allConsumersFinished = b->CreateICmpEQ(conSignal, b->getSize(n));
+            terminated = b->CreateOr(terminated, allConsumersFinished);
+        }
+        return terminated;
+    }
+    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initiallyTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::readTerminationSignal(BuilderRef b) {
-    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelIndex));
-    return b->CreateLoad(ptr, true);
+inline Value * PipelineCompiler::readTerminationSignal(BuilderRef b, const unsigned partitionId) {
+    const auto name = TERMINATION_PREFIX + std::to_string(partitionId);
+    Value * const ptr = b->getScalarFieldPtr(name);
+    return b->CreateLoad(ptr, true, name);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeTerminationSignal(BuilderRef b, Value * const signal) {
-    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelIndex));
+    const auto id = KernelPartitionId[mKernelId];
+    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(id));
     b->CreateStore(signal, ptr, true);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief loadItemCountsOfCountableRateStreams
+ * @brief readCountableItemCountsAfterAbnormalTermination
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRef b) {
 
@@ -250,28 +207,139 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
         return isCountable(binding);
     };
 
-    Vec<Value *> finalProcessed(mProcessedItemCount);
-    Vec<Value *> finalProduced(mProducedItemCount);
-
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        if (isCountableType(mReturnedProcessedItemCountPtr[i], getInputBinding(i))) {
-            finalProcessed[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
-        }
-    }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
+    Vec<Value *> finalProduced(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        if (isCountableType(mReturnedProducedItemCountPtr[i], getOutputBinding(i))) {
-            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
+        const StreamSetPort port (PortType::Output, i);
+        finalProduced[i] = mProducedItemCount[port];
+        if (isCountableType(mReturnedProducedItemCountPtr[port], getOutputBinding(port))) {
+            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr[port]);
+            #ifdef PRINT_DEBUG_MESSAGES
+            debugPrint(b, makeBufferName(mKernelId, port) +
+                       "_producedAfterAbnormalTermination = %" PRIu64, finalProduced[i]);
+            #endif
         }
     }
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        mFinalProcessedPhi[i]->addIncoming(finalProcessed[i], exitBlock);
-    }
+
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        mFinalProducedPhi[i]->addIncoming(finalProduced[i], exitBlock);
+        const StreamSetPort port (PortType::Output, i);
+        mProducedAtTerminationPhi[port]->addIncoming(finalProduced[i], exitBlock);
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief informInputKernelsOfTermination
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
+
+    if (CheckAssertions) {
+
+        bool hasPrincipal = false;
+        Value * atLeastOneExhausted = nullptr;
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const BufferPort & br = mBufferGraph[e];
+            if (LLVM_UNLIKELY(br.IsZeroExtended)) continue;
+            Value * const closed = isClosed(b, br.Port);
+            Value * const avail = getLocallyAvailableItemCount(b, br.Port);
+            Value * const processed = mProcessedItemCount[br.Port]; assert (processed);
+
+            Value * const fullyConsumed = b->CreateAnd(closed, b->CreateICmpULE(avail, processed));
+            if (LLVM_UNLIKELY(br.IsPrincipal)) {
+                if (atLeastOneExhausted) {
+                    RecursivelyDeleteTriviallyDeadInstructions(atLeastOneExhausted);
+                }
+                atLeastOneExhausted = fullyConsumed;
+                hasPrincipal = true;
+                break;
+            }
+            if (atLeastOneExhausted) {
+                atLeastOneExhausted = b->CreateOr(atLeastOneExhausted, fullyConsumed);
+            } else {
+                atLeastOneExhausted = fullyConsumed;
+            }
+        }
+
+        if (atLeastOneExhausted) {
+            Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+            Value * const notTerminatedNormally = b->CreateICmpNE(mTerminatedSignalPhi, completed);
+            Value * const expectedTermination = b->CreateOr(notTerminatedNormally, atLeastOneExhausted);
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "Kernel %s in partition %" PRId64 " was terminated before exhausting ";
+            if (hasPrincipal) {
+                out << "its principal input.";
+            } else {
+                out << "at least one of its inputs.";
+            }
+            b->CreateAssert(expectedTermination, out.str(),
+                mCurrentKernelName, b->getSize(mCurrentPartitionId),
+                mKernelName[FirstKernelInPartition]);
+        }
+
+    }
+
+
+    // When a partition terminates, we want to inform any kernels that supply information to it that
+    // one of their consumers has finished processing data.
+    ConstantInt * const ONE = b->getSize(1);
+    for (const auto e : make_iterator_range(out_edges(mCurrentPartitionId, mTerminationPropagationGraph))) {
+        const auto id = target(e, mTerminationPropagationGraph);
+        Value * const signal = b->getScalarFieldPtr(CONSUMER_TERMINATION_COUNT_PREFIX + std::to_string(id));
+        b->CreateAtomicFetchAndAdd(ONE, signal);
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief verifyPostInvocationTerminationSignal
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::verifyPostInvocationTerminationSignal(BuilderRef b) {
+
+    if (mIsPartitionRoot) {
+        #ifndef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
+        Value * anyUnterminated = nullptr;
+        ConstantInt * const ZERO = b->getSize(0);
+        if (mCurrentPartitionId > 0) {
+            Value * const signal = mPartitionTerminationSignal[mCurrentPartitionId - 1];
+            anyUnterminated = b->CreateICmpEQ(signal, ZERO);
+        }
+
+        for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionJumpTree))) {
+            const auto partitionId = source(e, mPartitionJumpTree);
+            Value * const signal = mPartitionTerminationSignal[partitionId];
+            Value * const nonterm = b->CreateICmpEQ(signal, ZERO);
+            if (anyUnterminated) {
+                anyUnterminated = b->CreateOr(anyUnterminated, nonterm);
+            } else {
+                anyUnterminated = nonterm;
+            }
+        }
+
+        if (anyUnterminated) {
+            Value * const allTerminated = b->CreateNot(anyUnterminated);
+            Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+            Value * const notTerminatedNormally = b->CreateICmpNE(mTerminatedAtExitPhi, completed);
+            Value * const valid = b->CreateOr(notTerminatedNormally, allTerminated);
+            constexpr auto msg =
+                "Kernel %s of partition %" PRId64 " was flagged as complete "
+                "before any of its source partitions were terminated.";
+            b->CreateAssert(valid, msg,
+                mCurrentKernelName, b->getSize(mCurrentPartitionId));
+        }
+        #endif
+        mPartitionRootTerminationSignal = b->CreateIsNotNull(mTerminatedAtExitPhi);
+    } else {
+        Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
+        constexpr auto msg =
+            "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
+            "after partition root %s was terminated.";
+        Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
+        b->CreateAssert(valid, msg,
+            mCurrentKernelName, b->getSize(mCurrentPartitionId),
+            mKernelName[FirstKernelInPartition]);
+    }
+
 }
 
 }

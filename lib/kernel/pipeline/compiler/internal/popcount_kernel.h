@@ -8,6 +8,10 @@ namespace kernel {
 class PopCountKernel final : public MultiBlockKernel {
 public:
 
+    static bool classof(const Kernel * const k) {
+        return k->getTypeId() == TypeId::PopCountKernel;
+    }
+
     enum PopCountType { POSITIVE, NEGATIVE, BOTH };
 
     explicit PopCountKernel(BuilderRef b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const output);

@@ -14,14 +14,21 @@ void PipelineCompiler::addFamilyKernelProperties(BuilderRef b, const unsigned in
         PointerType * const voidPtrTy = b->getVoidPtrTy();
         const auto prefix = makeKernelName(index);
         const auto tl = kernel->hasThreadLocal();
-        if (tl) {
-            mTarget->addInternalScalar(voidPtrTy, prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+        const auto ai = kernel->allocatesInternalStreamSets();
+        if (ai) {
+            mTarget->addInternalScalar(voidPtrTy, prefix + ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX, index);
         }
-        mTarget->addInternalScalar(voidPtrTy, prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
         if (tl) {
-            mTarget->addInternalScalar(voidPtrTy, prefix + FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+            mTarget->addInternalScalar(voidPtrTy, prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX, index);
+            if (ai) {
+                mTarget->addInternalScalar(voidPtrTy, prefix + ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX, index);
+            }
         }
-        mTarget->addInternalScalar(voidPtrTy, prefix + FINALIZE_FUNCTION_POINTER_SUFFIX);
+        mTarget->addInternalScalar(voidPtrTy, prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX, index);
+        if (tl) {
+            mTarget->addInternalScalar(voidPtrTy, prefix + FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX, index);
+        }
+        mTarget->addInternalScalar(voidPtrTy, prefix + FINALIZE_FUNCTION_POINTER_SUFFIX, index);
     }
 }
 
@@ -47,7 +54,8 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
             auto readNextScalar = [&](const StringRef name) {
                 auto ptr = getScalarFieldPtr(b.get(), name); assert (ptr);
                 Value * value = nextArg();
-                if (LLVM_UNLIKELY(mCheckAssertions)) {
+
+                if (LLVM_UNLIKELY(CheckAssertions)) {
                     b->CreateAssert(value, "family parameter (%s) was given a null value", b->GetString(name));
                 }
                 b->CreateStore(value, ptr);
@@ -58,8 +66,15 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
             }
             if (LLVM_LIKELY(kernel->hasFamilyName())) {
                 const auto tl = kernel->hasThreadLocal();
+                const auto ai = kernel->allocatesInternalStreamSets();
+                if (ai) {
+                    readNextScalar(prefix + ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+                }
                 if (tl) {
                     readNextScalar(prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+                    if (ai) {
+                        readNextScalar(prefix + ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+                    }
                 }
                 readNextScalar(prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
                 if (tl) {
@@ -76,10 +91,10 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
  * @brief getFamilyFunctionFromKernelState
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getFamilyFunctionFromKernelState(BuilderRef b, Type * const type, const std::string & suffix) const {
-    const auto prefix = makeKernelName(mKernelIndex);
+    const auto prefix = makeKernelName(mKernelId);
     Value * const funcPtr = b->getScalarField(prefix + suffix);
     assert (funcPtr->getType() == b->getVoidPtrTy());
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         b->CreateAssert(funcPtr, prefix + suffix + " is null");
     }
     return b->CreatePointerCast(funcPtr, type);
