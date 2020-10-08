@@ -102,8 +102,9 @@ static cl::opt<unsigned, true> BlockSizeOption("BlockSize", cl::location(BlockSi
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 
 
+const unsigned DefaultSegmentSize = 16384;
 static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(SegmentSize),
-                                               cl::init(getPageSize()),
+                                               cl::init(DefaultSegmentSize),
                                                cl::desc("Expected amount of input data to process per segment"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
 static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
