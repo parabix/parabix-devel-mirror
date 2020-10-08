@@ -71,16 +71,16 @@ static cl::opt<std::string, true> ASMOutputFilenameOption("ShowASM", cl::locatio
 
 // Enable Debug Options to be specified on the command line
 static cl::opt<CodeGenOpt::Level, true>
-OptimizationLevel("optimization-level", cl::location(OptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the front-end optimization level:"),
-                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
-                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+OptimizationLevel("optimization-level", cl::location(OptLevel), cl::init(CodeGenOpt::None), cl::desc("Set the front-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations"),
                              clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
                              clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
                   CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 static cl::opt<CodeGenOpt::Level, true>
-BackEndOptOption("backend-optimization-level", cl::location(BackEndOptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the back-end optimization level:"),
-                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
-                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+BackEndOptOption("backend-optimization-level", cl::location(BackEndOptLevel), cl::init(CodeGenOpt::None), cl::desc("Set the back-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations"),
                              clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
                              clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
                 CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
