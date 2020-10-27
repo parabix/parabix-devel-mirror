@@ -52,7 +52,6 @@ void KernelBuilder::setScalarField(const StringRef fieldName, Value * const valu
  * @brief CreateMonitoredScalarFieldLoad
  ** ------------------------------------------------------------------------------------------------------------- */
 LoadInst * KernelBuilder::CreateMonitoredScalarFieldLoad(const StringRef fieldName, Value * internalPtr) {
-    DataLayout DL(getModule());
     Value * scalarPtr = getScalarFieldPtr(fieldName);
     Value * scalarEndPtr = CreateGEP(scalarPtr, getInt32(1));
     Value * internalEndPtr = CreateGEP(internalPtr, getInt32(1));
@@ -61,8 +60,8 @@ LoadInst * KernelBuilder::CreateMonitoredScalarFieldLoad(const StringRef fieldNa
     Value * internalAddr = CreatePtrToInt(internalPtr, getSizeTy());
     Value * internalEndAddr = CreatePtrToInt(internalEndPtr, getSizeTy());
     Value * inBounds = CreateAnd(CreateICmpULE(scalarAddr, internalAddr), CreateICmpUGE(scalarEndAddr, internalEndAddr));
-    __CreateAssert(inBounds, "Access (%x," PRId64 " %x)" PRId64 " to scalar " + fieldName + " out of bounds (%x," PRId64 " %x)" PRId64 ").",
-                   {internalAddr, internalEndAddr, scalarAddr, scalarEndAddr});
+    __CreateAssert(inBounds, "Access (%" PRIx64 ",%" PRIx64 ") to scalar " + fieldName + " out of bounds (%" PRIx64 ",%" PRIx64 ").",
+                   {scalarAddr, scalarEndAddr, internalAddr, internalEndAddr});
     return CreateLoad(internalPtr);
 }
 
@@ -78,8 +77,8 @@ StoreInst * KernelBuilder::CreateMonitoredScalarFieldStore(const StringRef field
     Value * internalAddr = CreatePtrToInt(internalPtr, getSizeTy());
     Value * internalEndAddr = CreateAdd(internalAddr, getSize(DL.getTypeAllocSize(toStore->getType())));
     Value * inBounds = CreateAnd(CreateICmpULE(scalarAddr, internalAddr), CreateICmpUGE(scalarEndAddr, internalEndAddr));
-    __CreateAssert(inBounds, "Store (%x," PRId64 " %x)" PRId64 " to scalar " + fieldName + " out of bounds (%x," PRId64 " %x)" PRId64 ").",
-                   {internalAddr, internalEndAddr, scalarAddr, scalarEndAddr});
+    __CreateAssert(inBounds, "Store (%" PRIx64 ",%" PRIx64 ") to scalar " + fieldName + " out of bounds (%" PRIx64 ",%" PRIx64 ").",
+                   {scalarAddr, scalarEndAddr, internalAddr, internalEndAddr});
     return CreateStore(toStore, internalPtr);
 }
 

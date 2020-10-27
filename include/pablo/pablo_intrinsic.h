@@ -22,6 +22,12 @@ enum class Intrinsic {
 
 class IntrinsicCall final : public Statement {
     friend class PabloBlock;
+
+    static constexpr auto __inSpanUpTo = "spanupto";
+    static constexpr auto __inInclusiveSpan = "inclusivespan";
+    static constexpr auto __inExclusiveSpan = "exclusivespan";
+    static constexpr auto __inPrintRegister = "printregister";
+
 public:
     static inline bool classof(PabloAST const * e) {
         return e->getClassTypeId() == ClassTypeId::IntrinsicCall;
@@ -40,7 +46,8 @@ public:
     }
 
     inline llvm::StringRef getIntrinsicName() const noexcept {
-        #define PABLO_INTRINSIC_CASE(INTRINSIC) case Intrinsic::INTRINSIC: return #INTRINSIC
+        #define PABLO_INTRINSIC_CASE(INTRINSIC) \
+            case Intrinsic::INTRINSIC: return llvm::StringRef(__in##INTRINSIC)
         switch (mIntrinsic) {
             PABLO_INTRINSIC_CASE(SpanUpTo);
             PABLO_INTRINSIC_CASE(InclusiveSpan);
@@ -70,8 +77,9 @@ public:
 protected:
     IntrinsicCall(Intrinsic intrinsic, llvm::Type * type, llvm::ArrayRef<PabloAST *> argv, const String * name, Allocator & allocator)
     : Statement(ClassTypeId::IntrinsicCall, type, argv, name, allocator)
-    , mIntrinsic(intrinsic)
-    {}
+    , mIntrinsic(intrinsic) {
+        setSideEffecting(intrinsic == pablo::Intrinsic::PrintRegister);
+    }
 
     const Intrinsic mIntrinsic;
 

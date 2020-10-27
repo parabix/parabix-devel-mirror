@@ -11,6 +11,7 @@
 #include <re/transforms/re_transformer.h>
 #include <re/unicode/resolve_properties.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace re;
 

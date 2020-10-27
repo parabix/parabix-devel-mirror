@@ -10,7 +10,7 @@
 #include <toolchain/toolchain.h>
 
 namespace IDISA {
-    
+
     const unsigned AVX_width = 256;
     const unsigned AVX512_width = 512;
 
@@ -29,8 +29,8 @@ public:
     virtual std::string getBuilderUniqueName() override;
 
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
-    llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos, const llvm::Twine &Name = "") override;
-    
+    llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos, const llvm::Twine Name = "") override;
+
     ~IDISA_AVX_Builder() {}
 protected:
     bool hasBMI1;

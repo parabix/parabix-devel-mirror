@@ -15,6 +15,7 @@
 #include <type_traits>
 #include <tuple>
 #include <vector>
+#include <util/aligned_allocator.h>
 #include <llvm/IR/Type.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <kernel/core/idisa_target.h>
@@ -150,7 +151,7 @@ public:
     using set_literal_t = std::vector<literal_t>;
 
     /// The internal buffer type of the stream.
-    using buffer_t = std::vector<buffer_item_type>;
+    using buffer_t = std::vector<buffer_item_type, AlignedAllocator<buffer_item_type, 64>>;
 
     /// The number of stream items per buffer item;
     static const uint32_t stream_items_per_buffer_item_v = si_per_bi<I>::value;
@@ -178,9 +179,7 @@ struct copy_decoder {
     static const size_t num_elements_v = 1;
 
     static result_t decode(typename traits::literal_t const & str) {
-        static_assert(std::is_same<typename traits::literal_t, typename traits::buffer_t>::value,
-            "copy_decoder cannot be used when literal_t != buffer_t");
-        return std::make_tuple(str, str.size(), 1);
+        return std::make_tuple(typename traits::buffer_t{str.begin(), str.end()}, str.size(), 1);
     }
 };
 
@@ -265,7 +264,7 @@ struct bin_decoder {
     static const size_t num_elements_v = 1;
 
     static result_t decode(typename traits::literal_t const & str) {
-        std::vector<uint8_t> buffer{};
+        std::vector<uint8_t, AlignedAllocator<uint8_t, 64>> buffer{};
         int counter = 0;
         size_t len = 0;
         uint8_t builder = 0;

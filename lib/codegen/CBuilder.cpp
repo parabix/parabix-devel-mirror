@@ -13,6 +13,7 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Dominators.h>
+#include <llvm/Transforms/Utils/Local.h>
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
@@ -32,19 +33,21 @@
 #endif
 
 #if defined(__i386__)
-typedef uint32_t unw_word_t;
-#define PRISz PRId32
+#define PRIdsz PRId32
+#define PRIxsz PRIx32
 #else
-typedef uint64_t unw_word_t;
-#define PRISz PRId64
+#define PRIdsz PRId64
+#define PRIxsz PRIx64
 #endif
-#if defined(HAS_LIBUNWIND)
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>
-static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
-#elif defined(HAS_EXECINFO)
+
+#ifdef ENABLE_ASSERTION_TRACE
+//#include <dwarf.h>
+//#include <libdwarf.h>
+//#include <libelf.h>
+//#include <link.h>
+//#include <dlfcn.h>
 #include <execinfo.h>
-static_assert(sizeof(void *) == sizeof(uintptr_t), "");
+#include <cxxabi.h>
 #endif
 
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
@@ -62,7 +65,7 @@ extern "C" void free_debug_wrapper(void * ptr) {
     }
 }
 
-Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const Twine Name) {
     if (ConstantInt * const c = dyn_cast<ConstantInt>(divisor)) {
         const auto d = c->getZExtValue();
         assert ("CreateURem divisor cannot be 0!" && d);
@@ -80,7 +83,7 @@ Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const 
     return Insert(BinaryOperator::CreateURem(number, divisor), Name);
 }
 
-Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const Twine Name) {
     if (ConstantInt * c = dyn_cast<ConstantInt>(divisor)) {
         const auto d = c->getZExtValue();
         assert ("CreateUDiv divisor cannot be 0!" && d);
@@ -98,7 +101,7 @@ Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const 
     return Insert(BinaryOperator::CreateUDiv(number, divisor), Name);
 }
 
-Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, const Twine Name) {
     assert (number->getType() == divisor->getType());
     if (LLVM_LIKELY(isa<Constant>(divisor))) {
         if (LLVM_UNLIKELY(cast<Constant>(divisor)->isOneValue())) {
@@ -112,7 +115,7 @@ Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, co
     return CreateAdd(quot, CreateZExt(CreateIsNotNull(rem), intTy), Name);
 }
 
-Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, const Twine Name) {
     if (isa<ConstantInt>(divisor)) {
         const auto d = cast<ConstantInt>(divisor)->getZExtValue();
         if (is_power_2(d)) {
@@ -122,7 +125,7 @@ Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, c
     return CreateMul(CreateUDiv(number, divisor), divisor, Name);
 }
 
-Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine Name) {
     if (isa<ConstantInt>(divisor)) {
         const auto d = cast<ConstantInt>(divisor)->getZExtValue();
         if (is_power_2(d)) {
@@ -135,14 +138,14 @@ Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, con
 }
 
 
-Value * CBuilder::CreateSaturatingAdd(Value * const a, Value * const b, const Twine &Name) {
+Value * CBuilder::CreateSaturatingAdd(Value * const a, Value * const b, const Twine Name) {
     // TODO: this seems to be an intrinsic in later versions of LLVM. Determine which.
     Value * const c = CreateAdd(a, b);
     Constant * const max = Constant::getAllOnesValue(a->getType());
     return CreateSelect(CreateICmpULT(c, a), max, c, Name);
 }
 
-Value * CBuilder::CreateSaturatingSub(Value * const a, Value * const b, const Twine &Name) {
+Value * CBuilder::CreateSaturatingSub(Value * const a, Value * const b, const Twine Name) {
     // TODO: this seems to be an intrinsic in later versions of LLVM. Determine which.
     Value * const c = CreateSub(a, b);
     Constant * const min = Constant::getNullValue(a->getType());
@@ -280,7 +283,7 @@ Function * CBuilder::GetPrintf() {
 }
 
 CallInst * CBuilder::__CreatePrintfCall(Value * const format, std::initializer_list<Value *> args) {
-    SmallVector<Value *, 1> argVals(2);
+    SmallVector<Value *, 8> argVals(1);
     argVals[0] = format;
     argVals.append(args);
     return CreateCall(GetPrintf(), argVals);
@@ -297,7 +300,7 @@ Function * CBuilder::GetDprintf() {
 }
 
 CallInst * CBuilder::__CreateDprintfCall(Value * const fd, Value * const format, std::initializer_list<Value *> args) {
-    SmallVector<Value *, 8> argVals(2);
+    SmallVector<Value *, 9> argVals(2);
     argVals[0] = fd;
     argVals[1] = format;
     argVals.append(args);
@@ -330,7 +333,7 @@ void CBuilder::CallPrintIntCond(StringRef name, Value * const value, Value * con
     SetInsertPoint(exitBlock);
 }
 
-void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd) {
+CallInst * CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
     Constant * printRegister = m->getFunction("print_int");
     IntegerType * const int64Ty = getInt64Ty();
@@ -358,16 +361,19 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
         printRegister = printFn;
         restoreIP(ip);
     }
-    Value * num = nullptr;
-    if (value->getType()->isPointerTy()) {
+    Value * num = value;
+    Type * const t = value->getType();
+    if (t->isPointerTy()) {
         num = CreatePtrToInt(value, int64Ty);
-    } else if (value->getType()->isIntegerTy()) {
-        num = CreateZExt(value, int64Ty);
+    } else if (t->isIntegerTy()) {
+        if (t->getIntegerBitWidth() < 64) {
+            num = CreateZExt(value, int64Ty);
+        }
     } else {
         report_fatal_error("CallPrintInt was given a non-integer/non-pointer value.");
     }
-    assert (num->getType()->isIntegerTy());
-    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
+    assert (num->getType()->isIntegerTy() && num->getType()->getIntegerBitWidth() == 64);
+    return CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
 }
 
 Value * CBuilder::CreateMalloc(Value * size) {
@@ -997,13 +1003,20 @@ void __report_failure_v(const char * name, const char * fmt, const uintptr_t * t
     }
     char buffer[1024] = {0};
     const auto m = std::vsprintf(buffer, fmt, args);
-    assert (m > 0);
     out.write(buffer, m);
     if (trace == nullptr) {
         if (colourize) {
             out.changeColor(raw_fd_ostream::WHITE, true);
         }
         out << "\nNo debug symbols loaded.\n";
+    }
+    if (codegen::TaskThreads > 1 || codegen::SegmentThreads > 1) {
+        if (colourize) {
+            out.changeColor(raw_fd_ostream::BLUE, true);
+        }
+        out << " (Thread # ";
+        out.write_hex(reinterpret_cast<unsigned long>(pthread_self()));
+        out << ")";
     }
     if (colourize) {
         out.resetColor();
@@ -1021,6 +1034,38 @@ void __report_failure(const char * name, const char * fmt, const uintptr_t * tra
     va_end(args);
 }
 
+#if 0
+
+Constant * resolve(CBuilder & b, void * addr) {
+
+    Dl_info symbol_info;
+    link_map * linkmap;
+
+    const auto r = dladdr1(addr, &symbol_info, reinterpret_cast<void **>(&linkmap), RTLD_DL_LINKMAP);
+
+    if (r == 0) {
+        return nullptr;
+    }
+
+    Constant * functionName = nullptr;
+
+    if (symbol_info.dli_sname) {
+        char * buffer = malloc(256);
+        buffer = abi::__cxa_demangle(symbol_info.dli_sname, buffer, 256, nullptr);
+        functionName = b.GetString(buffer);
+        free(buffer);
+    }
+
+    if (symbol_info.dli_fname) {
+
+
+    }
+
+
+}
+
+#endif
+
 void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::initializer_list<Value *> params) {
 
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
@@ -1032,8 +1077,17 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
     Module * const m = getModule();
     LLVMContext & C = getContext();
     Type * const stackTy = IntegerType::get(C, sizeof(uintptr_t) * 8);
+
+//    IntegerType * const int32Ty = getInt32Ty();
+
     PointerType * const stackPtrTy = stackTy->getPointerTo();
     PointerType * const int8PtrTy = getInt8PtrTy();
+
+//    FixedArray<Type *, 3> fields;
+//    fields[0] = int8PtrTy;
+//    fields[1] = int8PtrTy;
+//    fields[2] = int32Ty;
+//    StructType * const structTy = StructType::create(C, fields);
 
     Function * assertFunc = m->getFunction("assert");
     if (LLVM_UNLIKELY(assertFunc == nullptr)) {
@@ -1111,19 +1165,17 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
 
         restoreIP(ip);
     }
-    #ifndef NDEBUG
-    SmallVector<unw_word_t, 64> stack;
-    #if defined(HAS_EXECINFO)
+    #ifdef ENABLE_ASSERTION_TRACE
+    SmallVector<uintptr_t, 64> stack(64);
     for (;;) {
-        const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
-        if (LLVM_LIKELY(n < (int)stack.capacity())) {
+        const size_t n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
+        if (LLVM_LIKELY(n < stack.capacity())) {
             stack.set_size(n);
             break;
         }
-        stack.reserve(n * 2);
+        stack.resize(n * 2);
     }
-    #endif
-    const unsigned FIRST_NON_ASSERT = 2;
+    constexpr unsigned FIRST_NON_ASSERT = 2;
     Constant * trace = nullptr;
     ConstantInt * depth = nullptr;
     if (LLVM_UNLIKELY(stack.size() < FIRST_NON_ASSERT)) {
@@ -1131,6 +1183,41 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         depth = getInt32(0);
     } else {
         const auto n = stack.size() - FIRST_NON_ASSERT;
+
+        #if 0
+
+        SmallVector<Constant *, 32> symbols(n);
+
+        for (size_t i = 0; i != n; ++i) {
+            const auto pc = stack[i];
+            const auto f = mBacktraceSymbols.find(pc);
+            Constant * symbol = nullptr;
+            if (f == mBacktraceSymbols.end()) {
+
+
+
+//                backtrace_state * const state = ::backtrace_create_state(nullptr, 0,&libbacktrace_error_callback, nullptr);
+//                pc_data data;
+//                ::backtrace_pcinfo(state, pc, &libbacktrace_full_callback, &libbacktrace_error_callback, &data);
+//                FixedArray<Constant *, 3> values;
+//                values[0] = GetString(data.Filename);
+//                values[1] = GetString(data.Function);
+//                values[2] = getSize(data.LineNo);
+//                symbol = ConstantStruct::get(structTy, values);
+//                mBacktraceSymbols.insert(std::make_pair(pc, symbol));
+            } else {
+                symbol = f->second;
+            }
+            symbols[i] = nullptr;
+        }
+
+
+
+
+
+        #endif
+
+        // search for a duplicate within the known globals
         for (GlobalVariable & gv : m->getGlobalList()) {
             Type * const ty = gv.getValueType();
             if (ty->isArrayTy() && ty->getArrayElementType() == stackTy && ty->getArrayNumElements() == n) {
@@ -1149,7 +1236,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
             }
         }
         if (LLVM_LIKELY(trace == nullptr)) {
-            Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<unw_word_t>(stack.data() + FIRST_NON_ASSERT, n));
+            Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<uintptr_t>(stack.data() + FIRST_NON_ASSERT, n));
             trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
         }
         trace = ConstantExpr::getPointerCast(trace, stackPtrTy);
@@ -1187,7 +1274,7 @@ void CBuilder::CreateExit(const int exitCode) {
     CreateCall(exit, getInt32(exitCode));
 }
 
-AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySize, const Twine & Name) {
+AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySize, const Twine Name) {
 
     auto BB = GetInsertBlock();
     auto F = BB->getParent();
@@ -1235,57 +1322,57 @@ Value * CBuilder::CreatePopcount(Value * bits) {
     return CreateCall(ctpopFunc, bits);
 }
 
-Value * CBuilder::CreateCountForwardZeroes(Value * value, const bool guaranteedNonZero) {
+Value * CBuilder::CreateCountForwardZeroes(Value * value, const Twine Name, const no_conversion<bool> guaranteedNonZero) {
     if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
     }
     Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
-    return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)});
+    return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
-Value * CBuilder::CreateCountReverseZeroes(Value * value, const bool guaranteedNonZero) {
+Value * CBuilder::CreateCountReverseZeroes(Value * value, const Twine Name, const no_conversion<bool> guaranteedNonZero) {
     if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
     }
     Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
-    return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)});
+    return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
-Value * CBuilder::CreateResetLowestBit(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateResetLowestBit(Value * bits, const Twine Name) {
     return CreateAnd(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)), Name);
 }
 
-Value * CBuilder::CreateIsolateLowestBit(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateIsolateLowestBit(Value * bits, const Twine Name) {
     return CreateAnd(bits, CreateNeg(bits), Name);
 }
 
-Value * CBuilder::CreateMaskToLowestBitInclusive(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateMaskToLowestBitInclusive(Value * bits, const Twine Name) {
     return CreateXor(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)), Name);
 }
 
-Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits, const Twine Name) {
     return CreateAnd(CreateSub(bits, ConstantInt::get(bits->getType(), 1)), CreateNot(bits), Name);
 }
 
-Value * CBuilder::CreateZeroHiBitsFrom(Value * bits, Value * pos, const Twine & Name) {
+Value * CBuilder::CreateZeroHiBitsFrom(Value * bits, Value * pos, const Twine Name) {
     Type * Ty = bits->getType();
     Constant * one = Constant::getIntegerValue(Ty, APInt(Ty->getScalarSizeInBits(), 1));
     Value * mask = CreateSub(CreateShl(one, pos), one);
     return CreateAnd(bits, mask, Name);
 }
 
-Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length, const Twine & Name) {
+Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length, const Twine Name) {
     Constant * One = ConstantInt::get(bits->getType(), 1);
     return CreateAnd(CreateLShr(bits, start), CreateSub(CreateShl(One, length), One), Name);
 }
 
-Value * CBuilder::CreateCeilLog2(Value * value, const Twine & Name) {
+Value * CBuilder::CreateCeilLog2(Value * value, const Twine Name) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     Value * m = CreateCountReverseZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m, Name);
 }
 
-Value * CBuilder::CreateLog2(Value * value, const Twine & Name) {
+Value * CBuilder::CreateLog2(Value * value, const Twine Name) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     Value * m = CreateCountReverseZeroes(value);
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m, Name);
@@ -1318,21 +1405,21 @@ LoadInst * CBuilder::CreateLoad(Value *Ptr, const char * Name) {
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
-LoadInst * CBuilder::CreateLoad(Value * Ptr, const Twine & Name) {
+LoadInst * CBuilder::CreateLoad(Value * Ptr, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
-LoadInst * CBuilder::CreateLoad(Type * Ty, Value *Ptr, const Twine & Name) {
+LoadInst * CBuilder::CreateLoad(Type * Ty, Value *Ptr, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Ty), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ty, Ptr, Name);
 }
 
-LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine & Name) {
+LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
     }
@@ -1340,8 +1427,10 @@ LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine & Name
 }
 
 StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
-    assert ("Ptr is not a pointer type for Val" &&
-            Ptr->getType()->isPointerTy() && Val->getType() == Ptr->getType()->getPointerElementType());
+    assert ("Ptr (Arg2) was expected to be a pointer type" &&
+            Ptr->getType()->isPointerTy());
+    assert ("Ptr (Arg2) is not a pointer type for Val (Arg1)" &&
+            Val->getType() == Ptr->getType()->getPointerElementType());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Val->getType()), "CreateStore");
     }
@@ -1356,32 +1445,35 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char *
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
     LI->setAlignment(Align);
     return LI;
 }
 
-LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine & Name) {
+LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
     LI->setAlignment(Align);
     return LI;
 }
 
-LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolatile, const Twine & Name) {
+LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolatile, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
     LI->setAlignment(Align);
@@ -1392,8 +1484,9 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
     SI->setAlignment(Align);
@@ -1448,8 +1541,8 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
         CheckAddress(Dst, Size, "CreateMemCpy: Dst");
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
-        Value * intSrc = CreatePtrToInt(Src, intPtrTy);
-        Value * intDst = CreatePtrToInt(Dst, intPtrTy);
+        Value * const intSrc = CreatePtrToInt(Src, intPtrTy);
+        Value * const intDst = CreatePtrToInt(Dst, intPtrTy);
         // If the call to this intrinisic has an alignment value that is not 0 or 1, then the caller
         // guarantees that both the source and destination pointers are aligned to that boundary.
         if (Align > 1) {
@@ -1457,9 +1550,10 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
             CreateAssertZero(CreateURem(intSrc, align), "CreateMemCpy: Src is misaligned");
             CreateAssertZero(CreateURem(intDst, align), "CreateMemCpy: Dst is misaligned");
         }
-        Value * intSize = CreateZExtOrTrunc(Size, intPtrTy);
-        Value * nonOverlapping = CreateOr(CreateICmpULT(CreateAdd(intSrc, intSize), intDst),
-                                          CreateICmpULT(CreateAdd(intDst, intSize), intSrc));
+        Value * const intSize = CreateZExtOrTrunc(Size, intPtrTy);
+        Value * const srcEndsBeforeDst = CreateICmpULE(CreateAdd(intSrc, intSize), intDst);
+        Value * const dstEndsBeforeSrc = CreateICmpULE(CreateAdd(intDst, intSize), intSrc);
+        Value * const nonOverlapping = CreateOr(srcEndsBeforeDst, dstEndsBeforeSrc);
         CreateAssert(nonOverlapping, "CreateMemCpy: overlapping ranges is undefined");
     }
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
@@ -1508,26 +1602,26 @@ CallInst * CBuilder::CreateMemCmp(Value * Ptr1, Value * Ptr2, Value * Num) {
     return CreateCall(f, {Ptr1, Ptr2, Num});
 }
 
-Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine & Name) {
+Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");
         }
         Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
         // exctracting an element from a position that exceeds the length of the vector is undefined
-        __CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx (%" PRISz ") is greater than Vec size (%" PRISz ")", { Idx, Size });
+        __CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }
     return IRBuilder<>::CreateExtractElement(Vec, Idx, Name);
 }
 
-Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, const Twine & Name) {
+Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");
         }
         Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
         // inserting an element into a position that exceeds the length of the vector is undefined
-        __CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx (%" PRISz ") is greater than Vec size (%" PRISz ")", { Idx, Size });
+        __CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }
     return IRBuilder<>::CreateInsertElement(Vec, NewElt, Idx, Name);
 }
@@ -1746,9 +1840,14 @@ void CBuilder::CheckAddress(Value * const Ptr, Value * const Size, Constant * co
             #endif
         }
         Value * const addr = CreatePointerCast(Ptr, voidPtrTy);
-        Value * check = CreateCall(isPoisoned, { addr, CreateTrunc(Size, sizeTy) });
-        Value * const valid = CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy));
-        __CreateAssert(valid, "%s was given an unallocated %" PRIuMAX "-byte memory address 0x%" PRIxPTR, {Name, Size, Ptr});
+        Value * const firstPoisoned = CreateCall(isPoisoned, { addr, CreateTrunc(Size, sizeTy) });
+        Value * const valid = CreateICmpEQ(firstPoisoned, ConstantPointerNull::get(voidPtrTy));
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(firstPoisoned->getType()));
+        Value * const startInt = CreatePtrToInt(Ptr, intPtrTy);
+        Value * const firstPoisonedInt = CreatePtrToInt(firstPoisoned, intPtrTy);
+        Value * const offset = CreateSub(firstPoisonedInt, startInt);
+        __CreateAssert(valid, "%s was given an unallocated %" PRIuMAX "-byte memory address 0x%" PRIxPTR " (first poisoned=%" PRIuMAX ")", {Name, Size, Ptr, offset});
     }
     #endif
 }
@@ -1767,12 +1866,12 @@ struct RemoveRedundantAssertionsPass : public ModulePass {
     static char ID;
     RemoveRedundantAssertionsPass() : ModulePass(ID) { }
 
-    void getAnalysisUsage(AnalysisUsage &AU) const override {
-//        #ifdef HAS_ADDRESS_SANITIZER
-//        AU.addRequired<DominatorTree>();
-//        AU.addRequired<AliasAnalysis>();
-//        AU.addPreserved<AliasAnalysis>();
-//        #endif
+    void getAnalysisUsage(AnalysisUsage & AU) const override {
+        #ifdef HAS_ADDRESS_SANITIZER
+        AU.addRequired<DominatorTreeWrapperPass>();
+        AU.addRequired<AAResultsWrapperPass>();
+        AU.addPreserved<AAResultsWrapperPass>();
+        #endif
     }
 
     virtual bool runOnModule(Module &M) override;
@@ -1790,58 +1889,66 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         return false;
     }
     bool modified = false;
-    DenseSet<Value *> S;
+    DenseSet<Value *> assertions;
+    bool discoveredStaticFailure = false;
 
-//    #ifdef HAS_ADDRESS_SANITIZER
-//    Function * const isPoisoned = M->getFunction("__asan_region_is_poisoned");
-//    DenseSet<CallInst *> alreadyTested;
-//    AliasAnalysis & AA = getAnalysis<AliasAnalysis>();
-//    #endif
+    #ifdef HAS_ADDRESS_SANITIZER
+    Function * const isPoisoned = M.getFunction("__asan_region_is_poisoned");
+    DenseSet<CallInst *> isPoisonedCalls;
+    #endif
 
     for (Function & F : M) {
 
-        //DominatorTree & DT = getAnalysis<DominatorTree>(F);
+        // ignore declarations
+        if (F.empty()) continue;
 
-        S.clear();
+        #ifdef HAS_ADDRESS_SANITIZER
+        DominatorTree & DT = getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
+        AAResults & AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
+        isPoisonedCalls.clear();
+        #endif
+
+        assertions.clear();
         // scan through each instruction and remove any trivially true or redundant assertions.
         for (auto & B : F) {
             for (auto i = B.begin(); i != B.end(); ) {
                 Instruction & inst = *i;
                 if (LLVM_UNLIKELY(isa<CallInst>(inst))) {
                     CallInst & ci = cast<CallInst>(inst);
-
-
-
                     // if we're using address sanitizer, try to determine whether we're
                     // rechecking the same address
-//                    #ifdef HAS_ADDRESS_SANITIZER
-//                    if (ci.getCalledFunction() == isPoisoned) {
-//                        bool alreadyProven = false;
-//                        ConstantInt * const length = dyn_cast<ConstantInt>(ci.getArgOperand(1));
-//                        if (length) {
-//                            Value * const ptr = ci.getArgOperand(0);
-//                            for (CallInst * prior : alreadyTested) {
-//                                if (DT.dominates(prior, &ci)) {
-//                                    Value * const priorPtr = prior->getArgOperand(0);
-//                                    ConstantInt * const priorLength = cast<ConstantInt>(prior->getArgOperand(1));
-//                                    const auto result = AA.alias(ptr, length->getLimitedValue(), priorPtr, priorLength->getLimitedValue());
-//                                    if (LLVM_UNLIKELY(result == AliasResult::MustAlias)) {
-//                                        alreadyProven = true;
-//                                        break;
-//                                    }
-//                                }
-//                            }
-//                        }
-//                        if (alreadyProven) {
-//                            PointerType * const voidPtrTy = IntegerType::getInt8PtrTy(M.getContext());
-//                            i = ci.replaceAllUsesWith(ConstantPointerNull::get(voidPtrTy));
-//                            modified = true;
-//                        } else {
-//                            alreadyTested.insert(&ci);
-//                        }
-//                        continue;
-//                    }
-//                    #endif
+                    #ifdef HAS_ADDRESS_SANITIZER
+                    if (ci.getCalledFunction() == isPoisoned) { assert (isPoisoned);
+                        bool alreadyProven = false;
+                        // To support non-constant lengths, we'd need a way of proving whether one
+                        // length is (symbolically) always less than or equal to another or v.v..
+                        ConstantInt * const length = dyn_cast<ConstantInt>(ci.getArgOperand(1));
+                        if (length) {
+                            Value * const ptr = ci.getArgOperand(0);
+                            for (CallInst * prior : isPoisonedCalls) {
+                                if (DT.dominates(prior, &ci)) {
+                                    Value * const priorPtr = prior->getArgOperand(0);
+                                    ConstantInt * const priorLength = cast<ConstantInt>(prior->getArgOperand(1));
+                                    const auto result = AA.alias(ptr, length->getLimitedValue(), priorPtr, priorLength->getLimitedValue());
+                                    if (LLVM_UNLIKELY(result == AliasResult::MustAlias)) {
+                                        alreadyProven = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (alreadyProven) {
+                                // __asan_region_is_poisoned returns the address of first poisoned
+                                // byte to indicate failure. Replace any dominated checks with null
+                                // to indicate success.
+                                PointerType * const voidPtrTy = cast<PointerType>(isPoisoned->getReturnType());
+                                ci.replaceAllUsesWith(ConstantPointerNull::get(voidPtrTy));
+                                modified = true;
+                            } else {
+                                isPoisonedCalls.insert(&ci);
+                            }
+                        }
+                    } else
+                    #endif
                     if (ci.getCalledFunction() == assertFunc) {
                         assert (ci.getNumArgOperands() >= 5);
                         bool remove = false;
@@ -1855,6 +1962,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                             Value * const op1 = icmp->getOperand(1);
                             if (LLVM_UNLIKELY(isa<Constant>(op0) && isa<Constant>(op1))) {
                                 static_check = ConstantExpr::getICmp(icmp->getPredicate(), cast<Constant>(op0), cast<Constant>(op1));
+                                ci.setOperand(0, static_check);
                             }
                         }
                         if (static_check) {
@@ -1890,28 +1998,51 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                                 const char * const argC = extract(arg); assert (argC);
                                                 fmt % argC;
                                             } else {
-                                                fmt % "<unknown>";
+                                                fmt % "<unknown constant type>";
                                             }
                                         }
                                     } else {
-                                        fmt % "<any>";
+                                        fmt % "<any value>";
                                     }
                                 }
                                 __report_failure(name, fmt.str().data(), trace, n);
-                                exit(-1);
+                                discoveredStaticFailure = true;
+                            } else {
+                                remove = true;
                             }
-                            remove = true;
-                        } else if (LLVM_UNLIKELY(S.count(check))) {
+                        } else { // non-static check
+
                             // a duplicate check will never be executed if true
-                            remove = true;
-                        } else {
-                            S.insert(check);
+                            if (assertions.count(check)) {
+                                remove = true;
+                            } else if (isa<PHINode>(check)) {
+                                // if all incoming values of this PHINode have been checked,
+                                // then this is an implicit duplicate check.
+                                PHINode * const phi = cast<PHINode>(check);
+                                const auto n = phi->getNumIncomingValues();
+                                bool allChecked = true;
+                                for (auto i = 0U; i != n; ++i) {
+                                    if (assertions.count(phi->getIncomingValue(i)) == 0) {
+                                        allChecked = false;
+                                        break;
+                                    }
+                                }
+                                if (allChecked) {
+                                    assertions.insert(check);
+                                    remove = true;
+                                }
+                            }
                         }
-                        if (LLVM_UNLIKELY(remove)) {
+
+                        if (remove) {
                             i = ci.eraseFromParent();
+                            RecursivelyDeleteTriviallyDeadInstructions(check);
                             modified = true;
                             continue;
+                        } else {
+                            assertions.insert(check);
                         }
+
                     }
                 }
                 ++i;
@@ -1919,12 +2050,16 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         }
 
         // if we have any runtime assertions, replace the calls to each with an invoke.
-        if (LLVM_UNLIKELY(S.empty())) continue;
+        if (LLVM_UNLIKELY(assertions.empty())) continue;
 
-        // Gather all assertions from the appropriate users of S.
+        // Gather all assertions function calls from the remaining conditions
         SmallVector<CallInst *, 64> assertList;
-        assertList.reserve(S.size());
-        for (Value * s : S) {
+        assertList.reserve(assertions.size());
+        for (Value * s : assertions) {
+            // It's possible (but unlikely) that the assertion condition is
+            // used for some purpose other than the assertion call; scan
+            // through and find each. We know, however, there must be exactly
+            // one assertion call for each condition.
             for (User * u : s->users()) {
                 if (isa<CallInst>(u)) {
                     CallInst * const c = cast<CallInst>(u);
@@ -1935,9 +2070,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                 }
             }
         }
-        assert (assertList.size() == S.size());
-        S.clear();
+        assert (assertList.size() == assertions.size());
+        assertions.clear();
 
+
+        // Replace the assertion function with a "try/throw" block
         CBuilder builder(M.getContext());
         builder.setModule(&M);
         builder.SetInsertPoint(&F.front());
@@ -1964,6 +2101,9 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         }
     }
 
+    if (LLVM_UNLIKELY(discoveredStaticFailure)) {
+        exit(-1);
+    }
 
     return modified;
 }

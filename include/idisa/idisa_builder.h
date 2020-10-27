@@ -140,7 +140,7 @@ public:
     //    1      0     c
     //    1      1     d
     llvm::Value * simd_binary(unsigned char mask, llvm::Value * bit_1, llvm::Value * bit_0);
-    
+
     //
     // Return a logic expression in terms of bitwise And, Or and Not for an
     // arbitrary three-operand boolean function corresponding to an 8-bit truth table mask.
@@ -244,8 +244,7 @@ public:
         return getStreamSetTy(getContext(), NumElements, FieldWidth);
     }
 
-    void CallPrintRegisterCond(llvm::StringRef regName, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
-    void CallPrintRegister(llvm::StringRef regName, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
+    llvm::CallInst * CallPrintRegister(llvm::StringRef regName, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
 
 protected:
     LLVM_ATTRIBUTE_NORETURN void UnsupportedFieldWidthError(const unsigned FieldWidth, std::string op_name);

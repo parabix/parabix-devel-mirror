@@ -12,7 +12,9 @@ namespace llvm { class Value; }
 namespace kernel {
 
 const static std::string INITIALIZE_FUNCTION_POINTER_SUFFIX = "_IFP";
+const static std::string ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX = "_AFP";
 const static std::string INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX = "_ITFP";
+const static std::string ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX = "_ATFP";
 const static std::string DO_SEGMENT_FUNCTION_POINTER_SUFFIX = "_SFP";
 const static std::string FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX = "_FTIP";
 const static std::string FINALIZE_FUNCTION_POINTER_SUFFIX = "_FIP";
@@ -42,13 +44,17 @@ public:
         void * const FunctionPointer;
         const Scalars Args;
 
-        llvm::Constant * Callee;
+        mutable llvm::Constant * Callee;
 
         CallBinding(const std::string Name, llvm::FunctionType * Type, void * FunctionPointer, std::initializer_list<Scalar *> && Args)
         : Name(Name), Type(Type), FunctionPointer(FunctionPointer), Args(Args), Callee(nullptr) { }
     };
 
     using CallBindings = std::vector<CallBinding>;
+
+    using LengthAssertion = std::array<const StreamSet *, 2>;
+
+    using LengthAssertions = std::vector<LengthAssertion>;
 
     bool hasSignature() const final { return true; }
 
@@ -70,10 +76,6 @@ public:
         return mNumOfThreads;
     }
 
-    const unsigned getNumOfSegments() const {
-        return mNumOfSegments;
-    }
-
     const Kernels & getKernels() const {
         return mKernels;
     }
@@ -82,9 +84,13 @@ public:
         return mCallBindings;
     }
 
+    const LengthAssertions & getLengthAssertions() const {
+        return mLengthAssertions;
+    }
+
     void addKernelDeclarations(BuilderRef b) final;
 
-    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept final;
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const final;
 
     virtual ~PipelineKernel();
 
@@ -92,16 +98,23 @@ protected:
 
     PipelineKernel(BaseDriver & driver,
                    std::string && signature,
-                   const unsigned numOfThreads, const unsigned numOfSegments,
+                   const unsigned numOfThreads,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
-                   Bindings && scalar_inputs, Bindings && scalar_outputs);
+                   Bindings && scalar_inputs, Bindings && scalar_outputs,
+                   LengthAssertions && lengthAssertions);
 
     void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const final;
 
     void recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const final;
 
     void linkExternalMethods(BuilderRef b) final;
+
+    LLVM_READNONE bool allocatesInternalStreamSets() const final;
+
+    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) final;
+
+    void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) final;
 
     void addAdditionalFunctions(BuilderRef b) final;
 
@@ -117,13 +130,16 @@ protected:
 
     void generateFinalizeMethod(BuilderRef b) final;
 
+    void runOptimizationPasses(BuilderRef b) const final;
+
 protected:
 
     const unsigned                            mNumOfThreads;
-    const unsigned                            mNumOfSegments;
-    const Kernels                             mKernels;
-    CallBindings                              mCallBindings;
     const std::string                         mSignature;
+    const Kernels                             mKernels;
+    const CallBindings                        mCallBindings;
+    const LengthAssertions                    mLengthAssertions;
+
 };
 
 }

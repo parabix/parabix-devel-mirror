@@ -60,13 +60,11 @@ bool lexical_ordering(const Graph & G, Vec & L) {
     return (traversed == num_edges(G));
 }
 
-namespace { // anonymous
-
 using ReverseTopologicalOrdering = SmallVector<unsigned, 256>;
 
-template <typename Graph>
-void __transitive_closure_dag(ReverseTopologicalOrdering & ordering, Graph & G) {
-    // Simple topological closure for DAGs
+template <typename Vector, typename Graph>
+void transitive_closure_dag(const Vector & ordering, Graph & G) {
+    // Simple transitive closure for DAGs
     for (unsigned u : ordering) {
         for (const auto e : make_iterator_range(in_edges(u, G))) {
             const auto s = source(e, G);
@@ -80,8 +78,8 @@ void __transitive_closure_dag(ReverseTopologicalOrdering & ordering, Graph & G) 
     }
 }
 
-template <typename Graph>
-void __transitive_reduction_dag(ReverseTopologicalOrdering & ordering, Graph & G) {
+template <typename Vector, typename Graph>
+void transitive_reduction_dag(const Vector & ordering, Graph & G) {
     using Edge = typename graph_traits<Graph>::edge_descriptor;
     BitVector sources(num_vertices(G), false);
     for (unsigned u : ordering ) {
@@ -97,14 +95,12 @@ void __transitive_reduction_dag(ReverseTopologicalOrdering & ordering, Graph & G
     }
 }
 
-} // end of anonymous namespace
-
 template <typename Graph>
 inline void transitive_closure_dag(Graph & G) {
     ReverseTopologicalOrdering ordering;
     ordering.reserve(num_vertices(G));
     topological_sort(G, std::back_inserter(ordering));
-    __transitive_closure_dag(ordering, G);
+    transitive_closure_dag(ordering, G);
 }
 
 template <typename Graph>
@@ -112,46 +108,8 @@ inline void transitive_reduction_dag(Graph & G) {
     ReverseTopologicalOrdering ordering;
     ordering.reserve(num_vertices(G));
     topological_sort(G, std::back_inserter(ordering));
-    __transitive_closure_dag(ordering, G);
-    __transitive_reduction_dag(ordering, G);
-}
-
-template <typename Graph>
-bool add_edge_if_no_induced_cycle(const typename graph_traits<Graph>::vertex_descriptor s,
-                                  const typename graph_traits<Graph>::vertex_descriptor t,
-                                  Graph & G) {
-    // If s-t exists, skip adding this edge
-    if (edge(s, t, G).second || s == t) {
-        return s != t;
-    }
-
-    // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
-    if (in_degree(s, G) > 0) {
-        BitVector V(num_vertices(G));
-        std::queue<typename graph_traits<Graph>::vertex_descriptor> Q;
-        // do a BFS to search for a t-s path
-        Q.push(t);
-        for (;;) {
-            const auto u = Q.front();
-            Q.pop();
-            for (auto e : make_iterator_range(out_edges(u, G))) {
-                const auto v = target(e, G);
-                if (LLVM_UNLIKELY(v == s)) {
-                    // we found a t-s path
-                    return false;
-                }
-                if (LLVM_LIKELY(!V.test(v))) {
-                    V.set(v);
-                    Q.push(v);
-                }
-            }
-            if (Q.empty()) {
-                break;
-            }
-        }
-    }
-    add_edge(s, t, G);
-    return true;
+    transitive_closure_dag(ordering, G);
+    transitive_reduction_dag(ordering, G);
 }
 
 #endif // LEXOGRAPHIC_ORDERING_HPP

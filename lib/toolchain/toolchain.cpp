@@ -20,6 +20,10 @@ using namespace llvm;
 #define IN_DEBUG_MODE false
 #endif
 
+// #define FORCE_ASSERTIONS
+
+// #define DISABLE_OBJECT_CACHE
+
 namespace codegen {
 
 inline unsigned getPageSize() {
@@ -67,16 +71,16 @@ static cl::opt<std::string, true> ASMOutputFilenameOption("ShowASM", cl::locatio
 
 // Enable Debug Options to be specified on the command line
 static cl::opt<CodeGenOpt::Level, true>
-OptimizationLevel("optimization-level", cl::location(OptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the front-end optimization level:"),
-                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
-                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+OptimizationLevel("optimization-level", cl::location(OptLevel), cl::init(CodeGenOpt::None), cl::desc("Set the front-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations"),
                              clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
                              clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
                   CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 static cl::opt<CodeGenOpt::Level, true>
-BackEndOptOption("backend-optimization-level", cl::location(BackEndOptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the back-end optimization level:"),
-                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
-                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+BackEndOptOption("backend-optimization-level", cl::location(BackEndOptLevel), cl::init(CodeGenOpt::None), cl::desc("Set the back-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations"),
                              clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
                              clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
                 CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
@@ -98,8 +102,9 @@ static cl::opt<unsigned, true> BlockSizeOption("BlockSize", cl::location(BlockSi
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 
 
+const unsigned DefaultSegmentSize = 16384;
 static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(SegmentSize),
-                                               cl::init(getPageSize()),
+                                               cl::init(DefaultSegmentSize),
                                                cl::desc("Expected amount of input data to process per segment"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
 static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
@@ -174,6 +179,9 @@ const cl::OptionCategory * LLVM_READONLY codegen_flags() {
 }
 
 bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
+    #ifdef FORCE_ASSERTIONS
+    if (flag == DebugFlags::EnableAsserts) return true;
+    #endif
     return DebugOptions.isSet(flag);
 }
 
@@ -181,6 +189,9 @@ bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
 std::string ProgramName;
 
 inline bool disableObjectCacheDueToCommandLineOptions() {
+    #ifdef DISABLE_OBJECT_CACHE
+    return true;
+    #else
     if (!TraceOption.empty()) return true;
     // if (!DebugOptions.empty()) return true;
     if (ShowIROption != OmittedOption) return true;
@@ -191,6 +202,7 @@ inline bool disableObjectCacheDueToCommandLineOptions() {
     if (pablo::ShowPabloOption != OmittedOption) return true;
     if (pablo::ShowOptimizedPabloOption != OmittedOption) return true;
     return false;
+    #endif
 }
 
 void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {

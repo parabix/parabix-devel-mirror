@@ -15,13 +15,14 @@
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/cc_compiler.h>
 #include <re/alphabet/alphabet.h>
+#include <llvm/Support/Compiler.h>
 
 using namespace pablo;
 using namespace llvm;
 
 namespace kernel {
 
-std::string StringInsertName(std::vector<std::string> & insertStrs, StreamSet * insertMarks) {
+LLVM_READONLY std::string StringInsertName(const std::vector<std::string> & insertStrs, const StreamSet * insertMarks) {
     std::string name = "StringInsertBixNum";
     for (auto s : insertStrs) {
         name += "_" + std::to_string(s.size());
@@ -32,14 +33,17 @@ std::string StringInsertName(std::vector<std::string> & insertStrs, StreamSet * 
     return name;
 }
     
-StringInsertBixNum::StringInsertBixNum(BuilderRef b, std::vector<std::string> & insertStrs,
+StringInsertBixNum::StringInsertBixNum(BuilderRef b, const std::vector<std::string> & insertStrs,
                                        StreamSet * insertMarks, StreamSet * insertBixNum)
-    : PabloKernel(b, StringInsertName(insertStrs, insertMarks),
-                  {Binding{"insertMarks", insertMarks}},
-                  {Binding{"insertBixNum", insertBixNum}}),
-    mInsertStrings(insertStrs),
-    mMultiplexing(insertMarks->getNumElements() < insertStrs.size()),
-    mBixNumBits(insertBixNum->getNumElements()) {}
+: PabloKernel(b, "StringInsertBixNum" + Kernel::getStringHash(StringInsertName(insertStrs, insertMarks)),
+              {Binding{"insertMarks", insertMarks}},
+              {Binding{"insertBixNum", insertBixNum}})
+, mInsertStrings(insertStrs)
+, mMultiplexing(insertMarks->getNumElements() < insertStrs.size())
+, mBixNumBits(insertBixNum->getNumElements())
+, mSignature(StringInsertName(insertStrs, insertMarks)) {
+
+}
 
 void StringInsertBixNum::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -60,33 +64,31 @@ void StringInsertBixNum::generatePabloMethod() {
     }
 }
 
-std::string StringReplaceKernel::makeSignature(std::vector<std::string> & insertStrs, StreamSet * insertMarks) {
-    std::string name = "";
-    for (auto s : insertStrs) {
+LLVM_READONLY std::string StringReplaceName(const std::vector<std::string> & insertStrs, const StreamSet * insertMarks) {
+    std::string name = "StringReplaceBixNum";
+    for (const auto & s : insertStrs) {
         name += "_" + s;
     }
     if (insertMarks->getNumElements() < insertStrs.size()) {
         name += "_multiplexed";
     }
-    mSignature = name;
-    return mSignature;
+    return name;
 }
 
-StringRef StringReplaceKernel::getSignature() const {
-    return mSignature;
-}
-
-StringReplaceKernel::StringReplaceKernel(BuilderRef b, std::vector<std::string> & insertStrs,
+StringReplaceKernel::StringReplaceKernel(BuilderRef b, const std::vector<std::string> & insertStrs,
                                          StreamSet * basis, StreamSet * spreadMask,
                                          StreamSet * insertMarks, StreamSet * runIndex,
                                          StreamSet * output)
-    : PabloKernel(b, "StringReplace" + getStringHash(makeSignature(insertStrs, insertMarks)),
-                 {Binding{"basis", basis}, Binding{"spreadMask", spreadMask},
-                  Binding{"insertMarks", insertMarks, FixedRate(1), LookAhead(1 << (runIndex->getNumElements()))},
-                     Binding{"runIndex", runIndex}},
-                 {Binding{"output", output}}),
-    mInsertStrings(insertStrs),
-    mMultiplexing(insertMarks->getNumElements() < insertStrs.size()) {}
+: PabloKernel(b, "StringReplaceBixNum" + Kernel::getStringHash(StringReplaceName(insertStrs, insertMarks)),
+             {Binding{"basis", basis}, Binding{"spreadMask", spreadMask},
+              Binding{"insertMarks", insertMarks, FixedRate(1), LookAhead(1 << (runIndex->getNumElements()))},
+              Binding{"runIndex", runIndex}},
+             {Binding{"output", output}})
+, mInsertStrings(insertStrs)
+, mMultiplexing(insertMarks->getNumElements() < insertStrs.size())
+, mSignature(StringReplaceName(insertStrs, insertMarks)) {
+
+}
 
 void StringReplaceKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());

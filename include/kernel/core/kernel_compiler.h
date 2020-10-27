@@ -23,6 +23,8 @@ public:
 
     using ScalarValueMap = llvm::StringMap<llvm::Value *>;
 
+    using ScalarAliasMap = std::vector<std::pair<std::string, std::string>>;
+
     using ScalarType = Kernel::ScalarType;
 
     using InternalScalar = Kernel::InternalScalar;
@@ -46,7 +48,7 @@ public:
 
     using OwnedStreamSetBuffers = Vec<std::unique_ptr<StreamSetBuffer>>;
 
-    enum class InitializeScalarMapOptions {
+    enum class InitializeOptions {
         SkipThreadLocal
         , IncludeThreadLocal
     };
@@ -333,9 +335,15 @@ protected:
 
 private:
 
-    void initializeScalarMap(BuilderRef b, const InitializeScalarMapOptions options);
+    void initializeScalarMap(BuilderRef b, const InitializeOptions options);
 
     void initializeIOBindingMap();
+
+    void initializeOwnedBufferHandles(BuilderRef b, const InitializeOptions options);
+
+protected:
+
+    void addAlias(llvm::StringRef alias, llvm::StringRef scalarName);
 
 protected:
 
@@ -357,6 +365,10 @@ public:
 
     void callGenerateInitializeThreadLocalMethod(BuilderRef b);
 
+    void callGenerateAllocateSharedInternalStreamSets(BuilderRef b);
+
+    void callGenerateAllocateThreadLocalInternalStreamSets(BuilderRef b);
+
     std::vector<llvm::Value *> getDoSegmentProperties(BuilderRef b) const;
 
     void setDoSegmentProperties(BuilderRef b, const llvm::ArrayRef<llvm::Value *> args);
@@ -373,9 +385,13 @@ protected:
 
 private:
 
-    void loadHandlesOfLocalOutputStreamSets(BuilderRef b) const;
-
     void clearInternalStateAfterCodeGen();
+
+    static Rational getLCMOfFixedRateInputs(const Kernel * const target);
+
+    static Rational getLCMOfFixedRateOutputs(const Kernel * const target);
+
+    void runInternalOptimizationPasses(llvm::Module * const m);
 
 protected:
 
@@ -389,6 +405,8 @@ protected:
     const InternalScalars &         mInternalScalars;
 
     llvm::Function *                mCurrentMethod = nullptr;
+
+    llvm::BasicBlock *              mEntryPoint = nullptr;
 
     llvm::Value *                   mSharedHandle = nullptr;
     llvm::Value *                   mThreadLocalHandle = nullptr;
@@ -416,6 +434,7 @@ protected:
     Vec<llvm::Value *>              mConsumedOutputItems;
 
     ScalarValueMap                  mScalarFieldMap;
+    ScalarAliasMap                  mScalarAliasMap;
     BindingMap                      mBindingMap;
 
     OwnedStreamSetBuffers           mStreamSetInputBuffers;

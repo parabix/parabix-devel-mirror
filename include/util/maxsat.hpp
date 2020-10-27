@@ -1,8 +1,11 @@
 #ifndef MAXSAT_HPP
 #define MAXSAT_HPP
 
+#include <llvm/Support/ErrorHandling.h>
+#include <algorithm>
 #include <vector>
 #include <z3.h>
+
 
 inline Z3_ast mk_binary_or(Z3_context ctx, Z3_ast in_1, Z3_ast in_2) {
     Z3_ast args[2] = { in_1, in_2 };
@@ -95,36 +98,35 @@ inline void assert_le_one(Z3_context ctx, Z3_solver s, unsigned n, Z3_ast * val)
 /** ------------------------------------------------------------------------------------------------------------- *
  * Fu & Malik procedure for MaxSAT. This procedure is based on unsat core extraction and the at-most-one constraint.
  ** ------------------------------------------------------------------------------------------------------------- */
-static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) {
-    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-        return -1;
-    }
+static int Z3_maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> soft) {
+    assert("initial formula is unsatisfiable!" && (Z3_solver_check(ctx, solver) != Z3_L_FALSE));
     if (LLVM_UNLIKELY(soft.empty())) {
         return 0;
     }
     const auto n = soft.size();
     const auto ty = Z3_mk_bool_sort(ctx);
-    Z3_ast aux_vars[n];
-    Z3_ast assumptions[n];
+
+    std::vector<Z3_ast> aux_vars(n);
+    std::vector<Z3_ast> assumptions(n);
 
     for (unsigned i = 0; i < n; ++i) {
         aux_vars[i] = Z3_mk_fresh_const(ctx, nullptr, ty);
         Z3_solver_assert(ctx, solver, mk_binary_or(ctx, soft[i], aux_vars[i]));
     }
 
-    for (unsigned c = n; c; --c) {
+    for (auto c = n; c; --c) {
         // create assumptions
         for (unsigned i = 0; i < n; i++) {
             // Recall that we asserted (soft_cnstrs[i] \/ aux_vars[i])
-            // So using (NOT aux_vars[i]) as an assumption we are actually forcing the soft_cnstrs[i] to be considered.
+            // So using (NOT aux_vars[i]) as an assumption we are force the soft constraints to be considered.
             assumptions[i] = Z3_mk_not(ctx, aux_vars[i]);
         }
-        if (Z3_solver_check_assumptions(ctx, solver, n, assumptions) != Z3_L_FALSE) {
+        if (Z3_solver_check_assumptions(ctx, solver, n, assumptions.data()) != Z3_L_FALSE) {
             return c; // done
         } else {
             Z3_ast_vector core = Z3_solver_get_unsat_core(ctx, solver);
             unsigned m = Z3_ast_vector_size(ctx, core);
-            Z3_ast block_vars[m];
+            std::vector<Z3_ast> block_vars(m);
             unsigned k = 0;
             // update soft-constraints and aux_vars
             for (unsigned i = 0; i < n; i++) {
@@ -147,11 +149,11 @@ static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) 
 
             }
             if (k > 1) {
-                Z3_ast aux_array_1[k + 1];
-                Z3_ast aux_array_2[k + 1];
-                Z3_ast * aux_1 = aux_array_1;
-                Z3_ast * aux_2 = aux_array_2;
-                std::memcpy(aux_1, block_vars, sizeof(Z3_ast) * k);
+                std::vector<Z3_ast> aux_array_1(k + 1);
+                std::vector<Z3_ast> aux_array_2(k + 1);
+                Z3_ast * aux_1 = aux_array_1.data();
+                Z3_ast * aux_2 = aux_array_2.data();
+                std::copy_n(block_vars.data(), k, aux_array_1.data());
                 unsigned i = 1;
                 for (; k > 1; ++i) {
                     assert (aux_1 != aux_2);
@@ -162,8 +164,7 @@ static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) 
             }
         }
     }
-    llvm_unreachable("unreachable");
-    return -1;
+    return 0;
 }
 
 #endif // MAXSAT_HPP

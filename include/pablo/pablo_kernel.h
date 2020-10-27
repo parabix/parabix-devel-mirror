@@ -138,6 +138,8 @@ public:
         return *mContext;
     }
 
+    bool requiresExplicitPartialFinalStride() const override;
+
 protected:
 
     PabloKernel(BuilderRef builder,
@@ -172,7 +174,7 @@ protected:
     // finalizing the KernelStateType.
     void addInternalProperties(BuilderRef b) final;
 
-    std::unique_ptr<kernel::KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
+    std::unique_ptr<kernel::KernelCompiler> instantiateKernelCompiler(BuilderRef b) const override;
 
 private:
 

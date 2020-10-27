@@ -27,19 +27,30 @@ void BlockKernelCompiler::generateMultiBlockLogic(BuilderRef b, Value * const nu
         report_fatal_error(out.str());
     }
 
+    const auto hasFinalBlock = true; // mTarget->requiresExplicitPartialFinalStride();
+
     BasicBlock * const entryBlock = b->GetInsertBlock();
     mStrideLoopBody = b->CreateBasicBlock(getName() + "_strideLoopBody");
+
+
     BasicBlock * const incrementCountableItems = b->CreateBasicBlock(getName() + "_incrementCountableItems");
     BasicBlock * const stridesDone = b->CreateBasicBlock(getName() + "_stridesDone");
-    BasicBlock * const doFinalBlock = b->CreateBasicBlock(getName() + "_doFinalBlock");
-    BasicBlock * const segmentDone = b->CreateBasicBlock(getName() + "_segmentDone");
+    BasicBlock * doFinalBlock = nullptr;
+    BasicBlock * segmentDone = nullptr;
 
-    b->CreateUnlikelyCondBr(mIsFinal, doFinalBlock, mStrideLoopBody);
+    if (hasFinalBlock) {
+        doFinalBlock = b->CreateBasicBlock(getName() + "_doFinalBlock");
+        segmentDone = b->CreateBasicBlock(getName() + "_segmentDone");
+        b->CreateUnlikelyCondBr(mIsFinal, doFinalBlock, mStrideLoopBody);
+    } else {
+        b->CreateBr(mStrideLoopBody);
+    }
 
     /// BLOCK BODY
 
     b->SetInsertPoint(mStrideLoopBody);
-    if (b->supportsIndirectBr()) {
+    mStrideLoopTarget = nullptr;
+    if (hasFinalBlock && b->supportsIndirectBr()) {
         Value * const baseTarget = BlockAddress::get(segmentDone);
         mStrideLoopTarget = b->CreatePHI(baseTarget->getType(), 2, "strideTarget");
         mStrideLoopTarget->addIncoming(baseTarget, entryBlock);
@@ -74,37 +85,42 @@ void BlockKernelCompiler::generateMultiBlockLogic(BuilderRef b, Value * const nu
 
     b->SetInsertPoint(stridesDone);
 
-    // Now conditionally perform the final block processing depending on the doFinal parameter.
-    if (mStrideLoopTarget) {
-        mStrideLoopBranch = b->CreateIndirectBr(mStrideLoopTarget, 3);
-        mStrideLoopBranch->addDestination(doFinalBlock);
-        mStrideLoopBranch->addDestination(segmentDone);
-    } else {
-        b->CreateUnlikelyCondBr(mIsFinal, doFinalBlock, segmentDone);
-    }
+    if (hasFinalBlock) {
 
-    doFinalBlock->moveAfter(stridesDone);
-
-    /// DO FINAL BLOCK
-
-    b->SetInsertPoint(doFinalBlock);
-    writeFinalBlockMethod(b, getRemainingItems(b));
-    b->CreateBr(segmentDone);
-
-    segmentDone->moveAfter(b->GetInsertBlock());
-
-    b->SetInsertPoint(segmentDone);
-
-    // Update the branch prediction metadata to indicate that the likely target will be segmentDone
-    if (mStrideLoopTarget) {
-        MDBuilder mdb(b->getContext());
-        const auto destinations = mStrideLoopBranch->getNumDestinations();
-        SmallVector<uint32_t, 16> weights(destinations);
-        for (unsigned i = 0; i < destinations; ++i) {
-            weights[i] = (mStrideLoopBranch->getDestination(i) == segmentDone) ? 100 : 1;
+        // Now conditionally perform the final block processing depending on the doFinal parameter.
+        if (mStrideLoopTarget) {
+            mStrideLoopBranch = b->CreateIndirectBr(mStrideLoopTarget, 3);
+            mStrideLoopBranch->addDestination(doFinalBlock);
+            mStrideLoopBranch->addDestination(segmentDone);
+        } else {
+            b->CreateUnlikelyCondBr(mIsFinal, doFinalBlock, segmentDone);
         }
-        mStrideLoopBranch->setMetadata(LLVMContext::MD_prof, mdb.createBranchWeights(weights));
+
+        doFinalBlock->moveAfter(stridesDone);
+
+        /// DO FINAL BLOCK
+
+        b->SetInsertPoint(doFinalBlock);
+        writeFinalBlockMethod(b, getRemainingItems(b));
+        b->CreateBr(segmentDone);
+
+        segmentDone->moveAfter(b->GetInsertBlock());
+
+        b->SetInsertPoint(segmentDone);
+
+        // Update the branch prediction metadata to indicate that the likely target will be segmentDone
+        if (mStrideLoopTarget) {
+            MDBuilder mdb(b->getContext());
+            const auto destinations = mStrideLoopBranch->getNumDestinations();
+            SmallVector<uint32_t, 16> weights(destinations);
+            for (unsigned i = 0; i < destinations; ++i) {
+                weights[i] = (mStrideLoopBranch->getDestination(i) == segmentDone) ? 100 : 1;
+            }
+            mStrideLoopBranch->setMetadata(LLVMContext::MD_prof, mdb.createBranchWeights(weights));
+        }
+
     }
+
 
 }
 
@@ -117,7 +133,7 @@ void BlockKernelCompiler::incrementCountableItemCounts(BuilderRef b) {
     const auto stride = mTarget->getStride();
 
     for (const Binding & input : getInputStreamSetBindings()) {
-        if (isCountable(input)) {
+        if (isCountable(input) && !input.isDeferred()) {
             const ProcessingRate & rate = input.getRate();
             Value * offset = nullptr;
             if (rate.isFixed()) {
@@ -132,7 +148,7 @@ void BlockKernelCompiler::incrementCountableItemCounts(BuilderRef b) {
     }
     // Update the produced item counts
     for (const Binding & output : getOutputStreamSetBindings()) {
-        if (isCountable(output)) {
+        if (isCountable(output) && !output.isDeferred()) {
             const ProcessingRate & rate = output.getRate();
             Value * offset = nullptr;
             if (rate.isFixed()) {

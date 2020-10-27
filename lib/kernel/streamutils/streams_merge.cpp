@@ -71,7 +71,7 @@ StreamsIntersect::StreamsIntersect(BuilderRef b, const std::vector<StreamSet *> 
     for (unsigned i = 0; i < inputs.size(); i++) {
         mInputStreamSets.push_back(Binding{"input" + std::to_string(i), inputs[i]});
     }
-    mOutputStreamSets.push_back(Binding{"output", output});
+    mOutputStreamSets.push_back(Binding{"output", output});    
 }
 
 void StreamsIntersect::generateDoBlockMethod(BuilderRef b) {

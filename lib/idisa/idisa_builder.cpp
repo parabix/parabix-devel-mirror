@@ -39,17 +39,7 @@ void IDISA_Builder::UnsupportedFieldWidthError(const unsigned fw, std::string op
     report_fatal_error(op_name + ": Unsupported field width: " +  std::to_string(fw));
 }
 
-void IDISA_Builder::CallPrintRegisterCond(StringRef regName, Value * const value, Value * const cond, const STD_FD fd) {
-    BasicBlock * const insertBefore = GetInsertBlock()->getNextNode();
-    BasicBlock* const callBlock = CreateBasicBlock("callBlock", insertBefore);
-    BasicBlock* const exitBlock = CreateBasicBlock("exitBlock", insertBefore);
-    CreateCondBr(cond, callBlock, exitBlock);
-    CallPrintRegister(regName, value, fd);
-    CreateBr(exitBlock);
-    SetInsertPoint(exitBlock);
-}
-
-void IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const STD_FD fd) {
+CallInst * IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
     Constant * printRegister = m->getFunction("print_register");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
@@ -84,7 +74,7 @@ void IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const
         builder.CreateRetVoid();
         printRegister = function;
     }
-    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
+    return CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {

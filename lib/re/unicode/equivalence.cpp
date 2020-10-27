@@ -444,7 +444,7 @@ RE * addClusterMatches(RE * r, EquivalenceOptions options) {
 CC * add_equivalent_codepoints(CC * cc, EquivalenceOptions options) {
     if (cc->getAlphabet() != &cc::Unicode) return cc;
     UnicodeSet addedCC;
-    for (const interval_t & i : *cc) {
+    for (const interval_t i : *cc) {
         for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
             addedCC = addedCC + equivalentCodepoints(cp, options);
         }

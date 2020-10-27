@@ -19,31 +19,37 @@ namespace kernel {
 // The result may then be used for calculation of a SpreadMask by InsertionSpreadMask.
 //
 
-class StringInsertBixNum : public pablo::PabloKernel {
+class StringInsertBixNum final : public pablo::PabloKernel {
 public:
-    StringInsertBixNum(BuilderRef b, std::vector<std::string> & insertStrs,
+    StringInsertBixNum(BuilderRef b, const std::vector<std::string> &insertStrs,
                        StreamSet * insertMarks, StreamSet * insertBixNum);
     void generatePabloMethod() override;
+    bool hasSignature() const override { return true; }
+    llvm::StringRef getSignature() const override {
+        return mSignature;
+    }
 private:
-    std::vector<std::string> mInsertStrings;
-    bool mMultiplexing;
-    unsigned mBixNumBits;
+    const std::vector<std::string>  mInsertStrings;
+    const bool                      mMultiplexing;
+    const unsigned                  mBixNumBits;
+    const std::string               mSignature;
 };
 
-class StringReplaceKernel : public pablo::PabloKernel {
+class StringReplaceKernel final : public pablo::PabloKernel {
 public:
-    StringReplaceKernel(BuilderRef b, std::vector<std::string> & insertStrs,
+    StringReplaceKernel(BuilderRef b, const std::vector<std::string> & insertStrs,
                         StreamSet * basis, StreamSet * spreadMask,
                         StreamSet * insertMarks, StreamSet * runIndex,
                         StreamSet * output);
-    llvm::StringRef getSignature() const override;
-    bool hasSignature() const override { return true; }
     void generatePabloMethod() override;
+    bool hasSignature() const override { return true; }
+    llvm::StringRef getSignature() const override {
+        return mSignature;
+    }
 private:
-    std::string makeSignature(std::vector<std::string> & insertStrs, StreamSet * insertMarks);
-    std::vector<std::string> mInsertStrings;
-    bool mMultiplexing;
-    std::string                         mSignature;
+    const std::vector<std::string>  mInsertStrings;
+    const bool                      mMultiplexing;
+    const std::string               mSignature;
 };
 }
 
