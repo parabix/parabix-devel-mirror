@@ -227,6 +227,9 @@ void GrepEngine::initFileResult(const std::vector<boost::filesystem::path> & pat
     mFileStatus.resize(n, FileStatus::Pending);
     mInputPaths = paths;
     mFileGroups = formFileGroups(paths);
+    const unsigned numOfThreads = std::min(static_cast<unsigned>(codegen::TaskThreads),
+                                           std::max(static_cast<unsigned>(mFileGroups.size()), 1u));
+    codegen::setTaskThreads(numOfThreads);
 }
 
 //
@@ -1108,12 +1111,9 @@ void * DoGrepThreadFunction(void *args) {
 }
 
 bool GrepEngine::searchAllFiles() {
-    const unsigned numOfThreads = std::min(static_cast<unsigned>(codegen::TaskThreads),
-                                           std::max(static_cast<unsigned>(mFileGroups.size()), 1u));
-    codegen::setTaskThreads(numOfThreads);
-    std::vector<pthread_t> threads(numOfThreads);
+    std::vector<pthread_t> threads(codegen::TaskThreads);
 
-    for(unsigned long i = 1; i < numOfThreads; ++i) {
+    for(unsigned long i = 1; i < codegen::TaskThreads; ++i) {
         const int rc = pthread_create(&threads[i], nullptr, DoGrepThreadFunction, (void *)this);
         if (rc) {
             llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
@@ -1121,7 +1121,7 @@ bool GrepEngine::searchAllFiles() {
     }
     // Main thread also does the work;
     DoGrepThreadMethod();
-    for(unsigned i = 1; i < numOfThreads; ++i) {
+    for(unsigned i = 1; i < codegen::TaskThreads; ++i) {
         void * status = nullptr;
         const int rc = pthread_join(threads[i], &status);
         if (rc) {

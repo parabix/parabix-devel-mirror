@@ -169,6 +169,7 @@ int main(int argc, char *argv[]) {
     }
     grep->initFileResult(allFiles); // unnecessary copy!
     grep->initREs(REs);
+    //llvm::errs() << "Before codegen, codegen::TaskThreads = " << codegen::TaskThreads << ", codegen::SegmentThreads = " << codegen::SegmentThreads << "\n";
     grep->grepCodeGen();
     const bool matchFound = grep->searchAllFiles();
 
