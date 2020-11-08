@@ -150,9 +150,9 @@ private:
     pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated_j, int j, int repeat_count, const int match_length, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
     pablo::PabloAST * reachable(pablo::PabloAST * repeated, int length, int repeat_count, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
     static bool isFixedLength(RE * regexp);
-    Marker processLowerBound(RE * repeated,  int lb, Marker marker, int ifGroupSize, pablo::PabloBuilder & pb);
+    Marker expandLowerBound(RE * repeated,  int lb, Marker marker, int ifGroupSize, pablo::PabloBuilder & pb);
     Marker processUnboundedRep(RE * repeated, Marker marker, pablo::PabloBuilder & pb);
-    Marker processBoundedRep(RE * repeated, int ub, Marker marker, int ifGroupSize,  pablo::PabloBuilder & pb);
+    Marker expandUpperBound(RE * repeated, int ub, Marker marker, int ifGroupSize,  pablo::PabloBuilder & pb);
 
     Marker compileName(Name * name, pablo::PabloBuilder & pb);
     Marker compileStart(Marker marker, pablo::PabloBuilder & pb);

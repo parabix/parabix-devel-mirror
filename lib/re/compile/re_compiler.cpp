@@ -20,6 +20,7 @@
 #include <re/transforms/to_utf8.h>
 #include <re/analysis/re_analysis.h>
 #include <re/analysis/re_local.h>
+#include <re/analysis/cc_sequence_search.h>
 #include <re/toolchain/toolchain.h>
 #include <re/ucd/ucd_compiler.hpp>
 
@@ -380,16 +381,139 @@ Marker RE_Compiler::compileIntersect(Intersect * const x, Marker marker, PabloBu
     UnsupportedRE("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
 }
 
+std::pair<int, int> CharacteristicSubexpressionAnalysis(Seq * s) {
+    unsigned i = 0;
+    while (i < s->size()) {
+        unsigned j = i;
+        std::vector<CC *> CC_seq;
+        while (j < s->size()) {
+            RE * item = (*s)[j];
+            if (CC * cc = dyn_cast<CC>(item)) {
+                CC_seq.push_back(cc);
+                j++;
+            } else if (const Name * name = dyn_cast<Name>(item)) {
+                RE * defn = name->getDefinition();
+                if (CC * cc = dyn_cast<CC>(defn)) {
+                    CC_seq.push_back(cc);
+                    j++;
+                } else break;
+            } else break;
+        }
+        // If we found a nonempty CC_seq, determine if it is a characteristic
+        // expression.
+        if (j > i) {
+            // Form E2 E1, where the original seq s is E1 CC_seq E2
+            RE * E2_E1 = makeSeq({makeSeq(s->begin()+j, s->end()), makeSeq(s->begin(), s->begin()+i)});
+            if (!CC_Sequence_Search(CC_seq, E2_E1)) {
+                // C is a characteristic subexpression
+                return std::make_pair<int, int>(i, j);
+            }
+        }
+        i = j+1;
+    }
+    return std::make_pair<int, int>(0, 0);
+}
+
 Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb) {
     const auto lb = rep->getLB();
     const auto ub = rep->getUB();
+    RE * repeated = rep->getRE();
+    if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) && (ub > 1)) {
+        // Check for a regular expression that satisfies on of the special conditions that
+        // allow implementation using the log2 technique.
+        auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
+        //llvm::errs() << "getLengthRange(repeated, mCodeUnitAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
+        int rpt = lb;
+        if ((lengths.first == 1) && (lengths.second == 1)) {
+            PabloAST * cc = compile(repeated, pb).stream();
+            if (lb > 0) {
+                PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, lengths.first, nullptr, pb);
+                auto lb_lgth = lengths.first * rpt - marker.offset();
+                PabloAST * marker_fwd = pb.createAdvance(marker.stream(), lb_lgth, "marker_fwd");
+                marker = Marker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
+            }
+            if (ub == Rep::UNBOUNDED_REP) {
+                marker = processUnboundedRep(repeated, marker, pb);
+            } else if (lb < ub) {
+                //marker = processBoundedRep(repeated, ub - lb, marker, IfInsertionGap, pb);
+                PabloAST * cursor = marker.stream();
+                PabloAST * upperLimitMask = reachable(cursor, lengths.first, ub - lb, nullptr, pb);
+                PabloAST * masked = pb.createAnd(cc, upperLimitMask, "masked");
+                PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
+                marker = Marker(bounded);
+            }
+            return marker;
+        }
+        if (mIndexingTransformer) {
+            auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
+            //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
+            if ((lengths.first == 1) && (lengths.second == 1)) {
+                PabloAST * cc = compile(repeated, pb).stream();
+                PabloAST * cursor = marker.stream();
+                if (marker.offset() != 0) {
+                    cursor = pb.createAnd(cc, pb.createScanTo(marker.stream(), mIndexStream));
+                    rpt -= 1;
+                }
+                PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, 1, mIndexStream, pb);
+                PabloAST * marker_fwd = pb.createIndexedAdvance(cursor, mIndexStream, rpt);
+                PabloAST * at_lb = pb.createAnd(marker_fwd, cc_lb, "lowerbound");
+                if (ub == Rep::UNBOUNDED_REP) {
+                    return processUnboundedRep(repeated, Marker(at_lb), pb);
+                }
+                PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, mIndexStream, pb);
+                PabloAST * masked = pb.createAnd(cc, upperLimitMask, "masked");
+                masked = pb.createOr(masked, pb.createNot(mIndexStream));
+                PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, masked), upperLimitMask, "bounded");
+                return Marker(bounded);
+            }
+        }
+        if (Seq * repeated_seq = dyn_cast<Seq>(repeated)) {
+            int i, j;
+            std::tie<int, int>(i, j) = CharacteristicSubexpressionAnalysis(repeated_seq);
+            if (j > i) {
+                // We have a characteristic subexpression from sequence elements i through j inclusive.
+                // Break the RE into the characteristic subexpression C and the two subexpressions
+                // before and after it.
+                //RE * E1 = makeSeq(repeated_seq->begin(), repeated_seq->begin() + i);
+                //llvm::errs() << "E1 = " << Printer_RE::PrintRE(E1) << "\n";
+                RE * C  = makeSeq(repeated_seq->begin() + i, repeated_seq->begin() + j);
+                //llvm::errs() << "C = " << Printer_RE::PrintRE(C) << "\n";
+                RE * E2 = makeSeq(repeated_seq->begin() + j, repeated_seq->end());
+                // Process an initial half iteration upto and including a match to C.
+                //llvm::errs() << "E2 = " << Printer_RE::PrintRE(E2) << "\n";
+                RE * E1_C = makeSeq(repeated_seq->begin(), repeated_seq->begin() + j);
+                PabloAST * M1 = process(E1_C, marker, pb).stream();
+                //
+                // Prepare the stream marking positions represent full repetitions.
+                RE * C_E2_E1_C = makeSeq({C, E2, E1_C});
+                PabloAST * consecutive = compile(C_E2_E1_C, pb).stream();
+                //
+                // Prepare the matches to the characteristic subexpression C as the index stream.
+                PabloAST * idx = compile(C, pb).stream();
+                //
+                //  Restrict to positions with at least lb-1 iterations.
+                PabloAST * at_least_lb = consecutive_matches(consecutive, 1, lb - 1, 1, idx, pb);
+                PabloAST * marker_fwd = pb.createIndexedAdvance(M1, idx, lb - 1);
+                PabloAST * at_lb = pb.createAnd(marker_fwd, at_least_lb, "lowerbound");
+                if (ub == Rep::UNBOUNDED_REP) {
+                    return processUnboundedRep(repeated, Marker(at_lb), pb);
+                }
+                PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, idx, pb);
+                PabloAST * masked = pb.createAnd(consecutive, upperLimitMask, "masked");
+                masked = pb.createOr(masked, pb.createNot(idx));
+                PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, masked), upperLimitMask, "bounded");
+                return process(E2, Marker(bounded), pb);
+            }
+        }
+
+    }
     if (lb > 0) {
-        marker = processLowerBound(rep->getRE(), lb, marker, IfInsertionGap, pb);
+        marker = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
     }
     if (ub == Rep::UNBOUNDED_REP) {
-        marker = processUnboundedRep(rep->getRE(), marker, pb);
+        marker = processUnboundedRep(repeated, marker, pb);
     } else if (lb < ub) {
-        marker = processBoundedRep(rep->getRE(), ub - lb, marker, IfInsertionGap, pb);
+        marker = expandUpperBound(repeated, ub - lb, marker, IfInsertionGap, pb);
     }
     return marker;
 }
@@ -444,48 +568,12 @@ inline PabloAST * RE_Compiler::reachable(PabloAST *  const repeated, const int l
     return reachable;
 }
 
-Marker RE_Compiler::processLowerBound(RE * const repeated, const int lb, Marker marker, const int ifGroupSize, PabloBuilder & pb) {
+Marker RE_Compiler::expandLowerBound(RE * const repeated, const int lb, Marker marker, const int ifGroupSize, PabloBuilder & pb) {
     if (LLVM_UNLIKELY(lb == 0)) {
         return marker;
     } else if (LLVM_UNLIKELY(lb == 1)) {
         return process(repeated, marker, pb);
     }
-    //
-    // A bounded repetition with a lower bound of at least 2.
-    if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
-        // Check for a regular expression that satisfies on of the special conditions that
-        // allow implementation using the log2 technique.
-        auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
-        //llvm::errs() << "getLengthRange(repeated, mCodeUnitAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
-        int rpt = lb;
-        if ((lengths.first == 1) && (lengths.second == 1)) {
-            PabloAST * cc = compile(repeated, pb).stream();
-            if (marker.offset() != 0) {
-                marker = Marker(pb.createAnd(cc, marker.stream()));
-                rpt -= 1;
-            }
-            PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, lengths.first, nullptr, pb);
-            auto lb_lgth = lengths.first * rpt;
-            PabloAST * marker_fwd = pb.createAdvance(marker.stream(), lb_lgth, "marker_fwd");
-            return Marker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
-        }
-        if (mIndexingTransformer) {
-            auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
-            //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
-            if ((lengths.first == 1) && (lengths.second == 1)) {
-                PabloAST * cc = compile(repeated, pb).stream();
-                PabloAST * cursor = marker.stream();
-                if (marker.offset() != 0) {
-                    cursor = pb.createAnd(cc, pb.createScanTo(marker.stream(), mIndexStream));
-                    rpt -= 1;
-                }
-                PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, 1, mIndexStream, pb);
-                PabloAST * marker_fwd = pb.createIndexedAdvance(cursor, mIndexStream, rpt);
-                return Marker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
-            }
-        }
-    }
-    // Fall through to general case.  Process the first item and insert the rest into an if-structure.
     const auto group = ifGroupSize < lb ? ifGroupSize : lb;
     for (auto i = 0; i < group; i++) {
         marker = process(repeated, marker, pb);
@@ -497,52 +585,17 @@ Marker RE_Compiler::processLowerBound(RE * const repeated, const int lb, Marker 
     auto nested = pb.createScope();
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
-    Marker m1 = processLowerBound(repeated, lb - group, marker, ifGroupSize * 2, nested);
+    Marker m1 = expandLowerBound(repeated, lb - group, marker, ifGroupSize * 2, nested);
     nested.createAssign(m, m1.stream());
     pb.createIf(marker.stream(), nested);
     mCompiledName = nestedMap.getParent();
     return Marker(m, m1.offset());
 }
 
-Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker marker, const int ifGroupSize,  PabloBuilder & pb) {
+Marker RE_Compiler::expandUpperBound(RE * const repeated, const int ub, Marker marker, const int ifGroupSize,  PabloBuilder & pb) {
     if (LLVM_UNLIKELY(ub == 0)) {
         return marker;
     }
-    //
-    // A bounded repetition with an upper bound of at least 2.
-    if ((ub > 1) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
-        // Check for a regular expression that satisfies on of the special conditions that
-        // allow implementation using the log2 technique.
-        auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
-        // TODO: handle fixed lengths > 1
-        if ((lengths.first == 1) && (lengths.second == 1)) {
-            PabloAST * repeatMarks = compile(repeated, pb).stream();
-            // log2 upper bound for fixed length (=1) class
-            // Create a mask of positions reachable within ub from current marker.
-            // Use matchstar, then apply filter.
-            PabloAST * cursor = marker.stream();
-            PabloAST * upperLimitMask = reachable(cursor, lengths.first, ub, nullptr, pb);
-            PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
-            PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
-            return Marker(bounded);
-        }
-        if (mIndexingTransformer) {
-            auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
-            //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
-            if ((lengths.first == 1) && (lengths.second == 1)) {
-                PabloAST * repeatMarks = compile(repeated, pb).stream();
-                // For a regexp which represent a single Unicode codepoint, we can use the mIndexStream stream
-                // as an index stream for an indexed advance operation.
-                PabloAST * cursor = marker.stream();
-                PabloAST * upperLimitMask = reachable(cursor, 1, ub, mIndexStream, pb);
-                PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
-                masked = pb.createOr(masked, pb.createNot(mIndexStream));
-                PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
-                return Marker(bounded);
-            }
-        }
-    }
-    // Fall through to general case.  Process the first item and insert the rest into an if-structure.
     const auto group = ifGroupSize < ub ? ifGroupSize : ub;
     for (auto i = 0; i < group; i++) {
         Marker a = process(repeated, marker, pb);
@@ -557,7 +610,7 @@ Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker 
     auto nested = pb.createScope();
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
-    Marker m1 = processBoundedRep(repeated, ub - group, marker, ifGroupSize * 2, nested);
+    Marker m1 = expandUpperBound(repeated, ub - group, marker, ifGroupSize * 2, nested);
     nested.createAssign(m1a, m1.stream());
     pb.createIf(marker.stream(), nested);
     mCompiledName = nestedMap.getParent();
