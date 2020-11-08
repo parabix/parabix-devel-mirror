@@ -430,7 +430,18 @@ Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb
     const auto lb = rep->getLB();
     const auto ub = rep->getUB();
     RE * repeated = rep->getRE();
-    if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) && (ub > 1)) {
+    // Always handle cases with small lower bound and no upper bound by expansion.
+    if ((lb <= 2) && (ub == Rep::UNBOUNDED_REP)) {
+        Marker at_lb = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
+        return processUnboundedRep(repeated, at_lb, pb);
+    }
+    // Similarly handle cases with small upper bound by expansion.
+    if ((ub != Rep::UNBOUNDED_REP) && (ub <= 2)) {
+        Marker at_lb = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
+        if (lb == ub) return at_lb;
+        return expandUpperBound(repeated, ub - lb, marker, IfInsertionGap, pb);
+    }
+    if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
         auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
@@ -487,8 +498,8 @@ Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb
             //llvm::errs() << "C = " << Printer_RE::PrintRE(C) << "\n";
             //llvm::errs() << "E2 = " << Printer_RE::PrintRE(E2) << "\n";
             // Process an initial half iteration upto and including a match to C.
-            marker = process(E1, marker, pb);
-            Marker M1 = process(C, marker, pb).stream();
+            Marker M1 = process(E1, marker, pb);
+            M1 = process(C, M1, pb);
             assert(M1.offset() == 0 && "RE compiler error: characteristic subexpression with nonzero offset");
             //
             // Prepare the stream marking positions represent full repetitions.
