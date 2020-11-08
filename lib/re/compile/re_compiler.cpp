@@ -381,37 +381,49 @@ Marker RE_Compiler::compileIntersect(Intersect * const x, Marker marker, PabloBu
     UnsupportedRE("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
 }
 
-std::pair<int, int> CharacteristicSubexpressionAnalysis(Seq * s) {
-    unsigned i = 0;
-    while (i < s->size()) {
-        unsigned j = i;
-        std::vector<CC *> CC_seq;
-        while (j < s->size()) {
-            RE * item = (*s)[j];
-            if (CC * cc = dyn_cast<CC>(item)) {
-                CC_seq.push_back(cc);
-                j++;
-            } else if (const Name * name = dyn_cast<Name>(item)) {
-                RE * defn = name->getDefinition();
-                if (CC * cc = dyn_cast<CC>(defn)) {
+bool CharacteristicSubexpressionAnalysis(RE * repeated, RE * &E1, RE * &C, RE * &E2) {
+    if (isa<CC>(repeated)) {
+        E1 = makeSeq();
+        E2 = makeSeq();
+        C = repeated;
+        return true;
+    }
+    if (Seq * s = dyn_cast<Seq>(repeated)) {
+        unsigned i = 0;
+        while (i < s->size()) {
+            unsigned j = i;
+            std::vector<CC *> CC_seq;
+            while (j < s->size()) {
+                RE * item = (*s)[j];
+                if (CC * cc = dyn_cast<CC>(item)) {
                     CC_seq.push_back(cc);
                     j++;
+                } else if (const Name * name = dyn_cast<Name>(item)) {
+                    RE * defn = name->getDefinition();
+                    if (CC * cc = dyn_cast<CC>(defn)) {
+                        CC_seq.push_back(cc);
+                        j++;
+                    } else break;
                 } else break;
-            } else break;
-        }
-        // If we found a nonempty CC_seq, determine if it is a characteristic
-        // expression.
-        if (j > i) {
-            // Form E2 E1, where the original seq s is E1 CC_seq E2
-            RE * E2_E1 = makeSeq({makeSeq(s->begin()+j, s->end()), makeSeq(s->begin(), s->begin()+i)});
-            if (!CC_Sequence_Search(CC_seq, E2_E1)) {
-                // C is a characteristic subexpression
-                return std::make_pair<int, int>(i, j);
             }
+            // If we found a nonempty CC_seq, determine if it is a characteristic
+            // expression.
+            if (j > i) {
+                E1 = makeSeq(s->begin(), s->begin()+i);
+                E2 = makeSeq(s->begin()+j, s->end());
+                // Form E2 E1, where the original seq s is E1 CC_seq E2
+                RE * E2_E1 = makeSeq({E2, E1});
+                if (!CC_Sequence_Search(CC_seq, E2_E1)) {
+                    // C is a characteristic subexpression
+                    C = makeSeq(s->begin()+i, s->begin()+j);
+                    return true;
+                }
+            }
+            i = j+1;
         }
-        i = j+1;
+        return false;
     }
-    return std::make_pair<int, int>(0, 0);
+    return false;
 }
 
 Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb) {
@@ -467,45 +479,38 @@ Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb
                 return Marker(bounded);
             }
         }
-        if (Seq * repeated_seq = dyn_cast<Seq>(repeated)) {
-            int i, j;
-            std::tie<int, int>(i, j) = CharacteristicSubexpressionAnalysis(repeated_seq);
-            if (j > i) {
-                // We have a characteristic subexpression from sequence elements i through j inclusive.
-                // Break the RE into the characteristic subexpression C and the two subexpressions
-                // before and after it.
-                //RE * E1 = makeSeq(repeated_seq->begin(), repeated_seq->begin() + i);
-                //llvm::errs() << "E1 = " << Printer_RE::PrintRE(E1) << "\n";
-                RE * C  = makeSeq(repeated_seq->begin() + i, repeated_seq->begin() + j);
-                //llvm::errs() << "C = " << Printer_RE::PrintRE(C) << "\n";
-                RE * E2 = makeSeq(repeated_seq->begin() + j, repeated_seq->end());
-                // Process an initial half iteration upto and including a match to C.
-                //llvm::errs() << "E2 = " << Printer_RE::PrintRE(E2) << "\n";
-                RE * E1_C = makeSeq(repeated_seq->begin(), repeated_seq->begin() + j);
-                PabloAST * M1 = process(E1_C, marker, pb).stream();
-                //
-                // Prepare the stream marking positions represent full repetitions.
-                RE * C_E2_E1_C = makeSeq({C, E2, E1_C});
-                PabloAST * consecutive = compile(C_E2_E1_C, pb).stream();
-                //
-                // Prepare the matches to the characteristic subexpression C as the index stream.
-                PabloAST * idx = compile(C, pb).stream();
-                //
-                //  Restrict to positions with at least lb-1 iterations.
-                PabloAST * at_least_lb = consecutive_matches(consecutive, 1, lb - 1, 1, idx, pb);
-                PabloAST * marker_fwd = pb.createIndexedAdvance(M1, idx, lb - 1);
-                PabloAST * at_lb = pb.createAnd(marker_fwd, at_least_lb, "lowerbound");
-                if (ub == Rep::UNBOUNDED_REP) {
-                    return processUnboundedRep(repeated, Marker(at_lb), pb);
-                }
-                PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, idx, pb);
-                PabloAST * masked = pb.createAnd(consecutive, upperLimitMask, "masked");
-                masked = pb.createOr(masked, pb.createNot(idx));
-                PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, masked), upperLimitMask, "bounded");
-                return process(E2, Marker(bounded), pb);
+        RE * C;
+        RE * E1;
+        RE * E2;
+        if (CharacteristicSubexpressionAnalysis(repeated, E1, C, E2)) {
+            //llvm::errs() << "E1 = " << Printer_RE::PrintRE(E1) << "\n";
+            //llvm::errs() << "C = " << Printer_RE::PrintRE(C) << "\n";
+            //llvm::errs() << "E2 = " << Printer_RE::PrintRE(E2) << "\n";
+            // Process an initial half iteration upto and including a match to C.
+            marker = process(E1, marker, pb);
+            Marker M1 = process(C, marker, pb).stream();
+            assert(M1.offset() == 0 && "RE compiler error: characteristic subexpression with nonzero offset");
+            //
+            // Prepare the stream marking positions represent full repetitions.
+            RE * C_E2_E1_C = makeSeq({C, E2, E1, C});
+            PabloAST * consecutive = compile(C_E2_E1_C, pb).stream();
+            //
+            // Prepare the matches to the characteristic subexpression C as the index stream.
+            PabloAST * idx = compile(C, pb).stream();
+            //
+            //  Restrict to positions with at least lb-1 iterations.
+            PabloAST * at_least_lb = consecutive_matches(consecutive, 1, lb - 1, 1, idx, pb);
+            PabloAST * marker_fwd = pb.createIndexedAdvance(M1.stream(), idx, lb - 1);
+            PabloAST * at_lb = pb.createAnd(marker_fwd, at_least_lb, "lowerbound");
+            if (ub == Rep::UNBOUNDED_REP) {
+                return processUnboundedRep(repeated, Marker(at_lb), pb);
             }
+            PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, idx, pb);
+            PabloAST * masked = pb.createAnd(consecutive, upperLimitMask, "masked");
+            masked = pb.createOr(masked, pb.createNot(idx));
+            PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, masked), upperLimitMask, "bounded");
+            return process(E2, Marker(bounded), pb);
         }
-
     }
     if (lb > 0) {
         marker = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
