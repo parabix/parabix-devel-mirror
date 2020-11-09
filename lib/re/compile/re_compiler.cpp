@@ -501,6 +501,7 @@ Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb
             Marker M1 = process(E1, marker, pb);
             M1 = process(C, M1, pb);
             assert(M1.offset() == 0 && "RE compiler error: characteristic subexpression with nonzero offset");
+            PabloAST * half_mark = M1.stream();
             //
             // Prepare the stream marking positions represent full repetitions.
             RE * C_E2_E1_C = makeSeq({C, E2, E1, C});
@@ -510,16 +511,24 @@ Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb
             PabloAST * idx = compile(C, pb).stream();
             //
             //  Restrict to positions with at least lb-1 iterations.
-            PabloAST * at_least_lb = consecutive_matches(consecutive, 1, lb - 1, 1, idx, pb);
-            PabloAST * marker_fwd = pb.createIndexedAdvance(M1.stream(), idx, lb - 1);
-            PabloAST * at_lb = pb.createAnd(marker_fwd, at_least_lb, "lowerbound");
-            if (ub == Rep::UNBOUNDED_REP) {
-                return processUnboundedRep(repeated, Marker(at_lb), pb);
+            if (lb > 1) {
+                PabloAST * at_least_lb = consecutive_matches(consecutive, 1, lb - 1, 1, idx, pb);
+                PabloAST * marker_fwd = pb.createIndexedAdvance(half_mark, idx, lb - 1);
+                half_mark = pb.createAnd(marker_fwd, at_least_lb, "lowerbound");
             }
-            PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, idx, pb);
+            if (ub == Rep::UNBOUNDED_REP) {
+                // Finish the half-iteration for the lower bound, then continue with unbounded.
+                Marker at_lb = process(E2, Marker(half_mark), pb);
+                return processUnboundedRep(repeated, at_lb, pb);
+            }
+            if (ub == lb) {
+                // No additional iterations, but finish the half-iteration.
+                return process(E2, Marker(half_mark), pb);
+            }
+            PabloAST * upperLimitMask = reachable(half_mark, 1, ub - lb, idx, pb);
             PabloAST * masked = pb.createAnd(consecutive, upperLimitMask, "masked");
             masked = pb.createOr(masked, pb.createNot(idx));
-            PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, masked), upperLimitMask, "bounded");
+            PabloAST * bounded = pb.createAnd(pb.createMatchStar(half_mark, masked), upperLimitMask, "bounded");
             return process(E2, Marker(bounded), pb);
         }
     }
