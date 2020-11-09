@@ -101,8 +101,8 @@ Marker RE_Compiler::process(RE * const re, Marker marker, PabloBuilder & pb) {
         return compileSeq(cast<Seq>(re), marker, pb);
     } else if (isa<Alt>(re)) {
         return compileAlt(cast<Alt>(re), marker, pb);
-    } else if (isa<Rep>(re)) {
-        return compileRep(cast<Rep>(re), marker, pb);
+    } else if (Rep * rep = dyn_cast<Rep>(re)) {
+        return compileRep(rep->getLB(), rep->getUB(), rep->getRE(), marker, pb);
     } else if (isa<Assertion>(re)) {
         return compileAssertion(cast<Assertion>(re), marker, pb);
     } else if (isa<Diff>(re)) {
@@ -426,10 +426,7 @@ bool CharacteristicSubexpressionAnalysis(RE * repeated, RE * &E1, RE * &C, RE * 
     return false;
 }
 
-Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb) {
-    const auto lb = rep->getLB();
-    const auto ub = rep->getUB();
-    RE * repeated = rep->getRE();
+Marker RE_Compiler::compileRep(int lb, int ub, RE * repeated, Marker marker, PabloBuilder & pb) {
     // Always handle cases with small lower bound and no upper bound by expansion.
     if ((lb <= 2) && (ub == Rep::UNBOUNDED_REP)) {
         Marker at_lb = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
@@ -440,6 +437,12 @@ Marker RE_Compiler::compileRep(Rep * const rep, Marker marker, PabloBuilder & pb
         Marker at_lb = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
         if (lb == ub) return at_lb;
         return expandUpperBound(repeated, ub - lb, marker, IfInsertionGap, pb);
+    }
+    // Handle the case of lb == 0 specially.
+    if (lb == 0) {
+        Marker at_least_one = compileRep(1, ub, repeated, marker, pb);
+        AlignMarkers(marker, at_least_one, pb);
+        return Marker(pb.createOr(marker.stream(), at_least_one.stream()), at_least_one.offset());
     }
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that

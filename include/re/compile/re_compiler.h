@@ -144,7 +144,7 @@ private:
     Marker compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, int matchLenSoFar, Marker marker, pablo::PabloBuilder & pb);
     Marker compileAlt(Alt * alt, Marker base, pablo::PabloBuilder & pb);
     Marker compileAssertion(Assertion * a, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileRep(Rep * rep, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileRep(int LB, int UB, RE * repeated, Marker marker, pablo::PabloBuilder & pb);
     Marker compileDiff(Diff * diff, Marker marker, pablo::PabloBuilder & cg);
     Marker compileIntersect(Intersect * x, Marker marker, pablo::PabloBuilder & cg);
     pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated_j, int j, int repeat_count, const int match_length, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
