@@ -218,7 +218,7 @@ void CompressedCarryManager::leaveLoopBody(BuilderRef b, BasicBlock * exitBlock)
 
 
 void CompressedCarryManager::enterIfScope(BuilderRef b, const PabloBlock * const /*scope*/) {
-    ++mIfDepth;++mIfDepth;
+    ++mIfDepth;
     enterScope(b);
     // We zero-initialized the nested summary value and later OR in the current summary into the escaping summary
     // so that upon processing the subsequent block iteration, we branch into this If scope iff a carry out was
