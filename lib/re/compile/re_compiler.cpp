@@ -502,36 +502,36 @@ Marker RE_Compiler::compileRep(int lb, int ub, RE * repeated, Marker marker, Pab
             //llvm::errs() << "E2 = " << Printer_RE::PrintRE(E2) << "\n";
             // Process an initial half iteration upto and including a match to C.
             Marker M1 = process(E1, marker, pb);
-            M1 = process(C, M1, pb);
-            assert(M1.offset() == 0 && "RE compiler error: characteristic subexpression with nonzero offset");
-            PabloAST * half_mark = M1.stream();
+            Marker half_mark = process(C, M1, pb);
+            assert(half_mark.offset() == 0 && "RE compiler error: characteristic subexpression with nonzero offset");
             //
             // Prepare the stream marking positions represent full repetitions.
             RE * C_E2_E1_C = makeSeq({C, E2, E1, C});
-            PabloAST * consecutive = compile(C_E2_E1_C, pb).stream();
+            PabloAST * iteration_marks = compile(C_E2_E1_C, pb).stream();
             //
             // Prepare the matches to the characteristic subexpression C as the index stream.
             PabloAST * idx = compile(C, pb).stream();
             //
             //  Restrict to positions with at least lb-1 iterations.
             if (lb > 1) {
-                PabloAST * at_least_lb = consecutive_matches(consecutive, 1, lb - 1, 1, idx, pb);
-                PabloAST * marker_fwd = pb.createIndexedAdvance(half_mark, idx, lb - 1);
-                half_mark = pb.createAnd(marker_fwd, at_least_lb, "lowerbound");
+                PabloAST * at_least_lb = consecutive_matches(iteration_marks, 1, lb - 1, 1, idx, pb);
+                PabloAST * marker_fwd = pb.createIndexedAdvance(half_mark.stream(), idx, lb - 1);
+                half_mark = Marker(pb.createAnd(marker_fwd, at_least_lb, "lower_bound"));
             }
             if (ub == Rep::UNBOUNDED_REP) {
                 // Finish the half-iteration for the lower bound, then continue with unbounded.
-                Marker at_lb = process(E2, Marker(half_mark), pb);
+                Marker at_lb = process(E2, half_mark, pb);
                 return processUnboundedRep(repeated, at_lb, pb);
             }
             if (ub == lb) {
                 // No additional iterations, but finish the half-iteration.
-                return process(E2, Marker(half_mark), pb);
+                return process(E2, half_mark, pb);
             }
-            PabloAST * upperLimitMask = reachable(half_mark, 1, ub - lb, idx, pb);
-            PabloAST * masked = pb.createAnd(consecutive, upperLimitMask, "masked");
-            masked = pb.createOr(masked, pb.createNot(idx));
-            PabloAST * bounded = pb.createAnd(pb.createMatchStar(half_mark, masked), upperLimitMask, "bounded");
+            PabloAST * at_lb = half_mark.stream();
+            PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, idx, pb);
+            PabloAST * masked = pb.createAnd(iteration_marks, upperLimitMask, "masked");
+            PabloAST * fill = pb.createOr(masked, pb.createNot(idx));
+            PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, fill), masked, "bounded");
             return process(E2, Marker(bounded), pb);
         }
     }
@@ -576,7 +576,7 @@ PabloAST * RE_Compiler::consecutive_matches(PabloAST * const repeated_j, const i
 }
 
 
-inline PabloAST * RE_Compiler::reachable(PabloAST *  const repeated, const int length, const int repeat_count, PabloAST * const indexStream, PabloBuilder & pb) {
+inline PabloAST * RE_Compiler::reachable(PabloAST * const repeated, const int length, const int repeat_count, PabloAST * const indexStream, PabloBuilder & pb) {
     if (repeat_count == 0) {
         return repeated;
     }
