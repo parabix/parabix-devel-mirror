@@ -10,7 +10,7 @@
 #include <re/adt/adt.h>
 #include <re/compile/re_compiler.h>
 #include <re/unicode/re_name_resolve.h>
-#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/boundaries.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>
 #include <unicode/data/PropertyValueAliases.h>
@@ -58,6 +58,10 @@ bool resolvePropertyDefinition(Name * const property) {
         } else if (value == "\\b{g}") {
             RE * gcb = generateGraphemeClusterBoundaryRule();
             property->setDefinition(resolveUnicodeNames(gcb));
+            return true;
+        } else if (value == "\\b") {
+            RE * wb = makeBoundaryAssertion(makeName("word", Name::Type::UnicodeProperty));
+            property->setDefinition(resolveUnicodeNames(wb));
             return true;
         } else if (value == "^s") {  // "start anchor (^) in single-line mode"
             property->setDefinition(makeNegativeLookBehindAssertion(makeCC(0, 0x10FFFF)));

@@ -135,5 +135,9 @@ void GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
                           re::UTF8_Transformer * t,
                           StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream);
 
+void WordBoundaryLogic(const std::unique_ptr<ProgramBuilder> & P,
+                          re::UTF8_Transformer * t,
+                          StreamSet * Source, StreamSet * U8index, StreamSet * wordBoundary_stream);
+
 }
 #endif

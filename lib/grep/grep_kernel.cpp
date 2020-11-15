@@ -34,7 +34,7 @@
 #include <re/transforms/re_multiplex.h>
 #include <kernel/unicode/UCD_property_kernel.h>
 #include <re/analysis/re_name_gather.h>
-#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/boundaries.h>
 #include <re/unicode/re_name_resolve.h>
 #include <kernel/unicode/charclasses.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
@@ -569,8 +569,8 @@ void ContextSpan::generatePabloMethod() {
 }
 
 void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF8_Transformer * t,
-                          StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream) {
-
+                                  StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream) {
+    
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     GCB = re::resolveUnicodeNames(GCB);
     const auto GCB_Sets = re::collectCCs(GCB, cc::Unicode);
@@ -588,3 +588,25 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
     options->addExternal("UTF8_index", U8index);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
 }
+
+void kernel::WordBoundaryLogic(const std::unique_ptr<ProgramBuilder> & P, UTF8_Transformer * t,
+                                  StreamSet * Source, StreamSet * U8index, StreamSet * wordBoundary_stream) {
+    
+    re::RE * wordBoundary = re::makeBoundaryAssertion(re::makeName("word", re::Name::Type::UnicodeProperty));
+    wordBoundary = re::resolveUnicodeNames(wordBoundary);
+    const auto wb_sets = re::collectCCs(wordBoundary, cc::Unicode);
+    auto wb_mpx = std::make_shared<cc::MultiplexedAlphabet>("wb_mpx", wb_sets);
+    wordBoundary = transformCCs(wb_mpx, wordBoundary);
+    auto wb_basis = wb_mpx->getMultiplexedCCs();
+    StreamSet * const wb_Classes = P->CreateStreamSet(wb_basis.size());
+    P->CreateKernelCall<CharClassesKernel>(std::move(wb_basis), Source, wb_Classes);
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+    options->setIndexingTransformer(t, U8index);
+    options->setRE(wordBoundary);
+    options->setSource(wb_Classes);
+    options->addAlphabet(wb_mpx, wb_Classes);
+    options->setResults(wordBoundary_stream);
+    options->addExternal("UTF8_index", U8index);
+    P->CreateKernelCall<ICGrepKernel>(std::move(options));
+}
+

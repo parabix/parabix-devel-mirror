@@ -120,7 +120,8 @@ protected:
         UTF8index = 2,
         MoveMatchesToEOL = 4,
         MatchStarts = 8,
-        GraphemeClusterBoundary = 16
+        GraphemeClusterBoundary = 16,
+        WordBoundary = 16
     };
     bool hasComponent(Component compon_set, Component c);
     void setComponent(Component & compon_set, Component c);
@@ -187,6 +188,7 @@ protected:
     kernel::StreamSet * mLineBreakStream;
     kernel::StreamSet * mU8index;
     kernel::StreamSet * mGCB_stream;
+    kernel::StreamSet * mWordBoundary_stream;
     re::UTF8_Transformer mUTF8_Transformer;
     pthread_t mEngineThread;
 };

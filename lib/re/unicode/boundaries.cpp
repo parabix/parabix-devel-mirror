@@ -1,7 +1,8 @@
-#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/boundaries.h>
 
 #include <re/adt/adt.h>
 #include <re/adt/printer_re.h>
+#include <re/analysis/validation.h>
 #include <re/transforms/re_transformer.h>
 #include <re/unicode/re_name_resolve.h>
 
@@ -59,6 +60,23 @@ bool hasGraphemeClusterBoundary(const RE * re) {
     }
     else llvm_unreachable("Unknown RE type");
 }
+    
+struct WordBoundaryAbsentValidator final : public RE_Validator {
+    
+    WordBoundaryAbsentValidator()
+    : RE_Validator() {}
+    
+    bool validateName(const Name * n) override {
+        llvm::errs() << "validateName " << n->getName() << "\n";
+        return n->getName() != "\\b";
+    }
+};
+
+bool hasWordBoundary(const RE * re) {
+    WordBoundaryAbsentValidator v;
+    return !(v.validateRE(re));
+}
+
 
 class GraphemeModeTransformer : public RE_Transformer {
 public:
