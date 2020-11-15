@@ -13,7 +13,7 @@
 #include <re/analysis/re_name_gather.h>
 #include <re/transforms/to_utf8.h>
 #include <re/ucd/ucd_compiler.hpp>
-#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/boundaries.h>
 #include <re/unicode/re_name_resolve.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>

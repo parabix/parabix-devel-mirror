@@ -59,7 +59,7 @@
 #include <re/transforms/replaceCC.h>
 #include <re/transforms/re_multiplex.h>
 #include <re/unicode/casing.h>
-#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/boundaries.h>
 #include <re/unicode/re_name_resolve.h>
 #include <sys/stat.h>
 #include <kernel/pipeline/driver/cpudriver.h>
@@ -138,6 +138,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mLineBreakStream(nullptr),
     mU8index(nullptr),
     mGCB_stream(nullptr),
+    mWordBoundary_stream(nullptr),
     mUTF8_Transformer(re::NameTransformationMode::None),
     mEngineThread(pthread_self()) {}
 
@@ -291,6 +292,13 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
+        if (hasWordBoundary(mREs[i])) {
+            UnicodeIndexing = true;
+            setComponent(mExternalComponents, Component::WordBoundary);
+            break;
+        }
+    }
+    for (unsigned i = 0; i < mREs.size(); ++i) {
         if (!validateFixedUTF8(mREs[i])) {
             setComponent(mExternalComponents, Component::UTF8index);
             if (mColoring) {
@@ -368,6 +376,7 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
     mLineBreakStream = nullptr;
     mU8index = nullptr;
     mGCB_stream = nullptr;
+    mWordBoundary_stream = nullptr;
     mPropertyStreamMap.clear();
 
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
@@ -402,6 +411,10 @@ void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & 
     if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
         mGCB_stream = P->CreateStreamSet(1, 1);
         GraphemeClusterLogic(P, &mUTF8_Transformer, SourceStream, mU8index, mGCB_stream);
+    }
+    if (hasComponent(mExternalComponents, Component::WordBoundary)) {
+        mWordBoundary_stream = P->CreateStreamSet(1, 1);
+        WordBoundaryLogic(P, &mUTF8_Transformer, SourceStream, mU8index, mWordBoundary_stream);
     }
     if (PropertyKernels) {
         for (auto e : mExternalNames) {
@@ -438,10 +451,24 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
         assert (mGCB_stream);
         if (indexMask == nullptr) {
             options->addExternal("\\b{g}", mGCB_stream);
+            P->CreateKernelCall<DebugDisplayKernel>("\\b{g}[U8indexed]", mGCB_stream);
         } else {
             StreamSet * iGCB_stream = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mGCB_stream, iGCB_stream);
             options->addExternal("\\b{g}", iGCB_stream, 1);
+            P->CreateKernelCall<DebugDisplayKernel>("\\b{g}", iGCB_stream);
+        }
+    }
+    if (hasComponent(mExternalComponents, Component::WordBoundary)) {
+        assert (mWordBoundary_stream);
+        if (indexMask == nullptr) {
+            options->addExternal("\\b", mWordBoundary_stream);
+            P->CreateKernelCall<DebugDisplayKernel>("\\b[U8indexed]", mWordBoundary_stream);
+        } else {
+            StreamSet * iWordBoundary_stream = P->CreateStreamSet(1, 1);
+            FilterByMask(P, indexMask, mWordBoundary_stream, iWordBoundary_stream);
+            options->addExternal("\\b", iWordBoundary_stream, 1);
+            P->CreateKernelCall<DebugDisplayKernel>("\\b", iWordBoundary_stream);
         }
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {

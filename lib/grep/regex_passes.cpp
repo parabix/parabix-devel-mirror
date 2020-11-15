@@ -20,7 +20,7 @@
 #include <re/transforms/re_star_normal.h>
 #include <re/transforms/resolve_diffs.h>
 #include <re/transforms/remove_nullable.h>
-#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/boundaries.h>
 #include <re/unicode/casing.h>
 #include <re/unicode/decomposition.h>
 #include <re/unicode/equivalence.h>
@@ -47,7 +47,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
         r = UCD::addEquivalentCodepoints(r);
     }
     r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
-    r = expandBoundaryAssertions(r);
+    //r = expandBoundaryAssertions(r);
     r = simplifyAssertions(r);
     //r = lookaheadPromotion(r);
     return r;

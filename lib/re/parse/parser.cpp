@@ -380,7 +380,8 @@ RE * RE_Parser::parseEscapedSet() {
                     return complemented ? makeReNonBoundary(re) : makeReBoundary(re);
                 }
             } else {
-                return complemented ? makeWordNonBoundary() : makeWordBoundary();
+                re = makeZeroWidth("\\b");
+                return complemented ? makeZerowidthComplement(re) : re;
             }
         case 'd':
             re = makeDigitSet();
