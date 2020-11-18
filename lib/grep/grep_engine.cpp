@@ -451,24 +451,24 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
         assert (mGCB_stream);
         if (indexMask == nullptr) {
             options->addExternal("\\b{g}", mGCB_stream);
-            P->CreateKernelCall<DebugDisplayKernel>("\\b{g}[U8indexed]", mGCB_stream);
+            //P->CreateKernelCall<DebugDisplayKernel>("\\b{g}[U8indexed]", mGCB_stream);
         } else {
             StreamSet * iGCB_stream = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mGCB_stream, iGCB_stream);
             options->addExternal("\\b{g}", iGCB_stream, 1);
-            P->CreateKernelCall<DebugDisplayKernel>("\\b{g}", iGCB_stream);
+            //P->CreateKernelCall<DebugDisplayKernel>("\\b{g}", iGCB_stream);
         }
     }
     if (hasComponent(mExternalComponents, Component::WordBoundary)) {
         assert (mWordBoundary_stream);
         if (indexMask == nullptr) {
             options->addExternal("\\b", mWordBoundary_stream);
-            P->CreateKernelCall<DebugDisplayKernel>("\\b[U8indexed]", mWordBoundary_stream);
+            //P->CreateKernelCall<DebugDisplayKernel>("\\b[U8indexed]", mWordBoundary_stream);
         } else {
             StreamSet * iWordBoundary_stream = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mWordBoundary_stream, iWordBoundary_stream);
             options->addExternal("\\b", iWordBoundary_stream, 1);
-            P->CreateKernelCall<DebugDisplayKernel>("\\b", iWordBoundary_stream);
+            //P->CreateKernelCall<DebugDisplayKernel>("\\b", iWordBoundary_stream);
         }
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
