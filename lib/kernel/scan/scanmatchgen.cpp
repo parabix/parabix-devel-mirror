@@ -1593,7 +1593,7 @@ ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, Strea
                         // output scalars
 {},
                         // kernel state
-{}) {
+{}), mColorizedLineNumberIndex(SourceCoords->getNumElements() == 3 ? LINE_NUMBERS : BATCH_LINE_NUMBERS) {
     setStride(1);
     addAttribute(SideEffecting());
 }
@@ -1629,7 +1629,7 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
 #ifdef WRITE_FILE_NUMBERS
     Value * matchFileNum = b->CreateLoad(b->getRawInputPointer("SourceCoords", b->getInt32(BATCH_FILE_NUMBERS), phiMatchNum), "matchFileNumLoad");
 #endif
-    Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("SourceCoords", b->getInt32(BATCH_LINE_NUMBERS), phiMatchNum), "matchNumLoad");
+    Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("SourceCoords", b->getInt32(mColorizedLineNumberIndex), phiMatchNum), "matchNumLoad");
 
     // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
     // to access past EOF.
