@@ -447,8 +447,6 @@ Marker RE_Compiler::compileRep(int lb, int ub, RE * repeated, Marker marker, Pab
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
-        auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
-        //llvm::errs() << "getLengthRange(repeated, mCodeUnitAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
         RE * C;
         RE * E1;
         RE * E2;

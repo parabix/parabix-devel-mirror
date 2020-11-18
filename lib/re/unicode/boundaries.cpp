@@ -67,7 +67,6 @@ struct WordBoundaryAbsentValidator final : public RE_Validator {
     : RE_Validator() {}
     
     bool validateName(const Name * n) override {
-        llvm::errs() << "validateName " << n->getName() << "\n";
         return n->getName() != "\\b";
     }
 };
