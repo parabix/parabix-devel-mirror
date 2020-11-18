@@ -68,6 +68,7 @@ public:
                        Scalar * const callbackObject);
 private:
     void generateDoSegmentMethod(BuilderRef iBuilder) override;
+    unsigned mColorizedLineNumberIndex;
 };
 
 }
