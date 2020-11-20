@@ -428,6 +428,7 @@ bool CharacteristicSubexpressionAnalysis(RE * repeated, RE * &E1, RE * &C, RE * 
 
 Marker RE_Compiler::compileRep(int lb, int ub, RE * repeated, Marker marker, PabloBuilder & pb) {
     // Always handle cases with small lower bound and no upper bound by expansion.
+    //llvm::errs() << "compileRep(" << Printer_RE::PrintRE(repeated) << ", " << lb << ", " << ub << ")\n";
     if ((lb <= 2) && (ub == Rep::UNBOUNDED_REP)) {
         Marker at_lb = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
         return processUnboundedRep(repeated, at_lb, pb);
@@ -436,13 +437,13 @@ Marker RE_Compiler::compileRep(int lb, int ub, RE * repeated, Marker marker, Pab
     if ((ub != Rep::UNBOUNDED_REP) && (ub <= 2)) {
         Marker at_lb = expandLowerBound(repeated, lb, marker, IfInsertionGap, pb);
         if (lb == ub) return at_lb;
-        return expandUpperBound(repeated, ub - lb, marker, IfInsertionGap, pb);
+        return expandUpperBound(repeated, ub - lb, at_lb, IfInsertionGap, pb);
     }
     // Handle the case of lb == 0 specially.
     if (lb == 0) {
         Marker at_least_one = compileRep(1, ub, repeated, marker, pb);
         AlignMarkers(marker, at_least_one, pb);
-        return Marker(pb.createOr(marker.stream(), at_least_one.stream()), at_least_one.offset());
+        return Marker(pb.createOr(marker.stream(), at_least_one.stream(), "none_or_1+"), at_least_one.offset());
     }
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that
@@ -529,8 +530,8 @@ Marker RE_Compiler::compileRep(int lb, int ub, RE * repeated, Marker marker, Pab
             }
             PabloAST * at_lb = half_mark.stream();
             PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, idx, pb);
-            PabloAST * masked = pb.createAnd(iteration_marks, upperLimitMask, "masked");
-            PabloAST * fill = pb.createOr(masked, pb.createNot(idx));
+            PabloAST * masked = pb.createAnd(pb.createOr(iteration_marks, at_lb, "reachable"), upperLimitMask, "masked");
+            PabloAST * fill = pb.createOr(masked, pb.createNot(idx), "fill");
             PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, fill), masked, "bounded");
             return process(E2, Marker(bounded), pb);
         }
@@ -597,6 +598,7 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * const repeated, const int le
 }
 
 Marker RE_Compiler::expandLowerBound(RE * const repeated, const int lb, Marker marker, const int ifGroupSize, PabloBuilder & pb) {
+    //llvm::errs() << "expandLowerBound(" << Printer_RE::PrintRE(repeated) << ", " << lb << ")\n";
     if (LLVM_UNLIKELY(lb == 0)) {
         return marker;
     } else if (LLVM_UNLIKELY(lb == 1)) {
@@ -621,6 +623,7 @@ Marker RE_Compiler::expandLowerBound(RE * const repeated, const int lb, Marker m
 }
 
 Marker RE_Compiler::expandUpperBound(RE * const repeated, const int ub, Marker marker, const int ifGroupSize,  PabloBuilder & pb) {
+    //llvm::errs() << "expandUpperBound(" << Printer_RE::PrintRE(repeated) << ", " << ub << ")\n";
     if (LLVM_UNLIKELY(ub == 0)) {
         return marker;
     }
@@ -629,7 +632,7 @@ Marker RE_Compiler::expandUpperBound(RE * const repeated, const int ub, Marker m
         Marker a = process(repeated, marker, pb);
         Marker m = marker;
         AlignMarkers(a, m, pb);
-        marker = Marker(pb.createOr(a.stream(), m.stream()), a.offset());
+        marker = Marker(pb.createOr(a.stream(), m.stream(), "ub_combine"), a.offset());
     }
     if (ub == group) {
         return marker;
