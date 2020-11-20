@@ -484,8 +484,8 @@ Marker RE_Compiler::compileRep(int lb, int ub, RE * repeated, Marker marker, Pab
             }
             PabloAST * at_lb = half_mark.stream();
             PabloAST * upperLimitMask = reachable(at_lb, 1, ub - lb, idx, pb);
-            PabloAST * masked = pb.createAnd(iteration_marks, upperLimitMask, "masked");
-            PabloAST * fill = pb.createOr(masked, pb.createNot(idx));
+            PabloAST * masked = pb.createAnd(pb.createOr(iteration_marks, at_lb, "reachable"), upperLimitMask, "masked");
+            PabloAST * fill = pb.createOr(masked, pb.createNot(idx), "fill");
             PabloAST * bounded = pb.createAnd(pb.createMatchStar(at_lb, fill), masked, "bounded");
             return process(E2, Marker(bounded), pb);
         }
