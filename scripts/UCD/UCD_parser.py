@@ -41,6 +41,8 @@ UCD_property_alias_regexp = re.compile("^([-A-Za-z_0-9]+)\s*;\s*([-A-Za-z_0-9]+)
 # Section 2.3.3 of UAX $44 
 Obsolete_Properties = ["na1", "Gr_Link", "Hyphen", "isc", "XO_NFC", "XO_NFD", "XO_NFKC", "XO_NFKD" ,"FC_NFKC"]
 Emoji_Properties = ["Emoji", "Emoji_Presentation", "Emoji_Modifier", "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic"]
+# Compatibility properties from Unicode TR 18
+Compatibility_Properties = ["alnum", "xdigit", "blank", "print", "word", "graph"]
 
 def parse_PropertyAlias_txt():
     property_object_map = {}
@@ -81,6 +83,12 @@ def parse_PropertyAlias_txt():
         prop_aliases = re.findall("[-A-Za-z_0-9]+", prop_extra)
         property_object_map[property_code].setAliases(prop_aliases)
     for p in Emoji_Properties:
+        prop_code = canonicalize(p)
+        property_enum_name_list.append(prop_code)
+        property_object_map[prop_code] = BinaryPropertyObject()
+        property_object_map[prop_code].setID(prop_code, p)
+        property_object_map[prop_code].setAliases([])
+    for p in Compatibility_Properties:
         prop_code = canonicalize(p)
         property_enum_name_list.append(prop_code)
         property_object_map[prop_code] = BinaryPropertyObject()

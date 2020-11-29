@@ -396,6 +396,9 @@ class UCD_generator():
         self.supported_props.append(property_code)
 
     def generate_property_value_file(self, filename_root, property_code):
+        if not property_code in self.property_object_map.keys():
+            print("Property code %s not in property_object_map" % property_code)
+            return 
         property_object = self.property_object_map[property_code]
         parse_property_data(self.property_object_map[property_code], filename_root + '.txt')
         basename = os.path.basename(filename_root)
@@ -490,6 +493,42 @@ class UCD_generator():
         print("%s: %s bytes" % (basename, sum([value_map[v].bytes() for v in value_map.keys()])))
         self.supported_props.append(property_code)
         self.property_data_headers.append(basename)
+
+    def generate_CompatibilityProperties_h(self):
+        basename = 'CompatibilityProperties'
+        alnum = self.property_object_map["alnum"]
+        alpha = self.property_object_map["Alpha"].value_map['Y']
+        digit = self.property_object_map["gc"].value_map['Nd']
+        alnum.fromUnicodeSet(uset_union(alpha, digit))
+        xdigit = self.property_object_map["xdigit"]
+        hexdigit = self.property_object_map["Hex"].value_map['Y']
+        xdigit.fromUnicodeSet(uset_union(hexdigit, digit))
+        blank = self.property_object_map["blank"]
+        space_sep = self.property_object_map["gc"].value_map['Zs']
+        blank.fromUnicodeSet(uset_union(space_sep, singleton_uset(9)))
+        graph = self.property_object_map["graph"]
+        control = self.property_object_map["gc"].value_map['Cc']
+        surrogate = self.property_object_map["gc"].value_map['Cs']
+        unassigned = self.property_object_map["gc"].value_map['Cn']
+        space = self.property_object_map["WSpace"].value_map['Y']
+        graph.fromUnicodeSet(uset_complement(union_of_all([control, surrogate, unassigned, space])))
+        printp = self.property_object_map["print"]
+        printp.fromUnicodeSet(uset_difference(uset_union(graph.value_map['Y'], blank.value_map['Y']), control))
+        word = self.property_object_map["word"]
+        connector = self.property_object_map["gc"].value_map['Pc']
+        mark = self.property_object_map["gc"].value_map['M']
+        join_c = self.property_object_map["Join_C"].value_map['Y']
+        word.fromUnicodeSet(union_of_all([alpha, connector, mark, join_c]))
+
+        f = cformat.open_header_file_for_write(basename)
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        f.write("\nnamespace UCD {\n")
+        for p in Compatibility_Properties:
+            if p in self.property_object_map: self.emit_property(f, p)
+        f.write("}\n\n")
+        cformat.close_header_file(f)
+        self.property_data_headers.append(basename)
+
 
     def generate_PropertyObjectTable_h(self):
         f = cformat.open_header_file_for_write('PropertyObjectTable')
@@ -637,6 +676,7 @@ def UCD_main():
     #
     ucd.generate_property_value_file('Jamo', 'JSN')
     #
+    ucd.generate_CompatibilityProperties_h()
     # 
         # Binary properties from PropList.txt
     ucd.generate_multisection_properties_file('emoji/emoji-data')

@@ -5,9 +5,9 @@
 # Licensed under Open Software License 3.0.
 #
 #
-UCD_src_dir = "UCD-11.0"
+UCD_src_dir = "UCD-12.1"
 
-UCD_output_dir = "generated-11"
+UCD_output_dir = "generated-12"
 
 version = "Unknown"
 

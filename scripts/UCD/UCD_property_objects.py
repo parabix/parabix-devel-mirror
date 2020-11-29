@@ -144,6 +144,9 @@ class BinaryPropertyObject(PropertyObject):
         if dflt != "N": 
             raise Exception("Binary properties must have default value No")
 
+    def fromUnicodeSet(self, theUset):
+        self.value_map['Y'] = theUset
+
 class NumericPropertyObject(PropertyObject):
     def __init__(self):
         PropertyObject.__init__(self)
