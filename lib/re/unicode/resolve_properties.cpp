@@ -136,40 +136,6 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                     UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
                 }
             }
-            // Try special cases of Unicode TR #18
-            // Now compatibility properties of UTR #18 Annex C
-                    
-            else if (canon == ".") return UnicodeSet(0, 0x10FFFF);
-            else if (canon == "alnum") {
-                Name * digit = makeName("nd", Name::Type::UnicodeProperty);
-                Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
-                return resolveUnicodeSet(digit) + resolveUnicodeSet(alpha);
-            } else if (canon == "xdigit") {
-                Name * digit = makeName("nd", Name::Type::UnicodeProperty);
-                Name * hexdigit = makeName("hexdigit", Name::Type::UnicodeProperty);
-                return resolveUnicodeSet(digit) + resolveUnicodeSet(hexdigit);
-            } else if (canon == "blank") {
-                Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
-                return resolveUnicodeSet(space_sep) + UnicodeSet(0x09) /* tab */;
-            } else if (canon == "print") {
-                Name * graph = makeName("graph", Name::Type::UnicodeProperty);
-                Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
-                return resolveUnicodeSet(graph) + resolveUnicodeSet(space_sep);
-            } else if (canon == "word") {
-                Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
-                Name * mark = makeName("mark", Name::Type::UnicodeProperty);
-                Name * conn = makeName("connectorpunctuation", Name::Type::UnicodeProperty);
-                Name * join = makeName("joincontrol", Name::Type::UnicodeProperty);
-                return resolveUnicodeSet(alnum) + resolveUnicodeSet(mark) + resolveUnicodeSet(conn) + resolveUnicodeSet(join);
-            } else if (canon == "graph") {
-                Name * space = makeName("space", Name::Type::UnicodeProperty);
-                Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
-                Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
-                Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
-                return ~(resolveUnicodeSet(space) + resolveUnicodeSet(ctrl) + resolveUnicodeSet(surr) + resolveUnicodeSet(unassigned));
-            }
-
-
         }
     }
     UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");

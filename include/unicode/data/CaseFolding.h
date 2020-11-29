@@ -1,7 +1,7 @@
 #ifndef CASEFOLDING_H
 #define CASEFOLDING_H
 /*
- *  Copyright (c) 2018 International Characters, Inc.
+ *  Copyright (c) 2020 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -2235,7 +2235,7 @@ k
                                                     std::move(defined_cps));
     }
     namespace CF_ns {
-        /** Code Point Ranges for cf (possibly overriding values from SCF)
+        /** Code Point Ranges for cf (possibly overriding values from scf)
         [00df, 00df], [0130, 0130], [0149, 0149], [01f0, 01f0],
         [0390, 0390], [03b0, 03b0], [0587, 0587], [1e96, 1e9a],
         [1e9e, 1e9e], [1f50, 1f50], [1f52, 1f52], [1f54, 1f54],

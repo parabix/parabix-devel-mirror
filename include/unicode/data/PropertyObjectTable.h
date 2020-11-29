@@ -1,7 +1,7 @@
 #ifndef PROPERTYOBJECTTABLE_H
 #define PROPERTYOBJECTTABLE_H
 /*
- *  Copyright (c) 2018 International Characters, Inc.
+ *  Copyright (c) 2020 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -15,6 +15,7 @@
 #include "BidiMirroring.h"
 #include "Blocks.h"
 #include "CaseFolding.h"
+#include "CompatibilityProperties.h"
 #include "CompositionExclusions.h"
 #include "DerivedAge.h"
 #include "DerivedBidiClass.h"
@@ -47,7 +48,7 @@
 
 namespace UCD {
 
-  const std::array<PropertyObject *, 127> property_object_table = {{
+  const std::array<PropertyObject *, 133> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
@@ -174,7 +175,13 @@ namespace UCD {
     &EMOJIMODIFIER_ns::property_object,
     &EMOJIMODIFIERBASE_ns::property_object,
     &EMOJICOMPONENT_ns::property_object,
-    &EXTENDEDPICTOGRAPHIC_ns::property_object  }};
+    &EXTENDEDPICTOGRAPHIC_ns::property_object,
+    &ALNUM_ns::property_object,
+    &XDIGIT_ns::property_object,
+    &BLANK_ns::property_object,
+    &PRINT_ns::property_object,
+    &WORD_ns::property_object,
+    &GRAPH_ns::property_object  }};
 }
 
 #endif

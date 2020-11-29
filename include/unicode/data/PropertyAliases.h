@@ -1,7 +1,7 @@
 #ifndef PROPERTYALIASES_H
 #define PROPERTYALIASES_H
 /*
- *  Copyright (c) 2018 International Characters, Inc.
+ *  Copyright (c) 2020 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -29,7 +29,7 @@ namespace UCD {
         Radical, RI, SD, STerm, Term, UIdeo, Upper, VS, WSpace, XIDC, XIDS,
         XO_NFC, XO_NFD, XO_NFKC, XO_NFKD, emoji, emojipresentation,
         emojimodifier, emojimodifierbase, emojicomponent,
-        extendedpictographic};
+        extendedpictographic, alnum, xdigit, blank, print, word, graph};
     const static std::vector<std::string> property_enum_name = {
         "cjkAccountingNumeric", "cjkOtherNumeric", "cjkPrimaryNumeric",
         "nv", "cf", "cjkCompatibilityVariant", "dm", "FC_NFKC", "lc",
@@ -50,7 +50,8 @@ namespace UCD {
         "SD", "STerm", "Term", "UIdeo", "Upper", "VS", "WSpace", "XIDC",
         "XIDS", "XO_NFC", "XO_NFD", "XO_NFKC", "XO_NFKD", "emoji",
         "emojipresentation", "emojimodifier", "emojimodifierbase",
-        "emojicomponent", "extendedpictographic"};
+        "emojicomponent", "extendedpictographic", "alnum", "xdigit",
+        "blank", "print", "word", "graph"};
     const static std::vector<std::string> property_full_name = {
         "kAccountingNumeric", "kOtherNumeric", "kPrimaryNumeric",
         "Numeric_Value", "Case_Folding", "kCompatibilityVariant",
@@ -92,15 +93,16 @@ namespace UCD {
         "Uppercase", "Variation_Selector", "White_Space", "XID_Continue",
         "XID_Start", "Expands_On_NFC", "Expands_On_NFD", "Expands_On_NFKC",
         "Expands_On_NFKD", "Emoji", "Emoji_Presentation", "Emoji_Modifier",
-        "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic"};
+        "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic",
+        "alnum", "xdigit", "blank", "print", "word", "graph"};
     static std::unordered_map<std::string, int> alias_map {{
-        {"age", age}, {"ahex", AHex}, {"alpha", Alpha},
+        {"age", age}, {"ahex", AHex}, {"alnum", alnum}, {"alpha", Alpha},
         {"alphabetic", Alpha}, {"asciihexdigit", AHex}, {"bc", bc},
         {"bidic", Bidi_C}, {"bidiclass", bc}, {"bidicontrol", Bidi_C},
         {"bidim", Bidi_M}, {"bidimirrored", Bidi_M},
         {"bidimirroringglyph", bmg}, {"bidipairedbracket", bpb},
-        {"bidipairedbrackettype", bpt}, {"blk", blk}, {"block", blk},
-        {"bmg", bmg}, {"bpb", bpb}, {"bpt", bpt},
+        {"bidipairedbrackettype", bpt}, {"blank", blank}, {"blk", blk},
+        {"block", blk}, {"bmg", bmg}, {"bpb", bpb}, {"bpt", bpt},
         {"canonicalcombiningclass", ccc}, {"cased", Cased},
         {"casefolding", cf}, {"caseignorable", CI}, {"ccc", ccc},
         {"ce", CE}, {"cf", cf}, {"changeswhencasefolded", CWCF},
@@ -138,19 +140,19 @@ namespace UCD {
         {"extendedpictographic", extendedpictographic}, {"extender", Ext},
         {"fcnfkc", FC_NFKC}, {"fcnfkcclosure", FC_NFKC},
         {"fullcompositionexclusion", Comp_Ex}, {"gc", gc}, {"gcb", GCB},
-        {"generalcategory", gc}, {"graphemebase", Gr_Base},
-        {"graphemeclusterbreak", GCB}, {"graphemeextend", Gr_Ext},
-        {"graphemelink", Gr_Link}, {"grbase", Gr_Base}, {"grext", Gr_Ext},
-        {"grlink", Gr_Link}, {"hangulsyllabletype", hst}, {"hex", Hex},
-        {"hexdigit", Hex}, {"hst", hst}, {"hyphen", Hyphen}, {"idc", IDC},
-        {"idcontinue", IDC}, {"ideo", Ideo}, {"ideographic", Ideo},
-        {"ids", IDS}, {"idsb", IDSB}, {"idsbinaryoperator", IDSB},
-        {"idst", IDST}, {"idstart", IDS}, {"idstrinaryoperator", IDST},
-        {"indicpositionalcategory", InPC}, {"indicsyllabiccategory", InSC},
-        {"inpc", InPC}, {"insc", InSC}, {"isc", isc}, {"isocomment", isc},
-        {"jamoshortname", JSN}, {"jg", jg}, {"joinc", Join_C},
-        {"joincontrol", Join_C}, {"joininggroup", jg}, {"joiningtype", jt},
-        {"jsn", JSN}, {"jt", jt},
+        {"generalcategory", gc}, {"graph", graph},
+        {"graphemebase", Gr_Base}, {"graphemeclusterbreak", GCB},
+        {"graphemeextend", Gr_Ext}, {"graphemelink", Gr_Link},
+        {"grbase", Gr_Base}, {"grext", Gr_Ext}, {"grlink", Gr_Link},
+        {"hangulsyllabletype", hst}, {"hex", Hex}, {"hexdigit", Hex},
+        {"hst", hst}, {"hyphen", Hyphen}, {"idc", IDC}, {"idcontinue", IDC},
+        {"ideo", Ideo}, {"ideographic", Ideo}, {"ids", IDS}, {"idsb", IDSB},
+        {"idsbinaryoperator", IDSB}, {"idst", IDST}, {"idstart", IDS},
+        {"idstrinaryoperator", IDST}, {"indicpositionalcategory", InPC},
+        {"indicsyllabiccategory", InSC}, {"inpc", InPC}, {"insc", InSC},
+        {"isc", isc}, {"isocomment", isc}, {"jamoshortname", JSN},
+        {"jg", jg}, {"joinc", Join_C}, {"joincontrol", Join_C},
+        {"joininggroup", jg}, {"joiningtype", jt}, {"jsn", JSN}, {"jt", jt},
         {"kaccountingnumeric", cjkAccountingNumeric},
         {"kcompatibilityvariant", cjkCompatibilityVariant},
         {"kiicore", cjkIICore}, {"kirggsource", cjkIRG_GSource},
@@ -180,8 +182,8 @@ namespace UCD {
         {"othermath", OMath}, {"otheruppercase", OUpper},
         {"oupper", OUpper}, {"patsyn", Pat_Syn}, {"patternsyntax", Pat_Syn},
         {"patternwhitespace", Pat_WS}, {"patws", Pat_WS}, {"pcm", PCM},
-        {"prependedconcatenationmark", PCM}, {"qmark", QMark},
-        {"quotationmark", QMark}, {"radical", Radical},
+        {"prependedconcatenationmark", PCM}, {"print", print},
+        {"qmark", QMark}, {"quotationmark", QMark}, {"radical", Radical},
         {"regionalindicator", RI}, {"ri", RI}, {"sb", SB}, {"sc", sc},
         {"scf", scf}, {"script", sc}, {"scriptextensions", scx},
         {"scx", scx}, {"sd", SD}, {"sentencebreak", SB},
@@ -196,10 +198,11 @@ namespace UCD {
         {"upper", Upper}, {"uppercase", Upper}, {"uppercasemapping", uc},
         {"urs", cjkRSUnicode}, {"variationselector", VS},
         {"verticalorientation", vo}, {"vo", vo}, {"vs", VS}, {"wb", WB},
-        {"whitespace", WSpace}, {"wordbreak", WB}, {"wspace", WSpace},
-        {"xidc", XIDC}, {"xidcontinue", XIDC}, {"xids", XIDS},
-        {"xidstart", XIDS}, {"xonfc", XO_NFC}, {"xonfd", XO_NFD},
-        {"xonfkc", XO_NFKC}, {"xonfkd", XO_NFKD}}};
+        {"whitespace", WSpace}, {"word", word}, {"wordbreak", WB},
+        {"wspace", WSpace}, {"xdigit", xdigit}, {"xidc", XIDC},
+        {"xidcontinue", XIDC}, {"xids", XIDS}, {"xidstart", XIDS},
+        {"xonfc", XO_NFC}, {"xonfd", XO_NFD}, {"xonfkc", XO_NFKC},
+        {"xonfkd", XO_NFKD}}};
 }
 
 #endif

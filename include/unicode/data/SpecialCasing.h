@@ -1,7 +1,7 @@
 #ifndef SPECIALCASING_H
 #define SPECIALCASING_H
 /*
- *  Copyright (c) 2018 International Characters, Inc.
+ *  Copyright (c) 2020 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -15,7 +15,7 @@
 
 namespace UCD {
     namespace LC_ns {
-        /** Code Point Ranges for lc (possibly overriding values from SLC)
+        /** Code Point Ranges for lc (possibly overriding values from slc)
         [00df, 00df], [0130, 0130], [0149, 0149], [01f0, 01f0],
         [0390, 0390], [03b0, 03b0], [0587, 0587], [1e96, 1e9a],
         [1f50, 1f50], [1f52, 1f52], [1f54, 1f54], [1f56, 1f56],
@@ -177,7 +177,7 @@ i̇
                                                     std::move(defined_cps));
     }
     namespace UC_ns {
-        /** Code Point Ranges for uc (possibly overriding values from SUC)
+        /** Code Point Ranges for uc (possibly overriding values from suc)
         [00df, 00df], [0130, 0130], [0149, 0149], [01f0, 01f0],
         [0390, 0390], [03b0, 03b0], [0587, 0587], [1e96, 1e9a],
         [1f50, 1f50], [1f52, 1f52], [1f54, 1f54], [1f56, 1f56],
@@ -339,7 +339,7 @@ ST
                                                     std::move(defined_cps));
     }
     namespace TC_ns {
-        /** Code Point Ranges for tc (possibly overriding values from STC)
+        /** Code Point Ranges for tc (possibly overriding values from stc)
         [00df, 00df], [0130, 0130], [0149, 0149], [01f0, 01f0],
         [0390, 0390], [03b0, 03b0], [0587, 0587], [1e96, 1e9a],
         [1f50, 1f50], [1f52, 1f52], [1f54, 1f54], [1f56, 1f56],

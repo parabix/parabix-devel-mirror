@@ -403,7 +403,7 @@ class UCD_generator():
         parse_property_data(self.property_object_map[property_code], filename_root + '.txt')
         basename = os.path.basename(filename_root)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code)
         f.write("}\n")
@@ -415,7 +415,7 @@ class UCD_generator():
         #(props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
         basename = os.path.basename(filename_root)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in sorted(props):
             self.emit_property(f, p)
@@ -429,7 +429,7 @@ class UCD_generator():
         #(props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
         basename = os.path.basename(filename_root)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
             if p in self.property_object_map: self.emit_property(f, p)
@@ -441,7 +441,7 @@ class UCD_generator():
         basename = 'UnicodeData'
         parse_UnicodeData_txt(self.property_object_map)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         prop_code_list = ['na', 'dm', 'suc', 'slc', 'stc', 'na1', 'isc', 'nv']
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
@@ -455,7 +455,7 @@ class UCD_generator():
         basename = 'SpecialCasing'
         parse_SpecialCasing_txt(self.property_object_map)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in ['lc', 'uc', 'tc']:
             self.emit_property(f, p)
@@ -472,7 +472,7 @@ class UCD_generator():
         parse_property_data(extension_object, filename_root+'.txt')
         basename = os.path.basename(filename_root)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         prop_list = self.property_object_map['sc'].name_list_order
         value_map = extension_object.value_map
         f.write("\nnamespace UCD {\n")
@@ -496,32 +496,38 @@ class UCD_generator():
 
     def generate_CompatibilityProperties_h(self):
         basename = 'CompatibilityProperties'
+        # alnum
         alnum = self.property_object_map["alnum"]
         alpha = self.property_object_map["Alpha"].value_map['Y']
         digit = self.property_object_map["gc"].value_map['Nd']
         alnum.fromUnicodeSet(uset_union(alpha, digit))
+        # xdigit
         xdigit = self.property_object_map["xdigit"]
         hexdigit = self.property_object_map["Hex"].value_map['Y']
         xdigit.fromUnicodeSet(uset_union(hexdigit, digit))
+        #blank
         blank = self.property_object_map["blank"]
         space_sep = self.property_object_map["gc"].value_map['Zs']
         blank.fromUnicodeSet(uset_union(space_sep, singleton_uset(9)))
+        #graph
         graph = self.property_object_map["graph"]
         control = self.property_object_map["gc"].value_map['Cc']
         surrogate = self.property_object_map["gc"].value_map['Cs']
         unassigned = self.property_object_map["gc"].value_map['Cn']
         space = self.property_object_map["WSpace"].value_map['Y']
         graph.fromUnicodeSet(uset_complement(union_of_all([control, surrogate, unassigned, space])))
+        #print
         printp = self.property_object_map["print"]
         printp.fromUnicodeSet(uset_difference(uset_union(graph.value_map['Y'], blank.value_map['Y']), control))
+        #word
         word = self.property_object_map["word"]
         connector = self.property_object_map["gc"].value_map['Pc']
         mark = self.property_object_map["gc"].value_map['M']
         join_c = self.property_object_map["Join_C"].value_map['Y']
-        word.fromUnicodeSet(union_of_all([alpha, connector, mark, join_c]))
+        word.fromUnicodeSet(union_of_all([alpha, digit, connector, mark, join_c]))
 
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in Compatibility_Properties:
             if p in self.property_object_map: self.emit_property(f, p)
@@ -564,7 +570,7 @@ class UCD_generator():
         fold_data = parse_CaseFolding_txt(self.property_object_map)
         cm = simple_CaseClosure_map(fold_data)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"', '<vector>'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>', '<vector>'])
         f.write(foldDeclarations)
         f.write(genFoldEntryData(cm))
         f.write("\nnamespace UCD {\n")
