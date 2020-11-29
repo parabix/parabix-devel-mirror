@@ -349,7 +349,7 @@ def genCompositeData():
         print("len(NFKDcasefold_map.keys()) != 0  - need to update UCD_composites.py for NFKDi")
 
     f = cformat.open_cpp_file_for_write('Equivalence')
-    cformat.write_imports(f, ["<string>", "<map>", "<vector>", "<UCD/unicode_set.h>", "<UCD/CaseFolding.h>"])
+    cformat.write_imports(f, ["<unicode/data/Equivalence.h>", "<string>", "<map>", "<vector>", "<unicode/core/unicode_set.h>", "<unicode/data/CaseFolding.h>"])
     f.write(Equivalence_cpp_template % (NFD_equiv, NFDi_equiv, NFKD_equiv))
     cformat.close_cpp_file(f)
    
@@ -382,7 +382,7 @@ def genCompositeData():
 #    cformat.close_header_file(f)
 
     f = cformat.open_header_file_for_write('PrecomposedMappings')
-    cformat.write_imports(f, ["<string>", "<map>", "<vector>", "<UCD/unicode_set.h>"])
+    cformat.write_imports(f, ["<string>", "<map>", "<vector>", "<unicode/core/unicode_set.h>"])
     f.write(PrecomposedMappings_template % (canon_mappings + compat_mappings))
     cformat.close_header_file(f)
 

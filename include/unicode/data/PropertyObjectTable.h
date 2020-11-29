@@ -48,7 +48,7 @@
 
 namespace UCD {
 
-  const std::array<PropertyObject *, 133> property_object_table = {{
+  const std::array<PropertyObject *, 141> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
@@ -74,7 +74,9 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkIRG_KPSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_KSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_MSource, PropertyObject::ClassTypeId::StringProperty),
+    new UnsupportedPropertyObject(cjkIRG_SSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_TSource, PropertyObject::ClassTypeId::StringProperty),
+    new UnsupportedPropertyObject(cjkIRG_UKSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_USource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_VSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkRSUnicode, PropertyObject::ClassTypeId::StringProperty),
@@ -127,7 +129,13 @@ namespace UCD {
     &DEP_ns::property_object,
     &DI_ns::property_object,
     &DIA_ns::property_object,
+    new UnsupportedPropertyObject(EBase, PropertyObject::ClassTypeId::BinaryProperty),
+    new UnsupportedPropertyObject(EComp, PropertyObject::ClassTypeId::BinaryProperty),
+    new UnsupportedPropertyObject(EMod, PropertyObject::ClassTypeId::BinaryProperty),
+    new UnsupportedPropertyObject(Emoji, PropertyObject::ClassTypeId::BinaryProperty),
+    new UnsupportedPropertyObject(EPres, PropertyObject::ClassTypeId::BinaryProperty),
     &EXT_ns::property_object,
+    new UnsupportedPropertyObject(ExtPict, PropertyObject::ClassTypeId::BinaryProperty),
     &GR_BASE_ns::property_object,
     &GR_EXT_ns::property_object,
     &GR_LINK_ns::property_object,

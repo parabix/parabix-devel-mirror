@@ -20,7 +20,7 @@ namespace UCD {
     [0000, 061f], [0621, 0621], [0640, 0640], [064b, 066d], [0670, 0670],
     [0674, 0674], [06d4, 06d4], [06d6, 06ed], [06f0, 06f9], [06fd, 06fe],
     [0700, 070f], [0711, 0711], [0730, 074c], [0780, 085f], [086b, 089f],
-    [08ad, 08ad], [08b5, 08b5], [08be, 10abf], [10ac6, 10ac6],
+    [08ad, 08ad], [08b5, 08b5], [08c8, 10abf], [10ac6, 10ac6],
     [10ac8, 10ac8], [10acb, 10acc], [10ae2, 10ae3], [10ae5, 10aea],
     [10af0, 10d01], [10d03, 10d08], [10d0a, 10d18], [10d1a, 10d1b],
     [10d1d, 10d1d], [10d1f, 10d1f], [10d21, 10d22], [10d24, 10ffff]**/
@@ -29,29 +29,30 @@ namespace UCD {
     namespace {
     const static UnicodeSet::run_t __no_joining_group_Set_runs[] = {
     {Full, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 5}, {Empty, 1}, {Full, 7},
-    {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 2064}, {Mixed, 2}, {Full, 16},
+    {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 2063}, {Mixed, 2}, {Full, 16},
     {Mixed, 2}, {Full, 32662}};
     const static UnicodeSet::bitquad_t  __no_joining_group_Set_quads[] = {
     0x00000002, 0xfffff801, 0x00113fff, 0xffd00000, 0x63ff3fff, 0x0002ffff,
-    0xffff0000, 0x00001fff, 0xfffff800, 0xc0202000, 0x00001940, 0xffff07ec,
-    0xadfffdfb, 0xfffffff6};
+    0xffff0000, 0x00001fff, 0xfffff800, 0x00202000, 0xffffff00, 0x00001940,
+    0xffff07ec, 0xadfffdfb, 0xfffffff6};
     }
 
-    const static UnicodeSet no_joining_group_Set{const_cast<UnicodeSet::run_t *>(__no_joining_group_Set_runs), 14, 0, const_cast<UnicodeSet::bitquad_t *>(__no_joining_group_Set_quads), 14, 0};
+    const static UnicodeSet no_joining_group_Set{const_cast<UnicodeSet::run_t *>(__no_joining_group_Set_runs), 14, 0, const_cast<UnicodeSet::bitquad_t *>(__no_joining_group_Set_quads), 15, 0};
 
     /** Code Point Ranges for Ain
-    [0639, 063a], [06a0, 06a0], [06fc, 06fc], [075d, 075f], [08b3, 08b3]**/
+    [0639, 063a], [06a0, 06a0], [06fc, 06fc], [075d, 075f], [08b3, 08b3],
+    [08c3, 08c3]**/
 
 
     namespace {
     const static UnicodeSet::run_t __ain_Set_runs[] = {
     {Empty, 49}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
-    {Empty, 2}, {Mixed, 1}, {Empty, 10}, {Mixed, 1}, {Empty, 34746}};
+    {Empty, 2}, {Mixed, 1}, {Empty, 10}, {Mixed, 2}, {Empty, 34745}};
     const static UnicodeSet::bitquad_t  __ain_Set_quads[] = {
-    0x06000000, 0x00000001, 0x10000000, 0xe0000000, 0x00080000};
+    0x06000000, 0x00000001, 0x10000000, 0xe0000000, 0x00080000, 0x00000008};
     }
 
-    const static UnicodeSet ain_Set{const_cast<UnicodeSet::run_t *>(__ain_Set_runs), 11, 0, const_cast<UnicodeSet::bitquad_t *>(__ain_Set_quads), 5, 0};
+    const static UnicodeSet ain_Set{const_cast<UnicodeSet::run_t *>(__ain_Set_runs), 11, 0, const_cast<UnicodeSet::bitquad_t *>(__ain_Set_quads), 6, 0};
 
     /** Code Point Ranges for Alaph
     [0710, 0710]**/
@@ -83,18 +84,18 @@ namespace UCD {
 
     /** Code Point Ranges for Beh
     [0628, 0628], [062a, 062b], [066e, 066e], [0679, 0680], [0750, 0756],
-    [08a0, 08a1], [08b6, 08b8]**/
+    [08a0, 08a1], [08b6, 08b8], [08be, 08c0]**/
 
 
     namespace {
     const static UnicodeSet::run_t __beh_Set_runs[] = {
     {Empty, 49}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 5}, {Mixed, 1},
-    {Empty, 10}, {Mixed, 1}, {Empty, 34746}};
+    {Empty, 10}, {Mixed, 2}, {Empty, 34745}};
     const static UnicodeSet::bitquad_t  __beh_Set_quads[] = {
-    0x00000d00, 0xfe004000, 0x00000001, 0x007f0000, 0x01c00003};
+    0x00000d00, 0xfe004000, 0x00000001, 0x007f0000, 0xc1c00003, 0x00000001};
     }
 
-    const static UnicodeSet beh_Set{const_cast<UnicodeSet::run_t *>(__beh_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__beh_Set_quads), 5, 0};
+    const static UnicodeSet beh_Set{const_cast<UnicodeSet::run_t *>(__beh_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__beh_Set_quads), 6, 0};
 
     /** Code Point Ranges for Beth
     [0712, 0712], [072d, 072d]**/
@@ -178,18 +179,18 @@ namespace UCD {
 
     /** Code Point Ranges for Gaf
     [063b, 063c], [06a9, 06a9], [06ab, 06ab], [06af, 06b4], [0762, 0764],
-    [08b0, 08b0]**/
+    [08b0, 08b0], [08c2, 08c2]**/
 
 
     namespace {
     const static UnicodeSet::run_t __gaf_Set_runs[] = {
     {Empty, 49}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 5}, {Mixed, 1},
-    {Empty, 9}, {Mixed, 1}, {Empty, 34746}};
+    {Empty, 9}, {Mixed, 2}, {Empty, 34745}};
     const static UnicodeSet::bitquad_t  __gaf_Set_quads[] = {
-    0x18000000, 0x001f8a00, 0x0000001c, 0x00010000};
+    0x18000000, 0x001f8a00, 0x0000001c, 0x00010000, 0x00000004};
     }
 
-    const static UnicodeSet gaf_Set{const_cast<UnicodeSet::run_t *>(__gaf_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__gaf_Set_quads), 4, 0};
+    const static UnicodeSet gaf_Set{const_cast<UnicodeSet::run_t *>(__gaf_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__gaf_Set_quads), 5, 0};
 
     /** Code Point Ranges for Gamal
     [0713, 0714], [072e, 072e]**/
@@ -206,18 +207,19 @@ namespace UCD {
 
     /** Code Point Ranges for Hah
     [062c, 062e], [0681, 0687], [06bf, 06bf], [0757, 0758], [076e, 076f],
-    [0772, 0772], [077c, 077c], [08a2, 08a2]**/
+    [0772, 0772], [077c, 077c], [08a2, 08a2], [08c1, 08c1], [08c5, 08c6]**/
 
 
     namespace {
     const static UnicodeSet::run_t __hah_Set_runs[] = {
     {Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4}, {Mixed, 2},
-    {Empty, 9}, {Mixed, 1}, {Empty, 34746}};
+    {Empty, 9}, {Mixed, 2}, {Empty, 34745}};
     const static UnicodeSet::bitquad_t  __hah_Set_quads[] = {
-    0x00007000, 0x000000fe, 0x80000000, 0x01800000, 0x1004c000, 0x00000004};
+    0x00007000, 0x000000fe, 0x80000000, 0x01800000, 0x1004c000, 0x00000004,
+    0x00000062};
     }
 
-    const static UnicodeSet hah_Set{const_cast<UnicodeSet::run_t *>(__hah_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__hah_Set_quads), 6, 0};
+    const static UnicodeSet hah_Set{const_cast<UnicodeSet::run_t *>(__hah_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__hah_Set_quads), 7, 0};
 
     /** Code Point Ranges for Teh_Marbuta_Goal
     [06c3, 06c3]**/
@@ -325,18 +327,18 @@ namespace UCD {
     const static UnicodeSet knotted_heh_Set{const_cast<UnicodeSet::run_t *>(__knotted_heh_Set_runs), 5, 0, const_cast<UnicodeSet::bitquad_t *>(__knotted_heh_Set_quads), 2, 0};
 
     /** Code Point Ranges for Lam
-    [0644, 0644], [06b5, 06b8], [076a, 076a], [08a6, 08a6]**/
+    [0644, 0644], [06b5, 06b8], [076a, 076a], [08a6, 08a6], [08c7, 08c7]**/
 
 
     namespace {
     const static UnicodeSet::run_t __lam_Set_runs[] = {
     {Empty, 50}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 5}, {Mixed, 1},
-    {Empty, 9}, {Mixed, 1}, {Empty, 34746}};
+    {Empty, 9}, {Mixed, 2}, {Empty, 34745}};
     const static UnicodeSet::bitquad_t  __lam_Set_quads[] = {
-    0x00000010, 0x01e00000, 0x00000400, 0x00000040};
+    0x00000010, 0x01e00000, 0x00000400, 0x00000040, 0x00000080};
     }
 
-    const static UnicodeSet lam_Set{const_cast<UnicodeSet::run_t *>(__lam_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__lam_Set_quads), 4, 0};
+    const static UnicodeSet lam_Set{const_cast<UnicodeSet::run_t *>(__lam_Set_runs), 9, 0, const_cast<UnicodeSet::bitquad_t *>(__lam_Set_quads), 5, 0};
 
     /** Code Point Ranges for Lamadh
     [0720, 0720]**/
@@ -1185,17 +1187,17 @@ namespace UCD {
     const static UnicodeSet african_feh_Set{const_cast<UnicodeSet::run_t *>(__african_feh_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__african_feh_Set_quads), 1, 0};
 
     /** Code Point Ranges for African_Qaf
-    [08bc, 08bc]**/
+    [08bc, 08bc], [08c4, 08c4]**/
 
 
     namespace {
     const static UnicodeSet::run_t __african_qaf_Set_runs[] = {
-    {Empty, 69}, {Mixed, 1}, {Empty, 34746}};
+    {Empty, 69}, {Mixed, 2}, {Empty, 34745}};
     const static UnicodeSet::bitquad_t  __african_qaf_Set_quads[] = {
-    0x10000000};
+    0x10000000, 0x00000010};
     }
 
-    const static UnicodeSet african_qaf_Set{const_cast<UnicodeSet::run_t *>(__african_qaf_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__african_qaf_Set_quads), 1, 0};
+    const static UnicodeSet african_qaf_Set{const_cast<UnicodeSet::run_t *>(__african_qaf_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__african_qaf_Set_quads), 2, 0};
 
     /** Code Point Ranges for African_Noon
     [08bd, 08bd]**/

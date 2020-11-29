@@ -1,378 +1,394 @@
 <greptest>
-    <grepcase regexp="^\P{Cn}$" datafile="All_good" grepcount="274872"/>
-    <grepcase regexp="^\P{Lu}$" datafile="All_good" grepcount="1110248"/>
-    <grepcase regexp="^\p{Ll}$" datafile="All_good" grepcount="2145"/>
-    <grepcase regexp="^\p{Lt}$" datafile="All_good" grepcount="31"/>
-    <grepcase regexp="^\p{Lm}$" datafile="All_good" grepcount="250"/>
-    <grepcase regexp="^\p{Lo}$" datafile="All_good" grepcount="121212"/>
-    <grepcase regexp="^\p{Mn}$" datafile="All_good" grepcount="1805"/>
-    <grepcase regexp="^\p{Me}$" datafile="All_good" grepcount="13"/>
-    <grepcase regexp="^\p{Mc}$" datafile="All_good" grepcount="415"/>
-    <grepcase regexp="^\p{Nd}$" datafile="All_good" grepcount="610"/>
-    <grepcase regexp="^\p{Nl}$" datafile="All_good" grepcount="236"/>
-    <grepcase regexp="^\p{No}$" datafile="All_good" grepcount="807"/>
-    <grepcase regexp="^\P{Zs}$" datafile="All_good" grepcount="1112012"/>
-    <grepcase regexp="^\P{Zl}$" datafile="All_good" grepcount="1112029"/>
-    <grepcase regexp="^\p{Zp}$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Cc}$" datafile="All_good" grepcount="32"/>
-    <grepcase regexp="^\p{Cf}$" datafile="All_good" grepcount="152"/>
-    <grepcase regexp="^\p{Co}$" datafile="All_good" grepcount="137468"/>
-    <grepcase regexp="^\p{Cs}$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\P{Pd}$" datafile="All_good" grepcount="1112005"/>
-    <grepcase regexp="^\p{Ps}$" datafile="All_good" grepcount="75"/>
-    <grepcase regexp="^\p{Pe}$" datafile="All_good" grepcount="73"/>
-    <grepcase regexp="^\p{Pc}$" datafile="All_good" grepcount="10"/>
-    <grepcase regexp="^\P{Po}$" datafile="All_good" grepcount="1111445"/>
-    <grepcase regexp="^\p{Sm}$" datafile="All_good" grepcount="948"/>
-    <grepcase regexp="^\p{Sc}$" datafile="All_good" grepcount="57"/>
-    <grepcase regexp="^\p{Sk}$" datafile="All_good" grepcount="121"/>
-    <grepcase regexp="^\p{So}$" datafile="All_good" grepcount="5984"/>
-    <grepcase regexp="^\p{Pi}$" datafile="All_good" grepcount="12"/>
-    <grepcase regexp="^\p{Pf}$" datafile="All_good" grepcount="10"/>
-    <grepcase regexp="^\p{C}$" datafile="All_good" grepcount="974809"/>
-    <grepcase regexp="^\p{L}$" datafile="All_good" grepcount="125419"/>
-    <grepcase regexp="^\p{LC}$" datafile="All_good" grepcount="3957"/>
-    <grepcase regexp="^\p{M}$" datafile="All_good" grepcount="2233"/>
-    <grepcase regexp="^\p{N}$" datafile="All_good" grepcount="1653"/>
-    <grepcase regexp="^\p{P}$" datafile="All_good" grepcount="788"/>
-    <grepcase regexp="^\p{S}$" datafile="All_good" grepcount="7110"/>
-    <grepcase regexp="^\P{Z}$" datafile="All_good" grepcount="1112012"/>
-    <grepcase regexp="^\p{Unknown}$" datafile="All_good" grepcount="974625"/>
-    <grepcase regexp="^\p{Common}$" datafile="All_good" grepcount="7556"/>
-    <grepcase regexp="^\p{Latin}$" datafile="All_good" grepcount="1353"/>
-    <grepcase regexp="^\p{Greek}$" datafile="All_good" grepcount="518"/>
-    <grepcase regexp="^\p{Cyrillic}$" datafile="All_good" grepcount="443"/>
-    <grepcase regexp="^\p{Armenian}$" datafile="All_good" grepcount="95"/>
-    <grepcase regexp="^\p{Hebrew}$" datafile="All_good" grepcount="134"/>
-    <grepcase regexp="^\p{Arabic}$" datafile="All_good" grepcount="1281"/>
-    <grepcase regexp="^\p{Syriac}$" datafile="All_good" grepcount="88"/>
-    <grepcase regexp="^\p{Thaana}$" datafile="All_good" grepcount="50"/>
-    <grepcase regexp="^\p{Devanagari}$" datafile="All_good" grepcount="156"/>
-    <grepcase regexp="^\p{Bengali}$" datafile="All_good" grepcount="96"/>
-    <grepcase regexp="^\P{Gurmukhi}$" datafile="All_good" grepcount="1111949"/>
-    <grepcase regexp="^\p{Gujarati}$" datafile="All_good" grepcount="91"/>
-    <grepcase regexp="^\p{Oriya}$" datafile="All_good" grepcount="90"/>
-    <grepcase regexp="^\p{Tamil}$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^\p{Telugu}$" datafile="All_good" grepcount="97"/>
-    <grepcase regexp="^\p{Kannada}$" datafile="All_good" grepcount="89"/>
-    <grepcase regexp="^\p{Malayalam}$" datafile="All_good" grepcount="117"/>
-    <grepcase regexp="^\p{Sinhala}$" datafile="All_good" grepcount="110"/>
-    <grepcase regexp="^\p{Thai}$" datafile="All_good" grepcount="86"/>
-    <grepcase regexp="^\p{Lao}$" datafile="All_good" grepcount="67"/>
-    <grepcase regexp="^\p{Tibetan}$" datafile="All_good" grepcount="207"/>
-    <grepcase regexp="^\p{Myanmar}$" datafile="All_good" grepcount="223"/>
-    <grepcase regexp="^\p{Georgian}$" datafile="All_good" grepcount="173"/>
-    <grepcase regexp="^\p{Hangul}$" datafile="All_good" grepcount="11739"/>
-    <grepcase regexp="^\p{Ethiopic}$" datafile="All_good" grepcount="495"/>
-    <grepcase regexp="^\p{Cherokee}$" datafile="All_good" grepcount="172"/>
-    <grepcase regexp="^\p{Canadian_Aboriginal}$" datafile="All_good" grepcount="710"/>
-    <grepcase regexp="^\p{Ogham}$" datafile="All_good" grepcount="29"/>
-    <grepcase regexp="^\p{Runic}$" datafile="All_good" grepcount="86"/>
-    <grepcase regexp="^\p{Khmer}$" datafile="All_good" grepcount="146"/>
-    <grepcase regexp="^\p{Mongolian}$" datafile="All_good" grepcount="167"/>
-    <grepcase regexp="^\p{Hiragana}$" datafile="All_good" grepcount="376"/>
-    <grepcase regexp="^\p{Katakana}$" datafile="All_good" grepcount="300"/>
-    <grepcase regexp="^\p{Bopomofo}$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^\p{Han}$" datafile="All_good" grepcount="89233"/>
-    <grepcase regexp="^\p{Yi}$" datafile="All_good" grepcount="1220"/>
-    <grepcase regexp="^\p{Old_Italic}$" datafile="All_good" grepcount="39"/>
-    <grepcase regexp="^\p{Gothic}$" datafile="All_good" grepcount="27"/>
-    <grepcase regexp="^\p{Deseret}$" datafile="All_good" grepcount="80"/>
-    <grepcase regexp="^\p{Inherited}$" datafile="All_good" grepcount="569"/>
-    <grepcase regexp="^\p{Tagalog}$" datafile="All_good" grepcount="20"/>
-    <grepcase regexp="^\p{Hanunoo}$" datafile="All_good" grepcount="21"/>
-    <grepcase regexp="^\p{Buhid}$" datafile="All_good" grepcount="20"/>
-    <grepcase regexp="^\p{Tagbanwa}$" datafile="All_good" grepcount="18"/>
-    <grepcase regexp="^\p{Limbu}$" datafile="All_good" grepcount="68"/>
-    <grepcase regexp="^\p{Tai_Le}$" datafile="All_good" grepcount="35"/>
-    <grepcase regexp="^\p{Linear_B}$" datafile="All_good" grepcount="211"/>
-    <grepcase regexp="^\P{Ugaritic}$" datafile="All_good" grepcount="1111998"/>
-    <grepcase regexp="^\p{Shavian}$" datafile="All_good" grepcount="48"/>
-    <grepcase regexp="^\p{Osmanya}$" datafile="All_good" grepcount="40"/>
-    <grepcase regexp="^\p{Cypriot}$" datafile="All_good" grepcount="55"/>
-    <grepcase regexp="^\p{Braille}$" datafile="All_good" grepcount="256"/>
-    <grepcase regexp="^\p{Buginese}$" datafile="All_good" grepcount="30"/>
-    <grepcase regexp="^\p{Coptic}$" datafile="All_good" grepcount="137"/>
-    <grepcase regexp="^\p{New_Tai_Lue}$" datafile="All_good" grepcount="83"/>
-    <grepcase regexp="^\P{Glagolitic}$" datafile="All_good" grepcount="1111897"/>
-    <grepcase regexp="^\p{Tifinagh}$" datafile="All_good" grepcount="59"/>
-    <grepcase regexp="^\P{Syloti_Nagri}$" datafile="All_good" grepcount="1111985"/>
-    <grepcase regexp="^\p{Old_Persian}$" datafile="All_good" grepcount="50"/>
-    <grepcase regexp="^\p{Kharoshthi}$" datafile="All_good" grepcount="68"/>
-    <grepcase regexp="^\p{Balinese}$" datafile="All_good" grepcount="121"/>
-    <grepcase regexp="^\P{Cuneiform}$" datafile="All_good" grepcount="1110795"/>
-    <grepcase regexp="^\p{Phoenician}$" datafile="All_good" grepcount="29"/>
-    <grepcase regexp="^\p{Phags_Pa}$" datafile="All_good" grepcount="56"/>
-    <grepcase regexp="^\p{Nko}$" datafile="All_good" grepcount="62"/>
-    <grepcase regexp="^\p{Sundanese}$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^\p{Lepcha}$" datafile="All_good" grepcount="74"/>
-    <grepcase regexp="^\p{Ol_Chiki}$" datafile="All_good" grepcount="48"/>
-    <grepcase regexp="^\p{Vai}$" datafile="All_good" grepcount="300"/>
-    <grepcase regexp="^\p{Saurashtra}$" datafile="All_good" grepcount="82"/>
-    <grepcase regexp="^\p{Kayah_Li}$" datafile="All_good" grepcount="47"/>
-    <grepcase regexp="^\p{Rejang}$" datafile="All_good" grepcount="37"/>
-    <grepcase regexp="^\p{Lycian}$" datafile="All_good" grepcount="29"/>
-    <grepcase regexp="^\p{Carian}$" datafile="All_good" grepcount="49"/>
-    <grepcase regexp="^\P{Lydian}$" datafile="All_good" grepcount="1112002"/>
-    <grepcase regexp="^\p{Cham}$" datafile="All_good" grepcount="83"/>
-    <grepcase regexp="^\p{Tai_Tham}$" datafile="All_good" grepcount="127"/>
-    <grepcase regexp="^\p{Tai_Viet}$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^\p{Avestan}$" datafile="All_good" grepcount="61"/>
-    <grepcase regexp="^\p{Egyptian_Hieroglyphs}$" datafile="All_good" grepcount="1071"/>
-    <grepcase regexp="^\P{Samaritan}$" datafile="All_good" grepcount="1111968"/>
-    <grepcase regexp="^\p{Lisu}$" datafile="All_good" grepcount="48"/>
-    <grepcase regexp="^\p{Bamum}$" datafile="All_good" grepcount="657"/>
-    <grepcase regexp="^\p{Javanese}$" datafile="All_good" grepcount="90"/>
-    <grepcase regexp="^\p{Meetei_Mayek}$" datafile="All_good" grepcount="79"/>
-    <grepcase regexp="^\P{Imperial_Aramaic}$" datafile="All_good" grepcount="1111998"/>
-    <grepcase regexp="^\p{Old_South_Arabian}$" datafile="All_good" grepcount="32"/>
-    <grepcase regexp="^\p{Inscriptional_Parthian}$" datafile="All_good" grepcount="30"/>
-    <grepcase regexp="^\p{Inscriptional_Pahlavi}$" datafile="All_good" grepcount="27"/>
-    <grepcase regexp="^\p{Old_Turkic}$" datafile="All_good" grepcount="73"/>
-    <grepcase regexp="^\p{Kaithi}$" datafile="All_good" grepcount="67"/>
-    <grepcase regexp="^\p{Batak}$" datafile="All_good" grepcount="56"/>
-    <grepcase regexp="^\P{Brahmi}$" datafile="All_good" grepcount="1111920"/>
-    <grepcase regexp="^\p{Mandaic}$" datafile="All_good" grepcount="29"/>
-    <grepcase regexp="^\P{Chakma}$" datafile="All_good" grepcount="1111959"/>
-    <grepcase regexp="^\p{Meroitic_Cursive}$" datafile="All_good" grepcount="90"/>
-    <grepcase regexp="^\p{Meroitic_Hieroglyphs}$" datafile="All_good" grepcount="32"/>
-    <grepcase regexp="^\p{Miao}$" datafile="All_good" grepcount="133"/>
-    <grepcase regexp="^\p{Sharada}$" datafile="All_good" grepcount="94"/>
-    <grepcase regexp="^\P{Sora_Sompeng}$" datafile="All_good" grepcount="1111994"/>
-    <grepcase regexp="^\p{Takri}$" datafile="All_good" grepcount="66"/>
-    <grepcase regexp="^\p{Caucasian_Albanian}$" datafile="All_good" grepcount="53"/>
-    <grepcase regexp="^\P{Bassa_Vah}$" datafile="All_good" grepcount="1111993"/>
-    <grepcase regexp="^\p{Duployan}$" datafile="All_good" grepcount="143"/>
-    <grepcase regexp="^\p{Elbasan}$" datafile="All_good" grepcount="40"/>
-    <grepcase regexp="^\p{Grantha}$" datafile="All_good" grepcount="85"/>
-    <grepcase regexp="^\p{Pahawh_Hmong}$" datafile="All_good" grepcount="127"/>
-    <grepcase regexp="^\p{Khojki}$" datafile="All_good" grepcount="62"/>
-    <grepcase regexp="^\p{Linear_A}$" datafile="All_good" grepcount="341"/>
-    <grepcase regexp="^\p{Mahajani}$" datafile="All_good" grepcount="39"/>
-    <grepcase regexp="^\p{Manichaean}$" datafile="All_good" grepcount="51"/>
-    <grepcase regexp="^\p{Mende_Kikakui}$" datafile="All_good" grepcount="213"/>
-    <grepcase regexp="^\p{Modi}$" datafile="All_good" grepcount="79"/>
-    <grepcase regexp="^\p{Mro}$" datafile="All_good" grepcount="43"/>
-    <grepcase regexp="^\p{Old_North_Arabian}$" datafile="All_good" grepcount="32"/>
-    <grepcase regexp="^\p{Nabataean}$" datafile="All_good" grepcount="40"/>
-    <grepcase regexp="^\p{Palmyrene}$" datafile="All_good" grepcount="32"/>
-    <grepcase regexp="^\p{Pau_Cin_Hau}$" datafile="All_good" grepcount="57"/>
-    <grepcase regexp="^\p{Old_Permic}$" datafile="All_good" grepcount="43"/>
-    <grepcase regexp="^\p{Psalter_Pahlavi}$" datafile="All_good" grepcount="29"/>
-    <grepcase regexp="^\p{Siddham}$" datafile="All_good" grepcount="92"/>
-    <grepcase regexp="^\P{Khudawadi}$" datafile="All_good" grepcount="1111960"/>
-    <grepcase regexp="^\p{Tirhuta}$" datafile="All_good" grepcount="82"/>
-    <grepcase regexp="^\p{Warang_Citi}$" datafile="All_good" grepcount="84"/>
-    <grepcase regexp="^\p{Ahom}$" datafile="All_good" grepcount="58"/>
-    <grepcase regexp="^\p{Anatolian_Hieroglyphs}$" datafile="All_good" grepcount="583"/>
-    <grepcase regexp="^\p{Hatran}$" datafile="All_good" grepcount="26"/>
-    <grepcase regexp="^\p{Multani}$" datafile="All_good" grepcount="38"/>
-    <grepcase regexp="^\p{Old_Hungarian}$" datafile="All_good" grepcount="108"/>
-    <grepcase regexp="^\p{SignWriting}$" datafile="All_good" grepcount="672"/>
-    <grepcase regexp="^\p{Adlam}$" datafile="All_good" grepcount="87"/>
-    <grepcase regexp="^\P{Bhaiksuki}$" datafile="All_good" grepcount="1111932"/>
-    <grepcase regexp="^\p{Marchen}$" datafile="All_good" grepcount="68"/>
-    <grepcase regexp="^\p{Newa}$" datafile="All_good" grepcount="93"/>
-    <grepcase regexp="^\p{Osage}$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^\p{Tangut}$" datafile="All_good" grepcount="6886"/>
-    <grepcase regexp="^\p{Masaram_Gondi}$" datafile="All_good" grepcount="75"/>
-    <grepcase regexp="^\p{Nushu}$" datafile="All_good" grepcount="397"/>
-    <grepcase regexp="^\p{Soyombo}$" datafile="All_good" grepcount="81"/>
-    <grepcase regexp="^\p{Zanabazar_Square}$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^\p{Dogra}$" datafile="All_good" grepcount="60"/>
-    <grepcase regexp="^\p{Gunjala_Gondi}$" datafile="All_good" grepcount="63"/>
-    <grepcase regexp="^\p{Makasar}$" datafile="All_good" grepcount="25"/>
-    <grepcase regexp="^\p{Medefaidrin}$" datafile="All_good" grepcount="91"/>
-    <grepcase regexp="^\p{Hanifi_Rohingya}$" datafile="All_good" grepcount="50"/>
-    <grepcase regexp="^\p{Sogdian}$" datafile="All_good" grepcount="42"/>
-    <grepcase regexp="^\p{Old_Sogdian}$" datafile="All_good" grepcount="40"/>
-    <grepcase regexp="^\p{Katakana_Or_Hiragana}$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Cn}(?&lt;!\p{Inherited})$" datafile="All_good" grepcount="837157"/>
-    <grepcase regexp="^\p{Lu}(?&lt;!\p{Kaithi})$" datafile="All_good" grepcount="1781"/>
-    <grepcase regexp="^\p{Ll}(?&lt;!\p{Gurmukhi})$" datafile="All_good" grepcount="2145"/>
-    <grepcase regexp="^\p{Lt}(?&lt;!\p{Khmer})$" datafile="All_good" grepcount="31"/>
-    <grepcase regexp="^[\p{Lm}\p{Imperial_Aramaic}]$" datafile="All_good" grepcount="281"/>
-    <grepcase regexp="^\p{Lo}(?&lt;=\p{Hanunoo})$" datafile="All_good" grepcount="18"/>
-    <grepcase regexp="^\p{Mn}(?&lt;!\p{Kannada})$" datafile="All_good" grepcount="1797"/>
-    <grepcase regexp="^[\p{Me}\p{Phoenician}]$" datafile="All_good" grepcount="42"/>
-    <grepcase regexp="^\p{Mc}(?&lt;=\p{Ogham})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Nd}(?&lt;=\p{Devanagari})$" datafile="All_good" grepcount="10"/>
-    <grepcase regexp="^\p{Nl}(?&lt;!\p{Saurashtra})$" datafile="All_good" grepcount="236"/>
-    <grepcase regexp="^\p{No}(?&lt;!\p{Hangul})$" datafile="All_good" grepcount="807"/>
-    <grepcase regexp="^\p{Zs}(?&lt;!\p{Brahmi})$" datafile="All_good" grepcount="17"/>
-    <grepcase regexp="^[\p{Zl}\p{Tagbanwa}]$" datafile="All_good" grepcount="18"/>
-    <grepcase regexp="^\p{Zp}(?&lt;=\p{Yi})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Cc}(?&lt;=\p{Glagolitic})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Cf}(?&lt;=\p{Syloti_Nagri})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Co}(?&lt;!\p{Cypriot})$" datafile="All_good" grepcount="137468"/>
-    <grepcase regexp="^\p{Cs}(?&lt;=\p{Tifinagh})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Pd}\p{Linear_A}]$" datafile="All_good" grepcount="365"/>
-    <grepcase regexp="^[\p{Ps}\p{Sinhala}]$" datafile="All_good" grepcount="185"/>
-    <grepcase regexp="^\p{Pe}(?&lt;!\p{Anatolian_Hieroglyphs})$" datafile="All_good" grepcount="73"/>
-    <grepcase regexp="^\p{Pc}(?&lt;=\p{Inherited})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Po}\p{Hanifi_Rohingya}]$" datafile="All_good" grepcount="634"/>
-    <grepcase regexp="^\p{Sm}(?&lt;!\p{Old_Hungarian})$" datafile="All_good" grepcount="948"/>
-    <grepcase regexp="^\p{Sc}(?&lt;!\p{Yi})$" datafile="All_good" grepcount="57"/>
-    <grepcase regexp="^\p{Sk}(?&lt;!\p{Anatolian_Hieroglyphs})$" datafile="All_good" grepcount="121"/>
-    <grepcase regexp="^\p{So}(?&lt;!\p{Bopomofo})$" datafile="All_good" grepcount="5984"/>
-    <grepcase regexp="^[\p{Pi}\p{Duployan}]$" datafile="All_good" grepcount="155"/>
-    <grepcase regexp="^\p{Pf}(?&lt;!\p{Carian})$" datafile="All_good" grepcount="10"/>
-    <grepcase regexp="^\p{C}(?&lt;=\p{Masaram_Gondi})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{L}\p{Ahom}]$" datafile="All_good" grepcount="125450"/>
-    <grepcase regexp="^\p{LC}(?&lt;=\p{Cypriot})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{M}(?&lt;=\p{Tangut})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{N}(?&lt;=\p{Takri})$" datafile="All_good" grepcount="10"/>
-    <grepcase regexp="^\p{P}(?&lt;!\p{Lao})$" datafile="All_good" grepcount="788"/>
-    <grepcase regexp="^\p{S}(?&lt;=\p{Soyombo})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Z}(?&lt;!\p{Old_North_Arabian})$" datafile="All_good" grepcount="17"/>
-    <grepcase regexp="^\p{Unknown}(?&lt;!\p{P})$" datafile="All_good" grepcount="974625"/>
-    <grepcase regexp="^\p{Common}(?&lt;=\p{Pe})$" datafile="All_good" grepcount="70"/>
-    <grepcase regexp="^\p{Latin}(?&lt;!\p{So})$" datafile="All_good" grepcount="1353"/>
-    <grepcase regexp="^\p{Greek}(?&lt;!\p{So})$" datafile="All_good" grepcount="430"/>
-    <grepcase regexp="^[\p{Cyrillic}\p{Cc}]$" datafile="All_good" grepcount="475"/>
-    <grepcase regexp="^\p{Armenian}(?&lt;!\p{Zl})$" datafile="All_good" grepcount="95"/>
-    <grepcase regexp="^\p{Hebrew}(?&lt;!\p{Zp})$" datafile="All_good" grepcount="134"/>
-    <grepcase regexp="^[\p{Arabic}\p{Zl}]$" datafile="All_good" grepcount="1281"/>
-    <grepcase regexp="^\p{Syriac}(?&lt;!\p{No})$" datafile="All_good" grepcount="88"/>
-    <grepcase regexp="^[\p{Thaana}\p{Nl}]$" datafile="All_good" grepcount="286"/>
-    <grepcase regexp="^\p{Devanagari}(?&lt;=\p{Zl})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Bengali}(?&lt;=\p{Lo})$" datafile="All_good" grepcount="55"/>
-    <grepcase regexp="^\p{Gurmukhi}(?&lt;=\p{Lo})$" datafile="All_good" grepcount="51"/>
-    <grepcase regexp="^\p{Gujarati}(?&lt;=\p{M})$" datafile="All_good" grepcount="26"/>
-    <grepcase regexp="^[\p{Oriya}\p{Sk}]$" datafile="All_good" grepcount="211"/>
-    <grepcase regexp="^\p{Tamil}(?&lt;=\p{Ll})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Telugu}(?&lt;!\p{Zs})$" datafile="All_good" grepcount="97"/>
-    <grepcase regexp="^[\p{Kannada}\p{Pd}]$" datafile="All_good" grepcount="113"/>
-    <grepcase regexp="^\p{Malayalam}(?&lt;=\p{S})$" datafile="All_good" grepcount="2"/>
-    <grepcase regexp="^[\p{Sinhala}\p{Co}]$" datafile="All_good" grepcount="137578"/>
-    <grepcase regexp="^\p{Thai}(?&lt;=\p{N})$" datafile="All_good" grepcount="10"/>
-    <grepcase regexp="^\p{Lao}(?&lt;=\p{Mn})$" datafile="All_good" grepcount="15"/>
-    <grepcase regexp="^[\p{Tibetan}\p{Pc}]$" datafile="All_good" grepcount="217"/>
-    <grepcase regexp="^\p{Myanmar}(?&lt;=\p{Pi})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Georgian}(?&lt;!\p{Me})$" datafile="All_good" grepcount="173"/>
-    <grepcase regexp="^\p{Hangul}(?&lt;!\p{Cf})$" datafile="All_good" grepcount="11739"/>
-    <grepcase regexp="^\p{Ethiopic}(?&lt;!\p{S})$" datafile="All_good" grepcount="485"/>
-    <grepcase regexp="^[\p{Cherokee}\p{Mn}]$" datafile="All_good" grepcount="1977"/>
-    <grepcase regexp="^\p{Canadian_Aboriginal}(?&lt;=\p{Pd})$" datafile="All_good" grepcount="1"/>
-    <grepcase regexp="^\p{Ogham}(?&lt;!\p{Ps})$" datafile="All_good" grepcount="28"/>
-    <grepcase regexp="^\p{Runic}(?&lt;=\p{Zs})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Khmer}\p{Zp}]$" datafile="All_good" grepcount="146"/>
-    <grepcase regexp="^\p{Mongolian}(?&lt;=\p{Ll})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Hiragana}(?&lt;!\p{So})$" datafile="All_good" grepcount="375"/>
-    <grepcase regexp="^\p{Katakana}(?&lt;!\p{Lo})$" datafile="All_good" grepcount="137"/>
-    <grepcase regexp="^[\p{Bopomofo}\p{Cs}]$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^[\p{Han}\p{Lt}]$" datafile="All_good" grepcount="89264"/>
-    <grepcase regexp="^\p{Yi}(?&lt;!\p{Cs})$" datafile="All_good" grepcount="1220"/>
-    <grepcase regexp="^\p{Old_Italic}(?&lt;!\p{Cf})$" datafile="All_good" grepcount="39"/>
-    <grepcase regexp="^[\p{Gothic}\p{N}]$" datafile="All_good" grepcount="1678"/>
-    <grepcase regexp="^\p{Deseret}(?&lt;!\p{Zl})$" datafile="All_good" grepcount="80"/>
-    <grepcase regexp="^\p{Inherited}(?&lt;=\p{Sm})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Tagalog}(?&lt;!\p{Lm})$" datafile="All_good" grepcount="20"/>
-    <grepcase regexp="^\p{Hanunoo}(?&lt;=\p{Z})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Buhid}(?&lt;!\p{S})$" datafile="All_good" grepcount="20"/>
-    <grepcase regexp="^\p{Tagbanwa}(?&lt;=\p{Cs})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Limbu}(?&lt;=\p{Z})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Tai_Le}(?&lt;=\p{Mc})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Linear_B}\p{Lu}]$" datafile="All_good" grepcount="1992"/>
-    <grepcase regexp="^\p{Ugaritic}(?&lt;=\p{So})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Shavian}\p{No}]$" datafile="All_good" grepcount="855"/>
-    <grepcase regexp="^[\p{Osmanya}\p{M}]$" datafile="All_good" grepcount="2273"/>
-    <grepcase regexp="^\p{Cypriot}(?&lt;!\p{Zl})$" datafile="All_good" grepcount="55"/>
-    <grepcase regexp="^\p{Braille}(?&lt;=\p{Nd})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Buginese}(?&lt;!\p{LC})$" datafile="All_good" grepcount="30"/>
-    <grepcase regexp="^\p{Coptic}(?&lt;!\p{Cc})$" datafile="All_good" grepcount="137"/>
-    <grepcase regexp="^[\p{New_Tai_Lue}\p{Pc}]$" datafile="All_good" grepcount="93"/>
-    <grepcase regexp="^\p{Glagolitic}(?&lt;=\p{S})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Tifinagh}(?&lt;!\p{L})$" datafile="All_good" grepcount="2"/>
-    <grepcase regexp="^\p{Syloti_Nagri}(?&lt;=\p{M})$" datafile="All_good" grepcount="8"/>
-    <grepcase regexp="^\p{Old_Persian}(?&lt;!\p{LC})$" datafile="All_good" grepcount="50"/>
-    <grepcase regexp="^\p{Kharoshthi}(?&lt;!\p{Pc})$" datafile="All_good" grepcount="68"/>
-    <grepcase regexp="^\p{Balinese}(?&lt;!\p{No})$" datafile="All_good" grepcount="121"/>
-    <grepcase regexp="^[\p{Cuneiform}\p{Sk}]$" datafile="All_good" grepcount="1355"/>
-    <grepcase regexp="^\p{Phoenician}(?&lt;=\p{Zp})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Phags_Pa}(?&lt;!\p{Pi})$" datafile="All_good" grepcount="56"/>
-    <grepcase regexp="^\p{Nko}(?&lt;=\p{Lm})$" datafile="All_good" grepcount="3"/>
-    <grepcase regexp="^\p{Sundanese}(?&lt;=\p{So})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Lepcha}(?&lt;=\p{Po})$" datafile="All_good" grepcount="5"/>
-    <grepcase regexp="^[\p{Ol_Chiki}\p{Zs}]$" datafile="All_good" grepcount="65"/>
-    <grepcase regexp="^[\p{Vai}\p{LC}]$" datafile="All_good" grepcount="4257"/>
-    <grepcase regexp="^[\p{Saurashtra}\p{Pe}]$" datafile="All_good" grepcount="155"/>
-    <grepcase regexp="^\p{Kayah_Li}(?&lt;!\p{Co})$" datafile="All_good" grepcount="47"/>
-    <grepcase regexp="^[\p{Rejang}\p{Po}]$" datafile="All_good" grepcount="620"/>
-    <grepcase regexp="^\p{Lycian}(?&lt;!\p{N})$" datafile="All_good" grepcount="29"/>
-    <grepcase regexp="^\p{Carian}(?&lt;=\p{Lm})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Lydian}(?&lt;!\p{Pe})$" datafile="All_good" grepcount="27"/>
-    <grepcase regexp="^\p{Cham}(?&lt;=\p{Pc})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Tai_Tham}\p{Ps}]$" datafile="All_good" grepcount="202"/>
-    <grepcase regexp="^\p{Tai_Viet}(?&lt;=\p{M})$" datafile="All_good" grepcount="9"/>
-    <grepcase regexp="^[\p{Avestan}\p{Cs}]$" datafile="All_good" grepcount="61"/>
-    <grepcase regexp="^\p{Egyptian_Hieroglyphs}(?&lt;=\p{Pe})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Samaritan}\p{Me}]$" datafile="All_good" grepcount="74"/>
-    <grepcase regexp="^\p{Lisu}(?&lt;!\p{Po})$" datafile="All_good" grepcount="46"/>
-    <grepcase regexp="^[\p{Bamum}\p{Pd}]$" datafile="All_good" grepcount="681"/>
-    <grepcase regexp="^\p{Javanese}(?&lt;=\p{Nl})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Meetei_Mayek}(?&lt;=\p{Cf})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Imperial_Aramaic}(?&lt;=\p{Sc})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Old_South_Arabian}(?&lt;=\p{Lo})$" datafile="All_good" grepcount="29"/>
-    <grepcase regexp="^\p{Inscriptional_Parthian}(?&lt;!\p{Lo})$" datafile="All_good" grepcount="8"/>
-    <grepcase regexp="^\p{Inscriptional_Pahlavi}(?&lt;=\p{P})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Old_Turkic}\p{Cs}]$" datafile="All_good" grepcount="73"/>
-    <grepcase regexp="^\p{Kaithi}(?&lt;!\p{Cs})$" datafile="All_good" grepcount="67"/>
-    <grepcase regexp="^[\p{Batak}\p{Ll}]$" datafile="All_good" grepcount="2201"/>
-    <grepcase regexp="^\p{Brahmi}(?&lt;=\p{Cc})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Mandaic}\p{LC}]$" datafile="All_good" grepcount="3986"/>
-    <grepcase regexp="^[\p{Chakma}\p{Mn}]$" datafile="All_good" grepcount="1859"/>
-    <grepcase regexp="^\p{Meroitic_Cursive}(?&lt;!\p{Pf})$" datafile="All_good" grepcount="90"/>
-    <grepcase regexp="^\p{Meroitic_Hieroglyphs}(?&lt;=\p{Mn})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Miao}\p{Mn}]$" datafile="All_good" grepcount="1934"/>
-    <grepcase regexp="^[\p{Sharada}\p{Ps}]$" datafile="All_good" grepcount="169"/>
-    <grepcase regexp="^[\p{Sora_Sompeng}\p{Lt}]$" datafile="All_good" grepcount="66"/>
-    <grepcase regexp="^\p{Takri}(?&lt;=\p{S})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Caucasian_Albanian}(?&lt;=\p{Cs})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Bassa_Vah}(?&lt;=\p{Cs})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Duployan}\p{So}]$" datafile="All_good" grepcount="6126"/>
-    <grepcase regexp="^[\p{Elbasan}\p{Pc}]$" datafile="All_good" grepcount="50"/>
-    <grepcase regexp="^\p{Grantha}(?&lt;!\p{S})$" datafile="All_good" grepcount="85"/>
-    <grepcase regexp="^\p{Pahawh_Hmong}(?&lt;!\p{Cc})$" datafile="All_good" grepcount="127"/>
-    <grepcase regexp="^\p{Khojki}(?&lt;!\p{Co})$" datafile="All_good" grepcount="62"/>
-    <grepcase regexp="^\p{Linear_A}(?&lt;!\p{Cc})$" datafile="All_good" grepcount="341"/>
-    <grepcase regexp="^\p{Mahajani}(?&lt;=\p{Cs})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Manichaean}(?&lt;!\p{LC})$" datafile="All_good" grepcount="51"/>
-    <grepcase regexp="^\p{Mende_Kikakui}(?&lt;!\p{Lt})$" datafile="All_good" grepcount="213"/>
-    <grepcase regexp="^[\p{Modi}\p{Cs}]$" datafile="All_good" grepcount="79"/>
-    <grepcase regexp="^\p{Mro}(?&lt;=\p{Lo})$" datafile="All_good" grepcount="31"/>
-    <grepcase regexp="^\p{Old_North_Arabian}(?&lt;!\p{Nl})$" datafile="All_good" grepcount="32"/>
-    <grepcase regexp="^[\p{Nabataean}\p{LC}]$" datafile="All_good" grepcount="3997"/>
-    <grepcase regexp="^\p{Palmyrene}(?&lt;!\p{N})$" datafile="All_good" grepcount="25"/>
-    <grepcase regexp="^\p{Pau_Cin_Hau}(?&lt;=\p{Pd})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Old_Permic}(?&lt;!\p{Sm})$" datafile="All_good" grepcount="43"/>
-    <grepcase regexp="^\p{Psalter_Pahlavi}(?&lt;=\p{Zp})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Siddham}(?&lt;=\p{Zl})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Khudawadi}(?&lt;=\p{S})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^[\p{Tirhuta}\p{L}]$" datafile="All_good" grepcount="125450"/>
-    <grepcase regexp="^[\p{Warang_Citi}\p{Ll}]$" datafile="All_good" grepcount="2197"/>
-    <grepcase regexp="^\p{Ahom}(?&lt;!\p{Lm})$" datafile="All_good" grepcount="58"/>
-    <grepcase regexp="^[\p{Anatolian_Hieroglyphs}\p{Pc}]$" datafile="All_good" grepcount="593"/>
-    <grepcase regexp="^[\p{Hatran}\p{Ps}]$" datafile="All_good" grepcount="101"/>
-    <grepcase regexp="^\p{Multani}(?&lt;!\p{Ps})$" datafile="All_good" grepcount="38"/>
-    <grepcase regexp="^\p{Old_Hungarian}(?&lt;!\p{Nd})$" datafile="All_good" grepcount="108"/>
-    <grepcase regexp="^\p{SignWriting}(?&lt;=\p{P})$" datafile="All_good" grepcount="5"/>
-    <grepcase regexp="^[\p{Adlam}\p{Pi}]$" datafile="All_good" grepcount="99"/>
-    <grepcase regexp="^\p{Bhaiksuki}(?&lt;=\p{Cn})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Marchen}(?&lt;!\p{Ll})$" datafile="All_good" grepcount="68"/>
-    <grepcase regexp="^\p{Newa}(?&lt;=\p{Lt})$" datafile="All_good" grepcount="0"/>
-    <grepcase regexp="^\p{Osage}(?&lt;!\p{Cc})$" datafile="All_good" grepcount="72"/>
-    <grepcase regexp="^\p{Tangut}(?&lt;!\p{Pc})$" datafile="All_good" grepcount="6886"/>
-    <grepcase regexp="^\p{Masaram_Gondi}(?&lt;!\p{Ll})$" datafile="All_good" grepcount="75"/>
-    <grepcase regexp="^[\p{Nushu}\p{Ps}]$" datafile="All_good" grepcount="472"/>
-    <grepcase regexp="^[\p{Soyombo}\p{Cn}]$" datafile="All_good" grepcount="837238"/>
-    <grepcase regexp="^[\p{Zanabazar_Square}\p{Nd}]$" datafile="All_good" grepcount="682"/>
-    <grepcase regexp="^[\p{Dogra}\p{N}]$" datafile="All_good" grepcount="1713"/>
-    <grepcase regexp="^[\p{Gunjala_Gondi}\p{P}]$" datafile="All_good" grepcount="851"/>
-    <grepcase regexp="^[\p{Makasar}\p{Ps}]$" datafile="All_good" grepcount="100"/>
-    <grepcase regexp="^[\p{Medefaidrin}\p{Sm}]$" datafile="All_good" grepcount="1039"/>
-    <grepcase regexp="^\p{Hanifi_Rohingya}(?&lt;=\p{M})$" datafile="All_good" grepcount="4"/>
-    <grepcase regexp="^\p{Sogdian}(?&lt;=\p{L})$" datafile="All_good" grepcount="22"/>
-    <grepcase regexp="^[\p{Old_Sogdian}\p{Pd}]$" datafile="All_good" grepcount="64"/>
-    <grepcase regexp="^[\p{Katakana_Or_Hiragana}\p{Mc}]$" datafile="All_good" grepcount="415"/>
+<grepcase regexp="^\p{Cn}$" datafile="All_good" grepcount="830672"/>
+<grepcase regexp="^\p{Lu}$" datafile="All_good" grepcount="1791"/>
+<grepcase regexp="^\p{Ll}$" datafile="All_good" grepcount="2155"/>
+<grepcase regexp="^\p{Lt}$" datafile="All_good" grepcount="31"/>
+<grepcase regexp="^\p{Lm}$" datafile="All_good" grepcount="260"/>
+<grepcase regexp="^\p{Lo}$" datafile="All_good" grepcount="127004"/>
+<grepcase regexp="^\p{Mn}$" datafile="All_good" grepcount="1839"/>
+<grepcase regexp="^\p{Me}$" datafile="All_good" grepcount="13"/>
+<grepcase regexp="^\p{Mc}$" datafile="All_good" grepcount="443"/>
+<grepcase regexp="^\P{Nd}$" datafile="All_good" grepcount="1111379"/>
+<grepcase regexp="^\p{Nl}$" datafile="All_good" grepcount="236"/>
+<grepcase regexp="^\p{No}$" datafile="All_good" grepcount="895"/>
+<grepcase regexp="^\p{Zs}$" datafile="All_good" grepcount="17"/>
+<grepcase regexp="^\p{Zl}$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Zp}$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Cc}$" datafile="All_good" grepcount="32"/>
+<grepcase regexp="^\p{Cf}$" datafile="All_good" grepcount="161"/>
+<grepcase regexp="^\P{Co}$" datafile="All_good" grepcount="974561"/>
+<grepcase regexp="^\p{Cs}$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Pd}$" datafile="All_good" grepcount="25"/>
+<grepcase regexp="^\P{Ps}$" datafile="All_good" grepcount="1111954"/>
+<grepcase regexp="^\p{Pe}$" datafile="All_good" grepcount="73"/>
+<grepcase regexp="^\p{Pc}$" datafile="All_good" grepcount="10"/>
+<grepcase regexp="^\p{Po}$" datafile="All_good" grepcount="593"/>
+<grepcase regexp="^\p{Sm}$" datafile="All_good" grepcount="948"/>
+<grepcase regexp="^\P{Sc}$" datafile="All_good" grepcount="1111967"/>
+<grepcase regexp="^\p{Sk}$" datafile="All_good" grepcount="123"/>
+<grepcase regexp="^\p{So}$" datafile="All_good" grepcount="6431"/>
+<grepcase regexp="^\p{Pi}$" datafile="All_good" grepcount="12"/>
+<grepcase regexp="^\p{Pf}$" datafile="All_good" grepcount="10"/>
+<grepcase regexp="^\p{C}$" datafile="All_good" grepcount="968333"/>
+<grepcase regexp="^\P{L}$" datafile="All_good" grepcount="980788"/>
+<grepcase regexp="^\p{LC}$" datafile="All_good" grepcount="3977"/>
+<grepcase regexp="^\P{M}$" datafile="All_good" grepcount="1109734"/>
+<grepcase regexp="^\p{N}$" datafile="All_good" grepcount="1781"/>
+<grepcase regexp="^\p{P}$" datafile="All_good" grepcount="798"/>
+<grepcase regexp="^\p{S}$" datafile="All_good" grepcount="7564"/>
+<grepcase regexp="^\p{Z}$" datafile="All_good" grepcount="17"/>
+<grepcase regexp="^\p{Unknown}$" datafile="All_good" grepcount="968140"/>
+<grepcase regexp="^\p{Common}$" datafile="All_good" grepcount="8052"/>
+<grepcase regexp="^\p{Latin}$" datafile="All_good" grepcount="1374"/>
+<grepcase regexp="^\p{Greek}$" datafile="All_good" grepcount="518"/>
+<grepcase regexp="^\p{Cyrillic}$" datafile="All_good" grepcount="443"/>
+<grepcase regexp="^\p{Armenian}$" datafile="All_good" grepcount="96"/>
+<grepcase regexp="^\p{Hebrew}$" datafile="All_good" grepcount="134"/>
+<grepcase regexp="^\P{Arabic}$" datafile="All_good" grepcount="1110738"/>
+<grepcase regexp="^\p{Syriac}$" datafile="All_good" grepcount="88"/>
+<grepcase regexp="^\p{Thaana}$" datafile="All_good" grepcount="50"/>
+<grepcase regexp="^\p{Devanagari}$" datafile="All_good" grepcount="154"/>
+<grepcase regexp="^\p{Bengali}$" datafile="All_good" grepcount="96"/>
+<grepcase regexp="^\p{Gurmukhi}$" datafile="All_good" grepcount="80"/>
+<grepcase regexp="^\P{Gujarati}$" datafile="All_good" grepcount="1111938"/>
+<grepcase regexp="^\p{Oriya}$" datafile="All_good" grepcount="91"/>
+<grepcase regexp="^\p{Tamil}$" datafile="All_good" grepcount="123"/>
+<grepcase regexp="^\p{Telugu}$" datafile="All_good" grepcount="98"/>
+<grepcase regexp="^\p{Kannada}$" datafile="All_good" grepcount="89"/>
+<grepcase regexp="^\P{Malayalam}$" datafile="All_good" grepcount="1111911"/>
+<grepcase regexp="^\p{Sinhala}$" datafile="All_good" grepcount="111"/>
+<grepcase regexp="^\p{Thai}$" datafile="All_good" grepcount="86"/>
+<grepcase regexp="^\p{Lao}$" datafile="All_good" grepcount="82"/>
+<grepcase regexp="^\p{Tibetan}$" datafile="All_good" grepcount="207"/>
+<grepcase regexp="^\p{Myanmar}$" datafile="All_good" grepcount="223"/>
+<grepcase regexp="^\p{Georgian}$" datafile="All_good" grepcount="173"/>
+<grepcase regexp="^\p{Hangul}$" datafile="All_good" grepcount="11739"/>
+<grepcase regexp="^\p{Ethiopic}$" datafile="All_good" grepcount="495"/>
+<grepcase regexp="^\p{Cherokee}$" datafile="All_good" grepcount="172"/>
+<grepcase regexp="^\P{Canadian_Aboriginal}$" datafile="All_good" grepcount="1111319"/>
+<grepcase regexp="^\p{Ogham}$" datafile="All_good" grepcount="29"/>
+<grepcase regexp="^\p{Runic}$" datafile="All_good" grepcount="86"/>
+<grepcase regexp="^\p{Khmer}$" datafile="All_good" grepcount="146"/>
+<grepcase regexp="^\p{Mongolian}$" datafile="All_good" grepcount="167"/>
+<grepcase regexp="^\p{Hiragana}$" datafile="All_good" grepcount="379"/>
+<grepcase regexp="^\p{Katakana}$" datafile="All_good" grepcount="304"/>
+<grepcase regexp="^\p{Bopomofo}$" datafile="All_good" grepcount="77"/>
+<grepcase regexp="^\p{Han}$" datafile="All_good" grepcount="94204"/>
+<grepcase regexp="^\P{Yi}$" datafile="All_good" grepcount="1110809"/>
+<grepcase regexp="^\p{Old_Italic}$" datafile="All_good" grepcount="39"/>
+<grepcase regexp="^\p{Gothic}$" datafile="All_good" grepcount="27"/>
+<grepcase regexp="^\p{Deseret}$" datafile="All_good" grepcount="80"/>
+<grepcase regexp="^\p{Inherited}$" datafile="All_good" grepcount="573"/>
+<grepcase regexp="^\p{Tagalog}$" datafile="All_good" grepcount="20"/>
+<grepcase regexp="^\p{Hanunoo}$" datafile="All_good" grepcount="21"/>
+<grepcase regexp="^\p{Buhid}$" datafile="All_good" grepcount="20"/>
+<grepcase regexp="^\p{Tagbanwa}$" datafile="All_good" grepcount="18"/>
+<grepcase regexp="^\P{Limbu}$" datafile="All_good" grepcount="1111961"/>
+<grepcase regexp="^\p{Tai_Le}$" datafile="All_good" grepcount="35"/>
+<grepcase regexp="^\p{Linear_B}$" datafile="All_good" grepcount="211"/>
+<grepcase regexp="^\p{Ugaritic}$" datafile="All_good" grepcount="31"/>
+<grepcase regexp="^\P{Shavian}$" datafile="All_good" grepcount="1111981"/>
+<grepcase regexp="^\p{Osmanya}$" datafile="All_good" grepcount="40"/>
+<grepcase regexp="^\p{Cypriot}$" datafile="All_good" grepcount="55"/>
+<grepcase regexp="^\p{Braille}$" datafile="All_good" grepcount="256"/>
+<grepcase regexp="^\p{Buginese}$" datafile="All_good" grepcount="30"/>
+<grepcase regexp="^\p{Coptic}$" datafile="All_good" grepcount="137"/>
+<grepcase regexp="^\p{New_Tai_Lue}$" datafile="All_good" grepcount="83"/>
+<grepcase regexp="^\p{Glagolitic}$" datafile="All_good" grepcount="132"/>
+<grepcase regexp="^\p{Tifinagh}$" datafile="All_good" grepcount="59"/>
+<grepcase regexp="^\p{Syloti_Nagri}$" datafile="All_good" grepcount="45"/>
+<grepcase regexp="^\p{Old_Persian}$" datafile="All_good" grepcount="50"/>
+<grepcase regexp="^\p{Kharoshthi}$" datafile="All_good" grepcount="68"/>
+<grepcase regexp="^\p{Balinese}$" datafile="All_good" grepcount="121"/>
+<grepcase regexp="^\p{Cuneiform}$" datafile="All_good" grepcount="1234"/>
+<grepcase regexp="^\p{Phoenician}$" datafile="All_good" grepcount="29"/>
+<grepcase regexp="^\p{Phags_Pa}$" datafile="All_good" grepcount="56"/>
+<grepcase regexp="^\p{Nko}$" datafile="All_good" grepcount="62"/>
+<grepcase regexp="^\p{Sundanese}$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^\p{Lepcha}$" datafile="All_good" grepcount="74"/>
+<grepcase regexp="^\p{Ol_Chiki}$" datafile="All_good" grepcount="48"/>
+<grepcase regexp="^\p{Vai}$" datafile="All_good" grepcount="300"/>
+<grepcase regexp="^\p{Saurashtra}$" datafile="All_good" grepcount="82"/>
+<grepcase regexp="^\p{Kayah_Li}$" datafile="All_good" grepcount="47"/>
+<grepcase regexp="^\p{Rejang}$" datafile="All_good" grepcount="37"/>
+<grepcase regexp="^\p{Lycian}$" datafile="All_good" grepcount="29"/>
+<grepcase regexp="^\p{Carian}$" datafile="All_good" grepcount="49"/>
+<grepcase regexp="^\p{Lydian}$" datafile="All_good" grepcount="27"/>
+<grepcase regexp="^\P{Cham}$" datafile="All_good" grepcount="1111946"/>
+<grepcase regexp="^\p{Tai_Tham}$" datafile="All_good" grepcount="127"/>
+<grepcase regexp="^\P{Tai_Viet}$" datafile="All_good" grepcount="1111957"/>
+<grepcase regexp="^\p{Avestan}$" datafile="All_good" grepcount="61"/>
+<grepcase regexp="^\p{Egyptian_Hieroglyphs}$" datafile="All_good" grepcount="1080"/>
+<grepcase regexp="^\p{Samaritan}$" datafile="All_good" grepcount="61"/>
+<grepcase regexp="^\p{Lisu}$" datafile="All_good" grepcount="49"/>
+<grepcase regexp="^\p{Bamum}$" datafile="All_good" grepcount="657"/>
+<grepcase regexp="^\p{Javanese}$" datafile="All_good" grepcount="90"/>
+<grepcase regexp="^\p{Meetei_Mayek}$" datafile="All_good" grepcount="79"/>
+<grepcase regexp="^\P{Imperial_Aramaic}$" datafile="All_good" grepcount="1111998"/>
+<grepcase regexp="^\p{Old_South_Arabian}$" datafile="All_good" grepcount="32"/>
+<grepcase regexp="^\p{Inscriptional_Parthian}$" datafile="All_good" grepcount="30"/>
+<grepcase regexp="^\p{Inscriptional_Pahlavi}$" datafile="All_good" grepcount="27"/>
+<grepcase regexp="^\P{Old_Turkic}$" datafile="All_good" grepcount="1111956"/>
+<grepcase regexp="^\p{Kaithi}$" datafile="All_good" grepcount="67"/>
+<grepcase regexp="^\p{Batak}$" datafile="All_good" grepcount="56"/>
+<grepcase regexp="^\p{Brahmi}$" datafile="All_good" grepcount="109"/>
+<grepcase regexp="^\p{Mandaic}$" datafile="All_good" grepcount="29"/>
+<grepcase regexp="^\p{Chakma}$" datafile="All_good" grepcount="71"/>
+<grepcase regexp="^\p{Meroitic_Cursive}$" datafile="All_good" grepcount="90"/>
+<grepcase regexp="^\p{Meroitic_Hieroglyphs}$" datafile="All_good" grepcount="32"/>
+<grepcase regexp="^\p{Miao}$" datafile="All_good" grepcount="149"/>
+<grepcase regexp="^\p{Sharada}$" datafile="All_good" grepcount="96"/>
+<grepcase regexp="^\p{Sora_Sompeng}$" datafile="All_good" grepcount="35"/>
+<grepcase regexp="^\p{Takri}$" datafile="All_good" grepcount="67"/>
+<grepcase regexp="^\p{Caucasian_Albanian}$" datafile="All_good" grepcount="53"/>
+<grepcase regexp="^\p{Bassa_Vah}$" datafile="All_good" grepcount="36"/>
+<grepcase regexp="^\p{Duployan}$" datafile="All_good" grepcount="143"/>
+<grepcase regexp="^\p{Elbasan}$" datafile="All_good" grepcount="40"/>
+<grepcase regexp="^\p{Grantha}$" datafile="All_good" grepcount="85"/>
+<grepcase regexp="^\p{Pahawh_Hmong}$" datafile="All_good" grepcount="127"/>
+<grepcase regexp="^\p{Khojki}$" datafile="All_good" grepcount="62"/>
+<grepcase regexp="^\p{Linear_A}$" datafile="All_good" grepcount="341"/>
+<grepcase regexp="^\p{Mahajani}$" datafile="All_good" grepcount="39"/>
+<grepcase regexp="^\p{Manichaean}$" datafile="All_good" grepcount="51"/>
+<grepcase regexp="^\p{Mende_Kikakui}$" datafile="All_good" grepcount="213"/>
+<grepcase regexp="^\p{Modi}$" datafile="All_good" grepcount="79"/>
+<grepcase regexp="^\P{Mro}$" datafile="All_good" grepcount="1111986"/>
+<grepcase regexp="^\p{Old_North_Arabian}$" datafile="All_good" grepcount="32"/>
+<grepcase regexp="^\p{Nabataean}$" datafile="All_good" grepcount="40"/>
+<grepcase regexp="^\p{Palmyrene}$" datafile="All_good" grepcount="32"/>
+<grepcase regexp="^\p{Pau_Cin_Hau}$" datafile="All_good" grepcount="57"/>
+<grepcase regexp="^\p{Old_Permic}$" datafile="All_good" grepcount="43"/>
+<grepcase regexp="^\p{Psalter_Pahlavi}$" datafile="All_good" grepcount="29"/>
+<grepcase regexp="^\p{Siddham}$" datafile="All_good" grepcount="92"/>
+<grepcase regexp="^\p{Khudawadi}$" datafile="All_good" grepcount="69"/>
+<grepcase regexp="^\p{Tirhuta}$" datafile="All_good" grepcount="82"/>
+<grepcase regexp="^\p{Warang_Citi}$" datafile="All_good" grepcount="84"/>
+<grepcase regexp="^\p{Ahom}$" datafile="All_good" grepcount="58"/>
+<grepcase regexp="^\p{Anatolian_Hieroglyphs}$" datafile="All_good" grepcount="583"/>
+<grepcase regexp="^\p{Hatran}$" datafile="All_good" grepcount="26"/>
+<grepcase regexp="^\p{Multani}$" datafile="All_good" grepcount="38"/>
+<grepcase regexp="^\p{Old_Hungarian}$" datafile="All_good" grepcount="108"/>
+<grepcase regexp="^\p{SignWriting}$" datafile="All_good" grepcount="672"/>
+<grepcase regexp="^\p{Adlam}$" datafile="All_good" grepcount="88"/>
+<grepcase regexp="^\p{Bhaiksuki}$" datafile="All_good" grepcount="97"/>
+<grepcase regexp="^\P{Marchen}$" datafile="All_good" grepcount="1111961"/>
+<grepcase regexp="^\p{Newa}$" datafile="All_good" grepcount="97"/>
+<grepcase regexp="^\p{Osage}$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^\p{Tangut}$" datafile="All_good" grepcount="6914"/>
+<grepcase regexp="^\p{Masaram_Gondi}$" datafile="All_good" grepcount="75"/>
+<grepcase regexp="^\p{Nushu}$" datafile="All_good" grepcount="397"/>
+<grepcase regexp="^\P{Soyombo}$" datafile="All_good" grepcount="1111946"/>
+<grepcase regexp="^\p{Zanabazar_Square}$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^\p{Dogra}$" datafile="All_good" grepcount="60"/>
+<grepcase regexp="^\p{Gunjala_Gondi}$" datafile="All_good" grepcount="63"/>
+<grepcase regexp="^\p{Makasar}$" datafile="All_good" grepcount="25"/>
+<grepcase regexp="^\p{Medefaidrin}$" datafile="All_good" grepcount="91"/>
+<grepcase regexp="^\p{Hanifi_Rohingya}$" datafile="All_good" grepcount="50"/>
+<grepcase regexp="^\p{Sogdian}$" datafile="All_good" grepcount="42"/>
+<grepcase regexp="^\p{Old_Sogdian}$" datafile="All_good" grepcount="40"/>
+<grepcase regexp="^\p{Elymaic}$" datafile="All_good" grepcount="23"/>
+<grepcase regexp="^\p{Nandinagari}$" datafile="All_good" grepcount="65"/>
+<grepcase regexp="^\p{Nyiakeng_Puachue_Hmong}$" datafile="All_good" grepcount="71"/>
+<grepcase regexp="^\p{Wancho}$" datafile="All_good" grepcount="59"/>
+<grepcase regexp="^\p{Chorasmian}$" datafile="All_good" grepcount="28"/>
+<grepcase regexp="^\p{Dives_Akuru}$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^\p{Khitan_Small_Script}$" datafile="All_good" grepcount="471"/>
+<grepcase regexp="^\p{Yezidi}$" datafile="All_good" grepcount="47"/>
+<grepcase regexp="^\p{Katakana_Or_Hiragana}$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Cn}(?&lt;!\p{Hanifi_Rohingya})$" datafile="All_good" grepcount="830672"/>
+<grepcase regexp="^[\p{Lu}\p{Rejang}]$" datafile="All_good" grepcount="1828"/>
+<grepcase regexp="^[\p{Ll}\p{Carian}]$" datafile="All_good" grepcount="2204"/>
+<grepcase regexp="^\p{Lt}(?&lt;=\p{Kayah_Li})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Lm}\p{Old_South_Arabian}]$" datafile="All_good" grepcount="292"/>
+<grepcase regexp="^\p{Lo}(?&lt;!\p{Tagbanwa})$" datafile="All_good" grepcount="126988"/>
+<grepcase regexp="^[\p{Mn}\p{Arabic}]$" datafile="All_good" grepcount="3046"/>
+<grepcase regexp="^\p{Me}(?&lt;!\p{Kannada})$" datafile="All_good" grepcount="13"/>
+<grepcase regexp="^[\p{Mc}\p{Tagalog}]$" datafile="All_good" grepcount="463"/>
+<grepcase regexp="^\p{Nd}(?&lt;=\p{Latin})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Nl}(?&lt;=\p{Gothic})$" datafile="All_good" grepcount="2"/>
+<grepcase regexp="^\p{No}(?&lt;=\p{Old_Sogdian})$" datafile="All_good" grepcount="10"/>
+<grepcase regexp="^\p{Zs}(?&lt;=\p{Masaram_Gondi})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Zl}(?&lt;=\p{Shavian})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Zp}(?&lt;!\p{Old_Italic})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Cc}(?&lt;=\p{Nandinagari})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Cf}\p{Caucasian_Albanian}]$" datafile="All_good" grepcount="214"/>
+<grepcase regexp="^\p{Co}(?&lt;!\p{Warang_Citi})$" datafile="All_good" grepcount="137468"/>
+<grepcase regexp="^\p{Cs}(?&lt;!\p{Modi})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Pd}(?&lt;=\p{Osmanya})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Ps}\p{Inherited}]$" datafile="All_good" grepcount="648"/>
+<grepcase regexp="^[\p{Pe}\p{Vai}]$" datafile="All_good" grepcount="373"/>
+<grepcase regexp="^[\p{Pc}\p{Old_Turkic}]$" datafile="All_good" grepcount="83"/>
+<grepcase regexp="^[\p{Po}\p{Runic}]$" datafile="All_good" grepcount="679"/>
+<grepcase regexp="^\p{Sm}(?&lt;!\p{Samaritan})$" datafile="All_good" grepcount="948"/>
+<grepcase regexp="^\p{Sc}(?&lt;!\p{Yezidi})$" datafile="All_good" grepcount="62"/>
+<grepcase regexp="^\p{Sk}(?&lt;=\p{Egyptian_Hieroglyphs})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{So}(?&lt;=\p{Hanunoo})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Pi}\p{Ogham}]$" datafile="All_good" grepcount="41"/>
+<grepcase regexp="^\p{Pf}(?&lt;=\p{Nabataean})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{C}\p{Latin}]$" datafile="All_good" grepcount="969707"/>
+<grepcase regexp="^\p{L}(?&lt;=\p{Old_Sogdian})$" datafile="All_good" grepcount="30"/>
+<grepcase regexp="^[\p{LC}\p{Unknown}]$" datafile="All_good" grepcount="972117"/>
+<grepcase regexp="^\p{M}(?&lt;!\p{Cuneiform})$" datafile="All_good" grepcount="2295"/>
+<grepcase regexp="^\p{N}(?&lt;!\p{Cypriot})$" datafile="All_good" grepcount="1781"/>
+<grepcase regexp="^\p{P}(?&lt;!\p{Warang_Citi})$" datafile="All_good" grepcount="798"/>
+<grepcase regexp="^[\p{S}\p{Hebrew}]$" datafile="All_good" grepcount="7697"/>
+<grepcase regexp="^\p{Z}(?&lt;!\p{Inscriptional_Parthian})$" datafile="All_good" grepcount="17"/>
+<grepcase regexp="^[\p{Unknown}\p{Cf}]$" datafile="All_good" grepcount="968301"/>
+<grepcase regexp="^[\p{Common}\p{N}]$" datafile="All_good" grepcount="9277"/>
+<grepcase regexp="^\p{Latin}(?&lt;=\p{N})$" datafile="All_good" grepcount="39"/>
+<grepcase regexp="^\p{Greek}(?&lt;!\p{Z})$" datafile="All_good" grepcount="518"/>
+<grepcase regexp="^[\p{Cyrillic}\p{M}]$" datafile="All_good" grepcount="2683"/>
+<grepcase regexp="^\p{Armenian}(?&lt;=\p{Cf})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Hebrew}\p{C}]$" datafile="All_good" grepcount="968467"/>
+<grepcase regexp="^\p{Arabic}(?&lt;=\p{Pi})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Syriac}(?&lt;!\p{Pd})$" datafile="All_good" grepcount="88"/>
+<grepcase regexp="^[\p{Thaana}\p{Pd}]$" datafile="All_good" grepcount="75"/>
+<grepcase regexp="^\p{Devanagari}(?&lt;=\p{Lu})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Bengali}(?&lt;=\p{Me})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Gurmukhi}(?&lt;=\p{Nl})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Gujarati}\p{Cf}]$" datafile="All_good" grepcount="252"/>
+<grepcase regexp="^\p{Oriya}(?&lt;!\p{So})$" datafile="All_good" grepcount="90"/>
+<grepcase regexp="^\p{Tamil}(?&lt;!\p{So})$" datafile="All_good" grepcount="91"/>
+<grepcase regexp="^[\p{Telugu}\p{Cc}]$" datafile="All_good" grepcount="130"/>
+<grepcase regexp="^\p{Kannada}(?&lt;=\p{Po})$" datafile="All_good" grepcount="1"/>
+<grepcase regexp="^\p{Malayalam}(?&lt;=\p{Mn})$" datafile="All_good" grepcount="11"/>
+<grepcase regexp="^\p{Sinhala}(?&lt;=\p{Mn})$" datafile="All_good" grepcount="6"/>
+<grepcase regexp="^[\p{Thai}\p{P}]$" datafile="All_good" grepcount="881"/>
+<grepcase regexp="^\p{Lao}(?&lt;=\p{Lt})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Tibetan}\p{Cf}]$" datafile="All_good" grepcount="368"/>
+<grepcase regexp="^\p{Myanmar}(?&lt;!\p{Zs})$" datafile="All_good" grepcount="223"/>
+<grepcase regexp="^\p{Georgian}(?&lt;!\p{Cs})$" datafile="All_good" grepcount="173"/>
+<grepcase regexp="^[\p{Hangul}\p{Lo}]$" datafile="All_good" grepcount="127068"/>
+<grepcase regexp="^\p{Ethiopic}(?&lt;!\p{Po})$" datafile="All_good" grepcount="486"/>
+<grepcase regexp="^\p{Cherokee}(?&lt;=\p{Zp})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Canadian_Aboriginal}(?&lt;=\p{LC})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Ogham}(?&lt;=\p{Ps})$" datafile="All_good" grepcount="1"/>
+<grepcase regexp="^\p{Runic}(?&lt;=\p{Mc})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Khmer}(?&lt;=\p{Nl})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Mongolian}(?&lt;!\p{Pd})$" datafile="All_good" grepcount="166"/>
+<grepcase regexp="^\p{Hiragana}(?&lt;=\p{Mc})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Katakana}(?&lt;=\p{Lu})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Bopomofo}\p{L}]$" datafile="All_good" grepcount="131243"/>
+<grepcase regexp="^\p{Han}(?&lt;=\p{No})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Yi}(?&lt;!\p{Lu})$" datafile="All_good" grepcount="1220"/>
+<grepcase regexp="^[\p{Old_Italic}\p{LC}]$" datafile="All_good" grepcount="4016"/>
+<grepcase regexp="^\p{Gothic}(?&lt;!\p{Lm})$" datafile="All_good" grepcount="27"/>
+<grepcase regexp="^\p{Deseret}(?&lt;!\p{Pi})$" datafile="All_good" grepcount="80"/>
+<grepcase regexp="^\p{Inherited}(?&lt;!\p{Mn})$" datafile="All_good" grepcount="10"/>
+<grepcase regexp="^\p{Tagalog}(?&lt;!\p{L})$" datafile="All_good" grepcount="3"/>
+<grepcase regexp="^[\p{Hanunoo}\p{Cn}]$" datafile="All_good" grepcount="830693"/>
+<grepcase regexp="^\p{Buhid}(?&lt;!\p{Ll})$" datafile="All_good" grepcount="20"/>
+<grepcase regexp="^\p{Tagbanwa}(?&lt;=\p{LC})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Limbu}(?&lt;!\p{Cs})$" datafile="All_good" grepcount="68"/>
+<grepcase regexp="^\p{Tai_Le}(?&lt;=\p{L})$" datafile="All_good" grepcount="35"/>
+<grepcase regexp="^\p{Linear_B}(?&lt;=\p{Cs})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Ugaritic}(?&lt;=\p{Sm})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Shavian}(?&lt;!\p{Pi})$" datafile="All_good" grepcount="48"/>
+<grepcase regexp="^\p{Osmanya}(?&lt;=\p{Sm})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Cypriot}(?&lt;=\p{So})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Braille}(?&lt;=\p{Sm})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Buginese}\p{Sk}]$" datafile="All_good" grepcount="153"/>
+<grepcase regexp="^\p{Coptic}(?&lt;=\p{Cn})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{New_Tai_Lue}\p{Lo}]$" datafile="All_good" grepcount="127017"/>
+<grepcase regexp="^\p{Glagolitic}(?&lt;=\p{Ps})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Tifinagh}(?&lt;!\p{L})$" datafile="All_good" grepcount="2"/>
+<grepcase regexp="^[\p{Syloti_Nagri}\p{Co}]$" datafile="All_good" grepcount="137513"/>
+<grepcase regexp="^[\p{Old_Persian}\p{Sm}]$" datafile="All_good" grepcount="998"/>
+<grepcase regexp="^[\p{Kharoshthi}\p{C}]$" datafile="All_good" grepcount="968401"/>
+<grepcase regexp="^\p{Balinese}(?&lt;=\p{Ll})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Cuneiform}(?&lt;!\p{No})$" datafile="All_good" grepcount="1234"/>
+<grepcase regexp="^\p{Phoenician}(?&lt;=\p{So})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Phags_Pa}(?&lt;!\p{Sm})$" datafile="All_good" grepcount="56"/>
+<grepcase regexp="^\p{Nko}(?&lt;!\p{N})$" datafile="All_good" grepcount="52"/>
+<grepcase regexp="^\p{Sundanese}(?&lt;!\p{C})$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^[\p{Lepcha}\p{Lo}]$" datafile="All_good" grepcount="127039"/>
+<grepcase regexp="^\p{Ol_Chiki}(?&lt;!\p{Pe})$" datafile="All_good" grepcount="48"/>
+<grepcase regexp="^[\p{Vai}\p{No}]$" datafile="All_good" grepcount="1195"/>
+<grepcase regexp="^\p{Saurashtra}(?&lt;=\p{Zl})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Kayah_Li}(?&lt;=\p{Lo})$" datafile="All_good" grepcount="28"/>
+<grepcase regexp="^\p{Rejang}(?&lt;=\p{Cf})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Lycian}\p{Ps}]$" datafile="All_good" grepcount="104"/>
+<grepcase regexp="^[\p{Carian}\p{Cn}]$" datafile="All_good" grepcount="830721"/>
+<grepcase regexp="^\p{Lydian}(?&lt;!\p{Mc})$" datafile="All_good" grepcount="27"/>
+<grepcase regexp="^\p{Cham}(?&lt;!\p{Pi})$" datafile="All_good" grepcount="83"/>
+<grepcase regexp="^\p{Tai_Tham}(?&lt;!\p{Sm})$" datafile="All_good" grepcount="127"/>
+<grepcase regexp="^\p{Tai_Viet}(?&lt;!\p{Co})$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^\p{Avestan}(?&lt;!\p{S})$" datafile="All_good" grepcount="61"/>
+<grepcase regexp="^\p{Egyptian_Hieroglyphs}(?&lt;=\p{S})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Samaritan}\p{Ps}]$" datafile="All_good" grepcount="136"/>
+<grepcase regexp="^\p{Lisu}(?&lt;!\p{Nl})$" datafile="All_good" grepcount="49"/>
+<grepcase regexp="^\p{Bamum}(?&lt;=\p{S})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Javanese}(?&lt;=\p{S})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Meetei_Mayek}(?&lt;!\p{Cf})$" datafile="All_good" grepcount="79"/>
+<grepcase regexp="^\p{Imperial_Aramaic}(?&lt;=\p{Lm})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Old_South_Arabian}(?&lt;=\p{Co})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Inscriptional_Parthian}\p{Mc}]$" datafile="All_good" grepcount="473"/>
+<grepcase regexp="^\p{Inscriptional_Pahlavi}(?&lt;!\p{Ll})$" datafile="All_good" grepcount="27"/>
+<grepcase regexp="^\p{Old_Turkic}(?&lt;!\p{Cc})$" datafile="All_good" grepcount="73"/>
+<grepcase regexp="^[\p{Kaithi}\p{Zp}]$" datafile="All_good" grepcount="67"/>
+<grepcase regexp="^[\p{Batak}\p{LC}]$" datafile="All_good" grepcount="4033"/>
+<grepcase regexp="^[\p{Brahmi}\p{Ll}]$" datafile="All_good" grepcount="2264"/>
+<grepcase regexp="^\p{Mandaic}(?&lt;!\p{Pf})$" datafile="All_good" grepcount="29"/>
+<grepcase regexp="^\p{Chakma}(?&lt;!\p{Mn})$" datafile="All_good" grepcount="55"/>
+<grepcase regexp="^[\p{Meroitic_Cursive}\p{Cn}]$" datafile="All_good" grepcount="830762"/>
+<grepcase regexp="^\p{Meroitic_Hieroglyphs}(?&lt;=\p{Cf})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Miao}(?&lt;=\p{Cn})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Sharada}(?&lt;=\p{Pf})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Sora_Sompeng}\p{Pc}]$" datafile="All_good" grepcount="45"/>
+<grepcase regexp="^[\p{Takri}\p{Nd}]$" datafile="All_good" grepcount="707"/>
+<grepcase regexp="^\p{Caucasian_Albanian}(?&lt;=\p{Lu})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Bassa_Vah}(?&lt;!\p{Pd})$" datafile="All_good" grepcount="36"/>
+<grepcase regexp="^[\p{Duployan}\p{Ll}]$" datafile="All_good" grepcount="2298"/>
+<grepcase regexp="^\p{Elbasan}(?&lt;=\p{Mc})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Grantha}\p{No}]$" datafile="All_good" grepcount="980"/>
+<grepcase regexp="^\p{Pahawh_Hmong}(?&lt;=\p{So})$" datafile="All_good" grepcount="5"/>
+<grepcase regexp="^[\p{Khojki}\p{Mc}]$" datafile="All_good" grepcount="499"/>
+<grepcase regexp="^\p{Linear_A}(?&lt;=\p{Sc})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Mahajani}(?&lt;!\p{M})$" datafile="All_good" grepcount="38"/>
+<grepcase regexp="^[\p{Manichaean}\p{Zp}]$" datafile="All_good" grepcount="51"/>
+<grepcase regexp="^\p{Mende_Kikakui}(?&lt;!\p{M})$" datafile="All_good" grepcount="206"/>
+<grepcase regexp="^\p{Modi}(?&lt;=\p{Z})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Mro}(?&lt;=\p{Lo})$" datafile="All_good" grepcount="31"/>
+<grepcase regexp="^[\p{Old_North_Arabian}\p{Pc}]$" datafile="All_good" grepcount="42"/>
+<grepcase regexp="^\p{Nabataean}(?&lt;=\p{Me})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Palmyrene}\p{Mc}]$" datafile="All_good" grepcount="475"/>
+<grepcase regexp="^[\p{Pau_Cin_Hau}\p{N}]$" datafile="All_good" grepcount="1838"/>
+<grepcase regexp="^[\p{Old_Permic}\p{Cc}]$" datafile="All_good" grepcount="75"/>
+<grepcase regexp="^\p{Psalter_Pahlavi}(?&lt;!\p{Pi})$" datafile="All_good" grepcount="29"/>
+<grepcase regexp="^\p{Siddham}(?&lt;=\p{S})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Khudawadi}(?&lt;!\p{Co})$" datafile="All_good" grepcount="69"/>
+<grepcase regexp="^\p{Tirhuta}(?&lt;=\p{No})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Warang_Citi}(?&lt;!\p{Mc})$" datafile="All_good" grepcount="84"/>
+<grepcase regexp="^[\p{Ahom}\p{N}]$" datafile="All_good" grepcount="1827"/>
+<grepcase regexp="^\p{Anatolian_Hieroglyphs}(?&lt;!\p{Pc})$" datafile="All_good" grepcount="583"/>
+<grepcase regexp="^\p{Hatran}(?&lt;=\p{So})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Multani}(?&lt;=\p{Lm})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Old_Hungarian}(?&lt;!\p{No})$" datafile="All_good" grepcount="102"/>
+<grepcase regexp="^\p{SignWriting}(?&lt;!\p{Sm})$" datafile="All_good" grepcount="672"/>
+<grepcase regexp="^\p{Adlam}(?&lt;=\p{M})$" datafile="All_good" grepcount="7"/>
+<grepcase regexp="^\p{Bhaiksuki}(?&lt;=\p{No})$" datafile="All_good" grepcount="19"/>
+<grepcase regexp="^\p{Marchen}(?&lt;=\p{Sc})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Newa}(?&lt;=\p{Pd})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^\p{Osage}(?&lt;!\p{Z})$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^[\p{Tangut}\p{Cn}]$" datafile="All_good" grepcount="837586"/>
+<grepcase regexp="^[\p{Masaram_Gondi}\p{Co}]$" datafile="All_good" grepcount="137543"/>
+<grepcase regexp="^\p{Nushu}(?&lt;!\p{Nd})$" datafile="All_good" grepcount="397"/>
+<grepcase regexp="^[\p{Soyombo}\p{Cn}]$" datafile="All_good" grepcount="830755"/>
+<grepcase regexp="^\p{Zanabazar_Square}(?&lt;=\p{Cc})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Dogra}\p{Sc}]$" datafile="All_good" grepcount="122"/>
+<grepcase regexp="^[\p{Gunjala_Gondi}\p{Po}]$" datafile="All_good" grepcount="656"/>
+<grepcase regexp="^[\p{Makasar}\p{N}]$" datafile="All_good" grepcount="1806"/>
+<grepcase regexp="^\p{Medefaidrin}(?&lt;!\p{Nd})$" datafile="All_good" grepcount="91"/>
+<grepcase regexp="^[\p{Hanifi_Rohingya}\p{Pi}]$" datafile="All_good" grepcount="62"/>
+<grepcase regexp="^\p{Sogdian}(?&lt;!\p{Lu})$" datafile="All_good" grepcount="42"/>
+<grepcase regexp="^\p{Old_Sogdian}(?&lt;!\p{Zp})$" datafile="All_good" grepcount="40"/>
+<grepcase regexp="^\p{Elymaic}(?&lt;!\p{M})$" datafile="All_good" grepcount="23"/>
+<grepcase regexp="^\p{Nandinagari}(?&lt;=\p{Ll})$" datafile="All_good" grepcount="0"/>
+<grepcase regexp="^[\p{Nyiakeng_Puachue_Hmong}\p{Nl}]$" datafile="All_good" grepcount="307"/>
+<grepcase regexp="^[\p{Wancho}\p{Cs}]$" datafile="All_good" grepcount="59"/>
+<grepcase regexp="^\p{Chorasmian}(?&lt;!\p{Co})$" datafile="All_good" grepcount="28"/>
+<grepcase regexp="^\p{Dives_Akuru}(?&lt;!\p{Ps})$" datafile="All_good" grepcount="72"/>
+<grepcase regexp="^[\p{Khitan_Small_Script}\p{Lm}]$" datafile="All_good" grepcount="731"/>
+<grepcase regexp="^[\p{Yezidi}\p{Lo}]$" datafile="All_good" grepcount="127007"/>
+<grepcase regexp="^\p{Katakana_Or_Hiragana}(?&lt;=\p{Pd})$" datafile="All_good" grepcount="0"/>
 </greptest>
