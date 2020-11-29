@@ -219,13 +219,13 @@ RE * RE_Parser::parse_group() {
             group_expr = makeLookAheadAssertion(parse_alt());
         } else if (accept('!')) { // negative look ahead
             group_expr = makeNegativeLookAheadAssertion(parse_alt());
-        } else if (accept("<=")) { // positive look ahead
+        } else if (accept("<=")) { // positive look behind
             group_expr = makeLookBehindAssertion(parse_alt());
-        } else if (accept("<!")) { // negative look ahead
+        } else if (accept("<!")) { // negative look behind
             group_expr = makeNegativeLookBehindAssertion(parse_alt());
-        } else if (accept('>')) { // negative look ahead
+        } else if (accept('>')) {
             group_expr = makeAtomicGroup(parse_alt());
-        } else if (accept('|')) { // negative look ahead
+        } else if (accept('|')) {
             group_expr = makeBranchResetGroup(parse_alt());
         } else if (atany("-dimsxgK")) { // mode switches
             bool closing_paren_parsed;

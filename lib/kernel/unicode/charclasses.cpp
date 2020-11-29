@@ -24,6 +24,10 @@ using namespace re;
 using namespace llvm;
 using namespace UCD;
 
+static std::string sourceShape(StreamSet * s) {
+    return std::to_string(s->getNumElements()) + "x" + std::to_string(s->getFieldWidth());
+}
+
 inline std::string signature(const std::vector<re::CC *> & ccs) {
     if (LLVM_UNLIKELY(ccs.empty())) {
         return "[]";
@@ -41,15 +45,15 @@ inline std::string signature(const std::vector<re::CC *> & ccs) {
     }
 }
 
-CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool useDirectCC)
-: mUseDirectCC(useDirectCC),
-  mSignature((useDirectCC ? "d" : "p") + signature(ccs)) {
+CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, StreamSet * BasisBits)
+: mUseDirectCC(BasisBits->getNumElements() == 1),
+  mSignature(signature(ccs)) {
 }
 
 
 CharClassesKernel::CharClassesKernel(BuilderRef b, std::vector<CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses)
-: CharClassesSignature(ccs, BasisBits->getNumElements() == 1)
-, PabloKernel(b, "cc" + getStringHash(mSignature), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
+: CharClassesSignature(ccs, BasisBits)
+, PabloKernel(b, "cc" + sourceShape(BasisBits) + "_" + getStringHash(mSignature), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
 , mCCs(std::move(ccs)) {
 
 }
@@ -98,8 +102,8 @@ ByteClassesKernel::ByteClassesKernel(BuilderRef b,
                                      std::vector<re::CC *> && ccs,
                                      StreamSet * inputStream,
                                      StreamSet * CharClasses):
-CharClassesSignature(ccs, inputStream->getNumElements() == 1)
-, PabloKernel(b, "ByteClassesKernel_" + getStringHash(mSignature), {Binding{"basis", inputStream}}, {Binding{"charclasses", CharClasses}})
+CharClassesSignature(ccs, inputStream)
+, PabloKernel(b, "ByteClassesKernel_" + sourceShape(inputStream) + "_" + getStringHash(mSignature), {Binding{"basis", inputStream}}, {Binding{"charclasses", CharClasses}})
 , mCCs(std::move(ccs)) {
 
 }

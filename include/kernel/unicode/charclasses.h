@@ -14,7 +14,7 @@ namespace re { class RE; class CC; }
 namespace kernel {
 
 struct CharClassesSignature {
-    CharClassesSignature(const std::vector<re::CC *> & ccs, bool useDirectCC);
+    CharClassesSignature(const std::vector<re::CC *> & ccs, StreamSet * basis);
 protected:
     const bool mUseDirectCC;
     const std::string mSignature;
