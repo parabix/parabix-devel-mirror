@@ -253,6 +253,7 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         Module * const m = kernel->getModule();
         assert ("cached kernel has no module?" && m);
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InfrequentlyUsed))) {
+            assert ("pipeline cannot be infrequently compiled" && !isa<PipelineKernel>(kernel));
             Infrequent.emplace_back(m);
         } else {
             Normal.emplace_back(m);
@@ -275,8 +276,8 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     };
 
     // compile any uncompiled kernels
-    addModules(Normal, codegen::BackEndOptLevel);
     addModules(Infrequent, CodeGenOpt::None);
+    addModules(Normal, codegen::BackEndOptLevel);
 
     // write/declare the "main" method
     auto mainModule = make_unique<Module>("main", *mContext);
@@ -303,7 +304,7 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     mCompiledKernel.clear();
 
     // return the compiled main method
-    mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
+    mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::None);
     mEngine->addModule(std::move(mainModule));
     mEngine->finalizeObject();
     auto mainFnPtr = mEngine->getFunctionAddress(main->getName());

@@ -692,8 +692,10 @@ PabloAST * triviallyFoldNot(Statement * stmt, PabloBlock * const block) {
     } else if (UseTernaryOptimizations) {
         if (auto ternary = dyn_cast<Ternary>(value)) { // ¬Ternary(m, a, b, c) ⇔ Ternary(¬m, a, b, c)
             block->setInsertPoint(stmt);
-            const uint8_t mask = ternary->getMask()->value();
-            return block->createTernary(block->getInteger(~mask), ternary->getA(), ternary->getB(), ternary->getC());
+            const auto mask = ternary->getMask()->value();
+            assert (mask <= 0xFF);
+            const auto negated_mask = mask ^ 0xFF;
+            return block->createTernary(block->getInteger(negated_mask), ternary->getA(), ternary->getB(), ternary->getC());
         }
     }
     return nullptr;

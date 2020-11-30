@@ -322,6 +322,7 @@ Ternary * PabloBlock::createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, Pablo
 Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name) {
     CHECK_SAME_TYPE(a, b);
     CHECK_SAME_TYPE(b, c);
+    assert (mask->value() <= 0xFF);
     return insertAtInsertionPoint(new (mAllocator) Ternary(mask, a, b, c, name, mAllocator));
 }
 
