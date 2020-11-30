@@ -851,8 +851,6 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         suppliedArgs += 1;
     }
 
-
-
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(b, false); assert (doSegment);
     assert (doSegment->arg_size() >= suppliedArgs);

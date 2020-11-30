@@ -46,15 +46,31 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
         return v;
     };
 
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
+    // To avoid the expense of instantiating a pipeline compiler when generating the
+    // "main" function for the pipeline on a subsequent run, family args are passed in
+    // order of the original kernels in the pipeline; however, the order of these kernels
+    // are actually executed may be shuffled around in the pipeline itself. So to map the
+    // original order to the pipeline order, we just search for a matching kernel object.
+
+    for (const Kernel * const kernel : cast<PipelineKernel>(mTarget)->getKernels()) {
         if (LLVM_UNLIKELY(kernel->externallyInitialized())) {
-            const auto prefix = makeKernelName(i);
+
+            unsigned kernelIndex = PipelineInput;
+
+            for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+                if (kernel == getKernel(i)) {
+                    kernelIndex = i;
+                    break;
+                }
+            }
+            assert ("could not find matching family kernel?" && (kernelIndex >= FirstKernel));
+
+            // get the internal prefix for this kernel.
+            const auto prefix = makeKernelName(kernelIndex);
 
             auto readNextScalar = [&](const StringRef name) {
                 auto ptr = getScalarFieldPtr(b.get(), name); assert (ptr);
                 Value * value = nextArg();
-
                 if (LLVM_UNLIKELY(CheckAssertions)) {
                     b->CreateAssert(value, "family parameter (%s) was given a null value", b->GetString(name));
                 }

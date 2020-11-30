@@ -217,8 +217,9 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr) {
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getOperand(0);
     } else if (Ternary * ternary = dyn_cast<Ternary>(expr)) {
-        const uint8_t mask = ternary->getMask()->value();
-        return createTernary(~mask, ternary->getA(), ternary->getB(), ternary->getC());
+        const auto mask = ternary->getMask()->value();
+        const auto negated_mask = mask ^ 0xFF;
+        return createTernary(negated_mask, ternary->getA(), ternary->getB(), ternary->getC());
     }
     return MAKE_UNARY(Not, expr);
 }
@@ -233,8 +234,9 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr, const llvm::StringRef prefix
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getOperand(0);
     } else if (Ternary * ternary = dyn_cast<Ternary>(expr)) {
-        const uint8_t mask = ternary->getMask()->value();
-        return createTernary(~mask, ternary->getA(), ternary->getB(), ternary->getC());
+        const auto mask = ternary->getMask()->value();
+        const auto negated_mask = mask ^ 0xFF;
+        return createTernary(negated_mask, ternary->getA(), ternary->getB(), ternary->getC());
     }
     return MAKE_NAMED_UNARY(Not, prefix, expr);
 }
@@ -992,10 +994,12 @@ PabloAST * PabloBuilder::createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, Pa
 }
 
 PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c) {
+    assert (mask->value() <= 0xFF);
     return MAKE_QUATERNARY(Ternary, mask, a, b, c);
 }
 
 PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
+    assert (mask->value() <= 0xFF);
     return MAKE_NAMED_QUATERNARY(Ternary, prefix, mask, a, b, c);
 }
 
