@@ -32,6 +32,7 @@
 #include <re/analysis/collect_ccs.h>
 #include <re/transforms/exclude_CC.h>
 #include <re/transforms/re_multiplex.h>
+#include <kernel/unicode/boundary_kernels.h>
 #include <kernel/unicode/UCD_property_kernel.h>
 #include <re/analysis/re_name_gather.h>
 #include <re/unicode/boundaries.h>
@@ -592,21 +593,10 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
 void kernel::WordBoundaryLogic(const std::unique_ptr<ProgramBuilder> & P, UTF8_Transformer * t,
                                   StreamSet * Source, StreamSet * U8index, StreamSet * wordBoundary_stream) {
     
-    re::RE * wordBoundary = re::makeBoundaryAssertion(re::makeName("word", re::Name::Type::UnicodeProperty));
-    wordBoundary = re::resolveUnicodeNames(wordBoundary);
-    const auto wb_sets = re::collectCCs(wordBoundary, cc::Unicode);
-    auto wb_mpx = std::make_shared<cc::MultiplexedAlphabet>("wb_mpx", wb_sets);
-    wordBoundary = transformCCs(wb_mpx, wordBoundary);
-    auto wb_basis = wb_mpx->getMultiplexedCCs();
-    StreamSet * const wb_Classes = P->CreateStreamSet(wb_basis.size());
-    P->CreateKernelCall<CharClassesKernel>(std::move(wb_basis), Source, wb_Classes);
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-    options->setIndexingTransformer(t, U8index);
-    options->setRE(wordBoundary);
-    options->setSource(wb_Classes);
-    options->addAlphabet(wb_mpx, wb_Classes);
-    options->setResults(wordBoundary_stream);
-    options->addExternal("UTF8_index", U8index);
-    P->CreateKernelCall<ICGrepKernel>(std::move(options));
+    re::Name * word = re::makeName("word", re::Name::Type::UnicodeProperty);
+    re::resolveUnicodeNames(word);
+    StreamSet * WordStream = P->CreateStreamSet(1);
+    P->CreateKernelCall<UnicodePropertyKernelBuilder>(word, Source, WordStream);
+    P->CreateKernelCall<BoundaryKernel>(WordStream, U8index, wordBoundary_stream);
 }
 

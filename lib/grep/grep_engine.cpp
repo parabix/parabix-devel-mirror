@@ -31,7 +31,7 @@
 #include <kernel/core/callback.h>
 #include <kernel/unicode/charclasses.h>
 #include <kernel/unicode/UCD_property_kernel.h>
-#include <kernel/unicode/grapheme_kernel.h>
+#include <kernel/unicode/boundary_kernels.h>
 #include <kernel/util/linebreak_kernel.h>
 #include <kernel/streamutils/streams_merge.h>
 #include <kernel/streamutils/stream_select.h>

@@ -8,7 +8,7 @@ NAME
     kernel.unicode
 SRC
     charclasses.cpp
-    grapheme_kernel.cpp
+    boundary_kernels.cpp
     UCD_property_kernel.cpp
 DEPS
     kernel.pipeline
