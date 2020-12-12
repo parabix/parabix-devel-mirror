@@ -28,6 +28,9 @@ std::string resolvePropertyFunction(re::Name * const property);
  */
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
 
+/*  Link all property expression nodes to their property_enum code. */
+void linkProperties(re::RE * r);
+
 }
 
 #endif // RESOLVE_PROPERTIES_H

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2018 International Characters.
+ *  Copyright (c) 2020 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -8,6 +8,7 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 #include <re/adt/adt.h>
+#include <re/adt/re_name.h>
 #include <re/compile/re_compiler.h>
 #include <re/unicode/re_name_resolve.h>
 #include <re/unicode/boundaries.h>
@@ -143,6 +144,61 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
         }
     }
     UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
+}
+
+struct PropertyLinker : public RE_Transformer {
+    PropertyLinker() : RE_Transformer("PropertyLinker") {}
+    RE * transformPropertyExpression (PropertyExpression * exp) override {
+        std::string id = exp->getPropertyIdentifier();
+        std::string canon = UCD::canonicalize_value_name(id);
+        auto propit = UCD::alias_map.find(canon);
+        if (propit !=  UCD::alias_map.end()) {
+            property_t prop = static_cast<UCD::property_t>(propit->second);
+            exp->setPropertyCode(prop);
+            return exp;
+        }
+        // If the property identifier is not a standard property name, it
+        // could be the value of a script or a general category property,
+        // or one of a few other special cases, provided that there is no "value".
+        if (exp->getValue() != nullptr) return exp;
+        const auto & gcObj = cast<EnumeratedPropertyObject>(getPropertyObject(gc));
+        int valcode = gcObj->GetPropertyValueEnumCode(canon);
+        if (valcode >= 0) {
+            // Found a general category.
+            exp->setValue(makeName(gcObj->GetValueFullName(valcode), Name::Type::PropertyValue));
+            exp->setPropertyIdentifier(property_enum_name[gc]);
+            exp->setPropertyCode(gc);
+            return exp;
+        }
+        const auto & scObj = cast<EnumeratedPropertyObject>(getPropertyObject(sc));
+        valcode = scObj->GetPropertyValueEnumCode(canon);
+        if (valcode >= 0) {
+            // Found a script.
+            exp->setValue(makeName(scObj->GetValueFullName(valcode), Name::Type::PropertyValue));
+            exp->setPropertyIdentifier(property_enum_name[sc]);
+            exp->setPropertyCode(sc);
+            return exp;
+        }
+        if (canon == "ascii") {  // block:ascii special case
+            exp->setValue(makeName("ascii", Name::Type::PropertyValue));
+            exp->setPropertyIdentifier(property_enum_name[blk]);
+            exp->setPropertyCode(blk);
+            return exp;
+        }
+        if (canon == "assigned") {  // cn:n special case
+            // general category != unassigned
+            exp->setValue(makeName("unassigned", Name::Type::PropertyValue));
+            exp->setPropertyIdentifier(property_enum_name[gc]);
+            exp->setOperator(PropertyExpression::Operator::NEq);
+            exp->setPropertyCode(gc);
+            return exp;
+        }
+        return exp;
+    }
+};
+
+void linkProperties(RE * r) {
+    PropertyLinker().transformRE(r);
 }
 
 }

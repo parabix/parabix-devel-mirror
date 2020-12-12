@@ -25,6 +25,7 @@ public:
         Unicode
         , UnicodeProperty
         , ZeroWidth
+        , PropertyValue
         , Unknown
     };
     std::string getNamespace() const;
@@ -226,6 +227,45 @@ private:
 
 inline RE * makeReference(std::string name, RE * capture){
     return Reference::Create(name, capture);
+}
+
+class PropertyExpression : public RE {
+public:
+    enum class Kind {Codepoint, Boundary};
+    enum class Operator {Eq, NEq, Less, LEq, Greater, GEq};
+
+    PropertyExpression::Kind getKind() const { return mKind;}
+    std::string getPropertyIdentifier() const { return mIdentifier;}
+    PropertyExpression::Operator getOperator() const { return mOperator;}
+    RE * getValue() const { return mValue;}
+
+    static PropertyExpression * Create(PropertyExpression::Kind k,
+                                       std::string id,
+                                       PropertyExpression::Operator op = PropertyExpression::Operator::Eq,
+                                       RE * val = nullptr) {
+        return new PropertyExpression(k, id, op, val);
+    }
+    RE_SUBTYPE(PropertyExpression)
+
+    void setPropertyIdentifier(std::string id) {mIdentifier = id;}
+    void setOperator(PropertyExpression::Operator op) {mOperator = op;}
+    void setValue(RE * v) {mValue = v;}
+    void setPropertyCode(int code) {mPropertyCode = code;}
+
+private:
+    PropertyExpression(Kind k, std::string id, PropertyExpression::Operator op, RE * v):
+       RE(ClassTypeId::PropertyExpression),
+       mKind(k), mIdentifier(id), mOperator(op), mValue(v), mPropertyCode(-1) {}
+    PropertyExpression::Kind mKind;
+    std::string mIdentifier;
+    PropertyExpression::Operator mOperator;
+    RE * mValue;
+    int mPropertyCode;
+};
+
+
+inline RE * makePropertyExpression(PropertyExpression::Kind k, std::string ident, PropertyExpression::Operator op, RE * v) {
+    return PropertyExpression::Create(k, ident, op, v);
 }
 
 }

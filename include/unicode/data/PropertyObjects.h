@@ -91,6 +91,7 @@ public:
     , mN() {
 
     }
+    int GetPropertyValueEnumCode(const std::string & value_spec);
     const UnicodeSet GetCodepointSet(const std::string & prop_value_string) override;
     // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val);

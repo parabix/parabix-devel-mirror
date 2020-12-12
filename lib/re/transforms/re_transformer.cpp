@@ -49,6 +49,7 @@ RE * RE_Transformer::transform(RE * const from) { assert (from);
         TRANSFORM(Rep);
         TRANSFORM(Seq);
         TRANSFORM(Start);
+        TRANSFORM(PropertyExpression);
         default: llvm_unreachable("Unknown RE type");
     }
     #undef TRANSFORM
@@ -181,6 +182,19 @@ RE * RE_Transformer::transformAssertion(Assertion * a) {
         return a;
     } else {
         return makeAssertion(x, a->getKind(), a->getSense());
+    }
+}
+
+RE * RE_Transformer::transformPropertyExpression(PropertyExpression * pe) {
+    RE * x0 = pe->getValue();
+    RE * x = transform(x0);
+    if (x == x0) {
+        return pe;
+    } else {
+        PropertyExpression::Kind k = pe->getKind();
+        std::string id = pe->getPropertyIdentifier();
+        PropertyExpression::Operator op = pe->getOperator();
+        return makePropertyExpression(k, id, op, x);
     }
 }
 

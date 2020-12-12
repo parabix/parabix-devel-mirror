@@ -31,6 +31,7 @@ public:
         , End
         , Intersect
         , Name
+        , PropertyExpression
         , Capture
         , Reference
         , Group

@@ -176,6 +176,10 @@ const std::string & ExtensionPropertyObject::GetPropertyValueGrepString() {
 }
 
 const UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) {
+    return GetCodepointSet(GetPropertyValueEnumCode(value_spec));
+}
+
+int BinaryPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     int property_enum_val = Binary_ns::Y;
     if (value_spec.length() != 0) {
         auto valit = Binary_ns::aliases_only_map.find(canonicalize_value_name(value_spec));
@@ -184,7 +188,7 @@ const UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value
         }
         property_enum_val = valit->second;
     }
-    return GetCodepointSet(property_enum_val);
+    return property_enum_val;
 }
 
 const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum_val) {
