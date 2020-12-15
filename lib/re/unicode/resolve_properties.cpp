@@ -14,6 +14,7 @@
 #include <re/unicode/boundaries.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>
+#include <unicode/data/PropertyObjectTable.h>
 #include <unicode/data/PropertyValueAliases.h>
 
 using namespace UCD;
@@ -160,12 +161,12 @@ struct PropertyLinker : public RE_Transformer {
         // If the property identifier is not a standard property name, it
         // could be the value of a script or a general category property,
         // or one of a few other special cases, provided that there is no "value".
-        if (exp->getValue() != nullptr) return exp;
+        if (exp->getValueString() != "") return exp;
         const auto & gcObj = cast<EnumeratedPropertyObject>(getPropertyObject(gc));
         int valcode = gcObj->GetPropertyValueEnumCode(canon);
         if (valcode >= 0) {
             // Found a general category.
-            exp->setValue(makeName(gcObj->GetValueFullName(valcode), Name::Type::PropertyValue));
+            exp->setValueString(gcObj->GetValueFullName(valcode));
             exp->setPropertyIdentifier(property_enum_name[gc]);
             exp->setPropertyCode(gc);
             return exp;
@@ -174,20 +175,20 @@ struct PropertyLinker : public RE_Transformer {
         valcode = scObj->GetPropertyValueEnumCode(canon);
         if (valcode >= 0) {
             // Found a script.
-            exp->setValue(makeName(scObj->GetValueFullName(valcode), Name::Type::PropertyValue));
+            exp->setValueString(scObj->GetValueFullName(valcode));
             exp->setPropertyIdentifier(property_enum_name[sc]);
             exp->setPropertyCode(sc);
             return exp;
         }
         if (canon == "ascii") {  // block:ascii special case
-            exp->setValue(makeName("ascii", Name::Type::PropertyValue));
+            exp->setValueString("ascii");
             exp->setPropertyIdentifier(property_enum_name[blk]);
             exp->setPropertyCode(blk);
             return exp;
         }
         if (canon == "assigned") {  // cn:n special case
             // general category != unassigned
-            exp->setValue(makeName("unassigned", Name::Type::PropertyValue));
+            exp->setValueString("unassigned");
             exp->setPropertyIdentifier(property_enum_name[gc]);
             exp->setOperator(PropertyExpression::Operator::NEq);
             exp->setPropertyCode(gc);
@@ -199,6 +200,85 @@ struct PropertyLinker : public RE_Transformer {
 
 void linkProperties(RE * r) {
     PropertyLinker().transformRE(r);
+}
+
+struct PropertyStandardization : public RE_Transformer {
+    PropertyStandardization() : RE_Transformer("PropertyStandardization") {}
+    RE * transformPropertyExpression (PropertyExpression * exp) override {
+        int prop_code = exp->getPropertyCode();
+        if (prop_code < 0) return exp;  // No property code - leave unchanged.
+        PropertyExpression::Operator op = exp->getOperator();
+        std::string val_str = exp->getValueString();
+        std::string canon = UCD::canonicalize_value_name(val_str);
+        if (auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[prop_code])) {
+            int val_code = obj->GetPropertyValueEnumCode(canon);
+            int enum_count = obj->GetEnumCount();
+            bool lt_0 = (op == PropertyExpression::Operator::Less) && (val_code == 0);
+            bool gt_count = (op == PropertyExpression::Operator::Greater) && (val_code == enum_count);
+            if (lt_0 || gt_count) {
+                // Impossible property.
+                return makeAlt();
+            }
+            bool ge_0 = (op == PropertyExpression::Operator::GEq) && (val_code == 0);
+            bool le_count = (op == PropertyExpression::Operator::LEq) && (val_code == enum_count);
+            if (ge_0 || le_count) {  // always true cases
+                return makePropertyExpression(PropertyExpression::Kind::Codepoint, "ANY");
+            }
+            bool le_0 = (op == PropertyExpression::Operator::LEq) && (val_code == 0);
+            bool ge_count = (op == PropertyExpression::Operator::GEq) && (val_code == enum_count);
+            if (val_code < 0) return exp;
+            if (le_0 || ge_count) {  // Equality cases
+                exp->setOperator(PropertyExpression::Operator::Eq);
+            } else if (op == PropertyExpression::Operator::LEq) {
+                // Standardize to Less.
+                val_code += 1;
+                exp->setOperator(PropertyExpression::Operator::Less);
+            } else if (op == PropertyExpression::Operator::GEq) {
+                val_code -= 1;
+                exp->setOperator(PropertyExpression::Operator::Greater);
+            }
+            exp->setValueString(obj->GetValueFullName(val_code));
+            return exp;
+        }
+        if (auto * obj = dyn_cast<BinaryPropertyObject>(property_object_table[prop_code])) {
+            int val_code = obj->GetPropertyValueEnumCode(canon);
+            // Standardize binary properties to positive form with an empty value string.
+            if (val_code < 0) return exp;
+            bool lt_F = (op == PropertyExpression::Operator::Less) && (val_code == 0);
+            bool lt_T = (op == PropertyExpression::Operator::Less) && (val_code == 1);
+            bool le_F = (op == PropertyExpression::Operator::LEq) && (val_code == 0);
+            bool le_T = (op == PropertyExpression::Operator::LEq) && (val_code == 1);
+            //bool gt_F = (op == PropertyExpression::Operator::Greater) && (val_code == 0);
+            bool gt_T = (op == PropertyExpression::Operator::Greater) && (val_code == 1);
+            bool ge_F = (op == PropertyExpression::Operator::GEq) && (val_code == 0);
+            //bool ge_T = (op == PropertyExpression::Operator::GEq) && (val_code == 1);
+            if (le_T || ge_F) {
+                // All possible enum values.   Standardize to \p{any}.
+                return makePropertyExpression(PropertyExpression::Kind::Codepoint, "ANY");
+            if (lt_F || gt_T) {
+                // No values.   return failure.
+                return makeAlt();
+            }
+            bool eq_F = (op == PropertyExpression::Operator::Eq) && (val_code == 0);
+            //bool eq_T = (op == PropertyExpression::Operator::Eq) && (val_code == 1);
+            //bool ne_F = (op == PropertyExpression::Operator::NEq) && (val_code == 0);
+            bool ne_T = (op == PropertyExpression::Operator::NEq) && (val_code == 1);
+            if (lt_T || le_F || eq_F || ne_T) {
+                // negated property.
+                exp->setOperator(PropertyExpression::Operator::NEq);
+                exp->setValueString("");
+            } else /*  if (gt_F || ge_T || eq_T || ne_F)  positive properties.  */
+                exp->setOperator(PropertyExpression::Operator::Eq);
+                exp->setValueString("");
+            }
+            return exp;
+        }
+        return exp;
+    }
+};
+
+void standardizeProperties(RE * r) {
+    PropertyStandardization().transformRE(r);
 }
 
 }

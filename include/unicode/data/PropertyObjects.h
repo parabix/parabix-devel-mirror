@@ -130,6 +130,7 @@ public:
     }
 
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
+    int GetEnumCount() {return independent_enum_count;}
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;

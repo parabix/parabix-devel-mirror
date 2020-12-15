@@ -106,7 +106,6 @@ void RE_Inspector::inspectAssertion(Assertion * a) {
 }
 
 void RE_Inspector::inspectPropertyExpression(PropertyExpression * pe) {
-    inspect(pe->getValue());
 }
 
 } // namespace re

@@ -186,16 +186,7 @@ RE * RE_Transformer::transformAssertion(Assertion * a) {
 }
 
 RE * RE_Transformer::transformPropertyExpression(PropertyExpression * pe) {
-    RE * x0 = pe->getValue();
-    RE * x = transform(x0);
-    if (x == x0) {
-        return pe;
-    } else {
-        PropertyExpression::Kind k = pe->getKind();
-        std::string id = pe->getPropertyIdentifier();
-        PropertyExpression::Operator op = pe->getOperator();
-        return makePropertyExpression(k, id, op, x);
-    }
+    return pe;
 }
 
 } // namespace re

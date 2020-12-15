@@ -237,34 +237,35 @@ public:
     PropertyExpression::Kind getKind() const { return mKind;}
     std::string getPropertyIdentifier() const { return mIdentifier;}
     PropertyExpression::Operator getOperator() const { return mOperator;}
-    RE * getValue() const { return mValue;}
+    std::string getValueString() const { return mValue;}
+    int getPropertyCode() const { return mPropertyCode;}
 
     static PropertyExpression * Create(PropertyExpression::Kind k,
                                        std::string id,
                                        PropertyExpression::Operator op = PropertyExpression::Operator::Eq,
-                                       RE * val = nullptr) {
+                                       std::string val = "") {
         return new PropertyExpression(k, id, op, val);
     }
     RE_SUBTYPE(PropertyExpression)
 
     void setPropertyIdentifier(std::string id) {mIdentifier = id;}
     void setOperator(PropertyExpression::Operator op) {mOperator = op;}
-    void setValue(RE * v) {mValue = v;}
+    void setValueString(std::string v) {mValue = v;}
     void setPropertyCode(int code) {mPropertyCode = code;}
 
 private:
-    PropertyExpression(Kind k, std::string id, PropertyExpression::Operator op, RE * v):
+    PropertyExpression(Kind k, std::string id, PropertyExpression::Operator op, std::string v):
        RE(ClassTypeId::PropertyExpression),
        mKind(k), mIdentifier(id), mOperator(op), mValue(v), mPropertyCode(-1) {}
     PropertyExpression::Kind mKind;
     std::string mIdentifier;
     PropertyExpression::Operator mOperator;
-    RE * mValue;
+    std::string mValue;
     int mPropertyCode;
 };
 
 
-inline RE * makePropertyExpression(PropertyExpression::Kind k, std::string ident, PropertyExpression::Operator op, RE * v) {
+inline RE * makePropertyExpression(PropertyExpression::Kind k, std::string ident, PropertyExpression::Operator op = PropertyExpression::Operator::Eq, std::string v = "") {
     return PropertyExpression::Create(k, ident, op, v);
 }
 

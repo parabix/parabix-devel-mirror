@@ -111,7 +111,7 @@ bool RE_Validator::validateAssertion(const Assertion * a) {
 }
 
 bool RE_Validator::validatePropertyExpression(const PropertyExpression * pe) {
-    return validate(pe->getValue());
+    return true;
 }
 
 bool validateNamesDefined(const RE * r) {
@@ -139,7 +139,7 @@ public:
     bool validateStart(const Start * s) override {return false;}
     bool validateEnd(const End * e) override {return false;}
     bool validatePropertyExpression(const PropertyExpression * pe) override {
-        return validate(pe->getValue()) && (pe->getKind() != PropertyExpression::Kind::Boundary);
+        return true;
     }
 };
 
