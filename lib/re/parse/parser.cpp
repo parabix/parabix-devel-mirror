@@ -506,7 +506,6 @@ RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
             // property-value is another regex
             auto previous = val_start;
             auto current = mCursor.pos();
-            val_start = current;
             
             while (true) {
                 if (*current == '/' && *previous != '\\') {
