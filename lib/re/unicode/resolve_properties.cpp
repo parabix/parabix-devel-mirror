@@ -285,6 +285,7 @@ struct PropertyExternalizer : public RE_Transformer {
     PropertyExternalizer() : RE_Transformer("PropertyExternalizer") {}
     RE * transformPropertyExpression (PropertyExpression * exp) override {
         PropertyExpression::Operator op = exp->getOperator();
+        std::string id = exp->getPropertyIdentifier();
         std::string val_str = exp->getValueString();
         std::string op_str = "";
         if (op == PropertyExpression::Operator::Less) op_str = "<";
@@ -293,7 +294,10 @@ struct PropertyExternalizer : public RE_Transformer {
         else if (op == PropertyExpression::Operator::GEq) op_str = ">=";
         else if (op == PropertyExpression::Operator::NEq) op_str = "!=";
         val_str = op_str + val_str;
-        Name * externName = makeName(exp->getPropertyIdentifier(), val_str, Name::Type::UnicodeProperty);
+        Name * externName;
+        if (val_str == "")
+            externName = makeName(id, Name::Type::UnicodeProperty);
+            else externName = makeName(id, val_str, Name::Type::UnicodeProperty);
         //externName->setDefinition(exp);
         return externName;
     }
