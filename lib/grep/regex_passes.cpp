@@ -25,6 +25,7 @@
 #include <re/unicode/decomposition.h>
 #include <re/unicode/equivalence.h>
 #include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <re/toolchain/toolchain.h>
 #include <toolchain/toolchain.h>
 
@@ -39,6 +40,9 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     }
     r = removeUnneededCaptures(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
+    r = UCD::linkProperties(r);
+    r = UCD::standardizeProperties(r);
+    r = UCD::externalizeProperties(r);
     r = grep::resolveUnicodeNames(r); // use full name resolution
     validateNamesDefined(r);
     if (UnicodeLevel2IsSet() && validateAlphabet(&cc::Unicode, r)) {

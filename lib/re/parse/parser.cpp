@@ -375,7 +375,7 @@ RE * RE_Parser::parseEscapedSet() {
                     ParseFailure("\\b{s} not yet supported.");
                     //return complemented ? makeZerowidthComplement(re) : re;
                 } else {
-                    re = parsePropertyExpression();
+                    re = parsePropertyExpression(PropertyExpression::Kind::Boundary);
                     require('}');
                     return complemented ? makeReNonBoundary(re) : makeReBoundary(re);
                 }
@@ -399,7 +399,7 @@ RE * RE_Parser::parseEscapedSet() {
             return complemented ? makeComplement(re) : re;
         case 'p':
             require('{');
-            re = parsePropertyExpression();
+            re = parsePropertyExpression(PropertyExpression::Kind::Codepoint);
             require('}');
             return complemented ? makeComplement(re) : re;
         case 'X': {
@@ -484,14 +484,23 @@ std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
     return s.str();
 }
 
-RE * RE_Parser::parsePropertyExpression() {
+RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
     const auto start = mCursor.pos();
-    while (mCursor.more() && !atany("}:=")) {
+    while (mCursor.more() && !atany("}:=<>")) {
         get1();
     }
-    if (accept('=')) {
-        // We have a property-name = value expression
-        const auto prop_end = mCursor.pos()-1;
+    const auto prop_end = mCursor.pos();
+    std::string prop = canonicalize(start, prop_end);
+    while (accept(' ') || accept('\t')) {/* skip whitespace, do nothing */}
+    PropertyExpression::Operator op;
+    if (atany("<>=:")) {
+        // We have a property-name op value expression
+        if (accept('=') || accept(':')) op = PropertyExpression::Operator::Eq;
+        else if (accept("<=")) op = PropertyExpression::Operator::LEq;
+        else if (accept(">=")) op = PropertyExpression::Operator::GEq;
+        else if (accept('<')) op = PropertyExpression::Operator::Less;
+        else if (accept('>')) op = PropertyExpression::Operator::Greater;
+        while (accept(' ') || accept('\t')) {/* skip whitespace, do nothing */}
         auto val_start = mCursor.pos();
         if (accept('/')) {
             // property-value is another regex
@@ -513,7 +522,8 @@ RE * RE_Parser::parsePropertyExpression() {
             }
             ++mCursor;
             //return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
-            return createName(canonicalize(start, prop_end), std::string(val_start-1, current));
+            //return createName(prop, std::string(val_start-1, current));
+            return makePropertyExpression(k, prop, op, std::string(val_start, current));
         }
         if (*val_start == '@') {
             // property-value is @property@ or @identity@
@@ -535,7 +545,8 @@ RE * RE_Parser::parsePropertyExpression() {
             }
             ++mCursor;
             //return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
-            return createName(canonicalize(start, prop_end), std::string(val_start-1, current));
+            //return createName(prop, std::string(val_start-1, current));
+            return makePropertyExpression(k, prop, op, std::string(val_start, mCursor.pos()));
         }
         else {
             // property-value is normal string
@@ -550,10 +561,12 @@ RE * RE_Parser::parsePropertyExpression() {
                 }
                 ++mCursor;
             }
-            return createName(canonicalize(start, prop_end), std::string(val_start, mCursor.pos()));
+            //return createName(prop, std::string(val_start, mCursor.pos()));
+            return makePropertyExpression(k, prop, op, std::string(val_start, mCursor.pos()));
         }
     }
-    return createName(canonicalize(start, mCursor.pos()));
+    return makePropertyExpression(k, prop);
+    //return createName(prop);
 }
 
 Name * RE_Parser::parseNamePatternExpression(){
@@ -658,7 +671,7 @@ RE * RE_Parser::parse_collation_element() {
 
 RE * RE_Parser::parse_Posix_class() {
     bool negated = accept('^');
-    RE * posixSet = parsePropertyExpression();
+    RE * posixSet = parsePropertyExpression(PropertyExpression::Kind::Codepoint);
     require(":]");
     if (negated) return makeComplement(posixSet);
     else return posixSet;

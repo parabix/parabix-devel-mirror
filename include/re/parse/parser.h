@@ -10,6 +10,7 @@
 #include <map>
 #include <set>
 #include <re/adt/re_cc.h>
+#include <re/adt/re_name.h>
 
 namespace re { class Name; class Capture;}
 
@@ -198,7 +199,7 @@ protected:
     
     codepoint_t parse_utf8_codepoint();
 
-    virtual RE * parsePropertyExpression();
+    virtual RE * parsePropertyExpression(PropertyExpression::Kind k);
 
     Name * parseNamePatternExpression();
 

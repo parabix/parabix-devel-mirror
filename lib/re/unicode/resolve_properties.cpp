@@ -198,8 +198,8 @@ struct PropertyLinker : public RE_Transformer {
     }
 };
 
-void linkProperties(RE * r) {
-    PropertyLinker().transformRE(r);
+RE * linkProperties(RE * r) {
+    return PropertyLinker().transformRE(r);
 }
 
 struct PropertyStandardization : public RE_Transformer {
@@ -277,8 +277,30 @@ struct PropertyStandardization : public RE_Transformer {
     }
 };
 
-void standardizeProperties(RE * r) {
-    PropertyStandardization().transformRE(r);
+RE * standardizeProperties(RE * r) {
+    return PropertyStandardization().transformRE(r);
+}
+
+struct PropertyExternalizer : public RE_Transformer {
+    PropertyExternalizer() : RE_Transformer("PropertyExternalizer") {}
+    RE * transformPropertyExpression (PropertyExpression * exp) override {
+        PropertyExpression::Operator op = exp->getOperator();
+        std::string val_str = exp->getValueString();
+        std::string op_str = "";
+        if (op == PropertyExpression::Operator::Less) op_str = "<";
+        else if (op == PropertyExpression::Operator::LEq) op_str = "<=";
+        else if (op == PropertyExpression::Operator::Greater) op_str = ">";
+        else if (op == PropertyExpression::Operator::GEq) op_str = ">=";
+        else if (op == PropertyExpression::Operator::NEq) op_str = "!=";
+        val_str = op_str + val_str;
+        Name * externName = makeName(exp->getPropertyIdentifier(), val_str, Name::Type::UnicodeProperty);
+        //externName->setDefinition(exp);
+        return externName;
+    }
+};
+
+RE * externalizeProperties(RE * r) {
+    return PropertyExternalizer().transformRE(r);
 }
 
 }
