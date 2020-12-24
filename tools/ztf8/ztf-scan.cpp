@@ -262,7 +262,6 @@ void LengthGroupCompression::generateMultiBlockLogic(BuilderRef b, Value * const
     Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, sz_STRIDE));
     Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
     Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
-
     std::vector<Value *> keyMasks = initializeCompressionMasks(b, sw, sz_BLOCKS_PER_STRIDE, 1, strideBlockOffset, compressMaskPtr, strideMasksReady);
     Value * keyMask = keyMasks[0];
 
@@ -358,6 +357,7 @@ void LengthGroupCompression::generateMultiBlockLogic(BuilderRef b, Value * const
         b->SetInsertPoint(markCompression);
         maskLength = b->CreateZExt(b->CreateSub(keyLength, lg.ENC_BYTES, "maskLength"), sizeTy);
     }
+
     // Compute a mask of bits, with zeroes marking positions to eliminate.
     // The entire symbols will be replaced, but we need to keep the required
     // number of positions for the encoded ZTF sequence.
@@ -744,8 +744,7 @@ unsigned hashTableSize(EncodingInfo info, unsigned lgth) {
 // Length-based symbol operations - for symbol length known at LLVM compile time.
 //
 std::vector<Value *> MonitoredScalarLoadSymbol(BuilderRef b, std::string scalarName, Value * sourcePtr, unsigned length) {
-    unsigned load_length = 1 << boost::intrusive::detail::floor_log2(length);
-    //b->CallPrintInt("sourcePtr" + std::to_string(length), sourcePtr);
+    unsigned load_length = 1U << boost::intrusive::detail::floor_log2(length);
     Type * loadPtrTy = b->getIntNTy(load_length * 8)->getPointerTo();
     Value * load1 = b->CreateMonitoredScalarFieldLoad(scalarName, b->CreateBitCast(sourcePtr, loadPtrTy));
     if (load_length == length) {
@@ -758,7 +757,7 @@ std::vector<Value *> MonitoredScalarLoadSymbol(BuilderRef b, std::string scalarN
 }
 
 std::vector<Value *> loadSymbol(BuilderRef b, Value * sourcePtr, unsigned length) {
-    unsigned load_length = 1 << boost::intrusive::detail::floor_log2(length);
+    unsigned load_length = 1U << boost::intrusive::detail::floor_log2(length);
     Type * loadPtrTy = b->getIntNTy(load_length * 8)->getPointerTo();
     Value * load1 = b->CreateAlignedLoad(b->CreateBitCast(sourcePtr, loadPtrTy), 1);
     if (load_length == length) {
@@ -771,7 +770,7 @@ std::vector<Value *> loadSymbol(BuilderRef b, Value * sourcePtr, unsigned length
 }
 
 void MonitoredScalarStoreSymbol(BuilderRef b, std::string scalarName, std::vector<Value *> toStore, Value * ptr, unsigned length) {
-    unsigned store_length = 1 << boost::intrusive::detail::floor_log2(length);
+    unsigned store_length = 1U << boost::intrusive::detail::floor_log2(length);
     //b->CallPrintInt("ptr" + std::to_string(length), ptr);
     Type * storePtrTy = b->getIntNTy(store_length * 8)->getPointerTo();
     b->CreateMonitoredScalarFieldStore(scalarName, toStore[0], b->CreateBitCast(ptr, storePtrTy));
@@ -784,7 +783,7 @@ void MonitoredScalarStoreSymbol(BuilderRef b, std::string scalarName, std::vecto
 }
 
 void storeSymbol(BuilderRef b, std::vector<Value *> toStore, Value * ptr, unsigned length) {
-    unsigned store_length = 1 << boost::intrusive::detail::floor_log2(length);
+    unsigned store_length = 1U << boost::intrusive::detail::floor_log2(length);
     Type * storePtrTy = b->getIntNTy(store_length * 8)->getPointerTo();
     b->CreateAlignedStore(toStore[0], b->CreateBitCast(ptr, storePtrTy), 1);
     if (store_length == length) {
@@ -819,8 +818,8 @@ void generateKeyProcessingLoops(BuilderRef b,
                                 Value * stridePos,
                                 BasicBlock * keysDone) {
 
-    unsigned maskCount = keyMasks.size();
-    unsigned maxLength = lo + maskCount - 1;
+    const auto maskCount = keyMasks.size();
+    const auto maxLength = lo + maskCount - 1;
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
@@ -855,19 +854,28 @@ void generateKeyProcessingLoops(BuilderRef b,
         PHINode * const keyWordPhi = b->CreatePHI(sizeTy, 2);
         keyWordPhi->addIncoming(sz_ZERO, entryBlock);
         Value * keyWordIdx = b->CreateCountForwardZeroes(keyMaskPhi, "keyWordIdx");
+
         Value * nextKeyWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(keyWordBasePtr, keyWordIdx)), sizeTy);
         Value * theKeyWord = b->CreateSelect(b->CreateICmpEQ(keyWordPhi, sz_ZERO), nextKeyWord, keyWordPhi);
         Value * keyWordPos = b->CreateAdd(stridePos, b->CreateMul(keyWordIdx, sw.WIDTH));
         Value * keyMarkPosInWord = b->CreateCountForwardZeroes(theKeyWord);
         Value * keyMarkPos = b->CreateAdd(keyWordPos, keyMarkPosInWord, "keyEndPos");
         Value * const hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
+
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            b->CreateAssert(b->CreateICmpUGE(keyMarkPos, sz_MARK_OFFSET),
+                            "keyMarkPos (%d) is less than sz_MARK_OFFSET (%d)", keyMarkPos, sz_MARK_OFFSET);
+        }
+
         Value * keyStartPos = b->CreateSub(keyMarkPos, sz_MARK_OFFSET, "keyStartPos");
         Value * keyHash = b->CreateAnd(hashValue, lg.HASH_MASK, "keyHash");
         Value * tblEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), LGTH_IDX, b->CreateMul(keyHash, lg.HI)});
         Value * symPtr = b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos);
+
         // Check to see if the hash table entry is nonzero (already assigned).
         std::vector<Value *> sym = loadSymbol(b, symPtr, length);
         std::vector<Value *> entry = MonitoredScalarLoadSymbol(b, "hashTable", tblEntryPtr, length);
+
         Value * symIsEqEntry = compareSymbols(b, sym, entry);
         Value * curHash = keyHash;
         if (length == maxLength) {
@@ -883,6 +891,10 @@ void generateKeyProcessingLoops(BuilderRef b,
             // First load the extensionMap entry for the current hash value and check it.
             Value * extensionMapEntry = b->CreateGEP(extensionMapPtr, {b->getInt32(0), LGTH_IDX, keyHash});
             Value * extensionHash = b->CreateZExt(b->CreateMonitoredScalarFieldLoad("prefixMapTable", extensionMapEntry), sizeTy);
+
+
+            b->CallPrintInt("extensionHash", extensionHash);
+
             b->CreateCondBr(b->CreateIsNull(extensionHash), tryStore, checkExtension);
 
             b->SetInsertPoint(checkExtension);
@@ -1060,7 +1072,6 @@ void FixedLengthCompression::generateMultiBlockLogic(BuilderRef b, Value * const
     Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, sz_STRIDE));
     Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
     Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
-
     std::vector<Value *> keyMasks = initializeCompressionMasks(b, sw, sz_BLOCKS_PER_STRIDE, numOfMasks, strideBlockOffset, compressMaskPtr, strideMasksReady);
     b->SetInsertPoint(strideMasksReady);
     // Iterate through key symbols and update the hash table as appropriate.
