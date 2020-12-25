@@ -3,19 +3,24 @@
 
 #include "../config.h"
 #include "../common/common.hpp"
+#include "../common/graphs.h"
+
 #include <algorithm>
 #include <queue>
 #include <z3.h>
 #include <util/maxsat.hpp>
 #include <assert.h>
+
+#include <kernel/core/kernel.h>
+#include <kernel/core/relationship.h>
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
 
+#define EXPERIMENTAL_SCHEDULING
 
 namespace kernel {
 
 struct PipelineAnalysis : public PipelineCommonGraphFunctions {
-
 
 public:
 
@@ -53,6 +58,7 @@ public:
         P.makeTerminationPropagationGraph();
 
         // Finish the buffer graph
+        // P.identifyDirectUpdatesToStateObjects();
         P.addStreamSetsToBufferGraph(b);
 
         P.gatherInfo();
@@ -79,19 +85,19 @@ private:
 
     // pipeline analysis functions
 
-    using KernelPartitionIds = flat_map<Relationships::vertex_descriptor, unsigned>;
+    using KernelPartitionIds = flat_map<ProgramGraph::vertex_descriptor, unsigned>;
 
     void generateInitialPipelineGraph(BuilderRef b);
 
-    using KernelVertexVec = SmallVector<Relationships::Vertex, 64>;
+    using KernelVertexVec = SmallVector<ProgramGraph::Vertex, 64>;
 
-    void addRegionSelectorKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, Relationships & G);
+    void addRegionSelectorKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, ProgramGraph & G);
 
-    void addPopCountKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, Relationships & G);
+    void addPopCountKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, ProgramGraph & G);
 
-    void combineDuplicateKernels(BuilderRef b, const Kernels & partition, Relationships & G);
+    void combineDuplicateKernels(BuilderRef b, const Kernels & partition, ProgramGraph & G);
 
-    void removeUnusedKernels(const unsigned p_in, const unsigned p_out, const Kernels & partition, Relationships & G);
+    void removeUnusedKernels(const unsigned p_in, const unsigned p_out, const Kernels & partition, ProgramGraph & G);
 
     void identifyPipelineInputs();
 
@@ -112,6 +118,21 @@ private:
 
     void identifyKernelPartitions(const std::vector<unsigned> & orderingOfG);
 
+    #ifdef EXPERIMENTAL_SCHEDULING
+    std::vector<PartitionData> gatherPartitionData(const std::vector<unsigned> & orderingOfG) const;
+
+    void analyzeDataflowWithinPartitions(std::vector<PartitionData> & P) const;
+
+    PartitionDataflowGraph analyzeDataflowBetweenPartitions(std::vector<PartitionData> & P) const;
+
+    PartitionOrdering makePartitionSchedulingGraph(std::vector<PartitionData> & P, const PartitionDataflowGraph & D) const;
+
+    void scheduleProgramGraph(const std::vector<PartitionData> & P, PartitionOrdering & O, const PartitionDataflowGraph & D) const;
+
+    void assembleProgramSchedule(const std::vector<PartitionData> & P, const PartitionOrdering & O);
+
+    #endif
+
     void addOrderingConstraintsToPartitionSubgraphs(const std::vector<unsigned> & orderingOfG);
 
     void generatePartitioningGraph();
@@ -127,6 +148,7 @@ private:
     void identifyLinearBuffers();
     void identifyNonLocalBuffers();
     void identifyLocalPortIds();
+    // void identifyDirectUpdatesToStateObjects();
 
     // consumer analysis functions
 
@@ -159,18 +181,19 @@ private:
 
     void makeInputTruncationGraph();
 
-    // Debug functions
+public:
 
+    // Debug functions
     void printBufferGraph(raw_ostream & out) const;
-    void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, const StringRef name = "G");
+    static void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, const StringRef name = "G");
 
 private:
 
     PipelineKernel * const          mPipelineKernel;
     const unsigned					mNumOfThreads;
     const LengthAssertions &        mLengthAssertions;
-    Relationships                   mRelationships;
-    KernelPartitionIds              mPartitionIds;
+    ProgramGraph                    Relationships;
+    KernelPartitionIds              PartitionIds;
 
 public:
 
@@ -216,7 +239,7 @@ public:
 
     OwningVector<Kernel>            mInternalKernels;
     OwningVector<Binding>           mInternalBindings;
-    OwningVector<StreamSetBuffer>      mInternalBuffers;
+    OwningVector<StreamSetBuffer>   mInternalBuffers;
 };
 
 }
@@ -227,6 +250,7 @@ public:
 #include "consumer_analysis.hpp"
 #include "dataflow_analysis.hpp"
 #include "partitioning_analysis.hpp"
+#include "scheduling_analysis.hpp"
 #include "termination_analysis.hpp"
 #include "zero_extend_analysis.hpp"
 #include "add_analysis.hpp"

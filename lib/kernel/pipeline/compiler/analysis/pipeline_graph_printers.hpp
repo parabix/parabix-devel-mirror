@@ -3,6 +3,7 @@
 
 #include "relationship_analysis.hpp"
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/graph/strong_components.hpp>
 
 namespace kernel {
 
@@ -40,6 +41,9 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
             out << '(' << v.numerator() << '/' << v.denominator() << ')';
         }
     };
+
+    std::vector<unsigned> component(num_vertices(G));
+    strong_components(G, component.data());
 
     out << "digraph " << name << " {\n";
     for (const auto v : make_iterator_range(vertices(G))) {
@@ -122,10 +126,12 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
     for (const auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
         const auto t = target(e, G);
-        out << "v" << s << " -> v" << t << " [";
+        out << "v" << s << " -> v" << t << " ";
+        char joiner = '[';
         const RelationshipType & rt = G[e];
         if (rt.Reason != ReasonType::OrderingConstraint) {
-            out  << "label=\"";
+            out  << joiner << "label=\"";
+            joiner = ',';
             switch (rt.Type) {
                 case PortType::Input:
                     out << 'I';
@@ -154,6 +160,10 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
             out << "\"";
         }
 
+        if (LLVM_UNLIKELY(component[s] == component[t])) {
+            out << joiner << "penwidth=3";
+            joiner = ',';
+        }
 
         switch (rt.Reason) {
             case ReasonType::None:
@@ -161,13 +171,13 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
                 break;
             case ReasonType::ImplicitPopCount:
             case ReasonType::ImplicitRegionSelector:
-                out << " color=blue";
+                out << joiner << "color=blue";
                 break;
             case ReasonType::Reference:
-                out << " color=gray";
+                out << joiner << "color=gray";
                 break;
             case ReasonType::OrderingConstraint:
-                out << " color=red";
+                out << joiner << "color=red";
                 break;
         }
         out << "];\n";

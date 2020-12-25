@@ -5,6 +5,7 @@
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include "../pipeline_compiler.hpp"
 #include <kernel/core/refwrapper.h>
 #include <util/extended_boost_graph_containers.h>
 #include <toolchain/toolchain.h>
@@ -139,35 +140,35 @@ struct RelationshipType : public StreamSetPort {
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType, no_property>;
 
-struct Relationships : public RelationshipGraph {
+struct ProgramGraph : public RelationshipGraph {
     using Vertex = RelationshipGraph::vertex_descriptor;
 
     template <typename T>
     inline Vertex add(T key) {
-        RelationshipNode k(key);
-        return __add(k);
+        return __add(RelationshipNode{key});
     }
 
     template <typename T>
     inline Vertex set(T key, Vertex v) {
-        RelationshipNode k(key);
-        return __set(k, v);
+        return __set(RelationshipNode{key}, v);
     }
 
     template <typename T>
     inline Vertex find(T key) {
-        RelationshipNode k(key);
-        return __find(k);
+        return __find(RelationshipNode{key});
     }
 
     template <typename T>
     inline Vertex addOrFind(T key, const bool permitAdd = true) {
-        RelationshipNode k(key);
-        return __addOrFind(k, permitAdd);
+        return __addOrFind(RelationshipNode{key}, permitAdd);
     }
 
     RelationshipGraph & Graph() {
         return static_cast<RelationshipGraph &>(*this);
+    }
+
+    const RelationshipGraph & Graph() const {
+        return static_cast<const RelationshipGraph &>(*this);
     }
 
 private:
@@ -410,8 +411,55 @@ bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B
     }
     return (A.Port < B.Port);
 }
-
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
+
+using OrderingDAWG = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
+
+struct PartitionData {
+
+    std::vector<unsigned>   Kernels;
+    std::vector<unsigned>   Repetitions;
+    OrderingDAWG            Orderings;
+    Rational                ExpectedRepetitions;
+
+    PartitionData()
+    : Orderings(1) {
+
+    }
+};
+
+struct PartitionDataflowEdge {
+    unsigned    KernelId;
+    RateId      RateType;
+    Rational    Expected;
+
+    PartitionDataflowEdge() = default;
+
+    PartitionDataflowEdge(unsigned id, RateId rateType, Rational expected)
+    : KernelId(id)
+    , RateType(rateType)
+    , Expected(expected) {
+
+    }
+
+};
+
+using PartitionDataflowGraph = adjacency_list<vecS, vecS, bidirectionalS, Rational, PartitionDataflowEdge>;
+
+using PartitionOrderingGraph = adjacency_list<hash_setS, vecS, bidirectionalS, std::vector<unsigned>, no_property>;
+
+struct PartitionOrdering {
+    PartitionOrderingGraph  Graph;
+    std::vector<unsigned>   Kernels;
+    OrderingDAWG            Ordering;
+
+    PartitionOrdering(PartitionOrderingGraph && graph, flat_set<unsigned> && kernels)
+    : Graph(graph)
+    , Kernels(kernels.begin(), kernels.end())
+    , Ordering(1) {
+
+    }
+};
 
 using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
 

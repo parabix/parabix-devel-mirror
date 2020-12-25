@@ -11,7 +11,7 @@ class KernelBuilder : public virtual IDISA::IDISA_Builder {
     friend class KernelCompiler;
 public:
 
-    using Rational = boost::rational<unsigned>;
+    using Rational = ProcessingRate::Rational;
 
     enum TerminationCode : unsigned {
         None = 0

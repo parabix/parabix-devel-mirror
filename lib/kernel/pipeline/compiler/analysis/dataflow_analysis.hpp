@@ -612,7 +612,7 @@ void PipelineAnalysis::computeDataFlowRates() {
         return Z3_mk_mul(ctx, 2, args);
     };
 
-    #warning This does not calculate the initial lookahead/delay implications.
+//    #warning This does not calculate the initial lookahead/delay implications.
 
     // Instead of trying to reason about lookahead/delay, we could have internal buffers
     // "reset" at the start of each partition.

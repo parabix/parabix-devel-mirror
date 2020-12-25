@@ -19,12 +19,12 @@ namespace kernel {
 
 namespace { // start of anonymous namespace
 
-using RefVector = SmallVector<Relationships::Vertex, 4>;
+using RefVector = SmallVector<ProgramGraph::Vertex, 4>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addProducerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
-void addProducerRelationships(const PortType portType, const unsigned producer, const Bindings & array, Relationships & G) {
+void addProducerRelationships(const PortType portType, const unsigned producer, const Bindings & array, ProgramGraph & G) {
     const auto n = array.size();
     if (LLVM_UNLIKELY(n == 0)) {
         return;
@@ -50,7 +50,7 @@ void addProducerRelationships(const PortType portType, const unsigned producer, 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addConsumerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
-void addConsumerRelationships(const PortType portType, const unsigned consumer, const Bindings & array, Relationships & G, const bool addRelationship) {
+void addConsumerRelationships(const PortType portType, const unsigned consumer, const Bindings & array, ProgramGraph & G, const bool addRelationship) {
     const auto n = array.size();
     if (LLVM_UNLIKELY(n == 0)) {
         return;
@@ -78,7 +78,7 @@ void addConsumerRelationships(const PortType portType, const unsigned consumer, 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addConsumerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
-void addConsumerRelationships(const PortType portType, const CallBinding & call, Relationships & G) {
+void addConsumerRelationships(const PortType portType, const CallBinding & call, ProgramGraph & G) {
     const auto & array = call.Args;
     const auto n = array.size();
     if (LLVM_UNLIKELY(n == 0)) {
@@ -133,7 +133,7 @@ inline const Binding & getReferenceBinding(const Kernel * const kernel, const St
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addReferenceRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
-void addReferenceRelationships(const PortType portType, const unsigned index, const Bindings & array, Relationships & G) {
+void addReferenceRelationships(const PortType portType, const unsigned index, const Bindings & array, ProgramGraph & G) {
     const auto n = array.size();
     if (LLVM_UNLIKELY(n == 0)) {
         return;
@@ -184,7 +184,7 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
 
     // Compute the lexographical ordering of G
     std::vector<unsigned> O;
-    if (LLVM_UNLIKELY(!lexical_ordering(mRelationships, O))) {
+    if (LLVM_UNLIKELY(!lexical_ordering(Relationships, O))) {
         // TODO: inspect G to determine what type of cycle. E.g., do we have circular references in the binding of
         // a kernel or is it a problem with the I/O relationships?
         report_fatal_error("Pipeline contains a cycle");
@@ -201,7 +201,7 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
     Vertices scalars;
 
     for (const auto i : O) {
-        const RelationshipNode & rn = mRelationships[i];
+        const RelationshipNode & rn = Relationships[i];
         switch (rn.Type) {
             case RelationshipNode::IsKernel:
                 assert (rn.Kernel);
@@ -237,7 +237,7 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
     const auto numOfCallees = callees.size();
     const auto numOfScalars = scalars.size();
 
-    SmallVector<unsigned, 256> subsitution(num_vertices(mRelationships), -1U);
+    SmallVector<unsigned, 256> subsitution(num_vertices(Relationships), -1U);
 
     LastKernel = PipelineInput + numOfKernels - 2;
     PipelineOutput = LastKernel + 1;
@@ -263,8 +263,8 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
         const auto out = PipelineInput + i;
         subsitution[in] = out;
 
-        const auto f = mPartitionIds.find(in);
-        assert (f != mPartitionIds.end());
+        const auto f = PartitionIds.find(in);
+        assert (f != PartitionIds.end());
         const auto id = f->second;
         // renumber the partitions to reflect the selected ordering instead
         // of the lexical (program input) ordering
@@ -280,17 +280,19 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
         KernelPartitionId[out] = outputPartitionId;
     }
 
-    #ifdef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
+    // Originally, if the pipeline kernel does not have external I/O, both the pipeline in/out
+    // nodes would be placed into the same (ignored) set but this won't be true after scheduling.
+    // Similarly, if we disable partitioning, every kernel will be placed into its own partition.
+    // Accept whatever the prior loops determines is the new partition count.
+
     PartitionCount = outputPartitionId + 1U;
-    #endif
 
     assert (outputPartitionId == (PartitionCount - 1));
-    assert (mRelationships[kernels[PipelineInput]].Kernel == mPipelineKernel);
-    assert (mRelationships[kernels[PipelineOutput]].Kernel == mPipelineKernel);
+    assert (Relationships[kernels[PipelineInput]].Kernel == mPipelineKernel);
+    assert (Relationships[kernels[PipelineOutput]].Kernel == mPipelineKernel);
 
     assert (KernelPartitionId[PipelineInput] == 0);
     assert (KernelPartitionId[PipelineOutput] == (PartitionCount - 1U));
-
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {
         assert (subsitution[streamSets[i]] == -1U);
@@ -315,9 +317,9 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
         for (const auto j : V) {
             assert (j < subsitution.size());
             const auto v = subsitution[j];
-            assert (j < num_vertices(mRelationships));
+            assert (j < num_vertices(Relationships));
             assert (v < num_vertices(H));
-            H[v] = mRelationships[j];
+            H[v] = Relationships[j];
         }
     };
 
@@ -325,13 +327,13 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
             const RelationshipNode::RelationshipNodeType type) {
         for (const auto j : V) {
             const auto v = subsitution[j];
-            for (const auto e : make_iterator_range(in_edges(j, mRelationships))) {
-                const auto i = source(e, mRelationships);
-                if (mRelationships[i].Type == type) {
-                    assert (mRelationships[e].Reason != ReasonType::OrderingConstraint);
+            for (const auto e : make_iterator_range(in_edges(j, Relationships))) {
+                const auto i = source(e, Relationships);
+                if (Relationships[i].Type == type) {
+                    assert (Relationships[e].Reason != ReasonType::OrderingConstraint);
                     const auto u = subsitution[i];
                     assert (u < num_vertices(H));
-                    temp.emplace_back(mRelationships[e], u);
+                    temp.emplace_back(Relationships[e], u);
                 }
             }
             std::sort(temp.begin(), temp.end());
@@ -346,13 +348,13 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
             const RelationshipNode::RelationshipNodeType type) {
         for (const auto j : V) {
             const auto v = subsitution[j];
-            for (const auto e : make_iterator_range(out_edges(j, mRelationships))) {
-                const auto i = target(e, mRelationships);
-                if (mRelationships[i].Type == type) {
-                    assert (mRelationships[e].Reason != ReasonType::OrderingConstraint);
+            for (const auto e : make_iterator_range(out_edges(j, Relationships))) {
+                const auto i = target(e, Relationships);
+                if (Relationships[i].Type == type) {
+                    assert (Relationships[e].Reason != ReasonType::OrderingConstraint);
                     const auto w = subsitution[i];
                     assert (w < num_vertices(H));
-                    temp.emplace_back(mRelationships[e], w);
+                    temp.emplace_back(Relationships[e], w);
                 }
             }
             std::sort(temp.begin(), temp.end());
@@ -403,8 +405,9 @@ void PipelineAnalysis::generateInitialPipelineGraph(BuilderRef b) {
 
     // Copy the list of kernels and add in any internal kernels
     Kernels kernels(mPipelineKernel->getKernels());
-
-    const auto p_in = add_vertex(RelationshipNode(mPipelineKernel), mRelationships);
+    assert (num_vertices(Relationships) == 0);
+    const unsigned p_in = add_vertex(RelationshipNode(mPipelineKernel), Relationships);
+    assert (p_in == PipelineInput);
     const auto n = kernels.size();
     KernelVertexVec vertex(n);
     for (unsigned i = 0; i < n; ++i) {
@@ -416,66 +419,68 @@ void PipelineAnalysis::generateInitialPipelineGraph(BuilderRef b) {
                 << " contains itself in its pipeline";
             report_fatal_error(msg.str());
         }
-        vertex[i] = mRelationships.add(K);
+        vertex[i] = Relationships.add(K);
     }
-    const auto p_out = add_vertex(RelationshipNode(mPipelineKernel), mRelationships);
+    const unsigned p_out = add_vertex(RelationshipNode(mPipelineKernel), Relationships);
+    PipelineOutput = p_out;
 
     // From the pipeline's perspective, a pipeline input node "produces" the inputs of the pipeline and a
     // pipeline output node "consumes" its outputs. Internally this means the inputs and outputs of the
     // pipeline are inverted from its external view but this change simplifies the analysis considerably
     // by permitting the compiler's internal graphs to acyclic.
 
-    addProducerRelationships(PortType::Output, p_in, mPipelineKernel->getInputStreamSetBindings(), mRelationships);
-    addConsumerRelationships(PortType::Input, p_out, mPipelineKernel->getOutputStreamSetBindings(), mRelationships, true);
+    addProducerRelationships(PortType::Output, p_in, mPipelineKernel->getInputStreamSetBindings(), Relationships);
+    addConsumerRelationships(PortType::Input, p_out, mPipelineKernel->getOutputStreamSetBindings(), Relationships, true);
 
     for (unsigned i = 0; i < n; ++i) {
-        addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), mRelationships);
+        addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), Relationships);
     }
     for (unsigned i = 0; i < n; ++i) {
-        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), mRelationships, false);
+        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), Relationships, false);
     }
 
     for (unsigned i = 0; i < n; ++i) {
-        addReferenceRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), mRelationships);
+        addReferenceRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), Relationships);
     }
     for (unsigned i = 0; i < n; ++i) {
-        addReferenceRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), mRelationships);
+        addReferenceRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), Relationships);
     }
 
-    addPopCountKernels(b, kernels, vertex, mRelationships);
+    addPopCountKernels(b, kernels, vertex, Relationships);
     // addRegionSelectorKernels(b, kernels, vertex, G, internalKernels, internalBindings);
 
-    addProducerRelationships(PortType::Output, p_in, mPipelineKernel->getInputScalarBindings(), mRelationships);
-    addConsumerRelationships(PortType::Input, p_out, mPipelineKernel->getOutputScalarBindings(), mRelationships, true);
+    addProducerRelationships(PortType::Output, p_in, mPipelineKernel->getInputScalarBindings(), Relationships);
+    addConsumerRelationships(PortType::Input, p_out, mPipelineKernel->getOutputScalarBindings(), Relationships, true);
     for (unsigned i = 0; i < n; ++i) {
-        addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputScalarBindings(), mRelationships);
+        addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputScalarBindings(), Relationships);
     }
 
     for (unsigned i = 0; i < n; ++i) {
-        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputScalarBindings(), mRelationships, true);
+        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputScalarBindings(), Relationships, true);
     }
 
     for (const CallBinding & C : mPipelineKernel->getCallBindings()) {
-        addConsumerRelationships(PortType::Input, C, mRelationships);
+        addConsumerRelationships(PortType::Input, C, Relationships);
     }
 
     // Pipeline optimizations
-    combineDuplicateKernels(b, kernels, mRelationships);
-    removeUnusedKernels(p_in, p_out, kernels, mRelationships);
+    combineDuplicateKernels(b, kernels, Relationships);
+    removeUnusedKernels(p_in, p_out, kernels, Relationships);
 
+    #ifndef EXPERIMENTAL_SCHEDULING
     // Add ordering constraints to ensure the input must be before all kernel invocations
     // and the invocations must come before the output.
     for (const auto v : vertex) {
-        add_edge(p_in, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, mRelationships);
-        add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, mRelationships);
+        add_edge(p_in, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, Relationships);
+        add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, Relationships);
     }
-
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addRegionSelectorKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, Relationships & G) {
+void PipelineAnalysis::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, ProgramGraph & G) {
 
     enum : unsigned {
         REGION_START = 0
@@ -598,14 +603,15 @@ void PipelineAnalysis::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addPopCountKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::addPopCountKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, Relationships & G) {
+void PipelineAnalysis::addPopCountKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, ProgramGraph & G) {
 
     struct Edge {
-        CountingType Type;
+        CountingType    Type;
         StreamSetPort   Port;
-        unsigned     StrideLength;
+        size_t          StrideLength;
+
         Edge() : Type(Unknown), Port(), StrideLength() { }
-        Edge(const CountingType type, const StreamSetPort port, unsigned stepFactor) : Type(type), Port(port), StrideLength(stepFactor) { }
+        Edge(const CountingType type, const StreamSetPort port, size_t stepFactor) : Type(type), Port(port), StrideLength(stepFactor) { }
     };
 
     using Graph = adjacency_list<vecS, vecS, directedS, Relationship *, Edge>;
@@ -621,7 +627,7 @@ void PipelineAnalysis::addPopCountKernels(BuilderRef b, Kernels & kernels, Kerne
 
         const Kernel * const kernel = kernels[i];
 
-        auto addPopCountDependency = [&](const Relationships::vertex_descriptor bindingVertex,
+        auto addPopCountDependency = [&](const ProgramGraph::vertex_descriptor bindingVertex,
                                          const RelationshipType & port) {
 
             const RelationshipNode & rn = G[bindingVertex];
@@ -698,7 +704,7 @@ void PipelineAnalysis::addPopCountKernels(BuilderRef b, Kernels & kernels, Kerne
 
     for (auto i = numOfKernels; i < n; ++i) {
 
-        unsigned strideLength = 0;
+        size_t strideLength = 0;
         CountingType type = CountingType::Unknown;
         for (const auto e : make_iterator_range(out_edges(i, H))) {
             const Edge & ed = H[e];
@@ -770,7 +776,7 @@ void PipelineAnalysis::addPopCountKernels(BuilderRef b, Kernels & kernels, Kerne
                 RelationshipNode & rn = G[binding];
                 assert (rn.Type == RelationshipNode::IsBinding);
 
-                graph_traits<Relationships>::in_edge_iterator ei, ei_end;
+                graph_traits<ProgramGraph>::in_edge_iterator ei, ei_end;
                 std::tie(ei, ei_end) = in_edges(binding, G);
                 assert (std::distance(ei, ei_end) == 2);
 
@@ -828,7 +834,7 @@ void PipelineAnalysis::addPopCountKernels(BuilderRef b, Kernels & kernels, Kerne
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief combineDuplicateKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G) /*static*/ {
+void PipelineAnalysis::combineDuplicateKernels(BuilderRef b, const Kernels & kernels, ProgramGraph & G) /*static*/ {
 
     using StreamSetVector = std::vector<std::pair<unsigned, StreamSetPort>>;
     using ScalarVector = std::vector<unsigned>;
@@ -1009,7 +1015,7 @@ void PipelineAnalysis::combineDuplicateKernels(BuilderRef b, const Kernels & ker
  * @brief removeUnusedKernels
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineAnalysis::removeUnusedKernels(const unsigned p_in, const unsigned p_out,
-                                                  const Kernels & kernels, Relationships & G) /*static*/ {
+                                                  const Kernels & kernels, ProgramGraph & G) /*static*/ {
 
     flat_set<unsigned> visited;
     std::queue<unsigned> pending;

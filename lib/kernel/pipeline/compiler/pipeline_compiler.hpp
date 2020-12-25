@@ -10,6 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 #include "config.h"
+
 using namespace boost;
 using namespace boost::math;
 using namespace boost::adaptors;

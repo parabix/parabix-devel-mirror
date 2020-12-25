@@ -37,7 +37,7 @@ struct ProcessingRate  {
         __Count
     };
 
-    using Rational = boost::rational<unsigned>;
+    using Rational = boost::rational<size_t>;
 
     KindId getKind() const { return mKind; }
 

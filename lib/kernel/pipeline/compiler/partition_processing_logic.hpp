@@ -324,10 +324,11 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
         return phi;
     };
 
-    for (auto partitionId = 0U; partitionId != targetPartitionId; ++partitionId) {
+    const auto firstPartition = KernelPartitionId[FirstKernel];
+    for (auto partitionId = firstPartition; partitionId != targetPartitionId; ++partitionId) {
         PHINode * const termPhi = findOrAddPhi(mPartitionTerminationSignalPhi, partitionId, "partitionTerminationSignalPhi");
         Value * term = nullptr;
-        if (partitionId <= mCurrentPartitionId) {
+        if (partitionId < mCurrentPartitionId) {
             term = mPartitionTerminationSignal[partitionId]; assert (term);
         } else {
             term = readTerminationSignal(b, partitionId); assert (term);
