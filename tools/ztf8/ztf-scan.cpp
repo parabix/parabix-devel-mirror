@@ -474,8 +474,8 @@ void initializeDecompressionMasks(BuilderRef b,
     blockNo->addIncoming(sz_ZERO, entryBlock);
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
     for (unsigned i = 0; i < maskCount; i++) {
-        Value * keyBitBlock = b->loadInputStreamBlock("keyMarks" + std::to_string(i), strideBlockIndex);
-        Value * hashBitBlock = b->loadInputStreamBlock("hashMarks" + std::to_string(i), strideBlockIndex);
+        Value * keyBitBlock = b->loadInputStreamBlock("keyMarks" + std::to_string(i), sz_ZERO, strideBlockIndex);
+        Value * hashBitBlock = b->loadInputStreamBlock("hashMarks" + std::to_string(i), sz_ZERO, strideBlockIndex);
         Value * const anyKey = b->simd_any(sw.width, keyBitBlock);
         Value * const anyHash = b->simd_any(sw.width, hashBitBlock);
         Value * keyWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyKey), sizeTy);
@@ -1210,7 +1210,7 @@ void generateHashProcessingLoops(BuilderRef b,
 
     for (unsigned length = lo; length <= maxLength; length++) {
         LengthGroupParameters lg(b, encodingScheme, encodingScheme.getLengthGroupNo(length));
-        Constant * LGTH_IDX = b->getInt32(length - lo);
+        Constant * LGTH_IDX = b->getSize(length - lo);
         Constant * sz_MARK_OFFSET = b->getSize(length - 1);
         BasicBlock * entryBlock = b->GetInsertBlock();
         BasicBlock * const hashProcessingLoop = b->CreateBasicBlock("hashProcessingLoop");

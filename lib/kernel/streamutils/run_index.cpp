@@ -37,7 +37,7 @@ void RunIndex::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     Var * runMarksVar = pb.createExtract(getInputStreamVar("runMarks"), pb.getInteger(0));
     PabloAST * runMarks = mInvertMask ? pb.createInFile(pb.createNot(runMarksVar)) : runMarksVar;
-    PabloAST * runStart = pb.createAnd(runMarks, pb.createNot(pb.createAdvance(runMarks, 1)), "runStart");
+    PabloAST * runStart = pb.createAnd(runMarks, pb.createAdvance(pb.createNot(runMarks), 1), "runStart");
     PabloAST * selectZero = runMarks;
     PabloAST * outputEnable = runMarks;
     Var * runIndexVar = getOutputStreamVar("runIndex");
