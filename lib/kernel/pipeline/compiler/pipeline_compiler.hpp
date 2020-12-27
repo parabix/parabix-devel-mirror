@@ -9,18 +9,15 @@
 #include <llvm/ADT/STLExtras.h>
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
+#include <boost/intrusive/detail/math.hpp>
 #include "config.h"
 using namespace boost;
 using namespace boost::math;
 using namespace boost::adaptors;
 using boost::container::flat_set;
 using boost::container::flat_map;
+using boost::intrusive::detail::floor_log2;
 using namespace llvm;
-
-inline static unsigned floor_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return ((sizeof(unsigned) * CHAR_BIT) - 1U) - __builtin_clz(v);
-}
 
 namespace kernel {
 
@@ -208,8 +205,8 @@ public:
     void copy(BuilderRef b, const CopyMode mode, Value * cond, const StreamSetPort outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy);
 
 
-    void computeFullyProcessedItemCounts(BuilderRef b);
-    void computeFullyProducedItemCounts(BuilderRef b);
+    void computeFullyProcessedItemCounts(BuilderRef b, Value * const terminated);
+    void computeFullyProducedItemCounts(BuilderRef b, Value * const terminated);
     Value * computeFullyProducedItemCount(BuilderRef b, const size_t kernel, const StreamSetPort port, Value * produced, Value * const terminationSignal);
 
     void updateKernelExitPhisAfterInitiallyTerminated(BuilderRef b);
