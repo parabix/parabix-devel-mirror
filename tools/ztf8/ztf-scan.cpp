@@ -891,10 +891,6 @@ void generateKeyProcessingLoops(BuilderRef b,
             // First load the extensionMap entry for the current hash value and check it.
             Value * extensionMapEntry = b->CreateGEP(extensionMapPtr, {b->getInt32(0), LGTH_IDX, keyHash});
             Value * extensionHash = b->CreateZExt(b->CreateMonitoredScalarFieldLoad("prefixMapTable", extensionMapEntry), sizeTy);
-
-
-            b->CallPrintInt("extensionHash", extensionHash);
-
             b->CreateCondBr(b->CreateIsNull(extensionHash), tryStore, checkExtension);
 
             b->SetInsertPoint(checkExtension);
