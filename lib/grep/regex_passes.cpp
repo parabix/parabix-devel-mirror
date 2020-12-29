@@ -39,6 +39,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
         errs() << "Parser:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     r = removeUnneededCaptures(r);
+    r = resolveEscapeNames(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
     r = UCD::linkProperties(r);
     r = UCD::standardizeProperties(r);

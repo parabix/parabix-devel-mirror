@@ -384,13 +384,13 @@ RE * RE_Parser::parseEscapedSet() {
                 return complemented ? makeZerowidthComplement(re) : re;
             }
         case 'd':
-            re = makeDigitSet();
+            re = createName("\\d");
             return complemented ? makeComplement(re) : re;
         case 's':
-            re = makeWhitespaceSet();
+            re = createName("\\s");
             return complemented ? makeComplement(re) : re;
         case 'w':
-            re = makeWordSet();
+            re = createName("\\w");
             return complemented ? makeComplement(re) : re;
         case 'q':
             require('{');
