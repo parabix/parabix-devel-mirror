@@ -14,11 +14,11 @@ namespace kernel {
 
 #define INITIAL_CANDIDATE_ATTEMPTS (100)
 
-#define INITIAL_TOPOLOGICAL_POPULATION_SIZE (10)
+#define INITIAL_TOPOLOGICAL_POPULATION_SIZE (25)
 
-#define MAX_POPULATION_SIZE (15)
+#define MAX_POPULATION_SIZE (50)
 
-#define MAX_EVOLUTIONARY_ROUNDS (10)
+#define MAX_EVOLUTIONARY_ROUNDS (30)
 
 #define CROSSOVER_RATE (0.03)
 
@@ -32,11 +32,11 @@ namespace kernel {
 
 #define RIGHT_HAND (2U)
 
-#define INITIAL_SCHEDULING_POPULATION_SIZE (5)
+#define INITIAL_SCHEDULING_POPULATION_ATTEMPTS (20)
 
-#define SCHEDULING_FITNESS_COST_ACO_ALPHA (20)
+#define INITIAL_SCHEDULING_POPULATION_SIZE (10)
 
-#define SCHEDULING_FITNESS_COST_ACO_BETA (4)
+// #define ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
 
 #define SCHEDULING_FITNESS_COST_ACO_RHO (0.1)
 
@@ -955,12 +955,27 @@ public:
         SmallVector<size_t, 4> _value;
     };
 
+    using Map = std::map<Candidate, size_t>;
+
+    using Individual = Map::const_iterator;
+
+    struct FitnessComparator {
+        bool operator()(const Individual & a,const Individual & b) const{
+            return a->second < b->second;
+        }
+    };
+
+    using PopulationArray = std::vector<Individual>;
+
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief runGA
      ** ------------------------------------------------------------------------------------------------------------- */
     void runGA(OrderingDAWG & result) {
 
-        if (initGA()) {
+        PopulationArray P1;
+        P1.reserve(MAX_POPULATION_SIZE);
+
+        if (initGA(P1)) {
             goto found_all_orderings;
         }
 
@@ -968,145 +983,100 @@ public:
 
         const auto evolutionary_start = std::chrono::high_resolution_clock::now();
 
-        using Item = std::pair<Candidate, size_t>;
-
-//        struct Item {
-//            Candidate candidate;
-//            size_t    weight;
-//        };
-
-
-        using List = std::vector<Item>;
-
         permutation_bitset bitString(candidateLength);
 
         BitVector V(candidateLength);
 
         std::uniform_real_distribution<double> zeroToOneReal(0.0, 1.0);
 
-        List P1;
-        P1.reserve(MAX_POPULATION_SIZE);
 
-        List P2;
-        P2.reserve(MAX_POPULATION_SIZE);
+        std::make_heap(P1.begin(), P1.end(), FitnessComparator{});
+
+        PopulationArray P2;
+        P2.reserve(3 * MAX_POPULATION_SIZE);
 
         for (unsigned round = 0; round < MAX_EVOLUTIONARY_ROUNDS; ++round) {
 
-            errs() << "EA: round=" << round << "\n";
-
-            // SELECTION:
-
-            P2.clear();
-
-            P1.clear();
-
-            P1.reserve(candidates.size());
-
-            for (auto i : candidates) {
-                P1.emplace_back(i.first, i.second);
-            }
-
-            std::sort(P1.begin(), P1.end(), [](const Item & A, const Item & B) {
-                return A.second < B.second;
-            });
-
-            if (P1.size() > MAX_POPULATION_SIZE) {
-                P1.resize(MAX_POPULATION_SIZE);
-            }
+//            errs() << "EA: round=" << round << "\n";
 
             const auto populationSize = P1.size();
 
             std::uniform_int_distribution<unsigned> upToN(0, populationSize - 1);
 
-            auto tournament_select = [&](const List & L) -> const Item & {
-                const auto & A = L[upToN(rng)];
-                const auto & B = L[upToN(rng)];
-                if (A.second < B.second) {
-                    return A;
+            auto tournament_select = [&]() -> const Candidate & {
+                const auto & A = P1[upToN(rng)];
+                const auto & B = P1[upToN(rng)];
+                if (A->second < B->second) {
+                    return A->first;
                 } else {
-                    return B;
+                    return B->first;
                 }
             };
 
-            for (unsigned i = 0; i < populationSize; ++i) {
-                errs() << "  population: ";
-                const Item & I = P1[i];
-                char joiner = '{';
-                for (const auto k : I.first) {
-                    errs() << joiner << k;
-                    joiner = ',';
-                }
-                errs() << "} := " << I.second << "\n";
-            }
-
-            for (unsigned i = 0; i < populationSize; ++i) {
-                P2.emplace_back(tournament_select(P1));
-            }
-
-            assert (P2.size() == populationSize);
-
+//            for (unsigned i = 0; i < populationSize; ++i) {
+//                errs() << "  population: ";
+//                const auto & I = P1[i];
+//                char joiner = '{';
+//                for (const auto k : I->first) {
+//                    errs() << joiner << k;
+//                    joiner = ',';
+//                }
+//                errs() << "} := " << I->second << "\n";
+//            }
 
             // CROSSOVER:
 
-            for (unsigned i = 1; i < populationSize; ++i) {
-                for (unsigned j = 0; j < i; ++j) {
+            assert (P2.empty());
 
-                    if (zeroToOneReal(rng) <= CROSSOVER_RATE) {
+            for (unsigned i = 0; i < populationSize; ++i) {
 
-                        const Candidate & A = P2[i].first;
-                        const Candidate & B = P2[j].first;
+                const Candidate & A = tournament_select();
+                const Candidate & B = tournament_select();
 
-                        // generate a random bit string
-                        bitString.randomize(rng);
+                // generate a random bit string
+                bitString.randomize(rng);
 
-                        auto crossover = [&](const Candidate & A, const Candidate & B, const bool selector) {
+                auto crossover = [&](const Candidate & A, const Candidate & B, const bool selector) {
 
-                            Candidate C(candidateLength);
+                    Candidate C(candidateLength);
 
-                            V.reset();
+                    V.reset();
 
-                            for (unsigned k = 0; k < candidateLength; ++k) {
-                                const auto t = bitString.test(k);
-                                if (t == selector) {
-                                    const auto v = A[k];
-                                    assert (v < candidateLength);
-                                    V.set(v);
-                                } else {
-                                    C[k] = A[k];
-                                }
-                            }
-
-                            for (unsigned k = 0U, p = -1U; k < candidateLength; ++k) {
-                                const auto t = bitString.test(k);
-                                if (t == selector) {
-                                    // V contains 1-bits for every entry we did not
-                                    // directly copy from A into C. We now insert them
-                                    // into C in the same order as they are in B.
-                                    for (;;){
-                                        ++p;
-                                        assert (p < candidateLength);
-                                        const auto v = B[p];
-                                        assert (v < candidateLength);
-                                        if (V.test(v)) break;
-                                    }
-                                    C[k] = B[p];
-                                }
-                            }
-                            insertCandidate(C);
-                        };
-
-                        crossover(A, B, true);
-
-                        crossover(B, A, false);
-
+                    for (unsigned k = 0; k < candidateLength; ++k) {
+                        const auto t = bitString.test(k);
+                        if (t == selector) {
+                            const auto v = A[k];
+                            assert (v < candidateLength);
+                            V.set(v);
+                        } else {
+                            C[k] = A[k];
+                        }
                     }
 
-                }
+                    for (unsigned k = 0U, p = -1U; k < candidateLength; ++k) {
+                        const auto t = bitString.test(k);
+                        if (t == selector) {
+                            // V contains 1-bits for every entry we did not
+                            // directly copy from A into C. We now insert them
+                            // into C in the same order as they are in B.
+                            for (;;){
+                                ++p;
+                                assert (p < candidateLength);
+                                const auto v = B[p];
+                                assert (v < candidateLength);
+                                if (V.test(v)) break;
+                            }
+                            C[k] = B[p];
+                        }
+                    }
 
+                    insertCandidate(C, P2);
 
+                };
 
+                crossover(A, B, true);
 
-
+                crossover(B, A, false);
 
             }
 
@@ -1119,7 +1089,7 @@ public:
 
             for (unsigned i = 0; i < populationSize; ++i) {
                 const auto j = upToN(rng);
-                auto & A = P2[j];
+                auto & A = P1[j];
                 if (zeroToOneReal(rng) <= MUTATION_RATE) {
                     std::uniform_int_distribution<unsigned> randomPoint(0, candidateLength - 1);
                     auto a = randomPoint(rng);
@@ -1129,14 +1099,33 @@ public:
                         if (b < a) {
                             std::swap(a, b);
                         }
-                        Candidate & C = A.first;
+                        Candidate C{A->first};
                         std::shuffle(C.begin() + a, C.begin() + b, rng);
-                        insertCandidate(C);
+
+                        insertCandidate(C, P2);
                         break;
                     }
                 }
             }
 
+            // SELECTION:
+
+            for (const auto & I : P2) {
+                if (P1.size() == MAX_POPULATION_SIZE) {
+                    if (I->second <= P1.front()->second) {
+                        std::pop_heap(P1.begin(), P1.end(), FitnessComparator{});
+                        P1.pop_back();
+                    } else {
+                        // New item exceeds the weight of the heaviest candiate
+                        // in the population.
+                        continue;
+                    }
+                }
+                P1.emplace_back(I);
+                std::push_heap(P1.begin(), P1.end(), FitnessComparator{});
+            }
+
+            P2.clear();
         }
 
         const auto evolutionary_end = std::chrono::high_resolution_clock::now();
@@ -1146,25 +1135,21 @@ public:
 
 found_all_orderings:
 
-        // Construct a trie of all possible best orderings of this partition
-        auto bestWeight = std::numeric_limits<size_t>::max();
-        std::vector<Candidate> bestCandidates;
+        if (LLVM_UNLIKELY(P1.empty())) return;
 
-        for (auto pair : candidates) {
-            if (pair.second < bestWeight) {
-                bestCandidates.clear();
-                bestWeight = pair.second;
-                goto add_candidate;
+        // Construct a trie of all possible best (lowest) orderings of this partition
+        std::sort_heap(P1.begin(), P1.end(), FitnessComparator{});
+
+        const auto bestWeight = P1.front()->second;
+
+        for (const auto individual : P1) {
+            if (bestWeight != individual->second) {
+                assert ("not min-to-max sorted?" && individual->second > bestWeight);
+                break;
             }
-            if (pair.second == bestWeight) {
-add_candidate: bestCandidates.emplace_back(std::move(pair.first));
-            }
+            make_trie(individual->first, result);
         }
 
-        assert (bestCandidates.size() > 0);
-        for (const Candidate & C : bestCandidates) {
-            make_trie(C, result);
-        }
     }
 
 protected:
@@ -1172,40 +1157,35 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief insertCandidate
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool insertCandidate(Candidate & C) {
+    bool insertCandidate(Candidate & C, PopulationArray & population) {
         repair(C);
         const auto f = candidates.emplace(C, 0);
         if (LLVM_LIKELY(f.second)) {
             f.first->second = fitness(f.first->first);
+            population.emplace_back(f.first);
             return true;
-        } else {
-            return false;
         }
+        return false;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    virtual bool initGA() = 0;
+    virtual bool initGA(PopulationArray & initialPopulation) = 0;
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
      ** ------------------------------------------------------------------------------------------------------------- */
-    virtual void repair(Candidate & L) = 0;
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief only_kernels
-     ** ------------------------------------------------------------------------------------------------------------- */
-    virtual const Candidate & only_kernels(const Candidate & L) = 0;
+    virtual void repair(Candidate & candidate) = 0;
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief fitness
      ** ------------------------------------------------------------------------------------------------------------- */
-    unsigned fitness(const Candidate & candidate) {
+    virtual size_t fitness(const Candidate & candidate) {
 
         const auto fitness_start = std::chrono::high_resolution_clock::now();
 
-        const auto result = analyzer.analyze(only_kernels(candidate));
+        const auto result = analyzer.analyze(candidate);
 
         const auto fitness_end = std::chrono::high_resolution_clock::now();
         fitness_time += (fitness_end - fitness_start).count();
@@ -1284,7 +1264,7 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool initGA() override {
+    bool initGA(PopulationArray & initialPopulation) override {
 
         // Any topological ordering of D can generate a valid schedule for our subgraph.
         // Begin by trying to generate N initial candidates. If we fail to enumerate all
@@ -1294,7 +1274,7 @@ protected:
 #warning switch this back before release
 
         return enumerateUpToNTopologicalOrderings(D, INITIAL_TOPOLOGICAL_POPULATION_SIZE, [&](Candidate & L) {
-            insertCandidate(L);
+            insertCandidate(L, initialPopulation);
             // candidates.emplace(L, fitness(L));
         });
 
@@ -1332,13 +1312,6 @@ protected:
 
     }
 
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief filter_kernels
-     ** ------------------------------------------------------------------------------------------------------------- */
-    const Candidate & only_kernels(const Candidate & L) override {
-        return L;
-    }
-
 public:
 
     PartitionSchedulingAnalysis(const SchedulingGraph & S, const PartitionDependencyGraph & D,
@@ -1369,7 +1342,7 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool initGA() override {
+    bool initGA(PopulationArray & initialPopulation) override {
 
         bool r = true;
 
@@ -1377,9 +1350,15 @@ protected:
 
         Candidate candidate(candidateLength);
         std::iota(candidate.begin(), candidate.end(), 0);
-        for (unsigned i = 0; i < 10; ++i) {
+        for (unsigned i = 0; i < INITIAL_SCHEDULING_POPULATION_ATTEMPTS; ++i) {
             std::shuffle(candidate.begin(), candidate.end(), rng);
-            if (insertCandidate(candidate)) {
+            #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
+            // we need to guarantee that our initial candidates are valid
+            // hamiltonian paths or we become too dependent on the rng to
+            // obtain one.
+            nearest_valid_schedule(candidate);
+            #endif
+            if (insertCandidate(candidate, initialPopulation)) {
                 if (candidates.size() >= INITIAL_SCHEDULING_POPULATION_SIZE) {
                     r = false;
                     break;
@@ -1398,9 +1377,86 @@ protected:
      ** ------------------------------------------------------------------------------------------------------------- */
     void repair(Candidate & candidate) override {
 
+        #ifndef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
+
         const auto repair_start = std::chrono::high_resolution_clock::now();
 
-        const auto n = num_vertices(O);
+        nearest_valid_schedule(candidate);
+
+        const auto repair_end = std::chrono::high_resolution_clock::now();
+        repair_time += (repair_end - repair_start).count();
+
+        #endif
+
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief fitness
+     ** ------------------------------------------------------------------------------------------------------------- */
+    size_t fitness(const Candidate & candidate) override {
+
+        const auto fitness_start = std::chrono::high_resolution_clock::now();
+        #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
+        auto result = std::numeric_limits<size_t>::max();
+        if (is_valid_hamiltonian_path(candidate)) {
+            result = analyzer.analyze(only_kernels(candidate));
+        }
+        #else
+        const auto result = analyzer.analyze(only_kernels(candidate));
+        #endif
+        const auto fitness_end = std::chrono::high_resolution_clock::now();
+        fitness_time += (fitness_end - fitness_start).count();
+
+        return result;
+    }
+
+private:
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief filter_kernels
+     ** ------------------------------------------------------------------------------------------------------------- */
+    const Candidate & only_kernels(const Candidate & L) {
+        toEval.clear();
+        for (unsigned i : L) {
+            if (i < numOfKernels) {
+                toEval.push_back(i);
+            }
+        }
+        assert (toEval.size() == numOfKernels);
+        return toEval;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief is_valid_hamiltonian_path
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool is_valid_hamiltonian_path(const Candidate & candidate) const {
+        assert(candidate.size() == candidateLength);
+        auto u = candidate[0];
+        for (unsigned i = 1; i < candidateLength; ++i) {
+            const auto v = candidate[i];
+            if (edge(u, v, O).second) {
+                u = v;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief nearest_valid_schedule
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void nearest_valid_schedule(Candidate & candidate) {
+
+        // Although our initial and mutate candidates tend to be invalid paths,
+        // crossovers tend to to be valid ones. Experiments showed its often
+        // worthwhile to run this test first to see whether we can just accept
+        // the candidate rather than transform it into valid one.
+        if (is_valid_hamiltonian_path(candidate)) {
+            return;
+        }
+
+        const auto n = candidateLength;
 
         assert (candidate.size() == n);
         assert (index.size() == n);
@@ -1678,26 +1734,10 @@ restart_process:
 
         candidate.swap(replacement);
 
-        const auto repair_end = std::chrono::high_resolution_clock::now();
-        repair_time += (repair_end - repair_start).count();
-
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief filter_kernels
-     ** ------------------------------------------------------------------------------------------------------------- */
-    const Candidate & only_kernels(const Candidate & L) override {
-        toEval.clear();
-        for (unsigned i : L) {
-            if (i < numOfKernels) {
-                toEval.push_back(i);
-            }
-        }
-        assert (toEval.size() == numOfKernels);
-        return toEval;
     }
 
 public:
+
 
     ProgramSchedulingAnalysis(const SchedulingGraph & S,
                               const PartitionOrderingGraph & O,
