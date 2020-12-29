@@ -446,17 +446,17 @@ struct PartitionDataflowEdge {
 
 using PartitionDataflowGraph = adjacency_list<vecS, vecS, bidirectionalS, Rational, PartitionDataflowEdge>;
 
-using PartitionOrderingGraph = adjacency_list<hash_setS, vecS, bidirectionalS, std::vector<unsigned>, no_property>;
+using PartitionOrderingGraph = adjacency_list<hash_setS, vecS, bidirectionalS, std::vector<unsigned>, double>;
 
 struct PartitionOrdering {
     PartitionOrderingGraph  Graph;
     std::vector<unsigned>   Kernels;
-    OrderingDAWG            Ordering;
+    const unsigned          NumOfKernelSets;
 
-    PartitionOrdering(PartitionOrderingGraph && graph, flat_set<unsigned> && kernels)
+    PartitionOrdering(PartitionOrderingGraph && graph, unsigned numOfKernelSets, flat_set<unsigned> && kernels)
     : Graph(graph)
     , Kernels(kernels.begin(), kernels.end())
-    , Ordering(1) {
+    , NumOfKernelSets(numOfKernelSets) {
 
     }
 };

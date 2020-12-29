@@ -39,9 +39,9 @@ void PipelineAnalysis::partitionRelationshipGraphIntoSynchronousRegions() {
 
     auto S = makePartitionSchedulingGraph(P, D);
 
-    scheduleProgramGraph(P, S, D);
+    const auto C = scheduleProgramGraph(P, S, D);
 
-    assembleProgramSchedule(P, S);
+    addSchedulingConstraints(P, C);
 
     #else
     addOrderingConstraintsToPartitionSubgraphs(orderingOfG);

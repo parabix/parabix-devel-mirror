@@ -127,9 +127,9 @@ private:
 
     PartitionOrdering makePartitionSchedulingGraph(std::vector<PartitionData> & P, const PartitionDataflowGraph & D) const;
 
-    void scheduleProgramGraph(const std::vector<PartitionData> & P, PartitionOrdering & O, const PartitionDataflowGraph & D) const;
+    std::vector<unsigned> scheduleProgramGraph(const std::vector<PartitionData> & P, const PartitionOrdering & O, const PartitionDataflowGraph & D) const;
 
-    void assembleProgramSchedule(const std::vector<PartitionData> & P, const PartitionOrdering & O);
+    void addSchedulingConstraints(const std::vector<PartitionData> & P, const std::vector<unsigned> & program);
 
     #endif
 
