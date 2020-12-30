@@ -12,25 +12,21 @@ namespace kernel {
 
 #ifdef EXPERIMENTAL_SCHEDULING
 
-#define INITIAL_CANDIDATE_ATTEMPTS (100)
+#define INITIAL_TOPOLOGICAL_POPULATION_SIZE (30)
 
-#define INITIAL_TOPOLOGICAL_POPULATION_SIZE (25)
-
-#define MAX_POPULATION_SIZE (50)
+#define MAX_POPULATION_SIZE (30)
 
 #define MAX_EVOLUTIONARY_ROUNDS (30)
-
-#define CROSSOVER_RATE (0.03)
 
 #define MUTATION_RATE (0.20)
 
 #define MAX_CUT_ACO_ROUNDS (50)
 
-#define UNPLACED (0U)
+#define BIPARTITE_GRAPH_UNPLACED (0U)
 
-#define LEFT_HAND (1U)
+#define BIPARTITE_GRAPH_LEFT_HAND (1U)
 
-#define RIGHT_HAND (2U)
+#define BIPARTITE_GRAPH_RIGHT_HAND (2U)
 
 #define INITIAL_SCHEDULING_POPULATION_ATTEMPTS (20)
 
@@ -86,11 +82,23 @@ std::vector<PartitionData> PipelineAnalysis::gatherPartitionData(const std::vect
     return P;
 }
 
-namespace {
+namespace { // start of anonymous namespace
 
 using Vertex = unsigned;
 
 using Candidate = std::vector<Vertex>;
+
+using Candidates = std::map<Candidate, size_t>;
+
+using Individual = Candidates::const_iterator;
+
+struct FitnessComparator {
+    bool operator()(const Individual & a,const Individual & b) const{
+        return a->second < b->second;
+    }
+};
+
+using Population = std::vector<Individual>;
 
 struct SchedulingNode {
 
@@ -113,6 +121,8 @@ struct SchedulingNode {
 };
 
 using SchedulingGraph = adjacency_list<vecS, vecS, bidirectionalS, SchedulingNode, Rational>;
+
+using random_engine = std::default_random_engine; // TODO: look into xorshift for this
 
 class MemoryAnalysis {
 
@@ -321,7 +331,7 @@ redo_bipartite_check_after_max_cut:
         assert (placement.size() >= numOfStreamSets);
 
         for (unsigned i = 0; i < numOfStreamSets; ++i) {
-            placement[i] = (out_degree(i, I) == 0) ? LEFT_HAND : UNPLACED;
+            placement[i] = (out_degree(i, I) == 0) ? BIPARTITE_GRAPH_LEFT_HAND : BIPARTITE_GRAPH_UNPLACED;
         }
 
         unsigned N = 1;
@@ -334,24 +344,24 @@ redo_bipartite_check_after_max_cut:
                 if (r == numOfStreamSets) {
                     goto is_bipartite_graph;
                 }
-                if (placement[r] == UNPLACED) {
+                if (placement[r] == BIPARTITE_GRAPH_UNPLACED) {
                     break;
                 }
                 assert (r < numOfStreamSets);
                 ++r;
             }
             assert (r < numOfStreamSets);
-            placement[r] = LEFT_HAND;
+            placement[r] = BIPARTITE_GRAPH_LEFT_HAND;
             assert (stack.empty());
 
             for (auto u = r;;) {
 
-                assert (placement[u] != UNPLACED);
-                const auto OTHER_HAND = (placement[u] ^ (LEFT_HAND | RIGHT_HAND));
+                assert (placement[u] != BIPARTITE_GRAPH_UNPLACED);
+                const auto OTHER_HAND = (placement[u] ^ (BIPARTITE_GRAPH_LEFT_HAND | BIPARTITE_GRAPH_RIGHT_HAND));
                 component[u] = N;
                 for (const auto e : make_iterator_range(out_edges(u, I))) {
                     const auto v = target(e, I);
-                    if (placement[v] == UNPLACED) {
+                    if (placement[v] == BIPARTITE_GRAPH_UNPLACED) {
                         placement[v] = OTHER_HAND;
                         stack.push_back(v);
                     } else if (placement[v] != OTHER_HAND) {
@@ -378,7 +388,7 @@ is_bipartite_graph:
         // orient the bridging edges according to the left/right hand sidedness.
         for (unsigned i = 0; i != numOfStreamSets; ++i) {
             const auto u = firstStreamSet + i;
-            const auto inA = placement[i] == LEFT_HAND;
+            const auto inA = placement[i] == BIPARTITE_GRAPH_LEFT_HAND;
             const auto componentId = component[i];
 
             for (const auto e : make_iterator_range(out_edges(u, G))) {
@@ -394,7 +404,7 @@ is_bipartite_graph:
         // then add our (bipartite) interval graph edges
         for (unsigned i = 0; i != numOfStreamSets; ++i) {
             const auto u = firstStreamSet + i;
-            const auto inA = placement[i] == LEFT_HAND;
+            const auto inA = placement[i] == BIPARTITE_GRAPH_LEFT_HAND;
             const auto componentId = component[i];
             for (const auto e : make_iterator_range(out_edges(i, I))) { // ST
                 const auto j = target(e, I); // ST
@@ -717,11 +727,11 @@ private:
             roots[i] = component[j];
         }
 
-        std::fill_n(placement.begin(), numOfStreamSets, UNPLACED);
+        std::fill_n(placement.begin(), numOfStreamSets, BIPARTITE_GRAPH_UNPLACED);
 
         BitVector in_tree(numOfStreamSets);
         for (const auto root : roots) {
-            placement[root] = LEFT_HAND;
+            placement[root] = BIPARTITE_GRAPH_LEFT_HAND;
             in_tree.set(root);
         }
 
@@ -738,12 +748,12 @@ private:
 
             double sum = 0.0;
             for (const auto u : in_tree.set_bits()) {
-                assert (placement[u] != UNPLACED);
+                assert (placement[u] != BIPARTITE_GRAPH_UNPLACED);
                 bool all_adjacencies_added = true;
                 for (const auto e : make_iterator_range(out_edges(u, I))) {
                     const auto v = target(e, I);
                     assert (v != u);
-                    if (placement[v] == UNPLACED) {
+                    if (placement[v] == BIPARTITE_GRAPH_UNPLACED) {
                         all_adjacencies_added = false;
                         const ACO & M = I[e];
                         assert (M.Pheromone > 0);
@@ -781,10 +791,10 @@ private:
                     const auto e = selected[i];
                     const auto u = source(e, I);
                     const auto v = target(e, I);
-                    assert (placement[u] != UNPLACED && placement[v] == UNPLACED);
+                    assert (placement[u] != BIPARTITE_GRAPH_UNPLACED && placement[v] == BIPARTITE_GRAPH_UNPLACED);
                     assert (!in_tree.test(v));
                     in_tree.set(v);
-                    placement[v] = placement[u] ^ (LEFT_HAND | RIGHT_HAND);
+                    placement[v] = placement[u] ^ (BIPARTITE_GRAPH_LEFT_HAND | BIPARTITE_GRAPH_RIGHT_HAND);
                     found = true;
                     break;
                 }
@@ -796,7 +806,7 @@ private:
 
         #ifndef NDEBUG
         for (unsigned i = 0; i < numOfStreamSets; ++i) {
-            assert ((out_degree(i, I) == 0) || (placement[i] != UNPLACED));
+            assert ((out_degree(i, I) == 0) || (placement[i] != BIPARTITE_GRAPH_UNPLACED));
         }
         #endif
     }
@@ -910,8 +920,58 @@ private:
     std::vector<unsigned> weight;
     std::vector<unsigned> component;
     std::vector<unsigned> placement;
-    std::vector<Vertex> stack;
-    std::vector<size_t> accum;
+    std::vector<Vertex>   stack;
+    std::vector<size_t>   accum;
+
+};
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief SchedulingAnalysisWorker
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct SchedulingAnalysisWorker {
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief repair
+     ** ------------------------------------------------------------------------------------------------------------- */
+    virtual void repair(Candidate & candidate) = 0;
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief fitness
+     ** ------------------------------------------------------------------------------------------------------------- */
+    virtual size_t fitness(const Candidate & candidate) {
+
+        const auto fitness_start = std::chrono::high_resolution_clock::now();
+
+        const auto result = analyzer.analyze(candidate);
+
+        const auto fitness_end = std::chrono::high_resolution_clock::now();
+        fitness_time += (fitness_end - fitness_start).count();
+
+        return result;
+    }
+
+protected:
+
+    SchedulingAnalysisWorker(const SchedulingGraph & S,
+                       const unsigned numOfKernels, const unsigned numOfStreamSets,
+                       const unsigned candidateLength)
+    : numOfKernels(numOfKernels)
+    , numOfStreamSets(numOfStreamSets)
+    , candidateLength(candidateLength)
+    , analyzer(S, numOfKernels, numOfStreamSets)
+    , rng(std::random_device()()) {
+
+    }
+
+protected:
+
+    const unsigned numOfKernels;
+    const unsigned numOfStreamSets;
+    const unsigned candidateLength;
+
+    MemoryAnalysis analyzer;
+
+    random_engine rng;
 
 };
 
@@ -928,8 +988,6 @@ private:
 class SchedulingAnalysis {
 
 public:
-
-    using random_engine = std::default_random_engine;
 
     constexpr static size_t BITS_PER_SIZET = (CHAR_BIT * sizeof(size_t));
 
@@ -955,24 +1013,12 @@ public:
         SmallVector<size_t, 4> _value;
     };
 
-    using Map = std::map<Candidate, size_t>;
-
-    using Individual = Map::const_iterator;
-
-    struct FitnessComparator {
-        bool operator()(const Individual & a,const Individual & b) const{
-            return a->second < b->second;
-        }
-    };
-
-    using PopulationArray = std::vector<Individual>;
-
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief runGA
      ** ------------------------------------------------------------------------------------------------------------- */
     void runGA(OrderingDAWG & result) {
 
-        PopulationArray P1;
+        Population P1;
         P1.reserve(MAX_POPULATION_SIZE);
 
         if (initGA(P1)) {
@@ -992,7 +1038,7 @@ public:
 
         std::make_heap(P1.begin(), P1.end(), FitnessComparator{});
 
-        PopulationArray P2;
+        Population P2;
         P2.reserve(3 * MAX_POPULATION_SIZE);
 
         for (unsigned round = 0; round < MAX_EVOLUTIONARY_ROUNDS; ++round) {
@@ -1157,7 +1203,7 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief insertCandidate
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool insertCandidate(Candidate & C, PopulationArray & population) {
+    bool insertCandidate(Candidate & C, Population & population) {
         repair(C);
         const auto f = candidates.emplace(C, 0);
         if (LLVM_LIKELY(f.second)) {
@@ -1171,7 +1217,7 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    virtual bool initGA(PopulationArray & initialPopulation) = 0;
+    virtual bool initGA(Population & initialPopulation) = 0;
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
@@ -1181,17 +1227,7 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief fitness
      ** ------------------------------------------------------------------------------------------------------------- */
-    virtual size_t fitness(const Candidate & candidate) {
-
-        const auto fitness_start = std::chrono::high_resolution_clock::now();
-
-        const auto result = analyzer.analyze(candidate);
-
-        const auto fitness_end = std::chrono::high_resolution_clock::now();
-        fitness_time += (fitness_end - fitness_start).count();
-
-        return result;
-    }
+    virtual size_t fitness(const Candidate & candidate) = 0;
 
 private:
 
@@ -1223,27 +1259,15 @@ in_trie:    continue;
 
 protected:
 
-    SchedulingAnalysis(const SchedulingGraph & S,
-                       const unsigned numOfKernels, const unsigned numOfStreamSets,
-                       const unsigned candidateLength)
-    : S(S)
-    , numOfKernels(numOfKernels)
-    , numOfStreamSets(numOfStreamSets)
-    , candidateLength(candidateLength)
-    , analyzer(S, numOfKernels, numOfStreamSets)
+    SchedulingAnalysis(const unsigned candidateLength)
+    : candidateLength(candidateLength)
     , rng(std::random_device()()) {
 
     }
 
 protected:
 
-    const SchedulingGraph & S;
-
-    const unsigned numOfKernels;
-    const unsigned numOfStreamSets;
     const unsigned candidateLength;
-
-    MemoryAnalysis analyzer;
 
     std::map<Candidate, size_t> candidates;
 
@@ -1257,28 +1281,7 @@ using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_p
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief PartitionSchedulingAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
-struct PartitionSchedulingAnalysis final : public SchedulingAnalysis {
-
-protected:
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief initGA
-     ** ------------------------------------------------------------------------------------------------------------- */
-    bool initGA(PopulationArray & initialPopulation) override {
-
-        // Any topological ordering of D can generate a valid schedule for our subgraph.
-        // Begin by trying to generate N initial candidates. If we fail to enumerate all
-        // of them, we'll use an evolutionary algorithm to try and explore the remaining
-        // solution space.
-
-#warning switch this back before release
-
-        return enumerateUpToNTopologicalOrderings(D, INITIAL_TOPOLOGICAL_POPULATION_SIZE, [&](Candidate & L) {
-            insertCandidate(L, initialPopulation);
-            // candidates.emplace(L, fitness(L));
-        });
-
-    }
+struct PartitionSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
@@ -1312,11 +1315,15 @@ protected:
 
     }
 
+
 public:
 
-    PartitionSchedulingAnalysis(const SchedulingGraph & S, const PartitionDependencyGraph & D,
-                                const unsigned numOfKernels, const unsigned numOfStreamSets)
-    : SchedulingAnalysis(S, numOfKernels, numOfStreamSets, numOfKernels)
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief constructor
+     ** ------------------------------------------------------------------------------------------------------------- */
+    PartitionSchedulingAnalysisWorker(const SchedulingGraph & S, const PartitionDependencyGraph & D,
+                                      const unsigned numOfKernels, const unsigned numOfStreamSets)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfStreamSets, numOfKernels)
     , D(D)
     , replacement(numOfKernels)
     , remaining(numOfKernels) {
@@ -1334,43 +1341,63 @@ private:
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief ProgramSchedulingAnalysis
+ * @brief PartitionSchedulingAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
-struct ProgramSchedulingAnalysis final : public SchedulingAnalysis {
-protected:
+struct PartitionSchedulingAnalysis final : public SchedulingAnalysis {
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool initGA(PopulationArray & initialPopulation) override {
+    bool initGA(Population & initialPopulation) override {
 
-        bool r = true;
+        // Any topological ordering of D can generate a valid schedule for our subgraph.
+        // Begin by trying to generate N initial candidates. If we fail to enumerate all
+        // of them, we'll use an evolutionary algorithm to try and explore the remaining
+        // solution space.
 
-        const auto init_start = std::chrono::high_resolution_clock::now();
+        return enumerateUpToNTopologicalOrderings(D, INITIAL_TOPOLOGICAL_POPULATION_SIZE, [&](Candidate & L) {
+            initialPopulation.emplace_back(candidates.emplace(L, fitness(L)).first);
+        });
 
-        Candidate candidate(candidateLength);
-        std::iota(candidate.begin(), candidate.end(), 0);
-        for (unsigned i = 0; i < INITIAL_SCHEDULING_POPULATION_ATTEMPTS; ++i) {
-            std::shuffle(candidate.begin(), candidate.end(), rng);
-            #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
-            // we need to guarantee that our initial candidates are valid
-            // hamiltonian paths or we become too dependent on the rng to
-            // obtain one.
-            nearest_valid_schedule(candidate);
-            #endif
-            if (insertCandidate(candidate, initialPopulation)) {
-                if (candidates.size() >= INITIAL_SCHEDULING_POPULATION_SIZE) {
-                    r = false;
-                    break;
-                }
-            }
-        }
-
-        const auto init_end = std::chrono::high_resolution_clock::now();
-        init_time += (init_end - init_start).count();
-
-        return r;
     }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief repair
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void repair(Candidate & candidate) override {
+        worker.repair(candidate);
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief fitness
+     ** ------------------------------------------------------------------------------------------------------------- */
+    size_t fitness(const Candidate & candidate) override {
+        return worker.fitness(candidate);
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief constructor
+     ** ------------------------------------------------------------------------------------------------------------- */
+    PartitionSchedulingAnalysis(const SchedulingGraph & S, const PartitionDependencyGraph & D,
+                                const unsigned numOfKernels, const unsigned numOfStreamSets)
+    : SchedulingAnalysis(numOfKernels)
+    , D(D)
+    , worker(S, D, numOfKernels, numOfStreamSets) {
+
+    }
+
+private:
+
+    const PartitionDependencyGraph & D;
+
+    PartitionSchedulingAnalysisWorker worker;
+
+};
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief ProgramSchedulingAnalysis
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
@@ -1408,39 +1435,6 @@ protected:
         fitness_time += (fitness_end - fitness_start).count();
 
         return result;
-    }
-
-private:
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief filter_kernels
-     ** ------------------------------------------------------------------------------------------------------------- */
-    const Candidate & only_kernels(const Candidate & L) {
-        toEval.clear();
-        for (unsigned i : L) {
-            if (i < numOfKernels) {
-                toEval.push_back(i);
-            }
-        }
-        assert (toEval.size() == numOfKernels);
-        return toEval;
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief is_valid_hamiltonian_path
-     ** ------------------------------------------------------------------------------------------------------------- */
-    bool is_valid_hamiltonian_path(const Candidate & candidate) const {
-        assert(candidate.size() == candidateLength);
-        auto u = candidate[0];
-        for (unsigned i = 1; i < candidateLength; ++i) {
-            const auto v = candidate[i];
-            if (edge(u, v, O).second) {
-                u = v;
-            } else {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -1522,6 +1516,13 @@ private:
 restart_process:
 
         #if HAMILTONIAN_PATH_STRATEGY == 1
+
+        // TODO: I'm not satisfied with the notion of "best path" as it violates the spirit
+        // of an ACO. The goal is to make the best known path a little more resilient to
+        // trail degradation. This improves the convergence rate to a good enough solution
+        // but this makes it far more prone to a local minimum. Could number of times a path
+        // is marked "best" be a form of weight?
+
         flat_set<std::pair<unsigned, unsigned>> bestPath;
         #endif
 
@@ -1736,13 +1737,49 @@ restart_process:
 
     }
 
+private:
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief only_kernels
+     ** ------------------------------------------------------------------------------------------------------------- */
+    const Candidate & only_kernels(const Candidate & candidate) {
+        toEval.clear();
+        for (unsigned i : candidate) {
+            if (i < numOfKernels) {
+                toEval.push_back(i);
+            }
+        }
+        assert (toEval.size() == numOfKernels);
+        return toEval;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief is_valid_hamiltonian_path
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool is_valid_hamiltonian_path(const Candidate & candidate) const {
+        assert(candidate.size() == candidateLength);
+        auto u = candidate[0];
+        for (unsigned i = 1; i < candidateLength; ++i) {
+            const auto v = candidate[i];
+            if (edge(u, v, O).second) {
+                u = v;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
 public:
 
-
-    ProgramSchedulingAnalysis(const SchedulingGraph & S,
-                              const PartitionOrderingGraph & O,
-                              const unsigned numOfKernels, const unsigned numOfStreamSets)
-    : SchedulingAnalysis(S, numOfKernels, numOfStreamSets, num_vertices(O))
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief constructor
+     ** ------------------------------------------------------------------------------------------------------------- */
+    ProgramSchedulingAnalysisWorker(const SchedulingGraph & S,
+                                    const PartitionOrderingGraph & O,
+                                    const unsigned numOfKernels, const unsigned numOfStreamSets)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfStreamSets, num_vertices(O))
     , O(O) {
         const auto n = num_vertices(O);
         visited.resize(n);
@@ -1758,22 +1795,80 @@ private:
     const PartitionOrderingGraph & O;
 
     BitVector visited;
-
     std::vector<std::pair<Vertex, double>> targets;
-
     flat_map<std::pair<Vertex, Vertex>, double> pheromone;
-
     std::vector<unsigned> index;
-
-
-
     Candidate path;
-
     Candidate replacement;
-
-
-
     Candidate toEval;
+
+};
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief ProgramSchedulingAnalysis
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct ProgramSchedulingAnalysis final : public SchedulingAnalysis {
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief initGA
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool initGA(Population & initialPopulation) override {
+
+        bool r = true;
+
+        const auto init_start = std::chrono::high_resolution_clock::now();
+
+        Candidate candidate(candidateLength);
+        std::iota(candidate.begin(), candidate.end(), 0);
+        for (unsigned i = 0; i < INITIAL_SCHEDULING_POPULATION_ATTEMPTS; ++i) {
+            std::shuffle(candidate.begin(), candidate.end(), rng);
+            #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
+            // we need to guarantee that our initial candidates are valid
+            // hamiltonian paths or we become too dependent on the rng to
+            // obtain one.
+            worker.nearest_valid_schedule(candidate);
+            #endif
+            if (insertCandidate(candidate, initialPopulation)) {
+                if (candidates.size() >= INITIAL_SCHEDULING_POPULATION_SIZE) {
+                    r = false;
+                    break;
+                }
+            }
+        }
+
+        const auto init_end = std::chrono::high_resolution_clock::now();
+        init_time += (init_end - init_start).count();
+
+        return r;
+    }
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief repair
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void repair(Candidate & candidate) override {
+        worker.repair(candidate);
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief fitness
+     ** ------------------------------------------------------------------------------------------------------------- */
+    size_t fitness(const Candidate & candidate) override {
+        return worker.fitness(candidate);
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief constructor
+     ** ------------------------------------------------------------------------------------------------------------- */
+    ProgramSchedulingAnalysis(const SchedulingGraph & S,
+                              const PartitionOrderingGraph & O,
+                              const unsigned numOfKernels, const unsigned numOfStreamSets)
+    : SchedulingAnalysis(num_vertices(O))
+    , worker(S, O, numOfKernels, numOfStreamSets) {
+
+    }
+
+private:
+
+    ProgramSchedulingAnalysisWorker worker;
 
 };
 
@@ -2307,31 +2402,10 @@ is_external_streamset:
     Z3_reset_memory();
     Z3_del_context(ctx);
 
-//    size_t lcmFactor{1};
     for (unsigned partitionId = 0; partitionId < activePartitions; ++partitionId) {
         PartitionData & N = P[partitionId];
         N.ExpectedRepetitions = expectedStrides[partitionId];
     }
-
-//    for (unsigned partitionId = 0; partitionId < m; ++partitionId) {
-//        PartitionData & N = P[partitionId];
-//        const auto rep = expectedStrides[partitionId] * lcmFactor;
-//        assert (rep.denominator() == 1);
-//        const auto n = N.Repetitions.size();
-//        for (unsigned i = 0; i < n; ++i) {
-//            const auto r = rep * N.Repetitions[i];
-//            assert (r.denominator() == 1);
-//            N.Repetitions[i] = r.numerator();
-//        }
-//    }
-
-//    for (unsigned streamSet = m; streamSet < n; ++streamSet) {
-//        const auto output = in_edge(streamSet, G);
-//        const auto producer = source(output, G);
-//        PartitionDataflowEdge & O = G[output];
-//        assert (producer < m);
-//        O.Expected *= expectedStrides[producer] * lcmFactor;
-//    }
 
     return G;
 }
@@ -2992,8 +3066,6 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     ProgramSchedulingAnalysis SA(S, O, kernelSets, streamSetNodes);
 
-    errs() << "start genetic algorithm for program\n";
-
     OrderingDAWG schedule(1);
 
     SA.runGA(schedule);
@@ -3135,7 +3207,6 @@ void PipelineAnalysis::addSchedulingConstraints(const std::vector<PartitionData>
     add_edge(u, PipelineOutput, RelationshipType{ReasonType::OrderingConstraint}, Relationships);
 
 }
-
 
 #endif
 
