@@ -380,10 +380,6 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                 }
             }
 
-            if (isPipelineKernel) {
-                assert (H[kernel].none());
-            }
-
         }
     }
 
