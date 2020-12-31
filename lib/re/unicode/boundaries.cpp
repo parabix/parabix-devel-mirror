@@ -1,10 +1,14 @@
 #include <re/unicode/boundaries.h>
 
 #include <re/adt/adt.h>
+#include <re/adt/re_name.h>
 #include <re/adt/printer_re.h>
 #include <re/analysis/validation.h>
 #include <re/transforms/re_transformer.h>
 #include <re/unicode/re_name_resolve.h>
+#include <unicode/data/PropertyObjects.h>
+#include <unicode/data/PropertyObjectTable.h>
+#include <re/compile/re_compiler.h>
 
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
@@ -228,5 +232,67 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     return gcb;
 }
 
+RE * EnumeratedPropertyBoundary(UCD::EnumeratedPropertyObject * enumObj) {
+    unsigned enum_count = enumObj->GetEnumCount();
+    unsigned basis_size = std::log2(enum_count - 1) + 1;
+    std::vector<RE *> assertions;
+    auto prop = enumObj->getPropertyCode();
+    PropertyExpression::Kind kind = PropertyExpression::Kind::Codepoint;
+    PropertyExpression::Operator op = PropertyExpression::Operator::Eq;
+    for (unsigned i = 0; i < basis_size; i++) {
+        std::vector<RE *> props;
+        for (unsigned j = 0; j < enum_count; j++) {
+            if (((j >> i) & 1) == 1) {
+                std::string enumVal = enumObj->GetValueEnumName(j);
+                RE * expr = makePropertyExpression(kind, UCD::property_full_name[prop], op, enumVal);
+                props.push_back(expr);
+            }
+        }
+        RE * propRE = makeAlt(props.begin(), props.end());
+        assertions.push_back(makeBoundaryAssertion(propRE));
+    }
+    return makeSeq(assertions.begin(), assertions.end());
+}
+
+class BoundaryPropertyResolver : public RE_Transformer {
+public:
+    BoundaryPropertyResolver() : RE_Transformer("ResolveBoundaryProperties") {}
+    
+    RE * transformPropertyExpression(PropertyExpression * propExpr) {
+        if (propExpr->getKind() == PropertyExpression::Kind::Codepoint) {
+            return propExpr;
+        }
+        int prop_code = propExpr->getPropertyCode();
+        if (prop_code >= 0) {
+            auto obj = UCD::property_object_table[prop_code];
+            if ((propExpr->getValueString() == "") && isa<UCD::EnumeratedPropertyObject>(obj)) {
+                return EnumeratedPropertyBoundary(cast<UCD::EnumeratedPropertyObject>(obj));
+            }
+            auto pe = makePropertyExpression(PropertyExpression::Kind::Codepoint,
+                                                                propExpr->getPropertyIdentifier(),
+                                                                propExpr->getOperator(),
+                                                                propExpr->getValueString());
+            cast<PropertyExpression>(pe)->setPropertyCode(prop_code);
+            return pe;
+        }
+        if (propExpr->getPropertyIdentifier() == "g") {
+            Name * gcb_name = makeZeroWidth("\\b{g}");
+            gcb_name->setDefinition(generateGraphemeClusterBoundaryRule());
+            return gcb_name;
+        }
+        if (propExpr->getPropertyIdentifier() == "w") {
+            Name * wb_name = makeZeroWidth("\\b{w}");
+            wb_name->setDefinition(nullptr);
+            RE_Compiler::UnsupportedRE("\\b{w} not yet supported.");
+            return wb_name;
+        }
+        RE_Compiler::UnsupportedRE(Printer_RE::PrintRE(propExpr));
+    }
+
+};
+
+RE * resolveBoundaryProperties(RE * r) {
+    return BoundaryPropertyResolver().transformRE(r);
+}
 
 }
