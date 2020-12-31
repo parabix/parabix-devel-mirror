@@ -6,6 +6,7 @@
 #include <re/analysis/validation.h>
 #include <re/transforms/re_transformer.h>
 #include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <unicode/data/PropertyObjects.h>
 #include <unicode/data/PropertyObjectTable.h>
 #include <re/compile/re_compiler.h>
@@ -272,7 +273,6 @@ public:
                                                                 propExpr->getPropertyIdentifier(),
                                                                 propExpr->getOperator(),
                                                                 propExpr->getValueString());
-            cast<PropertyExpression>(pe)->setPropertyCode(prop_code);
             return pe;
         }
         if (propExpr->getPropertyIdentifier() == "g") {
@@ -292,7 +292,7 @@ public:
 };
 
 RE * resolveBoundaryProperties(RE * r) {
-    return BoundaryPropertyResolver().transformRE(r);
+    return UCD::linkProperties(BoundaryPropertyResolver().transformRE(r));
 }
 
 }

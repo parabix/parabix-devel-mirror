@@ -29,7 +29,8 @@ void UnicodePropertyExpressionError(std::string errmsg) {
 
 bool resolvePropertyDefinition(Name * const property) {
     if (property->hasNamespace()) {
-        auto propit = alias_map.find(property->getNamespace());
+        auto prop = canonicalize_value_name(property->getNamespace());
+        auto propit = alias_map.find(prop);
         if (propit == alias_map.end()) {
             UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
         }

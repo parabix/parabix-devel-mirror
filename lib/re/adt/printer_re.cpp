@@ -138,7 +138,7 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         retVal.append(")");
     } else if (const PropertyExpression * pe = dyn_cast<const PropertyExpression>(re)) {
         if (pe->getKind() == PropertyExpression::Kind::Boundary) {
-            retVal = "Group(";
+            retVal = "Boundary(";
         } else {
             retVal = "Property(";
         }

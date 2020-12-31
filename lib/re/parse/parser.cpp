@@ -362,27 +362,12 @@ RE * RE_Parser::parseEscapedSet() {
     switch (escapeCh) {
         case 'b':
             if (accept('{')) {
-                if (accept("g}")) {
-                    re = makeZeroWidth("\\b{g}");
-                    return complemented ? makeZerowidthComplement(re) : re;
-                } else if (accept("w}")) {
-                    ParseFailure("\\b{w} not yet supported.");
-                    //return complemented ? makeZerowidthComplement(re) : re;
-                } else if (accept("l}")) {
-                    ParseFailure("\\b{l} not yet supported.");
-                    //return complemented ? makeZerowidthComplement(re) : re;
-                } else if (accept("s}")) {
-                    ParseFailure("\\b{s} not yet supported.");
-                    //return complemented ? makeZerowidthComplement(re) : re;
-                } else {
-                    re = parsePropertyExpression(PropertyExpression::Kind::Boundary);
-                    require('}');
-                    return complemented ? makeReNonBoundary(re) : makeReBoundary(re);
-                }
+                re = parsePropertyExpression(PropertyExpression::Kind::Boundary);
+                require('}');
             } else {
                 re = makeZeroWidth("\\b");
-                return complemented ? makeZerowidthComplement(re) : re;
             }
+            return complemented ? makeZerowidthComplement(re) : re;
         case 'd':
             re = createName("\\d");
             return complemented ? makeComplement(re) : re;
