@@ -105,6 +105,7 @@ std::vector<PartitionData> PipelineAnalysis::gatherPartitionData(const std::vect
             const auto id = f->second;
             // partition 0 is reserved for fake pipeline I/O kernels
             if (id == 0) {
+                assert (u == PipelineInput || u == PipelineOutput);
                 continue;
             }
             assert (id < PartitionCount);
@@ -112,6 +113,17 @@ std::vector<PartitionData> PipelineAnalysis::gatherPartitionData(const std::vect
             END_SCOPED_REGION
             default: break;
         }
+    }
+
+    for (unsigned i = 0; i < PartitionCount - 1; ++i) {
+        errs() << "PARTITION: " << (i + 1) << " =d";
+        char joiner = ' ';
+        for (unsigned k : P[i].Kernels) {
+            errs() << joiner << k;
+            joiner = ',';
+        }
+        errs() << "\n";
+
     }
 
     return P;
@@ -259,7 +271,7 @@ void postorder_minimize(OrderingDAWG & O) {
         }
     }
 
-};
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief MemoryAnalysis
@@ -1158,6 +1170,7 @@ public:
         P1.reserve(MAX_POPULATION_SIZE);
 
         if (initGA(P1)) {
+            std::sort(P1.begin(), P1.end(), FitnessComparator{});
             goto found_all_orderings;
         }
 
@@ -1315,22 +1328,23 @@ public:
 
         END_SCOPED_REGION
 
+        // Construct a trie of all possible best (lowest) orderings of this partition
+        std::sort_heap(P1.begin(), P1.end(), FitnessComparator{});
+
 found_all_orderings:
 
         if (LLVM_UNLIKELY(P1.empty())) return;
 
-        // Construct a trie of all possible best (lowest) orderings of this partition
-        std::sort_heap(P1.begin(), P1.end(), FitnessComparator{});
+        assert (std::is_sorted(P1.begin(), P1.end(), FitnessComparator{}));
 
-        const auto bestWeight = P1.front()->second;
+        auto i = P1.begin();
+        const auto end = P1.end();
 
-        for (const auto individual : P1) {
-            if (bestWeight != individual->second) {
-                assert ("not min-to-max sorted?" && individual->second > bestWeight);
-                break;
-            }
-            make_trie(individual->first, result);
-        }
+        const auto bestWeight = (*i)->second;
+        do {
+            make_trie((*i)->first, result);
+        } while ((++i != end) && (bestWeight == (*i)->second));
+
     }
 
 protected:
@@ -1997,7 +2011,7 @@ private:
 
 };
 
-}; // end of anonymous namespace
+} // end of anonymous namespace
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowWithinPartitions
@@ -2340,7 +2354,7 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(std::v
     // create a bipartite graph consisting of partitions and cross-partition
     // streamset nodes and relationships
     for (unsigned partitionId = 0; partitionId < activePartitions; ++partitionId) {
-        PartitionData & N = P[partitionId];
+        const PartitionData & N = P[partitionId];
         const auto n = N.Kernels.size();
 
         // consumers
@@ -2411,27 +2425,26 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(std::v
                         assert (h != PartitionIds.end());
                         const auto consumingPartitionId = h->second - 1;
                         if (partitionId != consumingPartitionId) {
-                            goto is_external_streamset;
+                            // Has External StreamSet
+
+                            const Binding & b = output.Binding;
+                            const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), 8};
+                            const auto streamSetNode = add_vertex(bytesPerItem, G);
+
+                            M.emplace(streamSet, streamSetNode);
+
+                            const ProcessingRate & rate = b.getRate();
+
+                            const auto strideSize = node.Kernel->getStride() * N.Repetitions[i];
+                            const auto sum = rate.getLowerBound() + rate.getUpperBound();
+                            const auto expected = sum * Rational{strideSize, 2};
+
+                            add_edge(partitionId, streamSetNode, PartitionDataflowEdge{producer, rate.getKind(), expected}, G);
+
+                            break;
                         }
                     }
 
-                    continue;
-
-is_external_streamset:
-
-                    const Binding & b = output.Binding;
-                    const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), 8};
-                    const auto streamSetNode = add_vertex(bytesPerItem, G);
-
-                    M.emplace(streamSet, streamSetNode);
-
-                    const ProcessingRate & rate = b.getRate();
-
-                    const auto strideSize = node.Kernel->getStride() * N.Repetitions[i];
-                    const auto sum = rate.getLowerBound() + rate.getUpperBound();
-                    const auto expected = sum * Rational{strideSize, 2};
-
-                    add_edge(partitionId, streamSetNode, PartitionDataflowEdge{producer, rate.getKind(), expected}, G);
                 }
             }
         }
@@ -2560,6 +2573,8 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
 
     const auto activePartitions = (PartitionCount - 1);
 
+        printGraph(D, errs(), "D");
+
     PathGraph H(activePartitions + 2);
 
     flat_set<unsigned> kernels;
@@ -2610,8 +2625,12 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
         assert (out_degree(i + 1, H) > 0);
     }
 
+    printGraph(H, errs(), "H0");
+
     transitive_closure_dag(reverse_traversal{l - 1}, H);
     transitive_reduction_dag(reverse_traversal{l - 1}, H);
+
+    printGraph(H, errs(), "H1");
 
     // To find our hamiltonian path later, we need a path from each join
     // in the graph to the other forked paths (including the implicit
@@ -2710,6 +2729,8 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
     }
 
     END_SCOPED_REGION
+
+    printGraph(H, errs(), "H2");
 
     // Each partition has one or more optimal orderings of kernel invocations.
     // We filter each ordering trie to only contain the kernels with cross-
@@ -2845,28 +2866,28 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
 
     assert (out_degree(firstKernelNode - 1, G) == 0);
 
-//    auto printOrderingGraph = [&](const PartitionOrderingGraph & GP, raw_ostream & out, const StringRef name = "G") {
-//        out << "digraph \"" << name << "\" {\n";
-//        for (auto v : make_iterator_range(vertices(GP))) {
-//            const auto & V = GP[v];
-//            out << "v" << v << " [shape=record,label=\"";
-//            bool addComma = false;
-//            for (const auto k : V) {
-//                if (addComma) out << ',';
-//                out << *kernels.nth(k);
-//                addComma = true;
-//            }
-//            out << "\"];\n";
-//        }
-//        for (auto e : make_iterator_range(edges(GP))) {
-//            const auto s = source(e, GP);
-//            const auto t = target(e, GP);
-//            out << "v" << s << " -> v" << t << ";\n";
-//        }
-//        out << "}\n\n";
-//        out.flush();
+    auto printOrderingGraph = [&](const PartitionOrderingGraph & GP, raw_ostream & out, const StringRef name) {
+        out << "digraph \"" << name << "\" {\n";
+        for (auto v : make_iterator_range(vertices(GP))) {
+            const auto & V = GP[v];
+            out << "v" << v << " [shape=record,label=\"";
+            bool addComma = false;
+            for (const auto k : V) {
+                if (addComma) out << ',';
+                out << *kernels.nth(k);
+                addComma = true;
+            }
+            out << "\"];\n";
+        }
+        for (auto e : make_iterator_range(edges(GP))) {
+            const auto s = source(e, GP);
+            const auto t = target(e, GP);
+            out << "v" << s << " -> v" << t << ";\n";
+        }
+        out << "}\n\n";
+        out.flush();
 
-//    };
+    };
 
     for (;;) {
         bool unchanged = true;
@@ -2945,6 +2966,8 @@ try_to_compress_further:
         assert (v < m);
         add_edge(u, v, GP);
     }
+
+    printOrderingGraph(GP, errs(), "O");
 
     return PartitionOrdering{std::move(GP), numOfKernelSets, std::move(kernels)};
 }
@@ -3293,12 +3316,12 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     SA.runGA(schedule);
 
-//    errs () << "init_time: " << init_time << "\n"
-//               "fitness_time: " << fitness_time << "\n"
-//               "repair_time: " << repair_time << "\n"
-//               "evolutionary_time: " << evolutionary_time << "\n";
+    errs () << "init_time: " << init_time << "\n"
+               "fitness_time: " << fitness_time << "\n"
+               "repair_time: " << repair_time << "\n"
+               "evolutionary_time: " << evolutionary_time << "\n";
 
-//    printDAWG(schedule, errs(), "S");
+    printDAWG(schedule, errs(), "S");
 
 
     std::vector<unsigned> program;
@@ -3306,11 +3329,14 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
     program.reserve(kernels.size());
 
     Vertex position = 0;
+
+
     while (out_degree(position, schedule) > 0) {
         const auto e = first_out_edge(position, schedule);
 
-        const auto k = schedule[e];
-        program.push_back(kernels[k]);
+        const auto s = schedule[e];
+        const auto k = kernels[s];
+        program.push_back(k);
 
 //        const auto local = schedule[e];
 //        assert (local < num_vertices(O));
@@ -3321,6 +3347,8 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
         assert (position != next);
         position = next;
     }
+
+    assert (program.size() >= (kernels.size() - 2));
 
     return program;
 }
@@ -3447,7 +3475,9 @@ void PipelineAnalysis::addSchedulingConstraints(const std::vector<PartitionData>
         assert (found);
 
         for (const auto v : subgraph) {
-            add_edge(u, v, RelationshipType{ReasonType::OrderingConstraint}, Relationships);
+            if (PipelineInput != v && u != PipelineOutput) {
+                add_edge(u, v, RelationshipType{ReasonType::OrderingConstraint}, Relationships);
+            }
             u = v;
         }
 
@@ -3455,8 +3485,11 @@ void PipelineAnalysis::addSchedulingConstraints(const std::vector<PartitionData>
 
     }
 
-    add_edge(u, PipelineOutput, RelationshipType{ReasonType::OrderingConstraint}, Relationships);
+    if (u != PipelineOutput) {
+        add_edge(u, PipelineOutput, RelationshipType{ReasonType::OrderingConstraint}, Relationships);
+    }
 
+    printRelationshipGraph(Relationships, errs(), "R2");
 }
 
 #endif

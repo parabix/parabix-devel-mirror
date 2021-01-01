@@ -723,7 +723,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mScalarValue(FirstKernel, LastScalar, mAllocator)
 , RequiresSynchronization(PipelineInput, PipelineOutput, mAllocator)
 
-, mPartitionEntryPoint(PartitionCount, mAllocator)
+, mPartitionEntryPoint(PartitionCount + 1, mAllocator)
 
 , mPartitionTerminationSignal(PartitionCount, mAllocator)
 , mExhaustedPipelineInputAtPartitionEntry(PartitionCount, mAllocator)

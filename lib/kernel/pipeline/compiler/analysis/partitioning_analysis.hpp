@@ -71,14 +71,16 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
     using PartitionMap = std::map<BitSet, unsigned>;
 
+    std::vector<ProgramGraph::vertex_descriptor> kernelSequence;
+
+
     // Convert G into a simpler representation of the graph that we can annotate
-    unsigned kernels = 0;
     unsigned streamSets = 0;
     for (const auto u : make_iterator_range(vertices(Relationships))) {
         const RelationshipNode & node = Relationships[u];
         switch (node.Type) {
             case RelationshipNode::IsKernel:
-                ++kernels;
+                kernelSequence.push_back(u);
                 break;
             case RelationshipNode::IsRelationship:
                 if (LLVM_LIKELY(isa<StreamSet>(Relationships[u].Relationship))) {
@@ -89,12 +91,14 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         }
     }
 
+    const auto kernels = kernelSequence.size();
+
     Graph H(kernels + streamSets);
 
     flat_map<ProgramGraph::vertex_descriptor, Vertex> M;
 
-    unsigned nextKernel = 0;
-    unsigned nextStreamSet = kernels;
+    auto nextKernel = 0U;
+    auto nextStreamSet = kernels;
 
     auto mapStreamSet = [&](const ProgramGraph::vertex_descriptor u) -> Vertex {
         assert (Relationships[u].Type == RelationshipNode::IsRelationship);
@@ -164,222 +168,216 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
     SmallFlatSet<unsigned, 8> fixedRates;
 
-    std::vector<ProgramGraph::vertex_descriptor> mappedKernel(kernels);
-
     // Begin by constructing a graph that represents the I/O relationships
     // and any partition boundaries.
-    for (const auto u : orderingOfG) {
-
+    for (const auto u : kernelSequence) {
         const RelationshipNode & node = Relationships[u];
+        assert (node.Type == RelationshipNode::IsKernel);
 
-        if (node.Type == RelationshipNode::IsKernel) {
+        const auto kernelObj = node.Kernel;
+        const auto isPipelineKernel = (kernelObj == mPipelineKernel);
 
-            const auto kernelObj = node.Kernel;
-            const auto isPipelineKernel = (kernelObj == mPipelineKernel);
+        const auto kernel = nextKernel++;
+        assert (kernel < kernels);
+        kernelSequence[kernel] = u;
+        assert (H[kernel].none());
 
-            const auto kernel = nextKernel++;
-            assert (kernel < kernels);
-            mappedKernel[kernel] = u;
-            assert (H[kernel].none());
+        bool isNewPartitionRoot = false;
 
-            bool isNewPartitionRoot = false;
+        // Iterate through the inputs
+        for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
+            const auto binding = source(e, Relationships);
+            const RelationshipNode & rn = Relationships[binding];
+            if (rn.Type == RelationshipNode::IsBinding) {
 
-            // Iterate through the inputs
-            for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
-                const auto binding = source(e, Relationships);
-                const RelationshipNode & rn = Relationships[binding];
-                if (rn.Type == RelationshipNode::IsBinding) {
+                const auto f = first_in_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = source(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
 
-                    const auto f = first_in_edge(binding, Relationships);
-                    assert (Relationships[f].Reason != ReasonType::Reference);
-                    const auto streamSet = source(f, Relationships);
-                    assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
-                    assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                auto buffer = mapStreamSet(streamSet);
 
-                    auto buffer = mapStreamSet(streamSet);
+                const Binding & b = rn.Binding;
+                const ProcessingRate & rate = b.getRate();
 
-                    const Binding & b = rn.Binding;
-                    const ProcessingRate & rate = b.getRate();
-
-                    unsigned fixedRate = 0;
-                    switch (rate.getKind()) {
-                        case RateId::Fixed:
-                            BEGIN_SCOPED_REGION
-                            const auto stride = rate.getRate() * kernelObj->getStride();
-                            assert (stride.denominator() == 1);
-                            fixedRate = stride.numerator();
-                            fixedRates.insert(fixedRate);
-                            END_SCOPED_REGION
-                            break;
-                        case RateId::PartialSum:
-                            BEGIN_SCOPED_REGION
-                            const auto partialSum = checkForPartialSumEntry(buffer, PI);
-                            add_edge(buffer, partialSum, 0, H);
-                            buffer = partialSum;
-                            END_SCOPED_REGION
-                            break;
-                        case RateId::Greedy:
-                            // A kernel with a greedy input cannot safely be included in its
-                            // producers' partitions unless its producers are guaranteed to
-                            // generate at least as much data as this kernel consumes.
-                            BEGIN_SCOPED_REGION
-                            const auto produced = parent(streamSet, Relationships);
-                            assert (Relationships[produced].Type == RelationshipNode::IsBinding);
-                            const Binding & prodBinding = Relationships[produced].Binding;
-                            const ProcessingRate & prodRate = prodBinding.getRate();
-                            if (prodRate.getLowerBound() < rate.getLowerBound()) {
-                                isNewPartitionRoot = true;
-                            }
-                            END_SCOPED_REGION
-                            break;
-                        case RateId::Bounded:
-                            // A bounded input rate always starts a new partition
+                unsigned fixedRate = 0;
+                switch (rate.getKind()) {
+                    case RateId::Fixed:
+                        BEGIN_SCOPED_REGION
+                        const auto stride = rate.getRate() * kernelObj->getStride();
+                        assert (stride.denominator() == 1);
+                        fixedRate = stride.numerator();
+                        fixedRates.insert(fixedRate);
+                        END_SCOPED_REGION
+                        break;
+                    case RateId::PartialSum:
+                        BEGIN_SCOPED_REGION
+                        const auto partialSum = checkForPartialSumEntry(buffer, PI);
+                        add_edge(buffer, partialSum, 0, H);
+                        buffer = partialSum;
+                        END_SCOPED_REGION
+                        break;
+                    case RateId::Greedy:
+                        // A kernel with a greedy input cannot safely be included in its
+                        // producers' partitions unless its producers are guaranteed to
+                        // generate at least as much data as this kernel consumes.
+                        BEGIN_SCOPED_REGION
+                        const auto produced = parent(streamSet, Relationships);
+                        assert (Relationships[produced].Type == RelationshipNode::IsBinding);
+                        const Binding & prodBinding = Relationships[produced].Binding;
+                        const ProcessingRate & prodRate = prodBinding.getRate();
+                        if (prodRate.getLowerBound() < rate.getLowerBound()) {
                             isNewPartitionRoot = true;
-                            break;
+                        }
+                        END_SCOPED_REGION
+                        break;
+                    case RateId::Bounded:
+                        // A bounded input rate always starts a new partition
+                        isNewPartitionRoot = true;
+                        break;
 
+                    default: break;
+                }
+
+                // If we have a lookahead/delay attribute on any stream, create
+                // a new buffer vertex (with a new rate id) to represent it each
+                // unique pairing.
+                for (const Attribute & attr : b.getAttributes()) {
+                    switch (attr.getKind()) {
+                        case AttrId::Delayed:
+                            buffer = makeAttributeVertex(buffer, attr.amount(), D);
+                            break;
+                        case AttrId::LookAhead:
+                            buffer = makeAttributeVertex(buffer, attr.amount(), L);
+                            break;
                         default: break;
                     }
+                }
 
-                    // If we have a lookahead/delay attribute on any stream, create
-                    // a new buffer vertex (with a new rate id) to represent it each
-                    // unique pairing.
+                add_edge(buffer, kernel, fixedRate, H);
+            }
+        }
+
+        // TODO: currently any kernel K that can terminate early is the root of a new partition. However,
+        // we could include it one of its sources' partition P if and only if there is no divergent path
+        // of kernels S in P for which *all* consumers of the outputs of S are controlled by an output of
+        // K.
+
+
+        // Check whether this (internal) kernel could terminate early
+        bool mayTerminateEarly = false;
+        bool internallySynchronized = false;
+        if (kernelObj != mPipelineKernel) {
+            mayTerminateEarly = kernelObj->canSetTerminateSignal();
+            internallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
+        }
+
+        // Assign a root of a partition a new id.
+        if (LLVM_UNLIKELY(isNewPartitionRoot || mayTerminateEarly)) {
+            addRateId(H[kernel], nextRateId++);
+        }
+
+        // TODO: an internally synchronzied kernel with fixed rate I/O can be contained within a partition
+        // but cannot be the root of a non-isolated partition. To permit them to be roots, they'd need
+        // some way of informing the pipeline as to how many strides they executed or the pipeline
+        // would need to know to calculate it from its outputs. Rather than handling this complication,
+        // for now we simply prevent this case.
+
+        const auto demarcateOutputs = mayTerminateEarly || internallySynchronized || isPipelineKernel; // (isNewPartitionRoot && internallySynchronized);
+        unsigned demarcationId = 0;
+
+        if (LLVM_UNLIKELY(demarcateOutputs)) {
+            demarcationId = nextRateId++;
+        }
+
+        // Now iterate through the outputs
+        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
+
+            const auto binding = target(e, Relationships);
+            const RelationshipNode & rn = Relationships[binding];
+
+            if (rn.Type == RelationshipNode::IsBinding) {
+
+                const auto f = out_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = target(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                const auto buffer = mapStreamSet(streamSet);
+                const Binding & b = rn.Binding;
+                const ProcessingRate & rate = b.getRate();
+                if (LLVM_UNLIKELY(demarcateOutputs)) {
+                    addRateId(H[buffer], demarcationId);
+                }
+
+                unsigned fixedRate = 0;
+                switch (rate.getKind()) {
+                    case RateId::Fixed:
+                        BEGIN_SCOPED_REGION
+                        const auto stride = rate.getRate() * kernelObj->getStride();
+                        assert (stride.denominator() == 1);
+                        fixedRate = stride.numerator();
+                        fixedRates.insert(fixedRate);
+                        END_SCOPED_REGION
+                        break;
+                    case RateId::PartialSum:
+                        BEGIN_SCOPED_REGION
+                        const auto partialSum = checkForPartialSumEntry(buffer, PO);
+                        add_edge(partialSum, buffer, 0, H);
+                        END_SCOPED_REGION
+                        break;
+                    case RateId::Bounded:
+                        addRateId(H[buffer], nextRateId++);
+                        break;
+                    case RateId::Relative:
+                        BEGIN_SCOPED_REGION
+                        const auto refBuffer = getReference(binding);
+                        add_edge(refBuffer, buffer, 0, H);
+                        END_SCOPED_REGION
+                        break;
+                    default: break;
+                }
+                // Check the attributes to see whether any impose a partition change
+                auto hasRateChangeAttribute = [](const Binding & b) {
                     for (const Attribute & attr : b.getAttributes()) {
                         switch (attr.getKind()) {
                             case AttrId::Delayed:
-                                buffer = makeAttributeVertex(buffer, attr.amount(), D);
-                                break;
-                            case AttrId::LookAhead:
-                                buffer = makeAttributeVertex(buffer, attr.amount(), L);
-                                break;
+                            case AttrId::Deferred:
+                            case AttrId::BlockSize:
+                                // A deferred output rate is closer to an bounded rate than a
+                                // countable rate but a deferred input rate simply means the
+                                // buffer must be dynamic.
+                                return true;
                             default: break;
                         }
                     }
+                    return false;
+                };
 
-                    add_edge(buffer, kernel, fixedRate, H);
+                add_edge(kernel, buffer, fixedRate, H);
+
+                if (LLVM_UNLIKELY(hasRateChangeAttribute(b))) {
+                    addRateId(H[buffer], nextRateId++);
                 }
+
             }
+        }
 
-            // TODO: currently any kernel K that can terminate early is the root of a new partition. However,
-            // we could include it one of its sources' partition P if and only if there is no divergent path
-            // of kernels S in P for which *all* consumers of the outputs of S are controlled by an output of
-            // K.
+        // Each output of a source kernel is given a rate not shared by the kernel itself
+        // to ensure its descendents are in a seperate partition. However, the descendents
+        // of a source kernel with two or more outputs that have an equivalent rate ought
+        // to be in the same partition (assuming they have no other inputs from differing
+        // partitions.)
 
-
-            // Check whether this (internal) kernel could terminate early
-            bool mayTerminateEarly = false;
-            bool internallySynchronized = false;
-            if (kernelObj != mPipelineKernel) {
-                mayTerminateEarly = kernelObj->canSetTerminateSignal();
-                internallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
+        if (LLVM_UNLIKELY(in_degree(kernel, H) == 0 && out_degree(kernel, H) != 0)) {
+            // place each input source kernel in its own partition
+            addRateId(H[kernel], nextRateId++);
+            const auto sourceKernelRateId = nextRateId++;
+            for (const auto output : make_iterator_range(out_edges(kernel, H))) {
+                const auto buffer = target(output, H);
+                addRateId(H[buffer], sourceKernelRateId);
             }
-
-            // Assign a root of a partition a new id.
-            if (LLVM_UNLIKELY(isNewPartitionRoot || mayTerminateEarly)) {
-                addRateId(H[kernel], nextRateId++);
-            }
-
-            // TODO: an internally synchronzied kernel with fixed rate I/O can be contained within a partition
-            // but cannot be the root of a non-isolated partition. To permit them to be roots, they'd need
-            // some way of informing the pipeline as to how many strides they executed or the pipeline
-            // would need to know to calculate it from its outputs. Rather than handling this complication,
-            // for now we simply prevent this case.
-
-            const auto demarcateOutputs = mayTerminateEarly || internallySynchronized || isPipelineKernel; // (isNewPartitionRoot && internallySynchronized);
-            unsigned demarcationId = 0;
-
-            if (LLVM_UNLIKELY(demarcateOutputs)) {
-                demarcationId = nextRateId++;
-            }
-
-            // Now iterate through the outputs
-            for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
-
-                const auto binding = target(e, Relationships);
-                const RelationshipNode & rn = Relationships[binding];
-
-                if (rn.Type == RelationshipNode::IsBinding) {
-
-                    const auto f = out_edge(binding, Relationships);
-                    assert (Relationships[f].Reason != ReasonType::Reference);
-                    const auto streamSet = target(f, Relationships);
-                    assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
-                    assert (isa<StreamSet>(Relationships[streamSet].Relationship));
-                    const auto buffer = mapStreamSet(streamSet);
-                    const Binding & b = rn.Binding;
-                    const ProcessingRate & rate = b.getRate();                    
-                    if (LLVM_UNLIKELY(demarcateOutputs)) {
-                        addRateId(H[buffer], demarcationId);
-                    }
-
-                    unsigned fixedRate = 0;
-                    switch (rate.getKind()) {
-                        case RateId::Fixed:
-                            BEGIN_SCOPED_REGION
-                            const auto stride = rate.getRate() * kernelObj->getStride();
-                            assert (stride.denominator() == 1);
-                            fixedRate = stride.numerator();
-                            fixedRates.insert(fixedRate);
-                            END_SCOPED_REGION
-                            break;
-                        case RateId::PartialSum:
-                            BEGIN_SCOPED_REGION
-                            const auto partialSum = checkForPartialSumEntry(buffer, PO);
-                            add_edge(partialSum, buffer, 0, H);
-                            END_SCOPED_REGION
-                            break;
-                        case RateId::Bounded:
-                            addRateId(H[buffer], nextRateId++);
-                            break;
-                        case RateId::Relative:
-                            BEGIN_SCOPED_REGION
-                            const auto refBuffer = getReference(binding);
-                            add_edge(refBuffer, buffer, 0, H);
-                            END_SCOPED_REGION
-                            break;
-                        default: break;
-                    }                    
-                    // Check the attributes to see whether any impose a partition change
-                    auto hasRateChangeAttribute = [](const Binding & b) {
-                        for (const Attribute & attr : b.getAttributes()) {
-                            switch (attr.getKind()) {
-                                case AttrId::Delayed:
-                                case AttrId::Deferred:
-                                case AttrId::BlockSize:
-                                    // A deferred output rate is closer to an bounded rate than a
-                                    // countable rate but a deferred input rate simply means the
-                                    // buffer must be dynamic.
-                                    return true;
-                                default: break;
-                            }
-                        }
-                        return false;
-                    };
-
-                    add_edge(kernel, buffer, fixedRate, H);
-
-                    if (LLVM_UNLIKELY(hasRateChangeAttribute(b))) {
-                        addRateId(H[buffer], nextRateId++);
-                    }
-
-                }
-            }
-
-            // Each output of a source kernel is given a rate not shared by the kernel itself
-            // to ensure its descendents are in a seperate partition. However, the descendents
-            // of a source kernel with two or more outputs that have an equivalent rate ought
-            // to be in the same partition (assuming they have no other inputs from differing
-            // partitions.)
-
-            if (LLVM_UNLIKELY(in_degree(kernel, H) == 0 && out_degree(kernel, H) != 0)) {
-                // place each input source kernel in its own partition
-                addRateId(H[kernel], nextRateId++);
-                const auto sourceKernelRateId = nextRateId++;
-                for (const auto output : make_iterator_range(out_edges(kernel, H))) {
-                    const auto buffer = target(output, H);
-                    addRateId(H[buffer], sourceKernelRateId);
-                }
-            }
-
         }
     }
 
@@ -394,13 +392,6 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         report_fatal_error("Cannot lexically order the partition graph!");
     }
 
-
-//    const auto sink = orderingOfH.back();
-//    addRateId(H[sink], nextRateId++);
-
-    std::vector<Vertex> kernelOrdering;
-    kernelOrdering.reserve(kernels);
-
     for (const auto u : orderingOfH) {
         auto & nodeRateSet = H[u];
         // boost dynamic_bitset will segfault when buffers are of differing lengths.
@@ -410,9 +401,6 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
             const auto & inputRateSet = H[v];
             nodeRateSet |= inputRateSet;
         }
-        if (u < kernels) {
-            kernelOrdering.push_back(u);
-        }
     }
 
     PartitionMap partitionSets;
@@ -420,28 +408,32 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
     PartitionIds.reserve(kernels);
     partitionSets.clear();
 
+    #error here! count in reverse? return graph?
+
     unsigned nextPartitionId = 1;
 
-    for (const auto u : kernelOrdering) {
+    for (unsigned u = 0; u < kernels; ++u) {
         const BitSet & node = H[u];
-        unsigned id = 0;
+        unsigned partitionId = 0;
         if (LLVM_LIKELY(node.any())) {
             auto f = partitionSets.find(node);
             if (f == partitionSets.end()) {
-                id = nextPartitionId++;
-                partitionSets.emplace(node, id);
+                partitionId = nextPartitionId++;
+                partitionSets.emplace(node, partitionId);
             } else {
-                id = f->second;
+                partitionId = f->second;
             }
-        #ifndef NDEBUG
-        } else {
-            const auto v = mappedKernel[u];
-            const auto & N = Relationships[v];
-            assert (N.Type == RelationshipNode::IsKernel);
-            assert (N.Kernel == mPipelineKernel);
-        #endif
         }
-        PartitionIds.emplace(mappedKernel[u], id);
+        const auto v = kernelSequence[u];
+        #ifndef NDEBUG
+        const auto & N = Relationships[v];
+        assert (N.Type == RelationshipNode::IsKernel);
+        assert (node.any() || N.Kernel == mPipelineKernel);
+        #endif
+
+        errs() << "Kernel " << v << " -> Partition " << partitionId << "\n";
+
+        PartitionIds.emplace(v, partitionId);
     }
     assert (PartitionIds.size() == kernels);
     PartitionCount = nextPartitionId;

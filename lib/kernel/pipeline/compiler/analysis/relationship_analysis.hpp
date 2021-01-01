@@ -231,33 +231,28 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
     // Transcribe the pipeline graph based on the lexical ordering, accounting for any auxillary
     // kernels and subsituted kernels/relationships.
 
-    const auto numOfKernels = kernels.size();
-    const auto numOfStreamSets = streamSets.size();
-    const auto numOfBindings = bindings.size();
-    const auto numOfCallees = callees.size();
-    const auto numOfScalars = scalars.size();
+    const unsigned numOfKernels = kernels.size();
+    const unsigned numOfStreamSets = streamSets.size();
+    const unsigned numOfBindings = bindings.size();
+    const unsigned numOfCallees = callees.size();
+    const unsigned numOfScalars = scalars.size();
 
     SmallVector<unsigned, 256> subsitution(num_vertices(Relationships), -1U);
 
     LastKernel = PipelineInput + numOfKernels - 2;
-    PipelineOutput = LastKernel + 1;
-
-    FirstStreamSet = PipelineOutput + 1;
-    LastStreamSet = PipelineOutput + numOfStreamSets;
-    FirstBinding = LastStreamSet + 1;
-    LastBinding = LastStreamSet + numOfBindings;
-
-    FirstCall = PipelineOutput + 1;
-    LastCall = PipelineOutput + numOfCallees;
-    FirstScalar = LastCall + 1;
-    LastScalar = LastCall + numOfScalars;
 
     // Now fill in all of the remaining kernels subsitute position
-    KernelPartitionId.reserve(PipelineOutput + 1);
+    KernelPartitionId.reserve(numOfKernels);
 
-    auto inputPartitionId = 0U;
-    auto outputPartitionId = 0U;
-    for (unsigned i = 0; i != numOfKernels; ++i) {
+    KernelPartitionId[PipelineInput] = 0;
+
+    auto inputPartitionId = -1U;
+    auto outputPartitionId = -1U;
+
+    assert (kernels[0] == PipelineInput);
+    assert (kernels[numOfKernels - 1] == PipelineOutput);
+
+    for (unsigned i = 0; i < (numOfKernels - 1); ++i) {
         const auto in = kernels[i];
         assert (subsitution[in] == -1U);
         const auto out = PipelineInput + i;
@@ -271,14 +266,17 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
 
         #ifndef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
         if (id != inputPartitionId) {
-        #else
-        if (id != inputPartitionId || i > FirstKernel) {
         #endif
             ++outputPartitionId;
             inputPartitionId = id;
+        #ifndef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
         }
+        #endif
         KernelPartitionId[out] = outputPartitionId;
     }
+
+    const auto newPipelineOutput = LastKernel + 1U;
+    KernelPartitionId[newPipelineOutput] = ++outputPartitionId;
 
     // Originally, if the pipeline kernel does not have external I/O, both the pipeline in/out
     // nodes would be placed into the same (ignored) set but this won't be true after scheduling.
@@ -287,12 +285,28 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
 
     PartitionCount = outputPartitionId + 1U;
 
-    assert (outputPartitionId == (PartitionCount - 1));
+    subsitution[PipelineOutput] = newPipelineOutput;
+
+    PipelineOutput = newPipelineOutput;
+
+    FirstStreamSet = PipelineOutput + 1U;
+    LastStreamSet = PipelineOutput + numOfStreamSets;
+    FirstBinding = LastStreamSet + 1U;
+    LastBinding = LastStreamSet + numOfBindings;
+
+    FirstCall = PipelineOutput + 1U;
+    LastCall = PipelineOutput + numOfCallees;
+    FirstScalar = LastCall + 1U;
+    LastScalar = LastCall + numOfScalars;
+
+
+    assert (KernelPartitionId[PipelineInput] == 0);
+
     assert (Relationships[kernels[PipelineInput]].Kernel == mPipelineKernel);
     assert (Relationships[kernels[PipelineOutput]].Kernel == mPipelineKernel);
 
-    assert (KernelPartitionId[PipelineInput] == 0);
-    assert (KernelPartitionId[PipelineOutput] == (PartitionCount - 1U));
+//    assert (KernelPartitionId[PipelineInput] == 0);
+//    assert (KernelPartitionId[PipelineOutput] == (PartitionCount - 1U));
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {
         assert (subsitution[streamSets[i]] == -1U);

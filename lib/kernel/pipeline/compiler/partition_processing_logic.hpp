@@ -15,7 +15,9 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
     const auto firstPartition = KernelPartitionId[FirstKernel];
     for (unsigned i = firstPartition; i < PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
-    }
+    }    
+    mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
+    mPartitionEntryPoint[PartitionCount] = mPipelineEnd;
 
     const auto ip = b->saveIP();
     IntegerType * const boolTy = b->getInt1Ty();
@@ -32,7 +34,7 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
     initializePipelineInputConsumedPhiNodes(b);
     b->restoreIP(ip);
 
-    mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -58,7 +60,7 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
  * @brief getPartitionExitPoint
  ** ------------------------------------------------------------------------------------------------------------- */
 inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
-    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    assert (mKernelId >= FirstKernel && mKernelId <= PipelineOutput);
     const auto partitionId = KernelPartitionId[mKernelId];
     assert ("partition exit cannot loop to current entry!" &&
             mPartitionEntryPoint[partitionId] != mPartitionEntryPoint[partitionId + 1]);
@@ -68,7 +70,7 @@ inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForPartitionEntry
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
+inline void PipelineCompiler::checkForPartitionEntry(BuilderRef /* b */) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);    
     mNextPartitionWithPotentialInput = nullptr;
     mIsPartitionRoot = false;
@@ -80,7 +82,7 @@ inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
 
         const auto jumpIdx = mPartitionJumpIndex[partitionId];
         assert (partitionId != jumpIdx);
-        mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];        
+        mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
         mIsPartitionRoot = true;
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "  *** entering partition %" PRIu64, b->getSize(mCurrentPartitionId));
@@ -503,6 +505,8 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
     const auto nextPartitionId = KernelPartitionId[nextKernel];
 
+    assert (nextKernel != PipelineOutput || (nextPartitionId != mCurrentPartitionId));
+
     if (nextPartitionId != mCurrentPartitionId) {
         assert (mCurrentPartitionId < nextPartitionId);
         assert (nextPartitionId <= PartitionCount);
@@ -569,6 +573,37 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
     }
 }
+
+#if 0
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setPartitionVariablesToPipelineEnd
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::setPartitionVariablesToPipelineEnd(BuilderRef /* b */) {
+
+    const auto nextPartitionId = KernelPartitionId[LastKernel];
+
+    mExhaustedInput = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
+
+    const auto n = LastStreamSet - FirstStreamSet + 1U;
+
+    for (unsigned i = 0; i != n; ++i) {
+        PHINode * const phi = mPartitionProducedItemCountPhi[nextPartitionId][i];
+        const auto streamSet = FirstStreamSet + i;
+        mLocallyAvailableItems[streamSet] = phi;
+    }
+
+    for (unsigned i = 0; i != n; ++i) {
+        PHINode * const phi = mPartitionConsumedItemCountPhi[nextPartitionId][i];
+        const auto streamSet = FirstStreamSet + i;
+        mInitialConsumedItemCount[streamSet] = phi;
+    }
+
+    for (unsigned i = 0; i != nextPartitionId; ++i) {
+        mPartitionTerminationSignal[i] = mPartitionTerminationSignalPhi[nextPartitionId][i];
+    }
+
+}
+#endif
 
 }
 

@@ -852,7 +852,6 @@ void PipelineCompiler::end(BuilderRef b) {
     // TODO: if we determine that all of the pipeline I/O is consumed in one invocation of the
     // pipeline, we can avoid testing at the end whether its terminated.
 
-
     Value * terminated = nullptr;
     if (ExternallySynchronized) {
         if (mCurrentThreadTerminationSignalPtr) {
