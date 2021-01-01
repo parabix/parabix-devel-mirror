@@ -235,24 +235,18 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
 
 RE * EnumeratedPropertyBoundary(UCD::EnumeratedPropertyObject * enumObj) {
     unsigned enum_count = enumObj->GetEnumCount();
-    unsigned basis_size = std::log2(enum_count - 1) + 1;
     std::vector<RE *> assertions;
     auto prop = enumObj->getPropertyCode();
     PropertyExpression::Kind kind = PropertyExpression::Kind::Codepoint;
     PropertyExpression::Operator op = PropertyExpression::Operator::Eq;
-    for (unsigned i = 0; i < basis_size; i++) {
-        std::vector<RE *> props;
-        for (unsigned j = 0; j < enum_count; j++) {
-            if (((j >> i) & 1) == 1) {
-                std::string enumVal = enumObj->GetValueEnumName(j);
-                RE * expr = makePropertyExpression(kind, UCD::property_full_name[prop], op, enumVal);
-                props.push_back(expr);
-            }
-        }
-        RE * propRE = makeAlt(props.begin(), props.end());
-        assertions.push_back(makeBoundaryAssertion(propRE));
+    std::vector<RE *> alts;
+    for (unsigned j = 0; j < enum_count; j++) {
+        std::string enumVal = enumObj->GetValueEnumName(j);
+        RE * expr = makePropertyExpression(kind, UCD::property_full_name[prop], op, enumVal);
+        alts.push_back(makeSeq({notBehind(expr), Ahead(expr)}));
+        alts.push_back(makeSeq({Behind(expr), notAhead(expr)}));
     }
-    return makeSeq(assertions.begin(), assertions.end());
+    return makeAlt(alts.begin(), alts.end());
 }
 
 class BoundaryPropertyResolver : public RE_Transformer {
