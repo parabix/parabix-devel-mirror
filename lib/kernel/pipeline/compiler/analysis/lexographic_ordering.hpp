@@ -62,8 +62,32 @@ bool lexical_ordering(const Graph & G, Vec & L) {
 
 using ReverseTopologicalOrdering = SmallVector<unsigned, 256>;
 
-template <typename Vector, typename Graph>
-void transitive_closure_dag(const Vector & ordering, Graph & G) {
+#ifndef NDEBUG
+template <typename Sorting, typename Graph>
+bool is_valid_topological_sorting(const Sorting & S, const Graph & G) {
+    const auto n = num_vertices(G);
+    std::vector<unsigned> remaining(n);
+    for (unsigned i = 0; i < n; ++i) {
+        remaining[i] = in_degree(i, G);
+    }
+    std::vector<unsigned> order(S.begin(), S.end());
+    assert (order.size() == n);
+    for (const auto u : reverse(order)) {
+        if (remaining[u] != 0) {
+            return false;
+        }
+        for (const auto e : make_iterator_range(out_edges(u, G))) {
+            const auto v = target(e, G);
+            assert (remaining[v] > 0);
+            remaining[v]--;
+        }
+    }
+    return true;
+}
+#endif
+
+template <typename Sorting, typename Graph>
+void transitive_closure_dag(const Sorting & ordering, Graph & G) {
     // Simple transitive closure for DAGs
     for (unsigned u : ordering) {
         for (const auto e : make_iterator_range(in_edges(u, G))) {
@@ -78,8 +102,8 @@ void transitive_closure_dag(const Vector & ordering, Graph & G) {
     }
 }
 
-template <typename Vector, typename Graph>
-void transitive_reduction_dag(const Vector & ordering, Graph & G) {
+template <typename Sorting, typename Graph>
+void transitive_reduction_dag(const Sorting & ordering, Graph & G) {
     using Edge = typename graph_traits<Graph>::edge_descriptor;
     BitVector sources(num_vertices(G));
     for (unsigned u : ordering ) {

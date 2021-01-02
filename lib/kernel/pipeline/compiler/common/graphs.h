@@ -372,52 +372,11 @@ using Partition = std::vector<unsigned>;
 
 using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
 
-struct PartitioningGraphNode {
-    enum TypeId {
-        Partition = 0
-        , Variable
-        , Fixed
-        , Greedy
-        , PartialSum
-        , Relative
-    };
-
-    TypeId Type = TypeId::Partition;
-    unsigned StreamSet = 0;
-    unsigned Delay = 0;
-
-    PartitioningGraphNode() = default;
-};
-
-struct PartitioningGraphEdge {
-    enum TypeId : unsigned {
-        IOPort = 0
-        , Channel
-        , Reference
-    };
-
-    TypeId          Type;
-    unsigned        Kernel;
-    StreamSetPort   Port;
-
-    PartitioningGraphEdge(unsigned kernel, StreamSetPort port) : Type(IOPort), Kernel(kernel), Port(port) { }
-    PartitioningGraphEdge(TypeId type = IOPort, unsigned kernel = 0, StreamSetPort port = StreamSetPort{}) : Type(type), Kernel(kernel), Port(port) { }
-};
-
-bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B) {
-    assert (A.Type == B.Type);
-    if (A.Kernel < B.Kernel) {
-        return true;
-    }
-    return (A.Port < B.Port);
-}
-using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
-
 using OrderingDAWG = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 struct PartitionData {
 
-    std::vector<unsigned>   Kernels;
+    Partition               Kernels;
     std::vector<unsigned>   Repetitions;
     OrderingDAWG            Orderings;
     Rational                ExpectedRepetitions;
@@ -427,6 +386,10 @@ struct PartitionData {
 
     }
 };
+
+using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned>;
+
+using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
 
 struct PartitionDataflowEdge {
     unsigned    KernelId;
@@ -460,6 +423,27 @@ struct PartitionOrdering {
 
     }
 };
+
+struct SchedulingNode {
+
+    enum NodeType {
+        IsKernel = 0
+        , IsStreamSet = 1
+    };
+
+    NodeType Type = NodeType::IsKernel;
+    Rational Size;
+
+    SchedulingNode() = default;
+
+    SchedulingNode(NodeType ty, Rational size = Rational{0})
+    : Type(ty)
+    , Size(size) {
+
+    }
+};
+
+using SchedulingGraph = adjacency_list<vecS, vecS, bidirectionalS, SchedulingNode, Rational>;
 
 using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
 

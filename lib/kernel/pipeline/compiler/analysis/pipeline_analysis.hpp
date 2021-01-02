@@ -116,20 +116,25 @@ private:
 
     void partitionRelationshipGraphIntoSynchronousRegions();
 
-    void identifyKernelPartitions(const std::vector<unsigned> & orderingOfG);
+    PartitionGraph identifyKernelPartitions();
 
     #ifdef EXPERIMENTAL_SCHEDULING
-    std::vector<PartitionData> gatherPartitionData(const std::vector<unsigned> & orderingOfG) const;
 
-    void analyzeDataflowWithinPartitions(std::vector<PartitionData> & P) const;
+    void analyzeDataflowWithinPartitions(PartitionGraph & P) const;
 
-    PartitionDataflowGraph analyzeDataflowBetweenPartitions(std::vector<PartitionData> & P) const;
+    SchedulingGraph makeIntraPartitionSchedulingGraph(const PartitionGraph & P, const unsigned currentPartitionId) const;
 
-    PartitionOrdering makePartitionSchedulingGraph(std::vector<PartitionData> & P, const PartitionDataflowGraph & D) const;
+    PartitionDependencyGraph makePartitionDependencyGraph(const PartitionData & currentPartition) const;
 
-    std::vector<unsigned> scheduleProgramGraph(const std::vector<PartitionData> & P, const PartitionOrdering & O, const PartitionDataflowGraph & D) const;
 
-    void addSchedulingConstraints(const std::vector<PartitionData> & P, const std::vector<unsigned> & program);
+
+    PartitionDataflowGraph analyzeDataflowBetweenPartitions(PartitionGraph & P) const;
+
+    PartitionOrdering makePartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const;
+
+    std::vector<unsigned> scheduleProgramGraph(const PartitionGraph & P, const PartitionOrdering & O, const PartitionDataflowGraph & D) const;
+
+    void addSchedulingConstraints(const PartitionGraph & P, const std::vector<unsigned> & program);
 
     #endif
 

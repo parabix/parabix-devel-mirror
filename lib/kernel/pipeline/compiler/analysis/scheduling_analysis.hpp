@@ -86,49 +86,6 @@ void printDAWG(const OrderingDAWG & G, raw_ostream & out, const StringRef name =
     out.flush();
 }
 
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief gatherPartitionData
- ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<PartitionData> PipelineAnalysis::gatherPartitionData(const std::vector<unsigned> & orderingOfG) const {
-
-    // Each program is constructed from some ordering of partitions.
-    std::vector<PartitionData> P(PartitionCount - 1);
-
-    for (const auto u : orderingOfG) {
-        const RelationshipNode & node = Relationships[u];
-        switch (node.Type) {
-            case RelationshipNode::IsKernel:
-            BEGIN_SCOPED_REGION
-            const auto f = PartitionIds.find(u);
-            assert (f != PartitionIds.end());
-            const auto id = f->second;
-            // partition 0 is reserved for fake pipeline I/O kernels
-            if (id == 0) {
-                assert (u == PipelineInput || u == PipelineOutput);
-                continue;
-            }
-            assert (id < PartitionCount);
-            P[id - 1].Kernels.push_back(u);
-            END_SCOPED_REGION
-            default: break;
-        }
-    }
-
-    for (unsigned i = 0; i < PartitionCount - 1; ++i) {
-        errs() << "PARTITION: " << (i + 1) << " =d";
-        char joiner = ' ';
-        for (unsigned k : P[i].Kernels) {
-            errs() << joiner << k;
-            joiner = ',';
-        }
-        errs() << "\n";
-
-    }
-
-    return P;
-}
-
 namespace { // start of anonymous namespace
 
 using Vertex = unsigned;
@@ -146,28 +103,6 @@ struct FitnessComparator {
 };
 
 using Population = std::vector<Individual>;
-
-struct SchedulingNode {
-
-    enum NodeType {
-        IsKernel = 0
-        , IsStreamSet = 1
-        , IsExternal = 2
-    };
-
-    NodeType Type = NodeType::IsKernel;
-    Rational Size;
-
-    SchedulingNode() = default;
-
-    SchedulingNode(NodeType ty, Rational size = Rational{0})
-    : Type(ty)
-    , Size(size) {
-
-    }
-};
-
-using SchedulingGraph = adjacency_list<vecS, vecS, bidirectionalS, SchedulingNode, Rational>;
 
 using random_engine = std::default_random_engine; // TODO: look into xorshift for this
 
@@ -358,9 +293,6 @@ public:
             for (const auto output : make_iterator_range(out_edges(kernel, S))) {
                 const auto streamSet = target(output, S);
                 const SchedulingNode & node = S[streamSet];
-                if (LLVM_UNLIKELY(node.Type == SchedulingNode::IsExternal)) {
-                    continue;
-                }
                 assert (node.Type == SchedulingNode::IsStreamSet);
                 // assert (node.Size > 0);
                 assert (streamSetId < numOfStreamSets);
@@ -396,9 +328,6 @@ public:
                 const auto streamSet = target(output, S);
                 const SchedulingNode & node = S[streamSet];
                 assert (node.Type != SchedulingNode::IsKernel);
-                if (LLVM_UNLIKELY(node.Type == SchedulingNode::IsExternal)) {
-                    continue;
-                }
                 assert (node.Type == SchedulingNode::IsStreamSet);
                 assert (streamSetId < numOfStreamSets);
                 const auto i = streamSetId++;
@@ -1040,10 +969,10 @@ private:
 
 public:
 
-    MemoryAnalysis(const SchedulingGraph & S, const unsigned numOfKernels, const unsigned numOfStreamSets)
+    MemoryAnalysis(const SchedulingGraph & S, const unsigned numOfKernels)
     : S(S)
     , numOfKernels(numOfKernels)
-    , numOfStreamSets(numOfStreamSets)
+    , numOfStreamSets(num_vertices(S) - numOfKernels)
     , rng(std::random_device()())
     , live(2 * numOfKernels + numOfStreamSets)
     , weight(2 * numOfKernels + numOfStreamSets)
@@ -1101,12 +1030,11 @@ struct SchedulingAnalysisWorker {
 protected:
 
     SchedulingAnalysisWorker(const SchedulingGraph & S,
-                       const unsigned numOfKernels, const unsigned numOfStreamSets,
+                       const unsigned numOfKernels,
                        const unsigned candidateLength)
     : numOfKernels(numOfKernels)
-    , numOfStreamSets(numOfStreamSets)
     , candidateLength(candidateLength)
-    , analyzer(S, numOfKernels, numOfStreamSets)
+    , analyzer(S, numOfKernels)
     , rng(std::random_device()()) {
 
     }
@@ -1114,7 +1042,6 @@ protected:
 protected:
 
     const unsigned numOfKernels;
-    const unsigned numOfStreamSets;
     const unsigned candidateLength;
 
     MemoryAnalysis analyzer;
@@ -1422,10 +1349,7 @@ protected:
 
     random_engine rng;
 
-
 };
-
-using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief PartitionSchedulingAnalysis
@@ -1471,8 +1395,8 @@ public:
      * @brief constructor
      ** ------------------------------------------------------------------------------------------------------------- */
     PartitionSchedulingAnalysisWorker(const SchedulingGraph & S, const PartitionDependencyGraph & D,
-                                      const unsigned numOfKernels, const unsigned numOfStreamSets)
-    : SchedulingAnalysisWorker(S, numOfKernels, numOfStreamSets, numOfKernels)
+                                      const unsigned numOfKernels)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels)
     , D(D)
     , replacement(numOfKernels)
     , remaining(numOfKernels) {
@@ -1528,10 +1452,10 @@ struct PartitionSchedulingAnalysis final : public SchedulingAnalysis {
      * @brief constructor
      ** ------------------------------------------------------------------------------------------------------------- */
     PartitionSchedulingAnalysis(const SchedulingGraph & S, const PartitionDependencyGraph & D,
-                                const unsigned numOfKernels, const unsigned numOfStreamSets)
+                                const unsigned numOfKernels)
     : SchedulingAnalysis(numOfKernels)
     , D(D)
-    , worker(S, D, numOfKernels, numOfStreamSets) {
+    , worker(S, D, numOfKernels) {
 
     }
 
@@ -1912,9 +1836,8 @@ public:
     ProgramSchedulingAnalysisWorker(const SchedulingGraph & S,
                                     const PartitionOrderingGraph & O,
                                     const unsigned numOfKernels,
-                                    const unsigned numOfStreamSets,
                                     const unsigned maxPathLength)
-    : SchedulingAnalysisWorker(S, numOfKernels, numOfStreamSets, numOfKernels)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels)
     , O(O) {
         const auto n = num_vertices(O);
         visited.resize(n);
@@ -1996,10 +1919,9 @@ struct ProgramSchedulingAnalysis final : public SchedulingAnalysis {
     ProgramSchedulingAnalysis(const SchedulingGraph & S,
                               const PartitionOrderingGraph & O,
                               const unsigned numOfKernels,
-                              const unsigned numOfStreamSets,
                               const unsigned maxPathLength)
     : SchedulingAnalysis(numOfKernels)
-    , worker(S, O, numOfKernels, numOfStreamSets, maxPathLength) {
+    , worker(S, O, numOfKernels, maxPathLength) {
 
     }
 
@@ -2016,7 +1938,7 @@ private:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowWithinPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::analyzeDataflowWithinPartitions(std::vector<PartitionData> & P) const {
+void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const {
 
     using SchedulingMap = flat_map<Vertex, Vertex>;
 
@@ -2045,109 +1967,12 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(std::vector<PartitionData
         /// Identify the nodes / streamsets belonging to our i-th partition
         /// -----------------------------------------------------------------
 
-        PartitionData & currentPartition = P[currentPartitionId - 1];
+        auto S = makeIntraPartitionSchedulingGraph(P, currentPartitionId);
+
+        PartitionData & currentPartition = P[currentPartitionId];
 
         const auto & kernels = currentPartition.Kernels;
         const auto numOfKernels = kernels.size();
-
-        SchedulingGraph S(numOfKernels);
-
-        unsigned internalStreamSets = 0;
-
-        BEGIN_SCOPED_REGION
-
-        SchedulingMap M;
-
-        unsigned currentKernelId = 0;
-
-        for (const auto u : kernels) {
-            const RelationshipNode & node = Relationships[u];
-            assert (node.Type == RelationshipNode::IsKernel);
-
-            const auto f = PartitionIds.find(u);
-            assert (f != PartitionIds.end());
-            const auto id = f->second;
-            if (LLVM_LIKELY(id == currentPartitionId)) {
-
-                const auto strideSize = node.Kernel->getStride();
-
-                const auto su = currentKernelId++;
-
-                for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
-                    const auto binding = source(e, Relationships);
-                    if (Relationships[binding].Type == RelationshipNode::IsBinding) {
-                        const auto f = first_in_edge(binding, Relationships);
-                        assert (Relationships[f].Reason != ReasonType::Reference);
-                        const auto streamSet = source(f, Relationships);
-                        // is this streamset in the subgraph? if so, add an edge.
-                        const auto m = M.find(streamSet);
-                        if (LLVM_LIKELY(m != M.end())) {
-                            const RelationshipNode & rn = Relationships[binding];
-                            const Binding & b = rn.Binding;
-                            const ProcessingRate & rate = b.getRate();
-
-                            // If we have a PopCount producer/consumer in the same partition,
-                            // they're both perform an identical number of strides. So long
-                            // as the producing/consuming strideRate match, the equation will
-                            // work. Since the lower bound of PopCounts is 0, we always use the
-                            // upper bound.
-                            Rational itemsPerStride{rate.getUpperBound() * strideSize};
-                            const auto sv = m->second;
-                            add_edge(sv, su, itemsPerStride, S);
-                        }
-                    }
-                }
-
-                for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
-                    const auto binding = target(e, Relationships);
-                    if (Relationships[binding].Type == RelationshipNode::IsBinding) {
-                        const auto f = first_out_edge(binding, Relationships);
-                        assert (Relationships[f].Reason != ReasonType::Reference);
-                        const auto streamSet = target(f, Relationships);
-                        assert ("a streamset can only have one producer" && M.count(streamSet) == 0);
-                        assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
-                        assert (isa<StreamSet>(Relationships[streamSet].Relationship));
-
-                        // Check whether this streamset node ought to be marked as External or ignored.
-                        bool isExternal = false;
-                        bool hasInternal = false;
-                        for (const auto e : make_iterator_range(out_edges(streamSet, Relationships))) {
-                            const auto binding = target(e, Relationships);
-                            assert (Relationships[binding].Type == RelationshipNode::IsBinding);
-                            const auto input = first_out_edge(binding, Relationships);
-                            const auto kernel = target(input, Relationships);
-                            assert (Relationships[kernel].Type == RelationshipNode::IsKernel);
-                            const auto f = PartitionIds.find(kernel);
-                            assert (f != PartitionIds.end());
-                            const auto id = f->second;
-                            if (LLVM_LIKELY(id == currentPartitionId)) {
-                                hasInternal = true;
-                            } else {
-                                isExternal = true;
-                            }
-                            if (hasInternal && isExternal) {
-                                goto checked_users;
-                            }
-                        }
-checked_users:          if (hasInternal) {
-                            const RelationshipNode & rn = Relationships[binding];
-                            const Binding & b = rn.Binding;
-                            const ProcessingRate & rate = b.getRate();
-                            Rational itemsPerStride{rate.getUpperBound() * strideSize};
-                            const auto type = isExternal ? SchedulingNode::IsExternal : SchedulingNode::IsStreamSet;
-                            internalStreamSets += isExternal ? 0 : 1;
-                            const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), 8};
-                            const auto sv = add_vertex(SchedulingNode{type, bytesPerItem}, S);
-                            add_edge(su, sv, itemsPerStride, S);
-                            M.emplace(streamSet, sv);
-                        }
-                    }
-                }
-            }
-        }
-
-        END_SCOPED_REGION
-
 
         BEGIN_SCOPED_REGION
 
@@ -2175,11 +2000,15 @@ checked_users:          if (hasInternal) {
         };
 
         auto multiply =[&](Z3_ast X, Z3_ast Y) {
+            assert (X);
+            assert (Y);
             Z3_ast args[2] = { X, Y };
             return Z3_mk_mul(ctx, 2, args);
         };
 
         auto assert_equals =[&](Z3_ast X, Z3_ast Y) {
+            assert (X);
+            assert (Y);
             const auto Z = Z3_mk_eq(ctx, X, Y);
             Z3_solver_assert(ctx, solver, Z);
         };
@@ -2191,18 +2020,21 @@ checked_users:          if (hasInternal) {
         for (unsigned u = 0; u < numOfKernels; ++u) {
             assert (S[u].Type == SchedulingNode::IsKernel);
             VarList[u] = free_variable();
+            for (const auto e : make_iterator_range(out_edges(u, S))) {
+                const auto streamSet = target(e, S);
+                const auto fixedRateVal = constant(S[e]);
+                const auto producedRate = multiply(VarList[u], fixedRateVal);
+                VarList[streamSet] = producedRate;
+            }
+        }
+        for (unsigned u = 0; u < numOfKernels; ++u) {
+            assert (S[u].Type == SchedulingNode::IsKernel);
             for (const auto e : make_iterator_range(in_edges(u, S))) {
                 const auto streamSet = source(e, S);
                 const auto producedRate = VarList[streamSet];
                 const auto fixedRateVal = constant(S[e]);
                 const auto consumedRate = multiply(VarList[u], fixedRateVal);
                 assert_equals(producedRate, consumedRate);
-            }
-            for (const auto e : make_iterator_range(out_edges(u, S))) {
-                const auto streamSet = target(e, S);
-                const auto fixedRateVal = constant(S[e]);
-                const auto producedRate = multiply(VarList[u], fixedRateVal);
-                VarList[streamSet] = producedRate;
             }
         }
 
@@ -2289,46 +2121,12 @@ checked_users:          if (hasInternal) {
         // TODO: we ought to reason about paths in D independently since they are
         // subgraphs of S with a single topological ordering.
 
-        PartitionDependencyGraph D(numOfKernels);
-
-        if (numOfKernels > 1) {
-            const auto n = num_vertices(S);
-            BitVector transitive(n);
-
-            // Generate the transitive closure as we create the dependency graph D
-            for (unsigned u = 0; u < numOfKernels; ++u) {
-                assert (S[u].Type == SchedulingNode::IsKernel);
-
-                // determine which streamsets this kernel transitively depends on.
-                transitive.reset();
-
-                for (const auto e : make_iterator_range(in_edges(u, S))) {
-                    const auto v = source(e, S);
-                    assert (S[v].Type != SchedulingNode::IsKernel);
-                    for (const auto f : make_iterator_range(in_edges(v, S))) {
-                        const auto w = source(f, S);
-                        assert (S[w].Type == SchedulingNode::IsKernel);
-                        assert (w < transitive.size());
-                        transitive.set(w);
-                    }
-                }
-
-                assert (in_degree(u, S) == 0 || transitive.any());
-
-                for (const auto w : transitive.set_bits()) {
-                    add_edge(w, u, D);
-                }
-            }
-
-            // Since transitive reductions of DAGs are unique, we take the transitive reduction of D
-            // to slightly simplify the problem later.
-            transitive_reduction_dag(reverse_traversal{numOfKernels - 1}, D);
-        }
+        const auto D = makePartitionDependencyGraph(currentPartition);
 
         // Now we begin the genetic algorithm phase; our overall goal is to find a schedule that
         // permits a minimum memory schedule.
 
-        PartitionSchedulingAnalysis SA(S, D, numOfKernels, internalStreamSets);
+        PartitionSchedulingAnalysis SA(S, D, numOfKernels);
 
         SA.runGA(currentPartition.Orderings);
 
@@ -2338,116 +2136,299 @@ checked_users:          if (hasInternal) {
     Z3_del_context(ctx);
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeIntraPartitionSchedulingGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const PartitionGraph & P,
+                                                                    const unsigned currentPartitionId) const {
+
+    const PartitionData & currentPartition = P[currentPartitionId];
+
+    const auto & kernels = currentPartition.Kernels;
+    const auto numOfKernels = kernels.size();
+
+    #warning add fake source/sink to each partition to reason about external streamsets?
+
+    flat_set<Vertex> streamSets;
+
+    for (const auto u : kernels) {
+        const RelationshipNode & node = Relationships[u];
+        assert (node.Type == RelationshipNode::IsKernel);
+        for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
+            const auto binding = source(e, Relationships);
+            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+                const auto f = first_in_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = source(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                streamSets.insert(streamSet);
+            }
+        }
+        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
+            const auto binding = target(e, Relationships);
+            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+                const auto f = first_out_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = target(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                streamSets.insert(streamSet);
+            }
+        }
+    }
+
+    flat_set<Vertex> externalStreamSet;
+    for (const auto e : make_iterator_range(in_edges(currentPartitionId, P))) {
+        externalStreamSet.insert(P[e]);
+    }
+    for (const auto e : make_iterator_range(out_edges(currentPartitionId, P))) {
+        externalStreamSet.insert(P[e]);
+    }
+
+
+    std::vector<Vertex> internalStreamSet;
+
+    internalStreamSet.reserve(streamSets.size() - externalStreamSet.size());
+
+    std::set_difference(streamSets.begin(), streamSets.end(),
+                        externalStreamSet.begin(), externalStreamSet.end(),
+                        std::back_inserter(internalStreamSet));
+
+    const auto numOfStreamSets = internalStreamSet.size();
+
+    SchedulingGraph G(numOfKernels + numOfStreamSets);
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        SchedulingNode & N = G[i];
+        N.Type = SchedulingNode::IsKernel;
+    }
+
+    const auto firstStreamSet = numOfKernels;
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        const auto u = kernels[i];
+        const RelationshipNode & node = Relationships[u];
+        assert (node.Type == RelationshipNode::IsKernel);
+
+        const auto strideSize = node.Kernel->getStride();
+
+        for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
+            const auto binding = source(e, Relationships);
+            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+                const auto f = first_in_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = source(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                const auto g = std::find(internalStreamSet.begin(), internalStreamSet.end(), streamSet);
+                if (g != internalStreamSet.end()) {
+
+                    const auto j = std::distance(internalStreamSet.begin(), g);
+
+                    const RelationshipNode & rn = Relationships[binding];
+                    const Binding & b = rn.Binding;
+                    const ProcessingRate & rate = b.getRate();
+
+                    // If we have a PopCount producer/consumer in the same partition,
+                    // they're both perform an identical number of strides. So long
+                    // as the producing/consuming strideRate match, the equation will
+                    // work. Since the lower bound of PopCounts is 0, we always use the
+                    // upper bound.
+                    Rational itemsPerStride{rate.getUpperBound() * strideSize};
+                    add_edge(firstStreamSet + j, i, itemsPerStride, G);
+                }
+            }
+        }
+
+        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
+            const auto binding = target(e, Relationships);
+            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+                const auto f = first_out_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = target(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+
+                const auto g = std::find(internalStreamSet.begin(), internalStreamSet.end(), streamSet);
+                if (g != internalStreamSet.end()) {
+                    const auto j = std::distance(internalStreamSet.begin(), g);
+                    const RelationshipNode & rn = Relationships[binding];
+                    const Binding & b = rn.Binding;
+
+                    const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), 8};
+
+                    SchedulingNode & SN = G[firstStreamSet + j];
+                    SN.Type = SchedulingNode::IsStreamSet;
+                    SN.Size = bytesPerItem;
+
+                    const ProcessingRate & rate = b.getRate();
+                    Rational itemsPerStride{rate.getUpperBound() * strideSize};
+
+                    add_edge(i, firstStreamSet + j, itemsPerStride, G);
+                }
+            }
+        }
+    }
+
+    return G;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePartitionDependencyGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+PartitionDependencyGraph PipelineAnalysis::makePartitionDependencyGraph(const PartitionData & currentPartition) const {
+
+    const auto & K = currentPartition.Kernels;
+    const auto numOfKernels = K.size();
+
+    PartitionDependencyGraph G(numOfKernels);
+
+    flat_set<Vertex> consumers;
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        const auto u = K[i];
+        assert (Relationships[u].Type == RelationshipNode::IsKernel);
+        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
+            const auto output = target(e, Relationships);
+            if (Relationships[output].Type == RelationshipNode::IsBinding) {
+                const auto f = first_out_edge(output, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = target(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                for (const auto e : make_iterator_range(out_edges(streamSet, Relationships))) {
+                    const auto input = target(e, Relationships);
+                    if (Relationships[input].Type == RelationshipNode::IsBinding) {
+                        const auto g = first_out_edge(input, Relationships);
+                        assert (Relationships[f].Reason != ReasonType::Reference);
+                        const auto consumer = target(g, Relationships);
+                        assert (Relationships[consumer].Type == RelationshipNode::IsKernel);
+                        consumers.insert(consumer);
+                    }
+                }
+            }
+        }
+        for (const auto v : consumers) {
+            const auto f = std::find(K.begin(), K.end(), v);
+            if (f != K.end()) {
+                const auto j = std::distance(K.begin(), f);
+                add_edge(i, j, G);
+            }
+        }
+        consumers.clear();
+    }
+
+    reverse_traversal ordering{numOfKernels};
+    assert (is_valid_topological_sorting(ordering, G));
+    transitive_reduction_dag(ordering, G);
+
+    return G;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowBetweenPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
-PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(std::vector<PartitionData> & P) const {
+PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(PartitionGraph & P) const {
 
     using DataflowMap = flat_map<Vertex, Vertex>;
 
     const auto activePartitions = (PartitionCount - 1);
 
-    PartitionDataflowGraph G(activePartitions);
-
-    DataflowMap M;
-
     // create a bipartite graph consisting of partitions and cross-partition
     // streamset nodes and relationships
-    for (unsigned partitionId = 0; partitionId < activePartitions; ++partitionId) {
-        const PartitionData & N = P[partitionId];
-        const auto n = N.Kernels.size();
 
-        // consumers
-        for (unsigned i = 0; i != n; ++i) {
-            const auto consumer = N.Kernels[i];
-            const RelationshipNode & node = Relationships[consumer];
-            assert (node.Type == RelationshipNode::IsKernel);
-            for (const auto e : make_iterator_range(in_edges(consumer, Relationships))) {
-                const auto binding = source(e, Relationships);
+    flat_set<Vertex> streamSets;
+
+    for (unsigned partitionId = 1; partitionId < PartitionCount; ++partitionId) {
+        for (const auto e : make_iterator_range(out_edges(partitionId, P))) {
+            const auto streamSet = P[e];
+            assert (streamSet < num_vertices(Relationships));
+            assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+            assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+            streamSets.insert(streamSet);
+        }
+    }
+
+    const auto numOfStreamSets = streamSets.size();
+
+    PartitionDataflowGraph G(activePartitions + numOfStreamSets);
+
+    for (unsigned streamSetNode = 0; streamSetNode < numOfStreamSets; ++streamSetNode) {
+        const auto streamSet = *streamSets.nth(streamSetNode);
+        for (const auto e : make_iterator_range(in_edges(streamSet, Relationships))) {
+            const auto binding = source(e, Relationships);
+            const RelationshipNode & output = Relationships[binding];
+            if (LLVM_LIKELY(output.Type == RelationshipNode::IsBinding)) {
+                const auto f = first_in_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const unsigned producer = source(f, Relationships);
+                const RelationshipNode & node = Relationships[producer];
+                assert (node.Type == RelationshipNode::IsKernel);
+
+                const Binding & b = output.Binding;
+                const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), 8};
+
+                const auto k = activePartitions + streamSetNode;
+
+                G[k] = bytesPerItem;
+
+                const auto g = PartitionIds.find(producer);
+                assert (g != PartitionIds.end());
+                const auto partitionId = g->second;
+
+                const PartitionData & N = P[partitionId];
+                const auto & K = N.Kernels;
+                const auto h = std::find(K.begin(), K.end(), producer);
+                assert (h != K.end());
+                const auto i = std::distance(K.begin(), h);
+
+                const auto strideSize = node.Kernel->getStride() * N.Repetitions[i];
+
+                const ProcessingRate & rate = b.getRate();
+                const auto sum = rate.getLowerBound() + rate.getUpperBound();
+                const auto expected = sum * Rational{strideSize, 2};
+                add_edge(partitionId - 1, k, PartitionDataflowEdge{producer, rate.getKind(), expected}, G);
+            }
+        }
+    }
+
+    for (unsigned partitionId = 1; partitionId < PartitionCount; ++partitionId) {
+        const PartitionData & N = P[partitionId];
+        const auto & K = N.Kernels;
+        for (const auto e : make_iterator_range(in_edges(partitionId, P))) {
+            const auto streamSet = P[e];
+            assert (streamSet < num_vertices(Relationships));
+            assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+            assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+            const auto f = streamSets.find(streamSet);
+            assert (f != streamSets.end());
+            const auto streamSetNode = std::distance(streamSets.begin(), f);
+            const auto k = activePartitions + streamSetNode;
+
+            for (const auto e : make_iterator_range(out_edges(streamSet, Relationships))) {
+                const auto binding = target(e, Relationships);
                 const RelationshipNode & input = Relationships[binding];
                 if (LLVM_LIKELY(input.Type == RelationshipNode::IsBinding)) {
-
-                    const auto f = first_in_edge(binding, Relationships);
-                    assert (Relationships[f].Reason != ReasonType::Reference);
-                    const auto streamSet = source(f, Relationships);
-                    assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
-                    assert (isa<StreamSet>(Relationships[streamSet].Relationship));
-
-                    // Is this an external streamset?
-                    const auto m = M.find(streamSet);
-                    if (LLVM_LIKELY(m == M.end())) {
-                        continue;
-                    }
-
-                    const auto streamSetNode = m->second;
-                    const auto strideSize = node.Kernel->getStride() * N.Repetitions[i];
-
-                    const Binding & b = input.Binding;
-                    const ProcessingRate & rate = b.getRate();
-
-                    const auto sum = rate.getLowerBound() + rate.getUpperBound();
-                    const auto expected = sum * Rational{strideSize, 2};
-
-                    add_edge(streamSetNode, partitionId, PartitionDataflowEdge{consumer, rate.getKind(), expected}, G);
-                }
-            }
-        }
-
-        // producers
-        for (unsigned i = 0; i != n; ++i) {
-
-            const auto producer = N.Kernels[i];
-            const RelationshipNode & node = Relationships[producer];
-            assert (node.Type == RelationshipNode::IsKernel);
-
-            for (const auto e : make_iterator_range(out_edges(producer, Relationships))) {
-                const auto binding = target(e, Relationships);
-                const RelationshipNode & output = Relationships[binding];
-                if (LLVM_LIKELY(output.Type == RelationshipNode::IsBinding)) {
-
                     const auto f = first_out_edge(binding, Relationships);
                     assert (Relationships[f].Reason != ReasonType::Reference);
-                    const auto streamSet = target(f, Relationships);
-                    assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
-                    assert (isa<StreamSet>(Relationships[streamSet].Relationship));
-
-                    // Check whether this streamset is used externally
-
-                    for (const auto g : make_iterator_range(out_edges(streamSet, Relationships))) {
-                        const auto binding = target(g, Relationships);
-                        const RelationshipNode & input = Relationships[binding];
-                        assert (input.Type == RelationshipNode::IsBinding);
-                        const auto f = first_out_edge(binding, Relationships);
-                        assert (Relationships[f].Reason != ReasonType::Reference);
-                        const auto consumer = target(f, Relationships);
-                        assert (Relationships[consumer].Type == RelationshipNode::IsKernel);
-                        const auto h = PartitionIds.find(consumer);
-                        assert (h != PartitionIds.end());
-                        const auto consumingPartitionId = h->second - 1;
-                        if (partitionId != consumingPartitionId) {
-                            // Has External StreamSet
-
-                            const Binding & b = output.Binding;
-                            const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), 8};
-                            const auto streamSetNode = add_vertex(bytesPerItem, G);
-
-                            M.emplace(streamSet, streamSetNode);
-
-                            const ProcessingRate & rate = b.getRate();
-
-                            const auto strideSize = node.Kernel->getStride() * N.Repetitions[i];
-                            const auto sum = rate.getLowerBound() + rate.getUpperBound();
-                            const auto expected = sum * Rational{strideSize, 2};
-
-                            add_edge(partitionId, streamSetNode, PartitionDataflowEdge{producer, rate.getKind(), expected}, G);
-
-                            break;
-                        }
+                    const unsigned consumer = target(f, Relationships);
+                    const RelationshipNode & node = Relationships[consumer];
+                    assert (node.Type == RelationshipNode::IsKernel);
+                    const auto g = std::find(K.begin(), K.end(), consumer);
+                    if (g != K.end()) {
+                        const auto i = std::distance(K.begin(), g);
+                        const auto strideSize = node.Kernel->getStride() * N.Repetitions[i];
+                        const Binding & b = input.Binding;
+                        const ProcessingRate & rate = b.getRate();
+                        const auto sum = rate.getLowerBound() + rate.getUpperBound();
+                        const auto expected = sum * Rational{strideSize, 2};
+                        add_edge(k, partitionId - 1, PartitionDataflowEdge{consumer, rate.getKind(), expected}, G);
                     }
-
                 }
             }
         }
+
     }
 
     #warning incorporate length equality assertions
@@ -2540,9 +2521,9 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(std::v
     Z3_reset_memory();
     Z3_del_context(ctx);
 
-    for (unsigned partitionId = 0; partitionId < activePartitions; ++partitionId) {
+    for (unsigned partitionId = 1; partitionId < PartitionCount; ++partitionId) {
         PartitionData & N = P[partitionId];
-        N.ExpectedRepetitions = expectedStrides[partitionId];
+        N.ExpectedRepetitions = expectedStrides[partitionId - 1];
     }
 
     return G;
@@ -2551,7 +2532,7 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(std::v
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePartitionSchedulingGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<PartitionData> & P, const PartitionDataflowGraph & D) const {
+PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const {
 
     // Our goal is to find a topological ordering of the partitions such that
     // (1) the distance each partition can "jump" (i.e. the number of subsequent
@@ -2572,8 +2553,6 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
     using PathGraph = adjacency_list<vecS, vecS, bidirectionalS>;
 
     const auto activePartitions = (PartitionCount - 1);
-
-        printGraph(D, errs(), "D");
 
     PathGraph H(activePartitions + 2);
 
@@ -2625,12 +2604,12 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
         assert (out_degree(i + 1, H) > 0);
     }
 
-    printGraph(H, errs(), "H0");
-
-    transitive_closure_dag(reverse_traversal{l - 1}, H);
-    transitive_reduction_dag(reverse_traversal{l - 1}, H);
-
-    printGraph(H, errs(), "H1");
+    BEGIN_SCOPED_REGION
+    const reverse_traversal ordering{l};
+    assert (is_valid_topological_sorting(ordering, H));
+    transitive_closure_dag(ordering, H);
+    transitive_reduction_dag(ordering, H);
+    END_SCOPED_REGION
 
     // To find our hamiltonian path later, we need a path from each join
     // in the graph to the other forked paths (including the implicit
@@ -2730,8 +2709,6 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
 
     END_SCOPED_REGION
 
-    printGraph(H, errs(), "H2");
-
     // Each partition has one or more optimal orderings of kernel invocations.
     // We filter each ordering trie to only contain the kernels with cross-
     // partition I/O and then compute the minimal acyclic dfa. The edges in
@@ -2745,7 +2722,7 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(std::vector<Par
 
     for (unsigned i = 0; i < activePartitions; ++i) {
 
-        PartitionData & D = P[i];
+        PartitionData & D = P[i + 1U];
 
         const OrderingDAWG & O = D.Orderings;
         assert (num_vertices(O) > 0);
@@ -2967,7 +2944,7 @@ try_to_compress_further:
         add_edge(u, v, GP);
     }
 
-    printOrderingGraph(GP, errs(), "O");
+    // printOrderingGraph(GP, errs(), "O");
 
     return PartitionOrdering{std::move(GP), numOfKernelSets, std::move(kernels)};
 }
@@ -2976,7 +2953,7 @@ try_to_compress_further:
  * @brief scheduleProgramGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
-        const std::vector<PartitionData> & P,
+        const PartitionGraph & P,
         const PartitionOrdering & partitionOrdering,
         const PartitionDataflowGraph & D) const {
 
@@ -3277,7 +3254,7 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     for (unsigned currentPartition = 0; currentPartition < activePartitions; ++currentPartition) {
 
-        const PartitionData & Pi = P[currentPartition];
+        const PartitionData & Pi = P[currentPartition + 1U];
 
         for (const auto e : make_iterator_range(in_edges(currentPartition, D))) {
             const PartitionDataflowEdge & C = D[e];
@@ -3308,7 +3285,7 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
         }
     }
 
-    ProgramSchedulingAnalysis SA(S, O, numOfFrontierKernels, numOfStreamSets, maxPathLength);
+    ProgramSchedulingAnalysis SA(S, O, numOfFrontierKernels, maxPathLength);
 
     // ProgramSchedulingAnalysis SA(S, O, kernelSets, streamSetNodes, pathLength);
 
@@ -3316,12 +3293,12 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     SA.runGA(schedule);
 
-    errs () << "init_time: " << init_time << "\n"
-               "fitness_time: " << fitness_time << "\n"
-               "repair_time: " << repair_time << "\n"
-               "evolutionary_time: " << evolutionary_time << "\n";
+//    errs () << "init_time: " << init_time << "\n"
+//               "fitness_time: " << fitness_time << "\n"
+//               "repair_time: " << repair_time << "\n"
+//               "evolutionary_time: " << evolutionary_time << "\n";
 
-    printDAWG(schedule, errs(), "S");
+//    printDAWG(schedule, errs(), "S");
 
 
     std::vector<unsigned> program;
@@ -3356,7 +3333,7 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addSchedulingConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::addSchedulingConstraints(const std::vector<PartitionData> & P,
+void PipelineAnalysis::addSchedulingConstraints(const PartitionGraph & P,
                                                 const std::vector<unsigned> & program) {
 
     // Since we compressed the graph, nodes within O represent 0 to many kernels that
@@ -3417,7 +3394,7 @@ void PipelineAnalysis::addSchedulingConstraints(const std::vector<PartitionData>
 
         assert (path.size() > 2);
 
-        const PartitionData & partition = P[currentPartitionId];
+        const PartitionData & partition = P[currentPartitionId + 1U];
 
         const auto & G = partition.Orderings;
         const auto & K = partition.Kernels;
@@ -3488,8 +3465,6 @@ void PipelineAnalysis::addSchedulingConstraints(const std::vector<PartitionData>
     if (u != PipelineOutput) {
         add_edge(u, PipelineOutput, RelationshipType{ReasonType::OrderingConstraint}, Relationships);
     }
-
-    printRelationshipGraph(Relationships, errs(), "R2");
 }
 
 #endif

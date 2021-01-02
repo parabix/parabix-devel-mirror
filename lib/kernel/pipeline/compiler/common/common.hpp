@@ -36,7 +36,6 @@ struct reverse_traversal {
     private:
 
         void increment() {
-            assert (counter);
             --counter;
         }
 
@@ -51,12 +50,15 @@ struct reverse_traversal {
     };
 
     inline iterator begin() const {
-        // note: preincrement forces the iterator to advance onto and capture the first interval.
-        return iterator(N);
+        return iterator(N - 1);
     }
 
     inline iterator end() const {
-        return iterator(0);
+        return iterator(-1);
+    }
+
+    inline unsigned size() const {
+        return N;
     }
 
     reverse_traversal(const size_t n) : N(n) { }
