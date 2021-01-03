@@ -30,16 +30,15 @@ void UnicodePropertyExpressionError(std::string errmsg) {
 bool resolvePropertyDefinition(Name * const property) {
     if (property->hasNamespace()) {
         auto prop = canonicalize_value_name(property->getNamespace());
-        auto propit = alias_map.find(prop);
-        if (propit == alias_map.end()) {
+        auto propCode = resolveProperty(prop);
+        if (propCode == UCD::Undefined) {
             UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
         }
-        auto theprop = static_cast<UCD::property_t>(propit->second);
-        if (isa<BinaryPropertyObject>(getPropertyObject(theprop))){
+        if (isa<BinaryPropertyObject>(getPropertyObject(propCode))){
             auto valit = Binary_ns::aliases_only_map.find(property->getName());
             if (valit != Binary_ns::aliases_only_map.end()) {
                 if (valit->second == Binary_ns::N) {
-                    Name * binprop = makeName(property_enum_name[theprop], Name::Type::UnicodeProperty);
+                    Name * binprop = makeName(getPropertyEnumName(propCode), Name::Type::UnicodeProperty);
                     property->setDefinition(makeDiff(makeAny(), binprop));
                     return true;
                 }
@@ -83,12 +82,11 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
         std::string value = name->getName();
         if (prop.length() > 0) {
             prop = canonicalize_value_name(prop);
-            auto propit = alias_map.find(prop);
-            if (propit == alias_map.end()) {
+            auto propCode = resolveProperty(prop);
+            if (propCode == UCD::Undefined) {
                 UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
-            auto theprop = static_cast<UCD::property_t>(propit->second);
-            auto propObj = getPropertyObject(theprop);
+            auto propObj = getPropertyObject(propCode);
             if ((value.length() > 0) && (value[0] == '/')) {
                 assert(false && "UCD::resolveUnicodeSet(re::Name *) does not support regex name resolution, use grep::resolveUnicodeSet(re::Name *) instead");
                 llvm::report_fatal_error("");
@@ -99,12 +97,11 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 if (otherProp == "identity") {
                     return propObj->GetReflexiveSet();
                 }
-                auto propit = alias_map.find(prop);
-                if (propit == alias_map.end()) {
+                auto propCode = resolveProperty(prop);
+                if (propCode == UCD::Undefined) {
                     UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
                 }
-                auto prop2 = static_cast<UCD::property_t>(propit->second);
-                auto propObj2 = getPropertyObject(prop2);
+                auto propObj2 = getPropertyObject(propCode);
                 if (isa<BinaryPropertyObject>(propObj) && isa<BinaryPropertyObject>(propObj2)) {
                     return ~(cast<BinaryPropertyObject>(propObj)->GetCodepointSet(UCD::Binary_ns::Y) ^
                              cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y));
@@ -132,15 +129,14 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             }
             // Try as a binary property.
             
-            auto propit = alias_map.find(canon);
-            if (propit != alias_map.end()) {
-                auto theprop = static_cast<UCD::property_t>(propit->second);
-                auto propObj = getPropertyObject(theprop);
+            auto propCode = resolveProperty(canon);
+            if (propCode != UCD::Undefined) {
+                auto propObj = getPropertyObject(propCode);
                 if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(propObj)) {
                     return p->GetCodepointSet(Binary_ns::Y);
                 }
                 else {
-                    UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
+                    UnicodePropertyExpressionError("Error: property " + getPropertyFullName(propCode) + " specified without a value");
                 }
             }
         }
@@ -153,10 +149,9 @@ struct PropertyLinker : public RE_Transformer {
     RE * transformPropertyExpression (PropertyExpression * exp) override {
         std::string id = exp->getPropertyIdentifier();
         std::string canon = UCD::canonicalize_value_name(id);
-        auto propit = UCD::alias_map.find(canon);
-        if (propit !=  UCD::alias_map.end()) {
-            property_t prop = static_cast<UCD::property_t>(propit->second);
-            exp->setPropertyCode(prop);
+        auto propCode = UCD::resolveProperty(canon);
+        if (propCode != UCD::Undefined) {
+            exp->setPropertyCode(propCode);
             return exp;
         }
         // If the property identifier is not a standard property name, it
@@ -168,7 +163,7 @@ struct PropertyLinker : public RE_Transformer {
         if (valcode >= 0) {
             // Found a general category.
             exp->setValueString(gcObj->GetValueFullName(valcode));
-            exp->setPropertyIdentifier(property_enum_name[gc]);
+            exp->setPropertyIdentifier(getPropertyEnumName(gc));
             exp->setPropertyCode(gc);
             return exp;
         }
@@ -177,20 +172,20 @@ struct PropertyLinker : public RE_Transformer {
         if (valcode >= 0) {
             // Found a script.
             exp->setValueString(scObj->GetValueFullName(valcode));
-            exp->setPropertyIdentifier(property_enum_name[sc]);
+            exp->setPropertyIdentifier(getPropertyEnumName(sc));
             exp->setPropertyCode(sc);
             return exp;
         }
         if (canon == "ascii") {  // block:ascii special case
             exp->setValueString("ascii");
-            exp->setPropertyIdentifier(property_enum_name[blk]);
+            exp->setPropertyIdentifier(getPropertyEnumName(blk));
             exp->setPropertyCode(blk);
             return exp;
         }
         if (canon == "assigned") {  // cn:n special case
             // general category != unassigned
             exp->setValueString("unassigned");
-            exp->setPropertyIdentifier(property_enum_name[gc]);
+            exp->setPropertyIdentifier(getPropertyEnumName(gc));
             exp->setOperator(PropertyExpression::Operator::NEq);
             exp->setPropertyCode(gc);
             return exp;

@@ -43,7 +43,7 @@ const std::string & PropertyObject::GetPropertyValueGrepString() {
 }
 
 const UnicodeSet PropertyObject::GetCodepointSet(const std::string &) {
-    report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
+    report_fatal_error("Property " + UCD::getPropertyFullName(the_property) + " unsupported.");
 }
 
 const std::string PropertyObject::GetStringValue(codepoint_t cp) const {
@@ -53,7 +53,7 @@ const std::string PropertyObject::GetStringValue(codepoint_t cp) const {
 const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     const int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val < 0) {
-        report_fatal_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
+        report_fatal_error("Enumerated Property " + UCD::getPropertyFullName(the_property) + ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
@@ -157,7 +157,7 @@ PropertyObject::iterator ExtensionPropertyObject::end() const {
 const UnicodeSet ExtensionPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val == -1) {
-        report_fatal_error("Extension Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
+        report_fatal_error("Extension Property " + UCD::getPropertyFullName(the_property) +  ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
@@ -184,7 +184,7 @@ int BinaryPropertyObject::GetPropertyValueEnumCode(const std::string & value_spe
     if (value_spec.length() != 0) {
         auto valit = Binary_ns::aliases_only_map.find(canonicalize_value_name(value_spec));
         if (valit == Binary_ns::aliases_only_map.end()) {
-            report_fatal_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
+            report_fatal_error("Binary Property " + UCD::getPropertyFullName(the_property) +  ": bad value: " + value_spec);
         }
         property_enum_val = valit->second;
     }
@@ -350,11 +350,11 @@ const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) c
 }
 
 const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
-    report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+    report_fatal_error("Property " + UCD::getPropertyFullName(the_property) + " is obsolete.");
 }
 
 const UnicodeSet ObsoletePropertyObject::GetCodepointSet(const std::string &) {
-    report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+    report_fatal_error("Property " + UCD::getPropertyFullName(the_property) + " is obsolete.");
 }
 
 

@@ -24,4 +24,5 @@ DEPS
     kernel.unicode
     re.parse
     re.unicode
+    unicode.data
 )

@@ -242,7 +242,7 @@ RE * EnumeratedPropertyBoundary(UCD::EnumeratedPropertyObject * enumObj) {
     std::vector<RE *> alts;
     for (unsigned j = 0; j < enum_count; j++) {
         std::string enumVal = enumObj->GetValueEnumName(j);
-        RE * expr = makePropertyExpression(kind, UCD::property_full_name[prop], op, enumVal);
+        RE * expr = makePropertyExpression(kind, UCD::getPropertyFullName(prop), op, enumVal);
         alts.push_back(makeSeq({notBehind(expr), Ahead(expr)}));
         alts.push_back(makeSeq({Behind(expr), notAhead(expr)}));
     }

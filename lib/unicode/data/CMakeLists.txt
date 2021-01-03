@@ -9,6 +9,7 @@ NAME
 SRC
     CaseFolding.cpp
     Equivalence.cpp
+    PropertyAliases.cpp
     PropertyObjects.cpp
 DEPS
     unicode.core

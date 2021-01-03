@@ -202,12 +202,11 @@ UCD::UnicodeSet resolveUnicodeSet(re::Name * const name) {
         std::string value = name->getName();
         if (prop.length() > 0 && value.length() > 0 && value[0] == '/') {
             prop = UCD::canonicalize_value_name(prop);
-            auto propit = UCD::alias_map.find(prop);
-            if (propit == UCD::alias_map.end()) {
+            auto propCode = UCD::resolveProperty(prop);
+            if (propCode == UCD::Undefined) {
                 UCD::UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
-            auto theprop = static_cast<UCD::property_t>(propit->second);
-            auto propObj = UCD::getPropertyObject(theprop);
+            auto propObj = UCD::getPropertyObject(propCode);
 
             // resolve regular expression
             re::RE * propValueRe = re::RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);

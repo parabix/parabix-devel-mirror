@@ -13,16 +13,36 @@ import string, os.path
 from UCD_parser import *
 from UCD_property_objects import *
 
-PropertyAliases_template = r"""
+PropertyAliases_h_template = r"""
 namespace UCD {
-    enum property_t {
-        %s};
+    enum property_t : int {
+        %s, 
+        Undefined = -1};
+    const std::string & getPropertyEnumName(const property_t);
+    const std::string & getPropertyFullName(const property_t);
+    property_t resolveProperty(const std:: string & propertyIdent);
+}
+"""
+
+PropertyAliases_cpp_template = r"""
+namespace UCD {
     const static std::vector<std::string> property_enum_name = {
         %s};
     const static std::vector<std::string> property_full_name = {
         %s};
     static std::unordered_map<std::string, int> alias_map {{
         %s}};
+    const std::string & getPropertyEnumName(const property_t p) {
+        return property_enum_name[p];
+    }
+    const std::string & getPropertyFullName(const property_t p) {
+        return property_full_name[p];
+    }
+    property_t resolveProperty(std:: string & propertyIdent) {
+        auto propit = alias_map.find(propertyIdent);
+        if (propit == alias_map.end()) return Undefined;
+        return static_cast<property_t>(propit->second);
+    }
 }
 """
 
@@ -319,15 +339,19 @@ class UCD_generator():
             self.full_name_map[p] = self.property_object_map[p].getPropertyFullName()
 
 
-    def generate_PropertyAliases_h(self):
+    def generate_PropertyAliases(self):
         f = cformat.open_header_file_for_write('PropertyAliases')
-        cformat.write_imports(f, ["<string>", "<unordered_map>", "<vector>"])
+        cformat.write_imports(f, ["<string>"])
         enum_text = cformat.multiline_fill(self.property_enum_name_list, ',', 8)
         enum_text2 = cformat.multiline_fill(['"%s"' % e for e in self.property_enum_name_list], ',', 8)
         full_name_text = cformat.multiline_fill(['"%s"' % self.full_name_map[e] for e in self.property_enum_name_list], ',', 8)
         map_text = cformat.multiline_fill(['{"%s", %s}' % (k, self.property_lookup_map[k]) for k in sorted(self.property_lookup_map.keys())], ',', 8)
-        f.write(PropertyAliases_template % (enum_text, enum_text2, full_name_text, map_text))
+        f.write(PropertyAliases_h_template % (enum_text))
         cformat.close_header_file(f)
+        f = cformat.open_cpp_file_for_write('PropertyAliases')
+        cformat.write_imports(f, ["<string>", "<unordered_map>", "<vector>", "<unicode/data/PropertyAliases.h>"])
+        f.write(PropertyAliases_cpp_template % (enum_text2, full_name_text, map_text))
+        cformat.close_cpp_file(f)
 
     def load_property_value_info(self):
         initializePropertyValues(self.property_object_map, self.property_lookup_map)
@@ -591,7 +615,7 @@ def UCD_main():
     #
     # Generate the PropertyAliases.h file to define all the Unicode property_t enum
     # and the basic property information.
-    ucd.generate_PropertyAliases_h()
+    ucd.generate_PropertyAliases()
     #
     # Next parse all property value names and their aliases.  Generate the data.
     ucd.load_property_value_info()
