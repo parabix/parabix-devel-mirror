@@ -30,11 +30,16 @@ public:
 
         P.generateInitialPipelineGraph(b);
 
+        // Initially, we gather information about our partition to determine what kernels
+        // are within each partition in a topological order
+
+        auto partitionGraph = P.identifyKernelPartitions();
+
         // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
         // the same sequence. This will help us to partition the graph later and is useful to determine
         // whether we can bypass a region without testing every kernel.
 
-        P.partitionRelationshipGraphIntoSynchronousRegions();
+        P.schedulePartitionedProgram(partitionGraph);
 
         // Construct the Stream and Scalar graphs
         P.transcribeRelationshipGraph();
@@ -66,7 +71,6 @@ public:
         #ifdef PRINT_BUFFER_GRAPH
         P.printBufferGraph(errs());
         #endif
-
 
         return P;
     }
@@ -114,11 +118,15 @@ private:
 
     // partitioning analysis
 
-    void partitionRelationshipGraphIntoSynchronousRegions();
-
     PartitionGraph identifyKernelPartitions();
 
-    #ifdef EXPERIMENTAL_SCHEDULING
+    void determinePartitionJumpIndices();
+
+    void makePartitionJumpTree();
+
+    // scheduling analysis
+
+    void schedulePartitionedProgram(PartitionGraph & P);
 
     void analyzeDataflowWithinPartitions(PartitionGraph & P) const;
 
@@ -126,25 +134,13 @@ private:
 
     PartitionDependencyGraph makePartitionDependencyGraph(const PartitionData & currentPartition) const;
 
-
-
     PartitionDataflowGraph analyzeDataflowBetweenPartitions(PartitionGraph & P) const;
 
-    PartitionOrdering makePartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const;
+    PartitionOrdering makeInterPartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const;
 
     std::vector<unsigned> scheduleProgramGraph(const PartitionGraph & P, const PartitionOrdering & O, const PartitionDataflowGraph & D) const;
 
     void addSchedulingConstraints(const PartitionGraph & P, const std::vector<unsigned> & program);
-
-    #endif
-
-    void addOrderingConstraintsToPartitionSubgraphs(const std::vector<unsigned> & orderingOfG);
-
-    void generatePartitioningGraph();
-
-    void determinePartitionJumpIndices();
-
-    void makePartitionJumpTree();
 
     // buffer management analysis functions
 

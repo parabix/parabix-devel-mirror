@@ -52,6 +52,33 @@ static size_t fitness_time = 0;
 static size_t repair_time = 0;
 static size_t evolutionary_time = 0;
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief analyzeDataflowWithinPartitions
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P) {
+
+    // Once we analyze the dataflow within the partitions, P contains DAWG that is either
+    // edgeless if any permutation of its kernels is valid or contains all of its optimal
+    // orderings for the kernels within each partition.
+
+    analyzeDataflowWithinPartitions(P);
+
+    // The graph itself has edges indicating a dependency between the partitions, annotated by the kernels
+    // that are a producer of one of the streamsets that traverses the partitions. Ideally we'll use the
+    // trie to score each of the possible orderings based on how close a kernel is to its cross-partition
+    // consumers but first we need to determine the order of our partitions.
+
+    const auto D = analyzeDataflowBetweenPartitions(P);
+
+    auto S = makeInterPartitionSchedulingGraph(P, D);
+
+    const auto C = scheduleProgramGraph(P, S, D);
+
+    addSchedulingConstraints(P, C);
+
+}
+
 void printDAWG(const OrderingDAWG & G, const std::vector<unsigned> & K, raw_ostream & out, const StringRef name = "G") {
 
     out << "digraph \"" << name << "\" {\n";
@@ -515,13 +542,13 @@ is_bipartite_graph:
         const auto fitness_end = std::chrono::high_resolution_clock::now();
         fitness_time += (fitness_end - fitness_start).count();
 
-//        errs() << "  candidate: ";
-//        char joiner = '{';
-//        for (const auto k : candidate) {
-//            errs() << joiner << k;
-//            joiner = ',';
-//        }
-//        errs() << "} := " << result << "\n";
+        errs() << "  candidate: ";
+        char joiner = '{';
+        for (const auto k : candidate) {
+            errs() << joiner << k;
+            joiner = ',';
+        }
+        errs() << "} := " << result << "\n";
 
         return result;
     }
@@ -1119,7 +1146,7 @@ public:
 
         for (unsigned round = 0; round < MAX_EVOLUTIONARY_ROUNDS; ++round) {
 
-//            errs() << "EA: round=" << round << "\n";
+            errs() << "EA: round=" << round << "\n";
 
             const auto populationSize = P1.size();
 
@@ -1135,16 +1162,16 @@ public:
                 }
             };
 
-//            for (unsigned i = 0; i < populationSize; ++i) {
-//                errs() << "  population: ";
-//                const auto & I = P1[i];
-//                char joiner = '{';
-//                for (const auto k : I->first) {
-//                    errs() << joiner << k;
-//                    joiner = ',';
-//                }
-//                errs() << "} := " << I->second << "\n";
-//            }
+            for (unsigned i = 0; i < populationSize; ++i) {
+                errs() << "  population: ";
+                const auto & I = P1[i];
+                char joiner = '{';
+                for (const auto k : I->first) {
+                    errs() << joiner << k;
+                    joiner = ',';
+                }
+                errs() << "} := " << I->second << "\n";
+            }
 
             // CROSSOVER:
 
@@ -1666,20 +1693,6 @@ restart_process:
             toEval.clear();
             for (const auto i : path) {
                 const auto & A = O[i];
-                #ifndef NDEBUG
-                for (const auto k : A) {
-                    if (std::find(toEval.begin(), toEval.end(), k) != toEval.end()) {
-                        errs() << "INVALID:";
-                        char joiner = ' ';
-                        for (const auto t : path) {
-                            errs() << joiner << t;
-                            joiner = ',';
-                        }
-                        errs() << "\n";
-                    }
-                    assert (std::find(toEval.begin(), toEval.end(), k) == toEval.end());
-                }
-                #endif
                 toEval.insert(toEval.end(), A.begin(), A.end());
             }
             const auto m = toEval.size();
@@ -1736,9 +1749,9 @@ restart_process:
                 assert (f != pheromone.end());
                 double & trail = f->second;
                 double d = deposit;
-//                if (deposit < 0 && bestPath.count(e) != 0) {
-//                    d *= 0.10;
-//                }
+                if (deposit < 0 && bestPath.count(e) != 0) {
+                    d *= 0.10;
+                }
                 trail = std::max(trail + d, HAMILTONIAN_PATH_MINIMUM_WEIGHT);
 //                if (deposit > 0 || bestPath.count(e) == 0) {
 //                    trail += deposit;
@@ -1748,22 +1761,22 @@ restart_process:
 
             #endif
 
-//            errs() << " candidate:";
-//            char joiner = ' ';
-//            for (const auto c : path) {
-//                errs() << joiner << c;
-//                joiner= ',';
-//            }
-//            errs() << "  := " << format("%.4f", inversions) <<
-//                         " (" << format("%.4f", bestInversions) << ")"
-//                         " d=" << format("%.4f", deposit);
+            errs() << " candidate:";
+            char joiner = ' ';
+            for (const auto c : path) {
+                errs() << joiner << c;
+                joiner= ',';
+            }
+            errs() << "  := " << format("%.4f", inversions) <<
+                         " (" << format("%.4f", bestInversions) << ")"
+                         " d=" << format("%.4f", deposit);
 
             // Store our path if its the best one
             if (inversions == bestInversions) {
                 ++converged;
             } else if (inversions < bestInversions) {
                 converged = 0;
-//                errs() << " *";
+                errs() << " *";
                 #if HAMILTONIAN_PATH_STRATEGY == 1
                 bestPath.clear();
                 for (unsigned i = 1; i < l; ++i) {
@@ -1776,7 +1789,7 @@ restart_process:
                 bestInversions = inversions;
             }
 
-//            errs() << "\n";
+            errs() << "\n";
 
 //            auto & out = errs();
 //            out << "digraph \"O" << r << "\" {\n";
@@ -1815,12 +1828,12 @@ restart_process:
         // just restart the process. We're guaranteed to find one eventually.
         if (replacement.empty()) {
 
-//            errs() << "!!! RESTART !!!\n";
+            errs() << "!!! RESTART !!!\n";
 
             goto restart_process;
         }
 
-//        errs() << "!!! CONVERGED !!!\n";
+        errs() << "!!! CONVERGED !!!\n";
 
         assert (replacement.size() == numOfKernels);
 
@@ -1967,12 +1980,12 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const
         /// Identify the nodes / streamsets belonging to our i-th partition
         /// -----------------------------------------------------------------
 
-        auto S = makeIntraPartitionSchedulingGraph(P, currentPartitionId);
-
         PartitionData & currentPartition = P[currentPartitionId];
 
         const auto & kernels = currentPartition.Kernels;
         const auto numOfKernels = kernels.size();
+
+        auto S = makeIntraPartitionSchedulingGraph(P, currentPartitionId);
 
         BEGIN_SCOPED_REGION
 
@@ -2063,52 +2076,41 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const
 
             // scale each streamSet node size field by the replication vector
             const Rational replicationFactor{num, denom};
-            S[u].Size = replicationFactor;
-            for (const auto e : make_iterator_range(out_edges(u, S))) {
-                const auto v = target(e, S);
-                assert (u != v);
-                auto & Sv = S[v];
-                assert (Sv.Type != SchedulingNode::IsKernel);
-                const auto & itemsPerStride = S[e];
-                Sv.Size *= (itemsPerStride * replicationFactor);
-                lcm = boost::lcm(lcm, Sv.Size.denominator());
-            }
+
+            auto & Su = S[u];
+            Su.Size = replicationFactor;
+            lcm = boost::lcm(lcm, Su.Size.denominator());
         }
 
         Z3_model_dec_ref(ctx, model);
         Z3_solver_dec_ref(ctx, solver);
 
         // NOTE: the LCM should always be 1 here but Z3 converges on a solution faster when rational numbers
-        // are allowed so the following handles any degenerate solution. I've never seen this branch entered
-        // during testing but the remainder of this function requires an integer solution and assumes it to
-        // be coprime.
+        // are allowed so the following handles any degenerate solution. The only time I've seen this occur
+        // is when a non-power of 2 segment size was given.
 
         if (LLVM_UNLIKELY(lcm != 1)) {
-            size_t gcd = 0;
-            for (unsigned u = 0; u < n; ++u) {
-                auto & Su = S[u];
-                Su.Size *= lcm;
-                assert (Su.Size.denominator() == 1);
-                if (gcd == 0) {
-                    gcd = Su.Size.numerator();
-                } else {
-                    gcd = boost::gcd(gcd, Su.Size.numerator());
-                }
-            }
-            if (LLVM_UNLIKELY(gcd > 1)) {
-                for (unsigned u = 0; u < n; ++u) {
-                    auto & Su = S[u];
-                    Su.Size /= gcd;
-                }
+            for (unsigned u = 0; u < numOfKernels; ++u) {
+                auto & replicationFactor = S[u].Size;
+                replicationFactor *= lcm;
+                assert (replicationFactor.denominator() == 1);
             }
         }
 
         currentPartition.Repetitions.resize(numOfKernels);
 
         for (unsigned u = 0; u < numOfKernels; ++u) {
-            auto & Su = S[u];
-            assert (Su.Size.denominator() == 1);
-            currentPartition.Repetitions[u] = Su.Size.numerator();
+            const auto & replicationFactor = S[u].Size;
+            for (const auto e : make_iterator_range(out_edges(u, S))) {
+                const auto v = target(e, S);
+                assert (u != v);
+                auto & Sv = S[v];
+                assert (Sv.Type == SchedulingNode::IsStreamSet);
+                const auto & itemsPerStride = S[e];
+                Sv.Size *= (itemsPerStride * replicationFactor);
+            }
+            assert (replicationFactor.denominator() == 1);
+            currentPartition.Repetitions[u] = replicationFactor.numerator();
         }
 
         END_SCOPED_REGION
@@ -2166,27 +2168,26 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
                 streamSets.insert(streamSet);
             }
         }
-        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
-            const auto binding = target(e, Relationships);
-            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
-                const auto f = first_out_edge(binding, Relationships);
-                assert (Relationships[f].Reason != ReasonType::Reference);
-                const auto streamSet = target(f, Relationships);
-                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
-                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
-                streamSets.insert(streamSet);
-            }
-        }
+//        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
+//            const auto binding = target(e, Relationships);
+//            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+//                const auto f = first_out_edge(binding, Relationships);
+//                assert (Relationships[f].Reason != ReasonType::Reference);
+//                const auto streamSet = target(f, Relationships);
+//                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+//                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+//                streamSets.insert(streamSet);
+//            }
+//        }
     }
 
     flat_set<Vertex> externalStreamSet;
     for (const auto e : make_iterator_range(in_edges(currentPartitionId, P))) {
         externalStreamSet.insert(P[e]);
     }
-    for (const auto e : make_iterator_range(out_edges(currentPartitionId, P))) {
-        externalStreamSet.insert(P[e]);
-    }
-
+//    for (const auto e : make_iterator_range(out_edges(currentPartitionId, P))) {
+//        externalStreamSet.insert(P[e]);
+//    }
 
     std::vector<Vertex> internalStreamSet;
 
@@ -2530,9 +2531,10 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(Partit
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePartitionSchedulingGraph
+ * @brief makeInterPartitionSchedulingGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const {
+PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionGraph & P,
+                                                                      const PartitionDataflowGraph & D) const {
 
     // Our goal is to find a topological ordering of the partitions such that
     // (1) the distance each partition can "jump" (i.e. the number of subsequent
@@ -2550,7 +2552,7 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(PartitionGraph 
     // the kernel nodes that have cross-partition I/O and return it to the user.
 
     using BV = dynamic_bitset<>;
-    using PathGraph = adjacency_list<vecS, vecS, bidirectionalS>;
+    using PathGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
     const auto activePartitions = (PartitionCount - 1);
 
@@ -2611,6 +2613,8 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(PartitionGraph 
     transitive_reduction_dag(ordering, H);
     END_SCOPED_REGION
 
+    printGraph(H, errs(), "H0");
+
     // To find our hamiltonian path later, we need a path from each join
     // in the graph to the other forked paths (including the implicit
     // "terminal" node.) Compute the post-dominator tree of H then insert
@@ -2653,66 +2657,92 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(PartitionGraph 
     std::vector<unsigned> occurences(l);
     std::vector<unsigned> singleton(l);
 
-    std::vector<BV> ancestors(l);
+    std::vector<std::bitset<2>> ancestors(l);
+
+    flat_set<std::pair<Vertex, Vertex>> toAdd;
+
     for (unsigned i = 0; i < l; ++i) {  // forward topological ordering
         const auto d = in_degree(i, H);
         if (d > 1) {
-            // Determine the common ancestors of each input to node_i
-            for (unsigned j = 0; j < l; ++j) {
-                ancestors[j].resize(d);
-                ancestors[j].reset();
-            }
-            unsigned k = 0;
-            for (const auto e : make_iterator_range(in_edges(i, H))) {
-                const auto v = source(e, H);
-                ancestors[v].set(k++);
-            }
-            std::fill_n(occurences.begin(), rank[i] - 1, 0);
-            for (auto j = i; j--; ) { // reverse topological ordering
-                for (const auto e : make_iterator_range(out_edges(j, H))) {
-                    const auto v = target(e, H);
-                    ancestors[j] |= ancestors[v];
-                }
-                if (ancestors[j].all()) {
-                    const auto k = rank[j];
-                    occurences[k]++;
-                    singleton[k] = j;
-                }
-            }
-            // Now scan again through them to determine the single ancestor
-            // to all inputs that is of highest rank.
-            auto lca = i;
-            for (auto j = rank[i] - 1; j--; ) {
-                if (occurences[j] == 1) {
-                    lca = singleton[j];
-                    break;
-                }
-            }
-            assert (lca < i);
 
-            for (const auto e : make_iterator_range(out_edges(lca, H))) {
-                const auto y = target(e, H);
-                const BV & Py = postdom[y];
-                for (const auto f : make_iterator_range(in_edges(i, H))) {
-                    const auto x = source(f, H);
+            PathGraph::in_edge_iterator begin, end;
+            std::tie(begin, end) = in_edges(i, H);
+
+            for (auto ei = begin; (++ei) != end; ) {
+                const auto x = source(*ei, H);
+                for (auto ej = begin; ej != ei; ++ej) {
+                    const auto y = source(*ej, H);
+
+                    // Determine the common ancestors of each input to node_i
+                    for (unsigned j = 0; j < l; ++j) {
+                        ancestors[j].reset();
+                    }
+                    ancestors[x].set(0);
+                    ancestors[y].set(1);
+
+                    std::fill_n(occurences.begin(), rank[i] - 1, 0);
+                    for (auto j = l; j--; ) { // reverse topological ordering
+                        for (const auto e : make_iterator_range(out_edges(j, H))) {
+                            const auto v = target(e, H);
+                            ancestors[j] |= ancestors[v];
+                        }
+                        if (ancestors[j].all()) {
+                            const auto k = rank[j];
+                            occurences[k]++;
+                            singleton[k] = j;
+                        }
+                    }
+                    // Now scan again through them to determine the single ancestor
+                    // to the pair of inputs that is of highest rank.
+                    auto lca = i;
+                    for (auto j = rank[i] - 1; j--; ) {
+                        if (occurences[j] == 1) {
+                            lca = singleton[j];
+                            break;
+                        }
+                    }
+
+                    assert (lca < i);
+
                     const BV & Px = postdom[x];
-                    // do not arc back to the start of the dominating path.
-                    if (!Px.is_subset_of(Py)) {
-                        add_edge(x, y, H);
+                    const BV & Py = postdom[y];
+
+                    for (const auto e : make_iterator_range(out_edges(lca, H))) {
+                        const auto z = target(e, H);
+                        const BV & Pz = postdom[z];
+
+                        // Do not arc back to the start of a dominating path.
+
+                        // NOTE: we delay adding the edges to H to prevent any changes
+                        // to the in degree of a vertex we have not yet visited on a
+                        // parallel path from being given an unintended edge.
+
+                        if (!Px.is_subset_of(Pz)) {
+                            toAdd.emplace(x, z);
+                        }
+
+                        if (!Py.is_subset_of(Pz)) {
+                            toAdd.emplace(y, z);
+                        }
                     }
                 }
             }
-
-
         }
     }
+
+    for (const auto & e : toAdd) {
+        add_edge(e.first, e.second, H);
+    }
+
+    printGraph(H, errs(), "H1");
 
     END_SCOPED_REGION
 
     // Each partition has one or more optimal orderings of kernel invocations.
     // We filter each ordering trie to only contain the kernels with cross-
-    // partition I/O and then compute the minimal acyclic dfa. The edges in
-    // those subgraphs will map to nodes in the subsequent ordering graph.
+    // partition I/O and then compute the minimal acyclic dfa. The edges
+    // (i.e., line graph) of those subgraphs will map to nodes in the subsequent
+    // ordering graph.
 
     std::vector<OrderingDAWG> partitionSubgraphs(activePartitions);
 
@@ -2765,11 +2795,9 @@ PartitionOrdering PipelineAnalysis::makePartitionSchedulingGraph(PartitionGraph 
 
     const auto firstKernelNode = (2U * activePartitions) + 2U;
 
-    // const auto numOfFrontierKernels = kernels.size();
+    const auto n = firstKernelNode + numOfLineGraphNodes;
 
-    const auto n = firstKernelNode + numOfLineGraphNodes; // numOfFrontierKernels
-
-    PartitionOrderingGraph G(n); // numOfFrontierKernels);
+    PartitionOrderingGraph G(n);
 
     // Split every node except for the common sink/source in H into two nodes in G;
     // this will form the backbone of the partition scheduling constraint graph
@@ -2944,7 +2972,7 @@ try_to_compress_further:
         add_edge(u, v, GP);
     }
 
-    // printOrderingGraph(GP, errs(), "O");
+    printOrderingGraph(GP, errs(), "O");
 
     return PartitionOrdering{std::move(GP), numOfKernelSets, std::move(kernels)};
 }
@@ -3293,10 +3321,10 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     SA.runGA(schedule);
 
-//    errs () << "init_time: " << init_time << "\n"
-//               "fitness_time: " << fitness_time << "\n"
-//               "repair_time: " << repair_time << "\n"
-//               "evolutionary_time: " << evolutionary_time << "\n";
+    errs () << "init_time: " << init_time << "\n"
+               "fitness_time: " << fitness_time << "\n"
+               "repair_time: " << repair_time << "\n"
+               "evolutionary_time: " << evolutionary_time << "\n";
 
 //    printDAWG(schedule, errs(), "S");
 

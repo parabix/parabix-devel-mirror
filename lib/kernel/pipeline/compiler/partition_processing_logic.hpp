@@ -70,7 +70,7 @@ inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForPartitionEntry
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::checkForPartitionEntry(BuilderRef /* b */) {
+inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);    
     mNextPartitionWithPotentialInput = nullptr;
     mIsPartitionRoot = false;

@@ -116,8 +116,18 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
             }
             assert ("a threadlocal buffer cannot be external" && (bn.isInternal() || nonLocal));
             assert (buffer->getHandle());
+
+            const BufferPort & rd = mBufferGraph[e];
+            const auto handleName = makeBufferName(i, rd.Port);
+            b->CallPrintInt("handle:" + handleName, buffer->getHandle());
+
             assert (isFromCurrentFunction(b, buffer->getHandle(), false));
             buffer->allocateBuffer(b, expectedNumOfStrides);
+
+
+
+
+
         }
     }
 

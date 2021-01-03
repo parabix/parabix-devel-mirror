@@ -18,8 +18,14 @@ namespace kernel {
 
 void StdOutKernel::generateDoSegmentMethod(BuilderRef b) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
+
+    b->CallPrintInt(" -- codeUnitBuffer", codeUnitBuffer);
+
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
     Value * length = b->getAccessibleItemCount("codeUnitBuffer");
+
+    b->CallPrintInt(" -- length", length);
+
     if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
         Constant * const scale = b->getSize(mCodeUnitWidth / 8);
         length = b->CreateMul(length, scale);
