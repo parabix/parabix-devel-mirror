@@ -30,41 +30,22 @@
 using namespace llvm;
 
 namespace re {
-bool hasGraphemeClusterBoundary(const RE * re) {
-    if (isa<CC>(re) || isa<Range>(re)) {
-        return false;
-    } else if (const Name * n = dyn_cast<Name>(re)) {
-        if (n->getType() == Name::Type::ZeroWidth) {
-            const std::string nameString = n->getName();
-            return nameString == "\\b{g}";
-        }
-        return false;
-    } else if (const Alt * alt = dyn_cast<Alt>(re)) {
-        for (const RE * re : *alt) {
-            if (hasGraphemeClusterBoundary(re)) return true;
-        }
-        return false;
-    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        for (const RE * re : *seq) {
-            if (hasGraphemeClusterBoundary(re)) return true;
-        }
-        return false;
-    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
-        return hasGraphemeClusterBoundary(rep->getRE());
-    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
-        return hasGraphemeClusterBoundary(diff->getLH()) || hasGraphemeClusterBoundary(diff->getRH());
-    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
-        return hasGraphemeClusterBoundary(e->getLH()) || hasGraphemeClusterBoundary(e->getRH());
-    } else if (isa<Start>(re) || isa<End>(re)) {
-        return false;
-    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
-        return hasGraphemeClusterBoundary(a->getAsserted());
-    } else if (const Group * g = dyn_cast<Group>(re)) {
-        if ((g->getMode() == Group::Mode::GraphemeMode) && (g->getSense() == Group::Sense::On)) return true;
-        else return hasGraphemeClusterBoundary(g->getRE());
+
+struct GraphemeBoundaryAbsentValidator final : public RE_Validator {
+    
+    GraphemeBoundaryAbsentValidator()
+    : RE_Validator() {}
+    
+    bool validatePropertyExpression(const PropertyExpression * e) override {
+        return e->getPropertyCode() != UCD::g;
     }
-    else llvm_unreachable("Unknown RE type");
+};
+
+bool hasGraphemeClusterBoundary(const RE * re) {
+    GraphemeBoundaryAbsentValidator v;
+    return !(v.validateRE(re));
 }
+
     
 struct WordBoundaryAbsentValidator final : public RE_Validator {
     
@@ -84,24 +65,26 @@ bool hasWordBoundary(const RE * re) {
 
 class GraphemeModeTransformer : public RE_Transformer {
 public:
-    GraphemeModeTransformer(bool inGraphemeMode = true) : RE_Transformer("ResolveGraphemeMode"), mGraphemeMode(inGraphemeMode) {}
+    GraphemeModeTransformer(bool inGraphemeMode = true) : RE_Transformer("ResolveGraphemeMode"),
+    mGraphemeMode(inGraphemeMode),
+    mGCB(makePropertyExpression(PropertyExpression::Kind::Boundary, "g"))
+    {}
     
     RE * transformName(Name * n) override {
         if (mGraphemeMode && (n->getName() == ".")) {
-            RE * GCB = makeZeroWidth("\\b{g}");
-            RE * nonGCB = makeDiff(makeSeq({}), GCB);
-            return makeSeq({makeAny(), makeRep(makeSeq({nonGCB, makeAny()}), 0, Rep::UNBOUNDED_REP), GCB});
+            RE * nonGCB = makeDiff(makeSeq({}), mGCB);
+            return makeSeq({makeAny(), makeRep(makeSeq({nonGCB, makeAny()}), 0, Rep::UNBOUNDED_REP), mGCB});
         }
         return n;
     }
     
     RE * transformCC(CC * cc) override {
-        if (mGraphemeMode) return makeSeq({cc, makeZeroWidth("\\b{g}")});
+        if (mGraphemeMode) return makeSeq({cc, mGCB});
         return cc;
     }
     
     RE * transformRange(Range * rg) override {
-        if (mGraphemeMode) return makeSeq({rg, makeZeroWidth("\\b{g}")});
+        if (mGraphemeMode) return makeSeq({rg, mGCB});
         return rg;
     }
     
@@ -125,7 +108,7 @@ public:
         for (auto i = seq->begin(); i != seq->end(); ++i) {
             bool atSingleChar = isa<CC>(*i) && (cast<CC>(*i)->count() == 1);
             if (afterSingleChar && mGraphemeMode && !atSingleChar) {
-                list.push_back(makeZeroWidth("\\b{g}"));
+                list.push_back(mGCB);
                 changed = true;
             }
             if (isa<CC>(*i)) {
@@ -138,7 +121,7 @@ public:
             afterSingleChar = atSingleChar;
         }
         if (afterSingleChar && mGraphemeMode) {
-            list.push_back(makeZeroWidth("\\b{g}"));
+            list.push_back(mGCB);
             changed = true;
         }
         if (!changed) return seq;
@@ -147,6 +130,7 @@ public:
 
 private:
     bool mGraphemeMode;
+    RE * mGCB;
 };
 
 RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
@@ -258,17 +242,6 @@ public:
             return propExpr;
         }
         int prop_code = propExpr->getPropertyCode();
-        if (prop_code >= 0) {
-            auto obj = UCD::property_object_table[prop_code];
-            if ((propExpr->getValueString() == "") && isa<UCD::EnumeratedPropertyObject>(obj)) {
-                return EnumeratedPropertyBoundary(cast<UCD::EnumeratedPropertyObject>(obj));
-            }
-            auto pe = makePropertyExpression(PropertyExpression::Kind::Codepoint,
-                                                                propExpr->getPropertyIdentifier(),
-                                                                propExpr->getOperator(),
-                                                                propExpr->getValueString());
-            return pe;
-        }
         if (propExpr->getPropertyIdentifier() == "g") {
             Name * gcb_name = makeZeroWidth("\\b{g}");
             gcb_name->setDefinition(generateGraphemeClusterBoundaryRule());
@@ -279,6 +252,17 @@ public:
             wb_name->setDefinition(nullptr);
             RE_Compiler::UnsupportedRE("\\b{w} not yet supported.");
             return wb_name;
+        }
+        if (prop_code >= 0) {
+            auto obj = UCD::property_object_table[prop_code];
+            if ((propExpr->getValueString() == "") && isa<UCD::EnumeratedPropertyObject>(obj)) {
+                return EnumeratedPropertyBoundary(cast<UCD::EnumeratedPropertyObject>(obj));
+            }
+            auto pe = makePropertyExpression(PropertyExpression::Kind::Codepoint,
+                                                                propExpr->getPropertyIdentifier(),
+                                                                propExpr->getOperator(),
+                                                                propExpr->getValueString());
+            return pe;
         }
         RE_Compiler::UnsupportedRE(Printer_RE::PrintRE(propExpr));
     }

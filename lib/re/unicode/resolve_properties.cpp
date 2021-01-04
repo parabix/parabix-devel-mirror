@@ -291,9 +291,15 @@ struct PropertyExternalizer : public RE_Transformer {
         else if (op == PropertyExpression::Operator::NEq) op_str = "!=";
         val_str = op_str + val_str;
         Name * externName;
-        if (val_str == "")
-            externName = makeName(id, Name::Type::UnicodeProperty);
-            else externName = makeName(id, val_str, Name::Type::UnicodeProperty);
+        if (exp->getKind() == PropertyExpression::Kind::Codepoint) {
+            if (val_str == "")
+                externName = makeName(id, Name::Type::UnicodeProperty);
+                else externName = makeName(id, val_str, Name::Type::UnicodeProperty);
+        } else {
+            if (val_str == "")
+                externName = makeName(id, Name::Type::ZeroWidth);
+                else externName = makeName(id, val_str, Name::Type::ZeroWidth);
+        }
         //externName->setDefinition(exp);
         return externName;
     }

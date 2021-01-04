@@ -36,7 +36,7 @@ namespace UCD {
         "VS", "WSpace", "XIDC", "XIDS", "XO_NFC", "XO_NFD", "XO_NFKC",
         "XO_NFKD", "emoji", "emojipresentation", "emojimodifier",
         "emojimodifierbase", "emojicomponent", "extendedpictographic",
-        "alnum", "xdigit", "blank", "print", "word", "graph"};
+        "alnum", "xdigit", "blank", "print", "word", "graph", "g", "w"};
     const static std::vector<std::string> property_full_name = {
         "kAccountingNumeric", "kOtherNumeric", "kPrimaryNumeric",
         "Numeric_Value", "Case_Folding", "kCompatibilityVariant",
@@ -81,7 +81,7 @@ namespace UCD {
         "XID_Start", "Expands_On_NFC", "Expands_On_NFD", "Expands_On_NFKC",
         "Expands_On_NFKD", "Emoji", "Emoji_Presentation", "Emoji_Modifier",
         "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic",
-        "alnum", "xdigit", "blank", "print", "word", "graph"};
+        "alnum", "xdigit", "blank", "print", "word", "graph", "g", "w"};
     static std::unordered_map<std::string, int> alias_map {{
         {"age", age}, {"ahex", AHex}, {"alnum", alnum}, {"alpha", Alpha},
         {"alphabetic", Alpha}, {"asciihexdigit", AHex}, {"bc", bc},
@@ -130,19 +130,20 @@ namespace UCD {
         {"ext", Ext}, {"extendedpictographic", extendedpictographic},
         {"extender", Ext}, {"extpict", ExtPict}, {"fcnfkc", FC_NFKC},
         {"fcnfkcclosure", FC_NFKC}, {"fullcompositionexclusion", Comp_Ex},
-        {"gc", gc}, {"gcb", GCB}, {"generalcategory", gc}, {"graph", graph},
-        {"graphemebase", Gr_Base}, {"graphemeclusterbreak", GCB},
-        {"graphemeextend", Gr_Ext}, {"graphemelink", Gr_Link},
-        {"grbase", Gr_Base}, {"grext", Gr_Ext}, {"grlink", Gr_Link},
-        {"hangulsyllabletype", hst}, {"hex", Hex}, {"hexdigit", Hex},
-        {"hst", hst}, {"hyphen", Hyphen}, {"idc", IDC}, {"idcontinue", IDC},
-        {"ideo", Ideo}, {"ideographic", Ideo}, {"ids", IDS}, {"idsb", IDSB},
-        {"idsbinaryoperator", IDSB}, {"idst", IDST}, {"idstart", IDS},
-        {"idstrinaryoperator", IDST}, {"indicpositionalcategory", InPC},
-        {"indicsyllabiccategory", InSC}, {"inpc", InPC}, {"insc", InSC},
-        {"isc", isc}, {"isocomment", isc}, {"jamoshortname", JSN},
-        {"jg", jg}, {"joinc", Join_C}, {"joincontrol", Join_C},
-        {"joininggroup", jg}, {"joiningtype", jt}, {"jsn", JSN}, {"jt", jt},
+        {"g", g}, {"gc", gc}, {"gcb", GCB}, {"generalcategory", gc},
+        {"graph", graph}, {"graphemebase", Gr_Base},
+        {"graphemeclusterbreak", GCB}, {"graphemeextend", Gr_Ext},
+        {"graphemelink", Gr_Link}, {"grbase", Gr_Base}, {"grext", Gr_Ext},
+        {"grlink", Gr_Link}, {"hangulsyllabletype", hst}, {"hex", Hex},
+        {"hexdigit", Hex}, {"hst", hst}, {"hyphen", Hyphen}, {"idc", IDC},
+        {"idcontinue", IDC}, {"ideo", Ideo}, {"ideographic", Ideo},
+        {"ids", IDS}, {"idsb", IDSB}, {"idsbinaryoperator", IDSB},
+        {"idst", IDST}, {"idstart", IDS}, {"idstrinaryoperator", IDST},
+        {"indicpositionalcategory", InPC}, {"indicsyllabiccategory", InSC},
+        {"inpc", InPC}, {"insc", InSC}, {"isc", isc}, {"isocomment", isc},
+        {"jamoshortname", JSN}, {"jg", jg}, {"joinc", Join_C},
+        {"joincontrol", Join_C}, {"joininggroup", jg}, {"joiningtype", jt},
+        {"jsn", JSN}, {"jt", jt},
         {"kaccountingnumeric", cjkAccountingNumeric},
         {"kcompatibilityvariant", cjkCompatibilityVariant},
         {"kiicore", cjkIICore}, {"kirggsource", cjkIRG_GSource},
@@ -188,12 +189,12 @@ namespace UCD {
         {"unicoderadicalstroke", cjkRSUnicode}, {"unifiedideograph", UIdeo},
         {"upper", Upper}, {"uppercase", Upper}, {"uppercasemapping", uc},
         {"urs", cjkRSUnicode}, {"variationselector", VS},
-        {"verticalorientation", vo}, {"vo", vo}, {"vs", VS}, {"wb", WB},
-        {"whitespace", WSpace}, {"word", word}, {"wordbreak", WB},
-        {"wspace", WSpace}, {"xdigit", xdigit}, {"xidc", XIDC},
-        {"xidcontinue", XIDC}, {"xids", XIDS}, {"xidstart", XIDS},
-        {"xonfc", XO_NFC}, {"xonfd", XO_NFD}, {"xonfkc", XO_NFKC},
-        {"xonfkd", XO_NFKD}}};
+        {"verticalorientation", vo}, {"vo", vo}, {"vs", VS}, {"w", w},
+        {"wb", WB}, {"whitespace", WSpace}, {"word", word},
+        {"wordbreak", WB}, {"wspace", WSpace}, {"xdigit", xdigit},
+        {"xidc", XIDC}, {"xidcontinue", XIDC}, {"xids", XIDS},
+        {"xidstart", XIDS}, {"xonfc", XO_NFC}, {"xonfd", XO_NFD},
+        {"xonfkc", XO_NFKC}, {"xonfkd", XO_NFKD}}};
     const std::string & getPropertyEnumName(const property_t p) {
         return property_enum_name[p];
     }

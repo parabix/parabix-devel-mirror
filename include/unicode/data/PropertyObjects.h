@@ -51,6 +51,7 @@ public:
         NumericProperty,
         StringProperty,
         StringOverrideProperty,
+        BoundaryProperty,
         ObsoleteProperty,
         UnsupportedProperty
     };
@@ -296,6 +297,22 @@ private:
     const std::vector<unsigned> mStringOffsets;        // the offsets of each string within the buffer.
     //unsigned mBufSize;                               // mStringOffsets has one extra element for buffer size.
     const std::vector<codepoint_t> mExplicitCps;
+};
+
+class BoundaryPropertyObject final : public PropertyObject {
+public:
+    static inline bool classof(const PropertyObject * p) {
+        return p->getClassTypeId() == ClassTypeId::BoundaryProperty;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+    BoundaryPropertyObject(UCD::property_t p)
+    : PropertyObject(p, ClassTypeId::BoundaryProperty)
+    {
+
+    }
 };
 
 class ObsoletePropertyObject final : public PropertyObject {

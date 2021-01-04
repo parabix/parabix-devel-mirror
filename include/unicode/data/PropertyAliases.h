@@ -28,11 +28,12 @@ namespace UCD {
         PCM, QMark, Radical, RI, SD, STerm, Term, UIdeo, Upper, VS, WSpace,
         XIDC, XIDS, XO_NFC, XO_NFD, XO_NFKC, XO_NFKD, emoji,
         emojipresentation, emojimodifier, emojimodifierbase, emojicomponent,
-        extendedpictographic, alnum, xdigit, blank, print, word, graph, 
+        extendedpictographic, alnum, xdigit, blank, print, word, graph, g,
+        w,
         Undefined = -1};
     const std::string & getPropertyEnumName(const property_t);
     const std::string & getPropertyFullName(const property_t);
-    property_t resolveProperty(const std:: string & propertyIdent);
+    property_t resolveProperty(std::string & propertyIdent);
 }
 
 #endif

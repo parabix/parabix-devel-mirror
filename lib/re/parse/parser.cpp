@@ -390,7 +390,7 @@ RE * RE_Parser::parseEscapedSet() {
         case 'X': {
             // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
             // to get to the next extended grapheme cluster boundary.
-            RE * GCB = makeZeroWidth("\\b{g}");
+            RE * GCB = makePropertyExpression(PropertyExpression::Kind::Boundary, "g");
             return makeSeq({makeAny(), makeRep(makeSeq({makeZerowidthComplement(GCB), makeAny()}), 0, Rep::UNBOUNDED_REP), GCB});
         }
         case 'N':

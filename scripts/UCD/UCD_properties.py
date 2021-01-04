@@ -16,11 +16,11 @@ from UCD_property_objects import *
 PropertyAliases_h_template = r"""
 namespace UCD {
     enum property_t : int {
-        %s, 
+        %s,
         Undefined = -1};
     const std::string & getPropertyEnumName(const property_t);
     const std::string & getPropertyFullName(const property_t);
-    property_t resolveProperty(const std:: string & propertyIdent);
+    property_t resolveProperty(std::string & propertyIdent);
 }
 """
 
@@ -63,12 +63,12 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} mapping to <none>
         ${null_set_ranges}**/
-        
+
         ${null_set_value}
 
         /** Code Point Ranges for ${prop_enum} mapping to <codepoint>
         ${reflexive_set_ranges}**/
-        
+
         ${reflexive_set_value}
 
         const static std::vector<unsigned> buffer_offsets = {
@@ -77,18 +77,18 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
 
         const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
-        static StringPropertyObject property_object(${prop_enum}, 
-                                                    std::move(null_codepoint_set), 
-                                                    std::move(reflexive_set), 
-                                                    static_cast<const char *>(string_buffer), 
-                                                    std::move(buffer_offsets), 
+        static StringPropertyObject property_object(${prop_enum},
+                                                    std::move(null_codepoint_set),
+                                                    std::move(reflexive_set),
+                                                    static_cast<const char *>(string_buffer),
+                                                    std::move(buffer_offsets),
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
     buffer_offsets = [0]
-    for cp in cps: 
+    for cp in cps:
         string_buffer += cp_value_map[cp] + "\n"
         buffer_offsets.append(len(string_buffer.encode("utf-8")))
     buffer_length = buffer_offsets[-1]
@@ -118,18 +118,18 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
 
         const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
-        static StringOverridePropertyObject property_object(${prop_enum}, 
-                                                    ${overridden}, 
-                                                    std::move(explicitly_defined_set), 
-                                                    static_cast<const char *>(string_buffer), 
-                                                    std::move(buffer_offsets), 
+        static StringOverridePropertyObject property_object(${prop_enum},
+                                                    ${overridden},
+                                                    std::move(explicitly_defined_set),
+                                                    static_cast<const char *>(string_buffer),
+                                                    std::move(buffer_offsets),
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
     buffer_offsets = [0]
-    for cp in cps: 
+    for cp in cps:
         string_buffer += cp_value_map[cp] + "\n"
         buffer_offsets.append(len(string_buffer.encode("utf-8")))
     buffer_length = buffer_offsets[-1]
@@ -157,16 +157,16 @@ def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
 
         const static std::vector<codepoint_t> defined_cps = {
         ${explicitly_defined_cps}};
-        static NumericPropertyObject property_object(${prop_enum}, 
-                                                    std::move(NaN_set), 
-                                                    static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+        static NumericPropertyObject property_object(${prop_enum},
+                                                    std::move(NaN_set),
+                                                    static_cast<const char *>(string_buffer),
+                                                    buffer_length,
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
-    for cp in cps: 
+    for cp in cps:
         string_buffer += cp_value_map[cp] + "\n"
     string_buffer += "NaN\n"  # This inserts the standard default value for strings as the last entry
     buffer_length = len(string_buffer.encode("utf-8"))
@@ -241,11 +241,11 @@ def simple_CaseClosure_map(fold_data):
    return cl_map
 
 #
-# Simple case fold map.     
+# Simple case fold map.
 # The simple case fold map is an ordered list of fold entries each of
-# the form (lo_codepoint, hicodepoint, offset).  Each entry describes 
+# the form (lo_codepoint, hicodepoint, offset).  Each entry describes
 # the case fold that applies for the consecutive entries in the given
-# codepoint range, according to the following equations.  
+# codepoint range, according to the following equations.
 # casefold(x) = x + offset, if ((x - low_codepoint) div offset) mod 2 = 0
 #             = x - offset, if ((x - low_codepoint) div offset) mod 2 = 1
 #
@@ -267,7 +267,7 @@ def caseFoldRangeMap(casemap):
          projected = []
          for (cp0, offset) in open_entries:
             even_odd_offset_group = int(abs(cp - cp0)/ abs(offset)) & 1
-            if even_odd_offset_group == 0: 
+            if even_odd_offset_group == 0:
                projected_foldcp = cp + offset
             else: projected_foldcp = cp - offset
             if not projected_foldcp in casemap[cp]:
@@ -414,7 +414,7 @@ class UCD_generator():
             emit_numeric_property(f, property_code, property_object.NaN_set, property_object.cp_value_map)
         elif isinstance(property_object, ObsoletePropertyObject):
             emit_Obsolete_property(f, property_code)
-        else: 
+        else:
             print("%s: unsupported property.")
             return
         self.supported_props.append(property_code)
@@ -422,7 +422,7 @@ class UCD_generator():
     def generate_property_value_file(self, filename_root, property_code):
         if not property_code in self.property_object_map.keys():
             print("Property code %s not in property_object_map" % property_code)
-            return 
+            return
         property_object = self.property_object_map[property_code]
         parse_property_data(self.property_object_map[property_code], filename_root + '.txt')
         basename = os.path.basename(filename_root)
@@ -621,11 +621,11 @@ def UCD_main():
     ucd.load_property_value_info()
 
     ucd.generate_UnicodeData_h()
-    
+
     ucd.generate_SpecialCasing_h()
-    
+
     ucd.genCaseFolding_h()
-    
+
     ucd.generate_multicolumn_properties_file('NameAliases', ['Name_Alias', 'Alias_Kind'])
 
     #
@@ -634,7 +634,7 @@ def UCD_main():
     #
     # The Block property
     ucd.generate_property_value_file('Blocks', 'blk')
-    
+
     # Scripts
     ucd.generate_property_value_file('Scripts', 'sc')
     #
@@ -643,10 +643,10 @@ def UCD_main():
     # #
     # General Category
     ucd.generate_property_value_file('extracted/DerivedGeneralCategory', 'gc')
-    
+
     # Binary properties from PropList.txt
     ucd.generate_multisection_properties_file('PropList')
-    
+
     # Binary properties from DerivedCoreProperties.txt
     ucd.generate_multisection_properties_file('DerivedCoreProperties')
     #
@@ -707,10 +707,10 @@ def UCD_main():
     ucd.generate_property_value_file('Jamo', 'JSN')
     #
     ucd.generate_CompatibilityProperties_h()
-    # 
+    #
         # Binary properties from PropList.txt
     ucd.generate_multisection_properties_file('emoji/emoji-data')
-    
+
     #
     ucd.generate_PropertyValueAliases_h()
 
