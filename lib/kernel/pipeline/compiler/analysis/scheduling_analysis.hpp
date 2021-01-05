@@ -373,15 +373,12 @@ public:
 
                 const auto lifespan = consumerRank - producerRank;
 
-                const auto & W = S[streamSet].Size;
-
-                assert (W.denominator() == 1);
-                assert (W.numerator() > 0);
+                const auto W = ceiling(S[streamSet].Size);
 
                 if (LLVM_LIKELY(lifespan <= 1)) {
                     const auto j = (2 * producerRank) | lifespan;
                     assert (j < (2 * numOfKernels));
-                    weight[j] += W.numerator();
+                    weight[j] += W;
 
                     // If the lifespan of this streamset is at most one, we can place it into the
                     // comparability graph and do not need to reason about it within the forest.
@@ -390,7 +387,7 @@ public:
                 } else {
 
                     const auto j = (2 * numOfKernels) + i;
-                    weight[j] = W.numerator();
+                    weight[j] = W;
 
                     // NOTE: we mark the direction of the edges between the "forest" and comparability
                     // graph nodes as Unknown since we do not know their orientation until we've built
@@ -541,14 +538,6 @@ is_bipartite_graph:
 
         const auto fitness_end = std::chrono::high_resolution_clock::now();
         fitness_time += (fitness_end - fitness_start).count();
-
-        errs() << "  candidate: ";
-        char joiner = '{';
-        for (const auto k : candidate) {
-            errs() << joiner << k;
-            joiner = ',';
-        }
-        errs() << "} := " << result << "\n";
 
         return result;
     }
@@ -1021,7 +1010,7 @@ protected:
 private:
 
     std::vector<unsigned> live;
-    std::vector<unsigned> weight;
+    std::vector<size_t>   weight;
     std::vector<unsigned> component;
     std::vector<unsigned> placement;
     std::vector<Vertex>   stack;
@@ -1146,7 +1135,7 @@ public:
 
         for (unsigned round = 0; round < MAX_EVOLUTIONARY_ROUNDS; ++round) {
 
-            errs() << "EA: round=" << round << "\n";
+            // errs() << "EA: round=" << round << "\n";
 
             const auto populationSize = P1.size();
 
@@ -1162,16 +1151,16 @@ public:
                 }
             };
 
-            for (unsigned i = 0; i < populationSize; ++i) {
-                errs() << "  population: ";
-                const auto & I = P1[i];
-                char joiner = '{';
-                for (const auto k : I->first) {
-                    errs() << joiner << k;
-                    joiner = ',';
-                }
-                errs() << "} := " << I->second << "\n";
-            }
+//            for (unsigned i = 0; i < populationSize; ++i) {
+//                errs() << "  population: ";
+//                const auto & I = P1[i];
+//                char joiner = '{';
+//                for (const auto k : I->first) {
+//                    errs() << joiner << k;
+//                    joiner = ',';
+//                }
+//                errs() << "} := " << I->second << "\n";
+//            }
 
             // CROSSOVER:
 
@@ -1620,10 +1609,10 @@ restart_process:
 
         unsigned converged = 0;
 
-        for (const auto e : make_iterator_range(edges(O))) {
-            const unsigned u = source(e, O);
-            const unsigned v = target(e, O);
-            pheromone[std::make_pair(u, v)] = HAMILTONIAN_PATH_DEFAULT_WEIGHT; // O[e];
+        for (auto & e : trail) {
+            Trail & t = e.second;
+            t.Pheromone = HAMILTONIAN_PATH_DEFAULT_WEIGHT;
+            t.Permanence = 0.0;
         }
 
         replacement.clear();
@@ -1651,9 +1640,10 @@ restart_process:
                 for (const auto e : make_iterator_range(out_edges(u, O))) {
                     const auto v = target(e, O);
                     if (visited.test(v)) continue;
-                    const auto f = pheromone.find(std::make_pair(u, v));
-                    assert (f != pheromone.end());
-                    targets.emplace_back(v, f->second);
+                    const auto f = trail.find(std::make_pair(u, v));
+                    assert (f != trail.end());
+                    const Trail & t = f->second;
+                    targets.emplace_back(v, t.Pheromone);
                 }
 
                 const auto k = targets.size();
@@ -1731,65 +1721,70 @@ restart_process:
 
             #if HAMILTONIAN_PATH_STRATEGY == 1
 
+            const auto l = path.size();
+
             double deposit = 0.0;
+
             if (inversions > bestInversions) {
                 const auto d = inversions - bestInversions; // [0,10)
                 const auto c = std::log(d + 1);
-                deposit = -c / (1.0 + c);
+                deposit = c / (1.0 + c);
+
+                for (unsigned i = 1; i < l; ++i) {
+                    const auto e = std::make_pair(path[i - 1], path[i]); // [0,10)
+                    const auto f = trail.find(e);
+                    assert (f != trail.end());
+                    Trail & t = f->second;
+                    const auto scale = 1.0 - (0.90 * std::sqrt(t.Permanence));
+                    const auto d = deposit * scale;
+                    t.Pheromone = std::max(t.Pheromone - d, HAMILTONIAN_PATH_MINIMUM_WEIGHT);
+                }
+
+
             } else if (inversions < bestInversions) {
                 const auto d = bestInversions - inversions;
                 deposit = std::sqrt(d) / (1.0 + std::log(d + 1));
-            }
-
-            const auto l = path.size();
-
-            for (unsigned i = 1; i < l; ++i) {
-                const auto e = std::make_pair(path[i - 1], path[i]); // [0,10)
-                const auto f = pheromone.find(e);
-                assert (f != pheromone.end());
-                double & trail = f->second;
-                double d = deposit;
-                if (deposit < 0 && bestPath.count(e) != 0) {
-                    d *= 0.10;
-                }
-                trail = std::max(trail + d, HAMILTONIAN_PATH_MINIMUM_WEIGHT);
-//                if (deposit > 0 || bestPath.count(e) == 0) {
-//                    trail += deposit;
-//                    trail = std::max(trail, HAMILTONIAN_PATH_MINIMUM_WEIGHT);
-//                }
-            }
-
-            #endif
-
-            errs() << " candidate:";
-            char joiner = ' ';
-            for (const auto c : path) {
-                errs() << joiner << c;
-                joiner= ',';
-            }
-            errs() << "  := " << format("%.4f", inversions) <<
-                         " (" << format("%.4f", bestInversions) << ")"
-                         " d=" << format("%.4f", deposit);
-
-            // Store our path if its the best one
-            if (inversions == bestInversions) {
-                ++converged;
-            } else if (inversions < bestInversions) {
-                converged = 0;
-                errs() << " *";
-                #if HAMILTONIAN_PATH_STRATEGY == 1
-                bestPath.clear();
                 for (unsigned i = 1; i < l; ++i) {
-                    bestPath.emplace(path[i - 1], path[i]);
+                    const auto e = std::make_pair(path[i - 1], path[i]); // [0,10)
+                    const auto f = trail.find(e);
+                    assert (f != trail.end());
+                    Trail & t = f->second;
+                    t.Permanence = std::min(t.Permanence + 0.1, 1.0);
+                    t.Pheromone += d;
+
                 }
-                #endif
+
+                // Store our path if its the best one
                 if (m == numOfKernels) {
                     replacement.swap(toEval);
                 }
                 bestInversions = inversions;
+
+                converged = 0;
+
+            } else { // if (inversions == bestInversions) {
+                ++converged;
             }
 
-            errs() << "\n";
+            #endif
+
+//            errs() << " candidate:";
+//            char joiner = ' ';
+//            for (const auto c : path) {
+//                errs() << joiner << c;
+//                joiner= ',';
+//            }
+//            errs() << "  := " << format("%.4f", inversions) <<
+//                         " (" << format("%.4f", bestInversions) << ")"
+//                         " d=" << format("%.4f", deposit);
+
+//            // Store our path if its the best one
+//            if (inversions < bestInversions) {
+//                converged = 0;
+//                errs() << " *";
+//            }
+
+//            errs() << "\n";
 
 //            auto & out = errs();
 //            out << "digraph \"O" << r << "\" {\n";
@@ -1828,12 +1823,12 @@ restart_process:
         // just restart the process. We're guaranteed to find one eventually.
         if (replacement.empty()) {
 
-            errs() << "!!! RESTART !!!\n";
+//            errs() << "!!! RESTART !!!\n";
 
             goto restart_process;
         }
 
-        errs() << "!!! CONVERGED !!!\n";
+//        errs() << "!!! CONVERGED !!!\n";
 
         assert (replacement.size() == numOfKernels);
 
@@ -1858,7 +1853,14 @@ public:
         path.reserve(maxPathLength);
         replacement.reserve(numOfKernels);
         toEval.reserve(numOfKernels);
-        pheromone.reserve(num_edges(O));
+        trail.reserve(num_edges(O));
+
+        for (const auto e : make_iterator_range(edges(O))) {
+            const unsigned u = source(e, O);
+            const unsigned v = target(e, O);
+            trail.emplace(std::make_pair(u, v), Trail{});
+        }
+
     }
 
 private:
@@ -1867,7 +1869,13 @@ private:
 
     BitVector visited;
     std::vector<std::pair<Vertex, double>> targets;
-    flat_map<std::pair<Vertex, Vertex>, double> pheromone;
+
+    struct Trail {
+        double Pheromone = 0.0;
+        double Permanence = 0.0;
+    };
+
+    flat_map<std::pair<Vertex, Vertex>, Trail> trail;
     std::vector<unsigned> index;
     Candidate path;
     Candidate replacement;
@@ -2613,8 +2621,6 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
     transitive_reduction_dag(ordering, H);
     END_SCOPED_REGION
 
-    printGraph(H, errs(), "H0");
-
     // To find our hamiltonian path later, we need a path from each join
     // in the graph to the other forked paths (including the implicit
     // "terminal" node.) Compute the post-dominator tree of H then insert
@@ -2733,8 +2739,6 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
     for (const auto & e : toAdd) {
         add_edge(e.first, e.second, H);
     }
-
-    printGraph(H, errs(), "H1");
 
     END_SCOPED_REGION
 
@@ -2972,7 +2976,7 @@ try_to_compress_further:
         add_edge(u, v, GP);
     }
 
-    printOrderingGraph(GP, errs(), "O");
+    // printOrderingGraph(GP, errs(), "O");
 
     return PartitionOrdering{std::move(GP), numOfKernelSets, std::move(kernels)};
 }
@@ -3309,7 +3313,6 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
             SchedulingNode & node = S[k];
             node.Type = SchedulingNode::IsStreamSet;
             node.Size = Pi.ExpectedRepetitions * De.Expected * D[v]; // bytes per segment
-            assert (node.Size.denominator() == 1);
         }
     }
 
@@ -3321,10 +3324,10 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     SA.runGA(schedule);
 
-    errs () << "init_time: " << init_time << "\n"
-               "fitness_time: " << fitness_time << "\n"
-               "repair_time: " << repair_time << "\n"
-               "evolutionary_time: " << evolutionary_time << "\n";
+//    errs () << "init_time: " << init_time << "\n"
+//               "fitness_time: " << fitness_time << "\n"
+//               "repair_time: " << repair_time << "\n"
+//               "evolutionary_time: " << evolutionary_time << "\n";
 
 //    printDAWG(schedule, errs(), "S");
 

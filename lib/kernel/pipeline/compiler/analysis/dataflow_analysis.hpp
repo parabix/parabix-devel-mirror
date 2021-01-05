@@ -902,29 +902,29 @@ void PipelineAnalysis::computeDataFlowRates() {
         MaximumNumOfStrides[kernel] = r[UpperBound];
     }
 
-    #ifndef NDEBUG
-    for (auto start = firstKernel; start <= lastKernel; ) {
-        // Determine which kernels are in this partition
-        const auto partitionId = KernelPartitionId[start];
-        assert (partitionId < PartitionCount);
-        auto end = start + 1U;
-        for (; end <= LastKernel; ++end) {
-            if (KernelPartitionId[end] != partitionId) {
-                break;
-            }
-        }
-        if (end > (start + 1)) {
-            const auto check = MaximumNumOfStrides[start] / MinimumNumOfStrides[start];
-            for (auto kernel = start + 1; kernel < end; ++kernel) {
-                const auto check2 = MaximumNumOfStrides[kernel] / MinimumNumOfStrides[kernel];
-                if (LLVM_UNLIKELY(check != check2)) {
-                    report_fatal_error("Kernel " + std::to_string(kernel) + " non-synchronous dataflow in partition " + std::to_string(partitionId) );
-                }
-            }
-        }
-        start = end;
-    }
-    #endif
+//    #ifndef NDEBUG
+//    for (auto start = firstKernel; start <= lastKernel; ) {
+//        // Determine which kernels are in this partition
+//        const auto partitionId = KernelPartitionId[start];
+//        assert (partitionId < PartitionCount);
+//        auto end = start + 1U;
+//        for (; end <= LastKernel; ++end) {
+//            if (KernelPartitionId[end] != partitionId) {
+//                break;
+//            }
+//        }
+//        if (end > (start + 1)) {
+//            const auto check = MaximumNumOfStrides[start] / MinimumNumOfStrides[start];
+//            for (auto kernel = start + 1; kernel < end; ++kernel) {
+//                const auto check2 = MaximumNumOfStrides[kernel] / MinimumNumOfStrides[kernel];
+//                if (LLVM_UNLIKELY(check != check2)) {
+//                    report_fatal_error("Kernel " + std::to_string(kernel) + " non-synchronous dataflow in partition " + std::to_string(partitionId) );
+//                }
+//            }
+//        }
+//        start = end;
+//    }
+//    #endif
 
 }
 #endif

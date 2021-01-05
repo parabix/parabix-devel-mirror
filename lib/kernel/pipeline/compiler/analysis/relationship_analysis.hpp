@@ -21,6 +21,8 @@ namespace { // start of anonymous namespace
 
 using RefVector = SmallVector<ProgramGraph::Vertex, 4>;
 
+#warning change enum tag to distinguish relationships and streamsets
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addProducerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */

@@ -370,6 +370,8 @@ using OwningVector = std::vector<std::unique_ptr<T>>;
 
 using Partition = std::vector<unsigned>;
 
+using CoarsePartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, Partition, unsigned>;
+
 using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
 
 using OrderingDAWG = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;

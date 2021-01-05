@@ -417,11 +417,6 @@ Value * CBuilder::CreateCacheAlignedMalloc(llvm::Value * const size) {
     Constant * align = ConstantInt::get(size->getType(), alignment);
     Value * const alignedSize = CreateRoundUp(size, align);
     Value * const ptr = CreateAlignedMalloc(alignedSize, alignment);
-
-    CallPrintInt("CreateCacheAlignedMalloc::alignedSize", alignedSize);
-    CallPrintInt("CreateCacheAlignedMalloc::ptr", ptr);
-
-
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         CreateMProtect(ptr, alignedSize, Protect::READ);
     }
