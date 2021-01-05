@@ -13,14 +13,11 @@
 #ifndef NDEBUG
 #include <llvm/IR/Verifier.h>
 #endif
+#include <boost/intrusive/detail/math.hpp>
 
 using namespace llvm;
 using namespace boost;
-
-inline static unsigned floor_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return ((sizeof(unsigned) * CHAR_BIT) - 1U) - __builtin_clz(v);
-}
+using boost::intrusive::detail::floor_log2;
 
 namespace kernel {
 

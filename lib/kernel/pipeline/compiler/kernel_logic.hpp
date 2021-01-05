@@ -29,7 +29,7 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index, const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeFullyProcessedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {       
+void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b, Value * const terminated) {
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferPort & br = mBufferGraph[e];
         const auto port = br.Port;
@@ -40,7 +40,7 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
             processed = mUpdatedProcessedPhi[port];
         }
         const Binding & input = br.Binding;
-        Value * const fullyProcessed = truncateBlockSize(b, input, processed, mKernelIsFinal);
+        Value * const fullyProcessed = truncateBlockSize(b, input, processed, terminated);
         mFullyProcessedItemCount[port] = fullyProcessed;
     }
 }
@@ -48,13 +48,13 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeFullyProducedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
+void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b, Value * const terminated) {
 
     const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
         Value * produced = mUpdatedProducedPhi[port];
-        Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, mKernelIsFinal);
+        Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, terminated);
         mFullyProducedItemCount[port]->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
     }
 }
@@ -73,11 +73,15 @@ Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b,
     // it's consumers has a non-Fixed rate that does not have a matching BlockSize
     // attribute.
 
+    assert ("produced cannot be null" && produced);
+
     const Binding & output = getOutputBinding(kernel, port);
     if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
         const auto & D = output.findAttribute(AttrId::Delayed);
         Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
-        produced = b->CreateSelect(terminationSignal, produced, delayed);
+        assert (terminationSignal && terminationSignal->getType()->isIntegerTy(1));
+        const auto name = makeBufferName(mKernelId, port) + "_delayedUntilTermination";
+        produced = b->CreateSelect(terminationSignal, produced, delayed, name);
     }
     return truncateBlockSize(b, output, produced, terminationSignal);
 }

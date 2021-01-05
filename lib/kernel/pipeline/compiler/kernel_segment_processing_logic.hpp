@@ -289,12 +289,15 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     debugPrint(b, "** " + prefix + ".loopExit = %" PRIu64, mSegNo);
     #endif
     writeUpdatedItemCounts(b);
-    computeFullyProcessedItemCounts(b);
+    assert (mTerminatedAtLoopExitPhi);
+    Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+    Value * const terminated = b->CreateICmpNE(mTerminatedAtLoopExitPhi, unterminated);
+    computeFullyProcessedItemCounts(b, terminated);
     computeMinimumConsumedItemCounts(b);
     if (kernelRequiresSynchronization) {
         writeLookAheadLogic(b);
     }
-    computeFullyProducedItemCounts(b);
+    computeFullyProducedItemCounts(b, terminated);
     replacePhiCatchWithCurrentBlock(b, mKernelLoopExitPhiCatch, mKernelExit);
     b->CreateBr(mKernelExit);
 

@@ -203,7 +203,8 @@ void ZTF_Symbols::generatePabloMethod() {
     // Nulls, Linefeeds and ZTF_symbols are also treated as symbol starts.
     PabloAST * LF = ccc.compileCC(re::makeByte(0x0A));
     PabloAST * Null = ccc.compileCC(re::makeByte(0x0));
-    PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr(LF, Null));
+    PabloAST * fileStart = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
+    PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr3(LF, Null, fileStart));
     // The next character after a ZTF symbol or a line feed also starts a new symbol.
     symStart = pb.createOr(symStart, pb.createAdvance(pb.createOr(ZTF_sym, LF), 1), "symStart");
     //

@@ -13,7 +13,7 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
 
     // the zeroth partition may be a fake one if this pipeline has I/O
     const auto firstPartition = KernelPartitionId[FirstKernel];
-    for (unsigned i = firstPartition; i < PartitionCount; ++i) {
+    for (auto i = firstPartition; i < PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
     }    
     mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
@@ -217,7 +217,10 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                     }
 
                 }
-                produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, mTerminatedInitially);
+
+//                assert (mTerminatedInitially);
+//                Value * const termSignal = b->CreateTrunc(mTerminatedInitially, b->getInt1Ty(), "termSignal");
+//                produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, termSignal);
             } else {
                 if (fromInitiallyTerminated) {
                     const auto prefix = makeBufferName(kernel, br.Port);
@@ -327,6 +330,7 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
     };
 
     const auto firstPartition = KernelPartitionId[FirstKernel];
+
     for (auto partitionId = firstPartition; partitionId != targetPartitionId; ++partitionId) {
         PHINode * const termPhi = findOrAddPhi(mPartitionTerminationSignalPhi, partitionId, "partitionTerminationSignalPhi");
         Value * term = nullptr;
