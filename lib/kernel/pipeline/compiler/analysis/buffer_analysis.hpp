@@ -245,6 +245,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         assert ("missing buffer?" && bn.Buffer);
 
         bn.NonLocal = nonLocal;
+
+     //   assert (nonLocal ^ (bn.Locality == BufferLocality::Local));
+
         mInternalBuffers[streamSet - FirstStreamSet].reset(bn.Buffer);
     }   
 }
@@ -301,18 +304,24 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 bp.IsManaged = true;
             }
 
+            bool nonLocal = false;
+            bool mustBeLinear = false;
+
             for (const Attribute & attr : binding.getAttributes()) {
                 switch (attr.getKind()) {
                     case AttrId::Add:                        
                         bp.Add = std::max(bp.Add, attr.amount());
                         break;
                     case AttrId::Delayed:
+                        nonLocal = true;
                         bp.Delay = std::max(bp.Delay, attr.amount());
                         break;
                     case AttrId::LookAhead:
+                        nonLocal = true;
                         bp.LookAhead = std::max(bp.LookAhead, attr.amount());
                         break;
                     case AttrId::LookBehind:
+                        nonLocal = true;
                         bp.LookBehind = std::max(bp.LookBehind, attr.amount());
                         break;
                     case AttrId::Truncate:
@@ -322,6 +331,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                         bp.IsPrincipal = true;
                         break;
                     case AttrId::Deferred:
+                        nonLocal = true;
                         bp.IsDeferred = true;
                         break;
                     case AttrId::SharedManagedBuffer:
@@ -333,6 +343,14 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                     default: break;
                 }
             }
+
+            #warning make locality an enum?
+
+            if (LLVM_UNLIKELY(nonLocal)) {
+                BufferNode & bn = mBufferGraph[streamSet];
+                bn.Locality = BufferLocality::SoftNonLocal;
+            }
+
             return bp;
         };
 
@@ -483,6 +501,74 @@ void PipelineAnalysis::generateInitialBufferGraph() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyBufferLocality
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::identifyBufferLocality() {
+
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    const auto n = LastStreamSet - FirstStreamSet + 1;
+
+    std::vector<unsigned> nonLocal(n, 0);
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        const auto partitionId = KernelPartitionId[kernel];
+        assert (partitionId < PartitionCount);
+
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const auto streamSet = source(input, mBufferGraph);
+            const auto producer = parent(streamSet, mBufferGraph);
+            const auto producerPartitionId = KernelPartitionId[producer];
+            assert (producerPartitionId <= partitionId);
+            if (producerPartitionId != partitionId) {
+                const BufferPort & inputRate = mBufferGraph[input];
+                const Binding & binding = inputRate.Binding;
+                const ProcessingRate & rate = binding.getRate();
+                unsigned state = 2;
+                if (LLVM_UNLIKELY(rate.isFixed())) {
+                    state = 1;
+                }
+                nonLocal[streamSet - FirstStreamSet] |= state;
+            }
+        }
+
+        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            const auto streamSet = target(output, mBufferGraph);
+            for (const auto data : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+                const auto consumer = target(data, mBufferGraph);
+                const auto consumerPartitionId = KernelPartitionId[consumer];
+                assert (consumerPartitionId >= partitionId);
+                assert (consumerPartitionId < PartitionCount);
+                if (consumerPartitionId != partitionId) {
+                    const BufferPort & outputRate = mBufferGraph[output];
+                    const Binding & binding = outputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    unsigned state = 2;
+                    if (LLVM_UNLIKELY(rate.isFixed())) {
+                        state = 1;
+                    }
+                    nonLocal[streamSet - FirstStreamSet] |= state;
+                }
+            }
+        }
+    }
+
+    for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
+        BufferNode & bn = mBufferGraph[i];
+        assert (bn.Locality != BufferLocality::HardNonLocal);
+        const auto r = nonLocal[i - FirstStreamSet];
+        if (r == 1) {
+            bn.Locality = BufferLocality::SoftNonLocal;
+        } else if (r != 0) {
+            bn.Locality = BufferLocality::HardNonLocal;
+        }
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::identifyLinearBuffers() {
@@ -615,16 +701,6 @@ void PipelineAnalysis::identifyLinearBuffers() {
         }
     }
 #endif
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief identifyNonLocalBuffers
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::identifyNonLocalBuffers() {
-
-
-
 }
 
 }

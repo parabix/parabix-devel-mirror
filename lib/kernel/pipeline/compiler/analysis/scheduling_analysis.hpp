@@ -240,12 +240,12 @@ void postorder_minimize(OrderingDAWG & O) {
  ** ------------------------------------------------------------------------------------------------------------- */
 class MemoryAnalysis {
 
-    struct ACO {
+    struct Trail {
         double Weight;
         double Pheromone;
     };
 
-    using IntervalGraph = adjacency_list<vecS, vecS, undirectedS, no_property, ACO>;
+    using IntervalGraph = adjacency_list<vecS, vecS, undirectedS, no_property, Trail>;
 
     using IntervalEdge = typename IntervalGraph::edge_descriptor;
 
@@ -659,10 +659,18 @@ private:
         // to more quickly converge on a "good enough" solution but kept the same
         // +/- flavour of the paper's original deposit function.
 
-        // TODO: I'm currently applying the Pythagorean theorem to the endpoint
+        // NOTE: I'm currently applying the Pythagorean theorem to the endpoint
         // weights to make the edge weight; hopefully this will prioritize placing
-        // pairs of heavy nodes into differing sets over a heavy and light or two
-        // light nodes. Investigate an alternate metric.
+        // pairs of medium to heavy nodes into differing sets over a heavy and light
+        // (or two light nodes.) Proof of this can be shown below:
+
+        // Given the formula:
+
+        //     (x/m)^2 + (y/n)^2 < (x/(m-1))^2 + (y/(n+1))^2
+
+        // All solutions to this that require x and y to be positive requires that
+        // n is negative. Since (y/n) refers to the size of a non-negative buffer
+        // allocation, this proves the statement by contradiction.
 
         for (const auto e : make_iterator_range(edges(I))) {
             const auto u = source(e, I);
@@ -671,7 +679,7 @@ private:
             const size_t Wv = weight[v + (2 * numOfKernels)];
             const auto weight = std::log10(std::pow(std::sqrt(Wu * Wu + Wv * Wv), MAX_CUT_BETA));
 
-            ACO & M = I[e];
+            Trail & M = I[e];
             M.Weight = weight;
             assert (M.Weight > 0.0);
             M.Pheromone = T_Init;
@@ -689,7 +697,7 @@ private:
             const auto u = source(e, I);
             const auto v = target(e, I);
             if (placement[u] != placement[v]) {
-                ACO & M = I[e];
+                Trail & M = I[e];
                 M.Pheromone += 1.0;
             }
         }
@@ -712,7 +720,7 @@ private:
             }
 
             for (const auto e : make_iterator_range(edges(I))) {
-                ACO & M = I[e];
+                Trail & M = I[e];
                 M.Pheromone *= (1.0 - MAX_CUT_RHO);
                 const auto u = source(e, I);
                 const auto v = target(e, I);
@@ -848,7 +856,7 @@ private:
                     assert (v != u);
                     if (placement[v] == BIPARTITE_GRAPH_UNPLACED) {
                         all_adjacencies_added = false;
-                        const ACO & M = I[e];
+                        const Trail & M = I[e];
                         assert (M.Pheromone > 0);
                         const auto w = std::pow(M.Pheromone, 2.0) * M.Weight;
                         selected.push_back(e);
@@ -1107,7 +1115,7 @@ public:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief runGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    void runGA(OrderingDAWG & result) {
+    size_t runGA(OrderingDAWG & result) {
 
         Population P1;
         P1.reserve(MAX_POPULATION_SIZE);
@@ -1249,6 +1257,7 @@ public:
             // SELECTION:
 
             for (const auto & I : P2) {
+                assert (P1.size() <= MAX_POPULATION_SIZE);
                 if (P1.size() == MAX_POPULATION_SIZE) {
                     if (I->second <= P1.front()->second) {
                         std::pop_heap(P1.begin(), P1.end(), FitnessComparator{});
@@ -1271,14 +1280,17 @@ public:
 
         END_SCOPED_REGION
 
-        // Construct a trie of all possible best (lowest) orderings of this partition
         std::sort_heap(P1.begin(), P1.end(), FitnessComparator{});
 
 found_all_orderings:
 
-        if (LLVM_UNLIKELY(P1.empty())) return;
+        if (LLVM_UNLIKELY(P1.empty())) {
+            return 0;
+        }
 
         assert (std::is_sorted(P1.begin(), P1.end(), FitnessComparator{}));
+
+        // Construct a trie of all possible best (lowest) orderings of this partition
 
         auto i = P1.begin();
         const auto end = P1.end();
@@ -1288,6 +1300,7 @@ found_all_orderings:
             make_trie((*i)->first, result);
         } while ((++i != end) && (bestWeight == (*i)->second));
 
+        return bestWeight;
     }
 
 protected:
@@ -2117,8 +2130,7 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const
                 const auto & itemsPerStride = S[e];
                 Sv.Size *= (itemsPerStride * replicationFactor);
             }
-            assert (replicationFactor.denominator() == 1);
-            currentPartition.Repetitions[u] = replicationFactor.numerator();
+            currentPartition.Repetitions[u] = replicationFactor;
         }
 
         END_SCOPED_REGION
@@ -2138,8 +2150,8 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const
 
         PartitionSchedulingAnalysis SA(S, D, numOfKernels);
 
-        SA.runGA(currentPartition.Orderings);
-
+        const auto m = SA.runGA(currentPartition.Orderings);
+        currentPartition.RequiredMemory = m;
     }
 
     Z3_reset_memory();
@@ -2396,7 +2408,7 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(Partit
 
                 const ProcessingRate & rate = b.getRate();
                 const auto sum = rate.getLowerBound() + rate.getUpperBound();
-                const auto expected = sum * Rational{strideSize, 2};
+                const auto expected = sum * strideSize * Rational{1, 2};
                 add_edge(partitionId - 1, k, PartitionDataflowEdge{producer, rate.getKind(), expected}, G);
             }
         }
@@ -2431,13 +2443,12 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(Partit
                         const Binding & b = input.Binding;
                         const ProcessingRate & rate = b.getRate();
                         const auto sum = rate.getLowerBound() + rate.getUpperBound();
-                        const auto expected = sum * Rational{strideSize, 2};
+                        const auto expected = sum * strideSize * Rational{1, 2};
                         add_edge(k, partitionId - 1, PartitionDataflowEdge{consumer, rate.getKind(), expected}, G);
                     }
                 }
             }
         }
-
     }
 
     #warning incorporate length equality assertions

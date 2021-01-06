@@ -228,11 +228,26 @@ enum BufferType : unsigned {
 
 ENABLE_ENUM_FLAGS(BufferType)
 
+enum BufferLocality {
+    // buffer is purely consumed within a partition
+    Local
+    // buffer is has a cross-partition consumer but all
+    // of its consumers consume data at a fixed rate.
+    , SoftNonLocal
+
+    , HardNonLocal
+};
+
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     unsigned Type = 0;
     bool NonLocal = false;
     bool NonLinear = false;
+
+#warning fix NonLocal flag to use Locality
+
+    BufferLocality Locality = BufferLocality::Local;
+
 
     unsigned CopyBack = 0;
     unsigned CopyBackReflection = 0;
@@ -379,14 +394,15 @@ using OrderingDAWG = adjacency_list<vecS, vecS, bidirectionalS, no_property, uns
 struct PartitionData {
 
     Partition               Kernels;
-    std::vector<unsigned>   Repetitions;
-    OrderingDAWG            Orderings;
-    Rational                ExpectedRepetitions;
+    std::vector<Rational>   Repetitions;
+    OrderingDAWG            Orderings{1};
+    Rational                ExpectedRepetitions{0};
+    size_t                  RequiredMemory = 0;
 
-    PartitionData()
-    : Orderings(1) {
+//    PartitionData()
+//    : Orderings(1) {
 
-    }
+//    }
 };
 
 using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned>;

@@ -30,6 +30,8 @@ public:
 
         P.generateInitialPipelineGraph(b);
 
+        BEGIN_SCOPED_REGION
+
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
 
@@ -42,10 +44,18 @@ public:
         P.schedulePartitionedProgram(partitionGraph);
 
         // Construct the Stream and Scalar graphs
-        P.transcribeRelationshipGraph();
+        P.transcribeRelationshipGraph(partitionGraph);
+
+        END_SCOPED_REGION
+
         P.generateInitialBufferGraph();
 
+        P.identifyBufferLocality();
+
         P.computeDataFlowRates();
+
+        P.determineBufferLayout();
+
         P.identifyTerminationChecks();
         P.determinePartitionJumpIndices();
 
@@ -105,7 +115,7 @@ private:
 
     void identifyPipelineInputs();
 
-    void transcribeRelationshipGraph();
+    void transcribeRelationshipGraph(const PartitionGraph & partitionGraph);
 
     void gatherInfo() {        
         MaxNumOfInputPorts = in_degree(PipelineOutput, mBufferGraph);
@@ -146,8 +156,11 @@ private:
 
     void addStreamSetsToBufferGraph(BuilderRef b);
     void generateInitialBufferGraph();
+
+    void determineBufferLayout();
+
     void identifyLinearBuffers();
-    void identifyNonLocalBuffers();
+    void identifyBufferLocality();
     void identifyLocalPortIds();
     // void identifyDirectUpdatesToStateObjects();
 
@@ -158,7 +171,9 @@ private:
     // dataflow analysis functions
 
     void computeDataFlowRates();
-    PartitionConstraintGraph identifyHardPartitionConstraints(BufferGraph & G) const;
+
+    PartitionConstraintGraph identifyHardPartitionConstraints() const;
+
     LengthConstraintGraph identifyLengthEqualityAssertions(BufferGraph & G) const;
 
     // zero extension analysis function
@@ -225,8 +240,11 @@ public:
 
     Partition                       KernelPartitionId;
 
+    std::vector<Rational>           ExpectedNumOfStrides;
     std::vector<Rational>           MinimumNumOfStrides;
     std::vector<Rational>           MaximumNumOfStrides;
+
+    std::vector<size_t>             RequiredPartitionMemory;
 
     BufferGraph                     mBufferGraph;
     std::vector<unsigned>           mPartitionJumpIndex;
@@ -248,6 +266,7 @@ public:
 #include "pipeline_graph_printers.hpp"
 #include "relationship_analysis.hpp"
 #include "buffer_analysis.hpp"
+#include "buffer_size_analysis.hpp"
 #include "consumer_analysis.hpp"
 #include "dataflow_analysis.hpp"
 #include "partitioning_analysis.hpp"
