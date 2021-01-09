@@ -97,11 +97,11 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 if (otherProp == "identity") {
                     return propObj->GetReflexiveSet();
                 }
-                auto propCode = resolveProperty(prop);
-                if (propCode == UCD::Undefined) {
+                auto propCode2 = resolveProperty(otherProp);
+                if (propCode2 == UCD::Undefined) {
                     UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
                 }
-                auto propObj2 = getPropertyObject(propCode);
+                auto propObj2 = getPropertyObject(propCode2);
                 if (isa<BinaryPropertyObject>(propObj) && isa<BinaryPropertyObject>(propObj2)) {
                     return ~(cast<BinaryPropertyObject>(propObj)->GetCodepointSet(UCD::Binary_ns::Y) ^
                              cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y));
@@ -142,6 +142,94 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
         }
     }
     UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
+}
+
+RE * resolveCodepointExpression(int propCode, PropertyExpression::Operator op, std::string value) {
+    auto propObj = property_object_table[propCode];
+    RE * resolved = nullptr;
+    if ((value.length() > 0) && (value[0] == '/')) {
+        assert(false && "UCD::resolveUnicodeSet(re::Name *) does not support regex name resolution, use grep::resolveUnicodeSet(re::Name *) instead");
+        llvm::report_fatal_error("");
+    }
+    else if ((value.length() > 0) && (value[0] == '@')) {
+        // resolve a @property@ or @identity@ expression.
+        std::string otherProp = canonicalize_value_name(value.substr(1));
+        if (otherProp == "identity") { // the codepoint maps to itself under the property
+            resolved = makeCC(propObj->GetReflexiveSet(), &cc::Unicode);
+        }
+        auto propCode2 = resolveProperty(otherProp);
+        if (propCode2 == UCD::Undefined) {
+            UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
+        }
+        auto propObj2 = getPropertyObject(propCode2);
+        if (isa<BinaryPropertyObject>(propObj) && isa<BinaryPropertyObject>(propObj2)) {
+            UnicodeSet r = ~(cast<BinaryPropertyObject>(propObj)->GetCodepointSet(UCD::Binary_ns::Y) ^
+                            cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y));
+            resolved = makeCC(r, &cc::Unicode);
+        }
+        else {  // TODO:  deal with string properties - the main use case.
+            UnicodePropertyExpressionError("unsupported");
+        }
+    } else {
+        resolved = makeCC(propObj->GetCodepointSet(value), &cc::Unicode);
+    }
+    if (op == PropertyExpression::Operator::NEq) {
+        resolved = makeDiff(makeAny(), resolved);
+    }
+    return resolved;
+}
+
+RE * resolveBoundaryExpression(int propCode, PropertyExpression::Operator op, std::string val) {
+    auto obj = property_object_table[propCode];
+    RE * resolved = nullptr;
+    if (BoundaryPropertyObject * b = dyn_cast<BoundaryPropertyObject>(obj)) {
+        if (propCode == UCD::g) { // Grapheme cluster boundary
+            resolved = generateGraphemeClusterBoundaryRule();
+        } else if (propCode == UCD::w) { // Unicode word boundary
+            UnicodePropertyExpressionError("\\b{w} not yet supported.");
+        } else {
+            UnicodePropertyExpressionError("Unknown boundary property.");
+        }
+        if (op == PropertyExpression::Operator::NEq) {
+            resolved = makeDiff(makeAny(), resolved);
+        }
+    } else if (isa<EnumeratedPropertyObject>(obj) && (val == "")) {
+        // Boundary between codepoints with any two different values for an
+        // enumerated property.
+        // TODO:  Pass in the operator, so that negated boundaries are generated in simplified form.
+        resolved = EnumeratedPropertyBoundary(cast<EnumeratedPropertyObject>(obj));
+        if (op == PropertyExpression::Operator::NEq) {
+            resolved = makeDiff(makeAny(), resolved);
+        }
+    } else {
+        RE * codepointRE = resolveCodepointExpression(propCode, PropertyExpression::Operator::Eq, val);
+        RE * a = makeLookAheadAssertion(codepointRE);
+        RE * na = makeNegativeLookAheadAssertion(codepointRE);
+        RE * b = makeLookBehindAssertion(codepointRE);
+        RE * nb = makeNegativeLookBehindAssertion(codepointRE);
+        if (op == PropertyExpression::Operator::NEq) {
+            resolved = makeAlt({makeSeq({b, a}), makeSeq({nb, na})});
+        } else {
+            resolved = makeAlt({makeSeq({b, na}), makeSeq({nb, a})});
+        }
+    }
+    return resolved;
+}
+
+RE * resolvePropertyExpression(PropertyExpression * p) {
+    auto propCode = p->getPropertyCode();
+    RE * resolved = nullptr;
+    if (propCode < 0) {
+        UnicodePropertyExpressionError("Property '" + p->getPropertyIdentifier() + "' unlinked");
+    }
+    auto op = p->getOperator();
+    auto val = p->getValueString();
+    if (p->getKind() == PropertyExpression::Kind::Boundary) {
+        resolved = resolveBoundaryExpression(propCode, op, val);
+    } else {
+        resolved = resolveCodepointExpression(propCode, op, val);
+    }
+    return resolved;
 }
 
 struct PropertyLinker : public RE_Transformer {
@@ -250,7 +338,8 @@ struct PropertyStandardization : public RE_Transformer {
             //bool ge_T = (op == PropertyExpression::Operator::GEq) && (val_code == 1);
             if (le_T || ge_F) {
                 // All possible enum values.   Standardize to \p{any}.
-                return makePropertyExpression(PropertyExpression::Kind::Codepoint, "ANY");
+                return makeAny();
+            }
             if (lt_F || gt_T) {
                 // No values.   return failure.
                 return makeAlt();
@@ -263,7 +352,7 @@ struct PropertyStandardization : public RE_Transformer {
                 // negated property.
                 exp->setOperator(PropertyExpression::Operator::NEq);
                 exp->setValueString("");
-            } else /*  if (gt_F || ge_T || eq_T || ne_F)  positive properties.  */
+            } else { /*  if (gt_F || ge_T || eq_T || ne_F)  positive properties.  */
                 exp->setOperator(PropertyExpression::Operator::Eq);
                 exp->setValueString("");
             }
