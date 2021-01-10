@@ -1,7 +1,7 @@
 #ifndef PROPERTYOBJECTTABLE_H
 #define PROPERTYOBJECTTABLE_H
 /*
- *  Copyright (c) 2020 International Characters, Inc.
+ *  Copyright (c) 2021 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -48,7 +48,7 @@
 
 namespace UCD {
 
-  const std::array<PropertyObject *, 141> property_object_table = {{
+  const std::array<PropertyObject *, 143> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
@@ -189,7 +189,9 @@ namespace UCD {
     &BLANK_ns::property_object,
     &PRINT_ns::property_object,
     &WORD_ns::property_object,
-    &GRAPH_ns::property_object  }};
+    &GRAPH_ns::property_object,
+    new UnsupportedPropertyObject(g, PropertyObject::ClassTypeId::BoundaryProperty),
+    new UnsupportedPropertyObject(w, PropertyObject::ClassTypeId::BoundaryProperty)  }};
 }
 
 #endif

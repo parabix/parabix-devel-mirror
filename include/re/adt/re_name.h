@@ -239,6 +239,7 @@ public:
     PropertyExpression::Operator getOperator() const { return mOperator;}
     std::string getValueString() const { return mValue;}
     int getPropertyCode() const { return mPropertyCode;}
+    RE * getResolvedRE() const { return mResolvedRE;}
 
     static PropertyExpression * Create(PropertyExpression::Kind k,
                                        std::string id,
@@ -252,6 +253,7 @@ public:
     void setOperator(PropertyExpression::Operator op) {mOperator = op;}
     void setValueString(std::string v) {mValue = v;}
     void setPropertyCode(int code) {mPropertyCode = code;}
+    void setResolvedRE(RE * re) {mResolvedRE = re;}
 
 private:
     PropertyExpression(Kind k, std::string id, PropertyExpression::Operator op, std::string v):
@@ -262,6 +264,7 @@ private:
     PropertyExpression::Operator mOperator;
     std::string mValue;
     int mPropertyCode;
+    RE * mResolvedRE;
 };
 
 

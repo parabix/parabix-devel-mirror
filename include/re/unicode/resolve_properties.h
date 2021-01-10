@@ -29,10 +29,15 @@ std::string resolvePropertyFunction(re::Name * const property);
  */
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
 
-re::RE * resolvePropertyExpression(re::PropertyExpression * p);
 
 /*  Link all property expression nodes to their property_enum code. */
 re::RE * linkProperties(re::RE * r);
+
+// Recursive property resolution is implemented using a grep lines function
+// that takes a text buffer and returns a vector of matched line numbers.
+typedef std::vector<int> (*GrepLinesFunctionType)(re::RE *, char * buf, size_t bufSize);
+
+re::RE * resolveProperties(re::RE * r, GrepLinesFunctionType grep = nullptr);
 
 /*  Convert all property expression to standardized form. */
 re::RE * standardizeProperties(re::RE * r);

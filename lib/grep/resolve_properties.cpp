@@ -202,7 +202,7 @@ UCD::UnicodeSet resolveUnicodeSet(re::Name * const name) {
         std::string value = name->getName();
         if (prop.length() > 0 && value.length() > 0 && value[0] == '/') {
             prop = UCD::canonicalize_value_name(prop);
-            auto propCode = UCD::resolveProperty(prop);
+            auto propCode = UCD::getPropertyCode(prop);
             if (propCode == UCD::Undefined) {
                 UCD::UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }

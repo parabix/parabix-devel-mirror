@@ -33,7 +33,7 @@ namespace UCD {
         Undefined = -1};
     const std::string & getPropertyEnumName(const property_t);
     const std::string & getPropertyFullName(const property_t);
-    property_t resolveProperty(std::string & propertyIdent);
+    property_t getPropertyCode(std::string & propertyIdent);
 }
 
 #endif

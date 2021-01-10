@@ -201,7 +201,7 @@ namespace UCD {
     const std::string & getPropertyFullName(const property_t p) {
         return property_full_name[p];
     }
-    property_t resolveProperty(std:: string & propertyIdent) {
+    property_t getPropertyCode(std:: string & propertyIdent) {
         auto propit = alias_map.find(propertyIdent);
         if (propit == alias_map.end()) return Undefined;
         return static_cast<property_t>(propit->second);

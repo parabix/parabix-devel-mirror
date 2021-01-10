@@ -42,7 +42,8 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     r = resolveEscapeNames(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
     r = UCD::linkProperties(r);
-    r = resolveBoundaryProperties(r);
+    r = UCD::resolveProperties(r);
+    //r = resolveBoundaryProperties(r);
     r = UCD::standardizeProperties(r);
     r = UCD::externalizeProperties(r);
     r = grep::resolveUnicodeNames(r); // use full name resolution
