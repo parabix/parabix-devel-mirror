@@ -39,6 +39,10 @@ struct GraphemeBoundaryAbsentValidator final : public RE_Validator {
     bool validatePropertyExpression(const PropertyExpression * e) override {
         return e->getPropertyCode() != UCD::g;
     }
+
+    bool validateName(const Name * n) override {
+        return n->getFullName() != "\\b{g}";
+    }
 };
 
 bool hasGraphemeClusterBoundary(const RE * re) {
