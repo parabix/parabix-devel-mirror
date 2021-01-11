@@ -8,7 +8,6 @@
 #include <re/unicode/re_name_resolve.h>
 #include <re/unicode/resolve_properties.h>
 #include <unicode/data/PropertyObjects.h>
-#include <unicode/data/PropertyObjectTable.h>
 #include <re/compile/re_compiler.h>
 
 #include <vector>                  // for vector, allocator
@@ -258,7 +257,7 @@ public:
             return wb_name;
         }
         if (prop_code >= 0) {
-            auto obj = UCD::property_object_table[prop_code];
+            auto obj = UCD::getPropertyObject(static_cast<UCD::property_t>(prop_code));
             if ((propExpr->getValueString() == "") && isa<UCD::EnumeratedPropertyObject>(obj)) {
                 return EnumeratedPropertyBoundary(cast<UCD::EnumeratedPropertyObject>(obj));
             }

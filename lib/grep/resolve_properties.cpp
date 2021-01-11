@@ -16,7 +16,7 @@
 #include <re/unicode/resolve_properties.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <unicode/data/PropertyAliases.h>
-#include <unicode/data/PropertyObjectTable.h>
+#include <unicode/data/PropertyObjects.h>
 #include <util/aligned_allocator.h>
 
 using namespace llvm;
@@ -125,7 +125,7 @@ const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::ExtensionPropertyObjec
     AlignedAllocator<char, 32> alloc;
     std::vector<std::string> accumulatedValues;
 
-    UCD::EnumeratedPropertyObject * baseObj = llvm::cast<UCD::EnumeratedPropertyObject>(UCD::property_object_table[propObj->base_property]);
+    UCD::EnumeratedPropertyObject * baseObj = llvm::cast<UCD::EnumeratedPropertyObject>(UCD::getPropertyObject(propObj->base_property));
 
     const std::string & str = baseObj->GetPropertyValueGrepString();
 

@@ -29,7 +29,11 @@ public:
         }
         if (theName == "\\w") {
             return makePropertyExpression(PropertyExpression::Kind::Codepoint, "word");
+        }/*
+        if (theName == "\\b") {
+            return makePropertyExpression(PropertyExpression::Kind::Boundary, "word");
         }
+          */
         return name;
     }
 private:

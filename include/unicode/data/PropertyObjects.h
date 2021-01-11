@@ -69,7 +69,7 @@ public:
     }
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
     virtual const UnicodeSet GetCodepointSet(const std::string & prop_value_string);
-    // virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern);
+    virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType);
     virtual const UnicodeSet GetReflexiveSet() const;
     virtual const std::string GetStringValue(UCD::codepoint_t cp) const;
 
@@ -138,7 +138,7 @@ public:
     int GetEnumCount() {return independent_enum_count;}
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE *, GrepLinesFunctionType) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
     std::vector<UnicodeSet> & GetEnumerationBasisSets();
     unsigned GetEnumerationValue(codepoint_t cp);
@@ -152,7 +152,6 @@ public:
     iterator end() const {
         return property_value_enum_names.cend();
     }
-    const UnicodeSet GetCodepointSetMatchingPattern(re::RE *, GrepLinesFunctionType);
 
 private:
     const unsigned independent_enum_count;
@@ -194,7 +193,7 @@ public:
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
 
 private:
     const property_t base_property;
@@ -222,7 +221,7 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & numeric_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
 
 private:
     const UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
@@ -253,7 +252,7 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType);
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
     const UnicodeSet GetReflexiveSet() const override;
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
 
@@ -289,7 +288,7 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
     const UnicodeSet GetReflexiveSet() const override;
     const UCD::property_t GetBaseProperty() {return mBaseProperty;}
     const UnicodeSet & GetOverriddenSet() const {return mOverriddenSet;}

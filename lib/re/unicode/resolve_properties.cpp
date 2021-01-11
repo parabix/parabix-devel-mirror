@@ -15,7 +15,6 @@
 #include <re/unicode/boundaries.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>
-#include <unicode/data/PropertyObjectTable.h>
 #include <unicode/data/PropertyValueAliases.h>
 #include <util/aligned_allocator.h>
 
@@ -164,11 +163,7 @@ RE * PropertyResolver::resolveCC (std::string value, bool is_negated) {
     RE * resolved = nullptr;
     if ((value.length() > 0) && (value[0] == '/')) {
         re::RE * propValueRe = re::RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
-        if (auto p = dyn_cast<UCD::EnumeratedPropertyObject>(mPropObj)) {
-            return makeCC(p->GetCodepointSetMatchingPattern(propValueRe, mGrep), &cc::Unicode);
-        } else if (auto p = dyn_cast<UCD::StringPropertyObject>(mPropObj)) {
-            return makeCC(p->GetCodepointSetMatchingPattern(propValueRe, mGrep), &cc::Unicode);
-        }
+        return makeCC(mPropObj->GetCodepointSetMatchingPattern(propValueRe, mGrep), &cc::Unicode);
     }
     else if ((value.length() > 0) && (value[0] == '@')) {
         // resolve a @property@ or @identity@ expression.
@@ -237,7 +232,7 @@ RE * PropertyResolver::transformPropertyExpression (PropertyExpression * exp) {
     if (mPropCode < 0) {
         UnicodePropertyExpressionError("Property '" + exp->getPropertyIdentifier() + "' unlinked");
     }
-    mPropObj = property_object_table[mPropCode];
+    mPropObj = getPropertyObject(static_cast<UCD::property_t>(mPropCode));
     if (exp->getKind() == PropertyExpression::Kind::Boundary) {
         exp->setResolvedRE(resolveBoundary(val, op == PropertyExpression::Operator::NEq));
     } else {
@@ -314,7 +309,8 @@ struct PropertyStandardization : public RE_Transformer {
         PropertyExpression::Operator op = exp->getOperator();
         std::string val_str = exp->getValueString();
         std::string canon = UCD::canonicalize_value_name(val_str);
-        if (auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[prop_code])) {
+        auto * propObj = getPropertyObject(static_cast<UCD::property_t>(prop_code));
+        if (auto * obj = dyn_cast<EnumeratedPropertyObject>(propObj)) {
             int val_code = obj->GetPropertyValueEnumCode(canon);
             int enum_count = obj->GetEnumCount();
             bool lt_0 = (op == PropertyExpression::Operator::Less) && (val_code == 0);
@@ -344,7 +340,7 @@ struct PropertyStandardization : public RE_Transformer {
             exp->setValueString(obj->GetValueFullName(val_code));
             return exp;
         }
-        if (auto * obj = dyn_cast<BinaryPropertyObject>(property_object_table[prop_code])) {
+        if (auto * obj = dyn_cast<BinaryPropertyObject>(propObj)) {
             int val_code = obj->GetPropertyValueEnumCode(canon);
             // Standardize binary properties to positive form with an empty value string.
             if (val_code < 0) return exp;
