@@ -40,6 +40,10 @@ namespace UCD {
     
 std::string canonicalize_value_name(const std::string & prop_or_val);
 
+// Recursive property resolution is implemented using a grep lines function
+// that takes a text buffer and returns a vector of matched line numbers.
+typedef std::vector<uint64_t> (*GrepLinesFunctionType)(re::RE *, const char * buf, size_t bufSize);
+
 class PropertyObject {
 public:
     friend const UnicodeSet grep::GetCodepointSetMatchingPattern(PropertyObject *, re::RE *);
@@ -148,6 +152,7 @@ public:
     iterator end() const {
         return property_value_enum_names.cend();
     }
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE *, GrepLinesFunctionType);
 
 private:
     const unsigned independent_enum_count;
@@ -248,7 +253,7 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType);
     const UnicodeSet GetReflexiveSet() const override;
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
 

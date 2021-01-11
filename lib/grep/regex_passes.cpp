@@ -7,6 +7,7 @@
 #include <grep/regex_passes.h>
 
 #include <grep/grep_name_resolve.h>
+#include <grep/grep_engine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <re/adt/adt.h>
 #include <re/analysis/validation.h>
@@ -42,7 +43,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     r = resolveEscapeNames(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
     r = UCD::linkProperties(r);
-    r = UCD::resolveProperties(r);
+    r = UCD::resolveProperties(r, grep::lineNumGrep);
     //r = resolveBoundaryProperties(r);
     r = UCD::standardizeProperties(r);
     r = UCD::externalizeProperties(r);

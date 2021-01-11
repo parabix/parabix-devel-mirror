@@ -1303,7 +1303,7 @@ void LineNumberAccumulator::accumulate_match(const size_t lineNum, char * /* lin
     mLineNums.push_back(lineNum);
 }
 
-std::vector<uint64_t> lineNumGrep(re::RE * pattern, char * buffer, size_t bufSize) {
+std::vector<uint64_t> lineNumGrep(re::RE * pattern, const char * buffer, size_t bufSize) {
       LineNumberAccumulator accum;
       CPUDriver driver("driver");
       grep::InternalSearchEngine engine(driver);

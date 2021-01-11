@@ -16,6 +16,9 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <unicode/data/PropertyObjectTable.h>
 #include <llvm/ADT/STLExtras.h>
+#include <util/aligned_allocator.h>
+#include <re/adt/adt.h>
+#include <re/analysis/re_analysis.h>
 
 using namespace llvm;
 
@@ -66,6 +69,29 @@ const UnicodeSet PropertyObject::GetReflexiveSet() const {
 const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_enum_val) const {
     assert (property_enum_val >= 0);
     return *(property_value_sets[property_enum_val]);
+}
+
+const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    AlignedAllocator<char, 32> alloc;
+    std::vector<std::string> accumulatedValues;
+
+    const std::string & str = GetPropertyValueGrepString();
+
+    const unsigned segmentSize = 8;
+    const auto n = str.length();
+    const auto w = 256 * segmentSize;
+    const auto m = w - (n % w);
+
+    char * aligned = alloc.allocate(n + m, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, m);
+    std::vector<uint64_t> matchedEnums = grep(re, aligned, n);
+    alloc.deallocate(aligned, 0);
+    UCD::UnicodeSet a;
+    for (const auto v : matchedEnums) {
+        a.insert(GetCodepointSet(v % GetEnumCount()));
+    }
+    return a;
 }
 
 std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
@@ -281,6 +307,20 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
         return result_set;
     }
 }
+
+const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    UCD::UnicodeSet matched(*re::matchableCodepoints(re) & mSelfCodepointSet);
+    if (re::matchesEmptyString(re)) {
+        matched.insert(mNullCodepointSet);
+    }
+    const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
+    std::vector<uint64_t> matchedLines = grep(re, mStringBuffer, bufSize);
+    for (const auto v : matchedLines) {
+        matched.insert(mExplicitCps[v]);
+    }
+    return matched;
+}
+
 
 const UnicodeSet StringPropertyObject::GetReflexiveSet() const {
     return mSelfCodepointSet;

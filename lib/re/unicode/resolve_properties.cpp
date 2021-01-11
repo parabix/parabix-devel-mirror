@@ -9,6 +9,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <re/adt/adt.h>
 #include <re/adt/re_name.h>
+#include <re/parse/parser.h>
 #include <re/compile/re_compiler.h>
 #include <re/unicode/re_name_resolve.h>
 #include <re/unicode/boundaries.h>
@@ -16,6 +17,7 @@
 #include <unicode/data/PropertyObjects.h>
 #include <unicode/data/PropertyObjectTable.h>
 #include <unicode/data/PropertyValueAliases.h>
+#include <util/aligned_allocator.h>
 
 using namespace UCD;
 using namespace re;
@@ -161,8 +163,12 @@ private:
 RE * PropertyResolver::resolveCC (std::string value, bool is_negated) {
     RE * resolved = nullptr;
     if ((value.length() > 0) && (value[0] == '/')) {
-        assert(false && "UCD::resolveUnicodeSet(re::Name *) does not support regex name resolution, use grep::resolveUnicodeSet(re::Name *) instead");
-        llvm::report_fatal_error("");
+        re::RE * propValueRe = re::RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
+        if (auto p = dyn_cast<UCD::EnumeratedPropertyObject>(mPropObj)) {
+            return makeCC(p->GetCodepointSetMatchingPattern(propValueRe, mGrep), &cc::Unicode);
+        } else if (auto p = dyn_cast<UCD::StringPropertyObject>(mPropObj)) {
+            return makeCC(p->GetCodepointSetMatchingPattern(propValueRe, mGrep), &cc::Unicode);
+        }
     }
     else if ((value.length() > 0) && (value[0] == '@')) {
         // resolve a @property@ or @identity@ expression.
@@ -400,7 +406,7 @@ struct PropertyExternalizer : public RE_Transformer {
                 else externName = makeName(id, val_str, Name::Type::UnicodeProperty);
         } else {
             if (val_str == "")
-                externName = makeName(id, Name::Type::ZeroWidth);
+                externName = makeName("\\b{g}", Name::Type::ZeroWidth);
                 else externName = makeName(id, val_str, Name::Type::ZeroWidth);
         }
         externName->setDefinition(exp->getResolvedRE());
