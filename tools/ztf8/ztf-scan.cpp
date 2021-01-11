@@ -835,6 +835,7 @@ void generateKeyProcessingLoops(BuilderRef b,
         BasicBlock * const tryStore = b->CreateBasicBlock("tryStore");
         BasicBlock * const storeKey = b->CreateBasicBlock("storeKey");
         BasicBlock * const nextKey = b->CreateBasicBlock("nextKey");
+        BasicBlock * const writePrefix = b->CreateBasicBlock("writePrefix");
         BasicBlock * loopExit;
         if (length == maxLength) {
             loopExit = keysDone;
@@ -846,6 +847,10 @@ void generateKeyProcessingLoops(BuilderRef b,
         Value * extensionMapPtr = b->getScalarFieldPtr("prefixMapTable");
         Value * keyWordBasePtr = b->getInputStreamBlockPtr("symbolMarks" + (length > lo ? std::to_string(length-lo) : ""), sz_ZERO, strideBlockOffset);
         keyWordBasePtr = b->CreateBitCast(keyWordBasePtr, sw.pointerTy);
+
+        Value * symSeqBasePtr = b->getInputStreamBlockPtr("symSequenceMarks" + (length > lo ? std::to_string(length-lo) : ""), sz_ZERO, strideBlockOffset);
+        symSeqBasePtr = b->CreateBitCast(symSeqBasePtr, sw.pointerTy);
+
         b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMasks[length-lo], sz_ZERO), loopExit, keyProcessingLoop);
 
         b->SetInsertPoint(keyProcessingLoop);
@@ -856,10 +861,24 @@ void generateKeyProcessingLoops(BuilderRef b,
         Value * keyWordIdx = b->CreateCountForwardZeroes(keyMaskPhi, "keyWordIdx");
 
         Value * nextKeyWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(keyWordBasePtr, keyWordIdx)), sizeTy);
+
+        Value * nextConsecSym = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(symSeqBasePtr, keyWordIdx)), sizeTy);
+
         Value * theKeyWord = b->CreateSelect(b->CreateICmpEQ(keyWordPhi, sz_ZERO), nextKeyWord, keyWordPhi);
+        //b->CallPrintInt("theKeyWord", theKeyWord);
+        nextConsecSym = b->CreateAnd(theKeyWord, nextConsecSym);
+        //b->CallPrintInt("nextConsecSym", nextConsecSym);
+
         Value * keyWordPos = b->CreateAdd(stridePos, b->CreateMul(keyWordIdx, sw.WIDTH));
         Value * keyMarkPosInWord = b->CreateCountForwardZeroes(theKeyWord);
+
+        Value * prefixSuppress = b->CreateCountForwardZeroes(nextConsecSym);
+        Value * prefixPos = b->CreateAdd(keyWordPos, prefixSuppress, "suppressPrefixPos");
+
         Value * keyMarkPos = b->CreateAdd(keyWordPos, keyMarkPosInWord, "keyEndPos");
+        //b->CallPrintInt("keyMarkPos", keyMarkPos);
+        //b->CallPrintInt("prefixPos", prefixPos);
+
         Value * const hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
 
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -942,7 +961,13 @@ void generateKeyProcessingLoops(BuilderRef b,
         }
         // Now prepare the prefix - PREFIX_BASE + ... + remaining hash bits.
         Value * ZTF_prefix = b->CreateTrunc(b->CreateAdd(lg.PREFIX_BASE, curHash, "ZTF_prefix"), b->getInt8Ty());
+
+        //suppress prefix write if the length of previous symbol is same as current symbol
+        //skip prefix if previous prefix is same as the current prefix? -> prefix memoization and comparison needed
+        b->CreateCondBr(b->CreateICmpEQ(curPos, prefixPos), writePrefix, nextKey);
+        b->SetInsertPoint(writePrefix);
         b->CreateStore(ZTF_prefix, b->getRawOutputPointer("encodedBytes", curPos));
+
         b->CreateBr(nextKey);
 
         b->SetInsertPoint(tryStore);
@@ -990,6 +1015,7 @@ FixedLengthCompression::FixedLengthCompression(BuilderRef b,
                                                StreamSet * const byteData,
                                                StreamSet * hashValues,
                                                std::vector<StreamSet *> symbolMarks,
+                                               std::vector<StreamSet *> symSequenceMarks,
                                                StreamSet * compressionMask,
                                                StreamSet * encodedBytes,
                                                unsigned strideBlocks)
@@ -999,6 +1025,7 @@ mEncodingScheme(encodingScheme), mLo(lo), mHi(lo + symbolMarks.size() - 1)  {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
     for (unsigned i = 0; i < symbolMarks.size(); i++) {
         mInputStreamSets.emplace_back("symbolMarks" + (i > 0 ? std::to_string(i) : ""), symbolMarks[i]);
+        mInputStreamSets.emplace_back("symSequenceMarks" + (i > 0 ? std::to_string(i) : ""), symSequenceMarks[i]);
     }
     if (DelayedAttribute) {
         mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );

@@ -129,7 +129,8 @@ public:
                     unsigned groupNo,
                  StreamSet * symbolRun, StreamSet * const lengthBixNum,
                  StreamSet * overflow,
-                 StreamSet * selected);
+                 StreamSet * selected,
+                 StreamSet * longSymSequence);
 protected:
     void generatePabloMethod() override;
     EncodingInfo & mEncodingScheme;

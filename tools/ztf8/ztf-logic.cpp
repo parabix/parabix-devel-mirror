@@ -317,12 +317,14 @@ LengthGroupSelector::LengthGroupSelector(BuilderRef b,
                            StreamSet * symbolRun,
                            StreamSet * const lengthBixNum,
                            StreamSet * overflow,
-                           StreamSet * selected)
+                           StreamSet * selected,
+                           StreamSet * longSymSequence)
 : PabloKernel(b, "LengthGroupSelector" + LengthSelectorSuffix(encodingScheme, groupNo, lengthBixNum),
               {Binding{"symbolRun", symbolRun, FixedRate(), LookAhead(1)},
                   Binding{"lengthBixNum", lengthBixNum},
                   Binding{"overflow", overflow}},
-              {Binding{"selected", selected}}), mEncodingScheme(encodingScheme), mGroupNo(groupNo) { }
+              {Binding{"selected", selected},
+              Binding{"longSymSequence", longSymSequence}}), mEncodingScheme(encodingScheme), mGroupNo(groupNo) { }
 
 void LengthGroupSelector::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -333,6 +335,7 @@ void LengthGroupSelector::generatePabloMethod() {
     PabloAST * runFinal = pb.createAnd(run, pb.createNot(pb.createLookahead(run, 1)));
     runFinal = pb.createAnd(runFinal, pb.createNot(overflow));
     Var * groupStreamVar = getOutputStreamVar("selected");
+    Var * symSequenceVar = getOutputStreamVar("longSymSequence");
     LengthGroupInfo groupInfo = mEncodingScheme.byLength[mGroupNo];
     // Run index codes count from 0 on the 2nd byte of a symbol.
     // So the length is 2 more than the bixnum.
@@ -341,7 +344,13 @@ void LengthGroupSelector::generatePabloMethod() {
     unsigned hi = groupInfo.hi;
     std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
     PabloAST * groupStream = pb.createAnd3(bnc.UGE(lengthBixNum, lo - offset), bnc.ULE(lengthBixNum, hi - offset), runFinal, groupName);
+    PabloAST * longestSymSequence = pb.createZeroes();
+    for (unsigned i = 1; i <= lo; i++) {
+        PabloAST * symbolSequence = pb.createAnd(groupStream, pb.createAdvance(groupStream, lo*i));
+        longestSymSequence = pb.createOr(longestSymSequence, symbolSequence);
+    }
     pb.createAssign(pb.createExtract(groupStreamVar, pb.getInteger(0)), groupStream);
+    pb.createAssign(pb.createExtract(symSequenceVar, pb.getInteger(0)), longestSymSequence);
 }
 
 

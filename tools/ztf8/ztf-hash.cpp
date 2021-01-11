@@ -102,14 +102,17 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * u8bytes = codeUnitStream;
     std::vector<StreamSet *> extractionMasks;
     for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
-        StreamSet * groupMarks = P->CreateStreamSet(1);
-        P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks);
+        StreamSet * groupMarks = P->CreateStreamSet(1);StreamSet * longSymSequence = P->CreateStreamSet(1);
+        P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks, longSymSequence);
+        //P->CreateKernelCall<DebugDisplayKernel>("groupMarks", groupMarks);
+        //P->CreateKernelCall<DebugDisplayKernel>("longSymSequence", longSymSequence);
         StreamSet * extractionMask = P->CreateStreamSet(1);
         StreamSet * input_bytes = u8bytes;
         StreamSet * output_bytes = P->CreateStreamSet(1, 8);
         if (encodingScheme1.byLength[i].lo == encodingScheme1.byLength[i].hi) {
             std::vector<StreamSet *> keyMarks = {groupMarks};
-            P->CreateKernelCall<FixedLengthCompression>(encodingScheme1, encodingScheme1.byLength[i].lo, input_bytes, hashValues, keyMarks, extractionMask, output_bytes);
+            std::vector<StreamSet *> symSequenceMarks = {longSymSequence};
+            P->CreateKernelCall<FixedLengthCompression>(encodingScheme1, encodingScheme1.byLength[i].lo, input_bytes, hashValues, keyMarks, symSequenceMarks, extractionMask, output_bytes);
         } else {
             P->CreateKernelCall<LengthGroupCompression>(encodingScheme1, i, groupMarks, hashValues, input_bytes,  extractionMask, output_bytes);
         }
@@ -175,7 +178,8 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * u8bytes = ztfHash_u8bytes;
     for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
         StreamSet * groupMarks = P->CreateStreamSet(1);
-        P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks);
+        StreamSet * longSymSequence = P->CreateStreamSet(1);
+        P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks, longSymSequence);
         StreamSet * groupDecoded = P->CreateStreamSet(1);
         P->CreateKernelCall<StreamSelect>(groupDecoded, Select(decodedMarks, {i}));
         //P->CreateKernelCall<DebugDisplayKernel>("decodedMarks", decodedMarks);

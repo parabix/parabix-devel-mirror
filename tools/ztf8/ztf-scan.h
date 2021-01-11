@@ -56,6 +56,7 @@ public:
                            StreamSet * const byteData,
                            StreamSet * hashValues,
                            std::vector<StreamSet *> symbolMarks,
+                           std::vector<StreamSet *> symSequenceMarks,
                            StreamSet * compressionMask,
                            StreamSet * encodedBytes,
                            unsigned strideBlocks = 8);
