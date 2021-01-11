@@ -1290,6 +1290,29 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     f(search_buffer, bufferLength, &accum);
 }
 
+class LineNumberAccumulator : public grep::MatchAccumulator {
+public:
+    LineNumberAccumulator() {}
+    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
+    std::vector<uint64_t> && getAccumulatedLines() { return std::move(mLineNums); }
+private:
+    std::vector<uint64_t> mLineNums;
+};
+
+void LineNumberAccumulator::accumulate_match(const size_t lineNum, char * /* line_start */, char * /* line_end */) {
+    mLineNums.push_back(lineNum);
+}
+
+std::vector<uint64_t> lineNumGrep(re::RE * pattern, char * buffer, size_t bufSize) {
+      LineNumberAccumulator accum;
+      CPUDriver driver("driver");
+      grep::InternalSearchEngine engine(driver);
+      engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+      engine.grepCodeGen(pattern);
+      engine.doGrep(buffer, bufSize, accum);
+      return accum.getAccumulatedLines();
+  }
+
 InternalMultiSearchEngine::InternalMultiSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mCaseInsensitive(false),

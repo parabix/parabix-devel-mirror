@@ -293,6 +293,8 @@ private:
     unsigned mNumOfThreads;
 };
 
+std::vector<uint64_t> lineNumGrep(re::RE * pattern, char * buffer, size_t bufSize);
+
 enum class PatternKind {Include, Exclude};
 class InternalMultiSearchEngine {
 public:
