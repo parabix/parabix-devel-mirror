@@ -35,6 +35,8 @@ re::RE * linkProperties(re::RE * r);
 
 re::RE * resolveProperties(re::RE * r, GrepLinesFunctionType grep = nullptr);
 
+re::RE * inlineSimpleProperties(re::RE * r);
+
 /*  Convert all property expression to standardized form. */
 re::RE * standardizeProperties(re::RE * r);
 

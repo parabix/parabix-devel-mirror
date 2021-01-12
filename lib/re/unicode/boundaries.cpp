@@ -70,7 +70,7 @@ class GraphemeModeTransformer : public RE_Transformer {
 public:
     GraphemeModeTransformer(bool inGraphemeMode = true) : RE_Transformer("ResolveGraphemeMode"),
     mGraphemeMode(inGraphemeMode),
-    mGCB(makePropertyExpression(PropertyExpression::Kind::Boundary, "g"))
+    mGCB(makeBoundaryExpression("g"))
     {}
     
     RE * transformName(Name * n) override {
@@ -224,12 +224,10 @@ RE * EnumeratedPropertyBoundary(UCD::EnumeratedPropertyObject * enumObj) {
     unsigned enum_count = enumObj->GetEnumCount();
     std::vector<RE *> assertions;
     auto prop = enumObj->getPropertyCode();
-    PropertyExpression::Kind kind = PropertyExpression::Kind::Codepoint;
-    PropertyExpression::Operator op = PropertyExpression::Operator::Eq;
     std::vector<RE *> alts;
     for (unsigned j = 0; j < enum_count; j++) {
         std::string enumVal = enumObj->GetValueEnumName(j);
-        RE * expr = makePropertyExpression(kind, UCD::getPropertyFullName(prop), op, enumVal);
+        RE * expr = makePropertyExpression(UCD::getPropertyFullName(prop), enumVal);
         alts.push_back(makeSeq({notBehind(expr), Ahead(expr)}));
         alts.push_back(makeSeq({Behind(expr), notAhead(expr)}));
     }
@@ -261,11 +259,18 @@ public:
             if ((propExpr->getValueString() == "") && isa<UCD::EnumeratedPropertyObject>(obj)) {
                 return EnumeratedPropertyBoundary(cast<UCD::EnumeratedPropertyObject>(obj));
             }
-            auto pe = makePropertyExpression(PropertyExpression::Kind::Codepoint,
-                                                                propExpr->getPropertyIdentifier(),
-                                                                propExpr->getOperator(),
-                                                                propExpr->getValueString());
-            return pe;
+            auto pe = makePropertyExpression(propExpr->getPropertyIdentifier(), propExpr->getValueString());
+            RE * a = makeLookAheadAssertion(pe);
+            RE * na = makeNegativeLookAheadAssertion(pe);
+            RE * b = makeLookBehindAssertion(pe);
+            RE * nb = makeNegativeLookBehindAssertion(pe);
+            RE * resolved = nullptr;
+            if (propExpr->getOperator() == PropertyExpression::Operator::NEq) {
+                resolved = makeAlt({makeSeq({b, a}), makeSeq({nb, na})});
+            } else {
+                resolved = makeAlt({makeSeq({b, na}), makeSeq({nb, a})});
+            }
+            return resolved;
         }
         RE_Compiler::UnsupportedRE(Printer_RE::PrintRE(propExpr));
     }

@@ -211,11 +211,14 @@ RE * PropertyResolver::resolveBoundary (std::string val, bool is_negated) {
             resolved = makeDiff(makeAny(), resolved);
         }
     } else {
-        RE * codepointRE = resolveCC(val, is_negated);
-        RE * a = makeLookAheadAssertion(codepointRE);
-        RE * na = makeNegativeLookAheadAssertion(codepointRE);
-        RE * b = makeLookBehindAssertion(codepointRE);
-        RE * nb = makeNegativeLookBehindAssertion(codepointRE);
+        std::string propName = getPropertyFullName(static_cast<property_t>(mPropCode));
+        PropertyExpression * codepointProp = makePropertyExpression(propName, val);
+        codepointProp->setPropertyCode(mPropCode);
+        codepointProp->setResolvedRE(resolveCC(val, false));
+        RE * a = makeLookAheadAssertion(codepointProp);
+        RE * na = makeNegativeLookAheadAssertion(codepointProp);
+        RE * b = makeLookBehindAssertion(codepointProp);
+        RE * nb = makeNegativeLookBehindAssertion(codepointProp);
         if (is_negated) {
             resolved = makeAlt({makeSeq({b, a}), makeSeq({nb, na})});
         } else {
@@ -322,7 +325,7 @@ struct PropertyStandardization : public RE_Transformer {
             bool ge_0 = (op == PropertyExpression::Operator::GEq) && (val_code == 0);
             bool le_count = (op == PropertyExpression::Operator::LEq) && (val_code == enum_count);
             if (ge_0 || le_count) {  // always true cases
-                return makePropertyExpression(PropertyExpression::Kind::Codepoint, "ANY");
+                return makeAny();
             }
             bool le_0 = (op == PropertyExpression::Operator::LEq) && (val_code == 0);
             bool ge_count = (op == PropertyExpression::Operator::GEq) && (val_code == enum_count);
@@ -382,6 +385,33 @@ RE * standardizeProperties(RE * r) {
     return PropertyStandardization().transformRE(r);
 }
 
+struct SimplePropertyInliner : public RE_Transformer {
+    const int MAX_CC_SIZE_TO_INLINE = 1;
+    const int MAX_BOUNDARY_ALTS_TO_INLINE = 2;
+    SimplePropertyInliner() : RE_Transformer("SimplePropertyInliner") {}
+    RE * transformPropertyExpression (PropertyExpression * exp) override {
+        if (exp->getKind() == PropertyExpression::Kind::Codepoint) {
+            if (CC * cc = dyn_cast<CC>(exp->getResolvedRE())) {
+                if (cc->size() <= MAX_CC_SIZE_TO_INLINE) {
+                    return cc;
+                }
+            }
+        }
+        else {
+            if (Alt * a = dyn_cast<Alt>(exp->getResolvedRE())) {
+                if (a->size() <= MAX_BOUNDARY_ALTS_TO_INLINE) {
+                    return a;
+                }
+            }
+        }
+        return exp;
+    }
+};
+
+RE * inlineSimpleProperties(RE * r) {
+    return SimplePropertyInliner().transformRE(r);
+}
+
 struct PropertyExternalizer : public RE_Transformer {
     PropertyExternalizer() : RE_Transformer("PropertyExternalizer") {}
     RE * transformPropertyExpression (PropertyExpression * exp) override {
@@ -399,11 +429,11 @@ struct PropertyExternalizer : public RE_Transformer {
         if (exp->getKind() == PropertyExpression::Kind::Codepoint) {
             if (val_str == "")
                 externName = makeName(id, Name::Type::UnicodeProperty);
-                else externName = makeName(id, val_str, Name::Type::UnicodeProperty);
+            else externName = makeName(id, val_str, Name::Type::UnicodeProperty);
         } else {
-            if (val_str == "")
-                externName = makeName("\\b{g}", Name::Type::ZeroWidth);
-                else externName = makeName(id, val_str, Name::Type::ZeroWidth);
+            id = "\\b{" + id + "}";
+            if (val_str == "" ) externName = makeName(id, Name::Type::ZeroWidth);
+            else externName = makeName(id, val_str, Name::Type::ZeroWidth);
         }
         externName->setDefinition(exp->getResolvedRE());
         return externName;

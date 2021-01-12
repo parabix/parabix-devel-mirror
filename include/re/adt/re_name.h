@@ -268,9 +268,16 @@ private:
 };
 
 
-inline RE * makePropertyExpression(PropertyExpression::Kind k, std::string ident, PropertyExpression::Operator op = PropertyExpression::Operator::Eq, std::string v = "") {
+inline PropertyExpression * makePropertyExpression(PropertyExpression::Kind k, std::string ident, PropertyExpression::Operator op = PropertyExpression::Operator::Eq, std::string v = "") {
     return PropertyExpression::Create(k, ident, op, v);
 }
 
+inline PropertyExpression * makePropertyExpression(std::string ident, std::string v = "", PropertyExpression::Operator op = PropertyExpression::Operator::Eq) {
+    return PropertyExpression::Create(PropertyExpression::Kind::Codepoint, ident, op, v);
+}
+
+inline PropertyExpression * makeBoundaryExpression(std::string ident, std::string v = "", PropertyExpression::Operator op = PropertyExpression::Operator::Eq) {
+    return PropertyExpression::Create(PropertyExpression::Kind::Boundary, ident, op, v);
+}
 }
 #endif // RE_NAME_H
