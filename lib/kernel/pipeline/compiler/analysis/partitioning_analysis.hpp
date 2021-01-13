@@ -507,6 +507,8 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     PartitionCount = num_vertices(S);
 
+    flat_set<std::pair<unsigned, unsigned>> targets;
+
     for (unsigned i = 1; i < PartitionCount; ++i) {
         add_edge(0, i, S);
         for (const auto producer : S[i]) {
@@ -536,7 +538,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                             assert (p != partitionMap.end());
                             const auto j = p->second;
                             if (i != j) {
-                                add_edge(i, j, streamSet, S);
+                                targets.emplace(j, streamSet);
                             }
                         }
                     }
@@ -544,6 +546,10 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
             }
         }
+        for (const auto & t : targets) {
+            add_edge(i, t.first, t.second, S);
+        }
+        targets.clear();
     }
 
     END_SCOPED_REGION

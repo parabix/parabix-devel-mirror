@@ -189,6 +189,8 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// KERNEL LOOP ENTRY
     /// -------------------------------------------------------------------------------------
 
+    #warning fix this to determine the initial (non-linear) number of strides
+
     b->SetInsertPoint(mKernelLoopEntry);
     if (kernelRequiresSynchronization) {
         determineNumOfLinearStrides(b);
@@ -370,31 +372,33 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::verifyExpectedNumOfStrides(BuilderRef b) {
 
-//    Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
-//    Value * const numOfStrides = mTotalNumOfStridesAtExitPhi;
+    if (ExternallySynchronized) return;
+
+    // TODO: would have to scale by external base segment size to use this assertion
+
+    Value * const numOfStrides = mTotalNumOfStridesAtExitPhi; assert (numOfStrides);
+    Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
 
     if (mIsPartitionRoot) {
 
-//        const auto & min = MinimumNumOfStrides[mKernelId];
-//        assert (min.denominator() == 1);
-//        const auto & max = MaximumNumOfStrides[mKernelId];
-//        assert (max.denominator() == 1);
+        const auto & min = MinimumNumOfStrides[mKernelId];
+        assert (min.denominator() == 1);
+        const auto & max = MaximumNumOfStrides[mKernelId];
+        assert (max.denominator() == 1);
 
-//        ConstantInt * const minRange = b->getSize(min.numerator());
-//        Value * const notTooFew = b->CreateICmpUGE(numOfStrides, minRange);
-//        ConstantInt * const maxRange = b->getSize(max.numerator());
-//        Value * const notTooMany = b->CreateICmpULE(numOfStrides, maxRange);
-//        Value * const withinRange = b->CreateAnd(notTooFew, notTooMany);
+        ConstantInt * const minRange = b->getSize(min.numerator());
+        Value * const notTooFew = b->CreateICmpUGE(numOfStrides, minRange);
+        ConstantInt * const maxRange = b->getSize(max.numerator());
+        Value * const notTooMany = b->CreateICmpULE(numOfStrides, maxRange);
+        Value * const withinRange = b->CreateAnd(notTooFew, notTooMany);
 
-//        Value * const valid = b->CreateOr(withinRange, terminated);
+        Value * const valid = b->CreateOr(withinRange, terminated);
 
-//        b->CreateAssert(valid, "%s was expected to perform [%" PRIu64 ",%" PRIu64 "] "
-//                               "strides but only executed %" PRIu64,
-//                        mCurrentKernelName, minRange, maxRange, numOfStrides);
+        b->CreateAssert(valid, "%s was expected to perform [%" PRIu64 ",%" PRIu64 "] "
+                               "strides but only executed %" PRIu64,
+                        mCurrentKernelName, minRange, maxRange, numOfStrides);
 
     } else {
-        Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
-        Value * const numOfStrides = mTotalNumOfStridesAtExitPhi;
 
         Value * const expectedNumOfStrides =
             b->CreateICmpEQ(numOfStrides, mMaximumNumOfStrides);

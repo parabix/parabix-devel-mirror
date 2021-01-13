@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <queue>
+#include <random>
 #include <z3.h>
 #include <util/maxsat.hpp>
 #include <assert.h>
@@ -54,7 +55,7 @@ public:
 
         P.computeDataFlowRates();
 
-        P.determineBufferLayout();
+        P.determineBufferLayout(b);
 
         P.identifyTerminationChecks();
         P.determinePartitionJumpIndices();
@@ -142,7 +143,7 @@ private:
 
     SchedulingGraph makeIntraPartitionSchedulingGraph(const PartitionGraph & P, const unsigned currentPartitionId) const;
 
-    PartitionDependencyGraph makePartitionDependencyGraph(const PartitionData & currentPartition) const;
+    PartitionDependencyGraph makePartitionDependencyGraph(const unsigned numOfKernels, const SchedulingGraph & S) const;
 
     PartitionDataflowGraph analyzeDataflowBetweenPartitions(PartitionGraph & P) const;
 
@@ -157,7 +158,7 @@ private:
     void addStreamSetsToBufferGraph(BuilderRef b);
     void generateInitialBufferGraph();
 
-    void determineBufferLayout();
+    void determineBufferLayout(BuilderRef b);
 
     void identifyLinearBuffers();
     void identifyBufferLocality();

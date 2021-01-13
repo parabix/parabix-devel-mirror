@@ -8,31 +8,6 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyHardPartitionConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
-PartitionConstraintGraph PipelineAnalysis::identifyHardPartitionConstraints() const {
-
-    PartitionConstraintGraph H(PartitionCount);
-
-    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
-        const BufferNode & bn = mBufferGraph[streamSet];
-        if (bn.Locality == BufferLocality::HardNonLocal) {
-            const auto producer = parent(streamSet, mBufferGraph);
-            const auto producerPartitionId = KernelPartitionId[producer];
-            for (const auto data : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-                const auto consumer = target(data, mBufferGraph);
-                const auto consumerPartitionId = KernelPartitionId[consumer];
-                assert (producerPartitionId <= consumerPartitionId);
-                add_edge(producerPartitionId, consumerPartitionId, H);
-
-            }
-        }
-    }
-
-    return H;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief identifyHardPartitionConstraints
- ** ------------------------------------------------------------------------------------------------------------- */
 LengthConstraintGraph PipelineAnalysis::identifyLengthEqualityAssertions(BufferGraph & G) const {
 
     LengthConstraintGraph H(LastStreamSet + 1);
@@ -58,6 +33,547 @@ LengthConstraintGraph PipelineAnalysis::identifyLengthEqualityAssertions(BufferG
 
     for (const LengthAssertion & la : mLengthAssertions) {
         add_edge(offset(la[0]), offset(la[1]), H);
+    }
+
+    return H;
+}
+
+#ifdef USE_Z3_MINMAX_OPTIMIZE_FOR_DATAFLOW_ANALYSIS
+
+// The advantage of using max-sat formulas instead of actual Z3 soft constraints is
+// that we can play with the timeout to perform a pseudo-hill-climbing approach w.r.t.
+// the number of soft constraints we satisfy. The disadvantage, however, is we
+// dramatically increase the number of clauses in the formula Z3 considers.
+
+#define USE_MAX_SAT_FOR_DATAFLOW_ANALYSIS
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeParitionDataFlowRates
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::computeDataFlowRates() {
+
+    using Bound = std::array<Rational, 2>;
+
+    errs() << "starting dataflow\n";
+
+    const auto dataflow_start = std::chrono::high_resolution_clock::now();
+
+    const auto cfg = Z3_mk_config();
+    Z3_set_param_value(cfg, "model", "true");
+    Z3_set_param_value(cfg, "proof", "false");
+
+    const auto ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
+    const auto solver = Z3_mk_optimize(ctx);
+    Z3_optimize_inc_ref(ctx, solver);
+
+    auto hard_assert = [&](Z3_ast c) {
+        Z3_optimize_assert(ctx, solver, c);
+    };
+
+    #ifdef USE_MAX_SAT_FOR_DATAFLOW_ANALYSIS
+    std::vector<Z3_ast> assumptions;
+    #endif
+    auto soft_assert = [&](Z3_ast c) {
+        #ifdef USE_MAX_SAT_FOR_DATAFLOW_ANALYSIS
+        assumptions.push_back(c);
+        #else
+        Z3_optimize_assert_soft(ctx, solver, c, "1", nullptr);
+        #endif
+    };
+
+    auto constant_real = [&](const Rational & value) {
+        return Z3_mk_real(ctx, value.numerator(), value.denominator());
+    };
+
+    const auto ONE = constant_real(1);
+
+    const auto TWO = constant_real(2);
+
+    auto multiply =[&](Z3_ast X, Z3_ast Y) {
+        Z3_ast args[2] = { X, Y };
+        return Z3_mk_mul(ctx, 2, args);
+    };
+
+    auto sub =[&](Z3_ast X, Z3_ast Y) {
+        Z3_ast args[2] = { X, Y };
+        return Z3_mk_sub(ctx, 2, args);
+    };
+
+    auto add =[&](Z3_ast X, Z3_ast Y) {
+        Z3_ast args[2] = { X, Y };
+        return Z3_mk_add(ctx, 2, args);
+    };
+
+    auto mk_upperbound = [&](Z3_ast strides, const Rational & rate) {
+        return multiply(strides, constant_real(rate));
+    };
+
+    auto mk_lowerbound = [&](Z3_ast strides, const Rational & rate) {
+        if (rate.numerator() == 0) {
+            return ONE;
+        } else {
+            return mk_upperbound(strides, rate);
+        }
+    };
+
+    auto min_one_constant_real = [&](const Rational & rate) {
+        if (rate.numerator() == 0) {
+            return ONE;
+        } else {
+            return constant_real(rate);
+        }
+    };
+
+    enum {
+        LowerBound = 0,
+        UpperBound = 1
+    };
+
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    std::vector<std::array<Z3_ast, 2>> variables(LastStreamSet + 1);
+
+    std::vector<Bound> bounds(PipelineOutput + 1);
+
+    BEGIN_SCOPED_REGION
+
+    const auto intType = Z3_mk_int_sort(ctx);
+
+//    auto constant_int = [&](const Rational & value) {
+//        assert (value.denominator() == 1);
+//        return Z3_mk_int(ctx, value.numerator(), intType);
+//    };
+
+    auto make_partition_vars = [&](const unsigned first, const unsigned last) {
+
+        const auto partitionId = KernelPartitionId[first];
+
+        errs() << "Partition " << partitionId << " [" << first << "," << last << ")\n";
+
+        Z3_optimize_push(ctx, solver);
+
+        const auto & expectedBase = ExpectedNumOfStrides[first];
+        assert (expectedBase.numerator() >= 1);
+        const auto expected = constant_real(expectedBase);
+
+        auto root_lb = expected;
+        auto root_ub = expected;
+
+        if (in_degree(first, mBufferGraph) > 0) {
+
+            root_lb = Z3_mk_fresh_const(ctx, "lb", intType);
+            root_ub = Z3_mk_fresh_const(ctx, "ub", intType);
+
+            Z3_optimize_minimize(ctx, solver, root_lb);
+            Z3_optimize_maximize(ctx, solver, root_ub);
+
+            hard_assert(Z3_mk_ge(ctx, root_lb, ONE));
+
+            hard_assert(Z3_mk_le(ctx, root_lb, root_ub));
+
+//            hard_assert(Z3_mk_le(ctx, root_lb, expected));
+//            hard_assert(Z3_mk_ge(ctx, root_ub, expected));
+
+            const auto maximum = constant_real(expectedBase * Rational{2});
+            hard_assert(Z3_mk_le(ctx, root_ub, maximum));
+        }
+
+        auto & root = variables[first];
+        root[LowerBound] = root_lb;
+        root[UpperBound] = root_ub;
+
+        for (auto kernel = first + 1U; kernel <= last; ++kernel) {
+            const auto r = ExpectedNumOfStrides[kernel] / expectedBase;
+            auto lb = root_lb;
+            auto ub = root_ub;
+            if (LLVM_UNLIKELY(r != Rational{1})) {
+                const auto ratio = constant_real(r);
+                lb = multiply(lb, ratio);
+                ub = multiply(ub, ratio);
+            }
+            auto & v = variables[kernel];
+            v[LowerBound] = lb;
+            v[UpperBound] = ub;
+        }
+
+        bool hasConstraints = false;
+
+        for (auto kernel = first; kernel <= last; ++kernel) {
+
+            const auto & stridesPerSegmentVar = variables[kernel];
+
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                const auto streamSet = source(input, mBufferGraph);
+                const auto producer = parent(streamSet, mBufferGraph);
+                const auto producerPartitionId = KernelPartitionId[producer];
+
+                if (producerPartitionId != partitionId) {
+                    const BufferPort & inputRate = mBufferGraph[input];
+                    const Binding & binding = inputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+
+                    const auto & outputVar = variables[streamSet];
+
+                    assert (producerPartitionId < partitionId);
+                    assert (outputVar[LowerBound]);
+                    assert (outputVar[UpperBound]);
+
+                    Z3_ast minInputRateVar = nullptr;
+                    Z3_ast maxInputRateVar = nullptr;
+
+                    if (LLVM_LIKELY(rate.isFixed())) {
+                        const auto fixedRateVal = constant_real(inputRate.Minimum);
+                        minInputRateVar = multiply(stridesPerSegmentVar[LowerBound], fixedRateVal);
+                        maxInputRateVar = multiply(stridesPerSegmentVar[UpperBound], fixedRateVal);
+                    } else if (LLVM_UNLIKELY(rate.isGreedy())) {
+                        minInputRateVar = outputVar[LowerBound];
+                        maxInputRateVar = outputVar[UpperBound];
+                    } else {
+                        minInputRateVar = mk_lowerbound(stridesPerSegmentVar[LowerBound], inputRate.Minimum);
+                        maxInputRateVar = mk_upperbound(stridesPerSegmentVar[UpperBound], inputRate.Maximum);
+                    }
+
+                    auto minOutputRateVar = outputVar[LowerBound];
+                    auto maxOutputRateVar = outputVar[UpperBound];
+
+                    soft_assert(Z3_mk_le(ctx, minInputRateVar, minOutputRateVar));
+
+                    const auto x2_diff = multiply(sub(minOutputRateVar, minInputRateVar), TWO);
+
+                    soft_assert(Z3_mk_le(ctx, maxInputRateVar, add(maxOutputRateVar, x2_diff)));
+
+
+
+//                    soft_assert(Z3_mk_le(ctx, minInputRateVar, maxOutputRateVar));
+
+
+//                    const auto lb = Z3_mk_div(ctx, minOutputRateVar, maxInputRateVar);
+//                    const auto ub = Z3_mk_div(ctx, maxOutputRateVar, minInputRateVar);
+
+
+////                    soft_assert(Z3_mk_eq(ctx, lb, ONE));
+
+////                    soft_assert(Z3_mk_eq(ctx, ub, ONE));
+
+//                    Z3_optimize_maximize(ctx, solver, lb);
+//                    Z3_optimize_minimize(ctx, solver, ub);
+
+//                    soft_assert(Z3_mk_le(ctx, lb, ub));
+
+//                    soft_assert(Z3_mk_le(ctx, ub, ONE));
+
+//                    soft_assert(Z3_mk_eq(ctx, stridesPerSegmentVar[LowerBound], lb));
+//                    soft_assert(Z3_mk_eq(ctx, stridesPerSegmentVar[UpperBound], ub));
+
+                    hasConstraints = true;
+                }
+            }
+        }
+
+        errs() << Z3_optimize_to_string(ctx, solver) << "\n";
+
+        #ifdef USE_MAX_SAT_FOR_DATAFLOW_ANALYSIS
+        const auto m = Z3_maxsat(ctx, solver, assumptions);
+        errs() << " m=" << m << " of " << assumptions.size() << "\n";
+        #else
+
+        if (LLVM_UNLIKELY(Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE)) {
+            errs() << "Z3 dataflow error: " << "failed to generate dataflow solution" << "\n";
+            exit(-1);
+        }
+
+        #endif
+
+        const auto model = Z3_optimize_get_model(ctx, solver);
+        Z3_model_inc_ref(ctx, model);
+
+        for (auto kernel = first; kernel <= last; ++kernel) {
+
+            const auto & stridesPerSegmentVar = variables[kernel];
+
+            for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
+
+                Z3_ast value;
+
+                if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar[bound], Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+                    report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+                }
+
+                __int64 num, denom;
+                if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+                    report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+                }
+               // assert (num > 0);
+                bounds[kernel][bound] = Rational{num, denom};
+            }
+        }
+
+        Z3_model_dec_ref(ctx, model);
+
+        Z3_optimize_pop(ctx, solver);
+
+        for (auto kernel = first; kernel <= last; ++kernel) {
+            // const auto & stridesPerSegmentVar = variables[kernel];
+
+            const auto & bound = bounds[kernel];
+
+            auto print_rational =[&] (const Rational & r) {
+                errs() << r.numerator() << "/" << r.denominator();
+            };
+
+            errs() << "  Kernel " << kernel << " [";
+            print_rational(bound[LowerBound]);
+            errs() << ",";
+            print_rational(bound[UpperBound]);
+            errs() << "]\n";
+
+            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+                const BufferPort & outputRate = mBufferGraph[output];
+                const Binding & binding = outputRate.Binding;
+                const ProcessingRate & rate = binding.getRate();
+                const auto streamSet = target(output, mBufferGraph);
+
+                Z3_ast minOutputRateVar = nullptr;
+                Z3_ast maxOutputRateVar = nullptr;
+
+                if (LLVM_LIKELY(rate.isFixed())) {
+                    minOutputRateVar = constant_real(bound[LowerBound] * outputRate.Minimum);
+                    maxOutputRateVar = constant_real(bound[UpperBound] * outputRate.Minimum);
+                } else {
+                    minOutputRateVar = min_one_constant_real(bound[LowerBound] * outputRate.Minimum);
+                    assert (minOutputRateVar == ONE);
+                    if (LLVM_UNLIKELY(rate.isUnknown())) {
+                        // TODO: is there a better way to handle unknown outputs? This
+                        // free variable represents the ideal amount of data to transfer
+                        // to subsequent kernels but that isn't very meaningful here.
+                        maxOutputRateVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+                        hard_assert(Z3_mk_le(ctx, minOutputRateVar, maxOutputRateVar));
+                    } else {
+                        maxOutputRateVar = constant_real(bound[UpperBound] * outputRate.Maximum);
+                    }
+                }
+
+                auto & outputVar = variables[streamSet];
+                outputVar[LowerBound] = minOutputRateVar;
+                outputVar[UpperBound] = maxOutputRateVar;
+            }
+
+        }
+
+//        for (auto kernel = first; kernel <= last; ++kernel) {
+//            const auto & stridesPerSegmentVar = variables[kernel];
+
+//            const auto & bound = bounds[kernel];
+
+//            auto print_rational =[&] (const Rational & r) {
+//                errs() << r.numerator() << "/" << r.denominator();
+//            };
+
+//            errs() << "  Kernel " << kernel << " [";
+//            print_rational(bound[LowerBound]);
+//            errs() << ",";
+//            print_rational(bound[UpperBound]);
+//            errs() << "]\n";
+
+//            const auto lb = constant_real(bounds[kernel][LowerBound]);
+//            hard_assert(Z3_mk_eq(ctx, stridesPerSegmentVar[LowerBound], lb));
+
+//            const auto ub = constant_real(bounds[kernel][UpperBound]);
+//            hard_assert(Z3_mk_eq(ctx, stridesPerSegmentVar[UpperBound], ub));
+
+//            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+//                const BufferPort & outputRate = mBufferGraph[output];
+//                const Binding & binding = outputRate.Binding;
+//                const ProcessingRate & rate = binding.getRate();
+//                const auto streamSet = target(output, mBufferGraph);
+
+//                Z3_ast minOutputRateVar = nullptr;
+//                Z3_ast maxOutputRateVar = nullptr;
+
+//                if (LLVM_LIKELY(rate.isFixed())) {
+//                    const auto fixedRateVal = constant_real(outputRate.Minimum);
+//                    minOutputRateVar = multiply(stridesPerSegmentVar[LowerBound], fixedRateVal);
+//                    maxOutputRateVar = multiply(stridesPerSegmentVar[UpperBound], fixedRateVal);
+//                } else {
+//                    minOutputRateVar = mk_lowerbound(stridesPerSegmentVar[LowerBound], outputRate.Minimum);
+//                    if (LLVM_UNLIKELY(rate.isUnknown())) {
+//                        // TODO: is there a better way to handle unknown outputs? This
+//                        // free variable represents the ideal amount of data to transfer
+//                        // to subsequent kernels but that isn't very meaningful here.
+//                        maxOutputRateVar = Z3_mk_fresh_const(ctx, nullptr, realType);
+//                        hard_assert(Z3_mk_le(ctx, minOutputRateVar, maxOutputRateVar));
+//                    } else {
+//                        maxOutputRateVar = mk_upperbound(stridesPerSegmentVar[UpperBound], outputRate.Maximum);
+//                    }
+//                }
+
+//                auto & outputVar = variables[streamSet];
+//                outputVar[LowerBound] = minOutputRateVar;
+//                outputVar[UpperBound] = maxOutputRateVar;
+//            }
+
+//        }
+
+    };
+
+    auto currentPartitionId = KernelPartitionId[firstKernel];
+    auto firstKernelInPartition = firstKernel;
+    for (auto kernel = (firstKernel + 1U); kernel <= lastKernel; ++kernel) {
+        const auto partitionId = KernelPartitionId[kernel];
+        if (partitionId != currentPartitionId) {
+            make_partition_vars(firstKernelInPartition, kernel - 1U);
+            // set the first kernel for the next partition
+            firstKernelInPartition = kernel;
+            currentPartitionId = partitionId;
+        }
+    }
+    if (firstKernelInPartition <= lastKernel) {
+        make_partition_vars(firstKernelInPartition, lastKernel);
+    }
+
+    END_SCOPED_REGION
+
+
+
+
+//    const auto E = identifyLengthEqualityAssertions(mBufferGraph);
+//    for (const auto e : make_iterator_range(edges(E))) {
+//        const auto & A = variables[source(e, mBufferGraph)];
+//        const auto & B = variables[target(e, mBufferGraph)];
+
+//        soft_assert(Z3_mk_eq(ctx, A[LowerBound], B[LowerBound]));
+//        soft_assert(Z3_mk_eq(ctx, A[UpperBound], B[UpperBound]));
+//    }
+
+//    #ifdef USE_MAX_SAT_FOR_DATAFLOW_ANALYSIS
+//    const auto m = Z3_maxsat(ctx, solver, assumptions);
+//    errs() << " m=" << m << " of " << assumptions.size() << "\n";
+//    #else
+
+//    try {
+//        if (LLVM_UNLIKELY(Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE)) {
+//            errs() << "Z3 dataflow error: " << "failed to generate dataflow solution" << "\n";
+//            exit(-1);
+//        }
+//    } catch (const std::runtime_error & e) {
+//        errs() << "Z3 dataflow error: " << e.what() << "\n";
+//        exit(-1);
+//    }
+
+//    #endif
+//    std::vector<Bound> bounds(PipelineOutput + 1);
+
+//    const auto model = Z3_optimize_get_model(ctx, solver);
+//    Z3_model_inc_ref(ctx, model);
+
+//    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+//        const auto & stridesPerSegmentVar = variables[kernel];
+
+//        for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
+
+//            Z3_ast value;
+
+//            if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar[bound], Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+//                report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+//            }
+
+//            __int64 num, denom;
+//            if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+//                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+//            }
+//            if (LLVM_UNLIKELY(num == 0)) {
+//                std::string tmp;
+//                raw_string_ostream out(tmp);
+//                if (bound == LowerBound) {
+//                    out << "Lower";
+//                } else {
+//                    out << "Upper";
+//                }
+//                out << "-bound for kernel " << kernel << " is zero?";
+//                report_fatal_error(out.str());
+//            }
+
+//            bounds[kernel][bound] = Rational{num, denom};
+//        }
+//    }
+
+//    Z3_model_dec_ref(ctx, model);
+
+    Z3_optimize_dec_ref(ctx, solver);
+    Z3_del_context(ctx);
+    Z3_reset_memory();
+
+
+    const auto & b = bounds[firstKernel];
+    auto g = gcd(b[LowerBound], b[UpperBound]);
+    for (auto kernel = firstKernel + 1; kernel <= lastKernel; ++kernel) {
+        const auto & b = bounds[kernel];
+        g = gcd(g, b[LowerBound]);
+        g = gcd(g, b[UpperBound]);
+    }
+    if (LLVM_UNLIKELY(g > Rational{1})) {
+        for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+            auto & r = bounds[kernel];
+            r[LowerBound] /= g;
+            r[UpperBound] /= g;
+        }
+    }
+
+    // Then write them out
+    MinimumNumOfStrides.resize(PipelineOutput + 1);
+    MaximumNumOfStrides.resize(PipelineOutput + 1);
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+        auto & b = bounds[kernel];
+        auto & lb = b[LowerBound];
+        auto & ub = b[UpperBound];
+        if (LLVM_UNLIKELY(lb.denominator() != 1)) {
+            const auto r = Rational{lb.numerator() % lb.denominator(), lb.denominator()};
+            lb -= r;
+            ub += r;
+        }
+        if (LLVM_UNLIKELY(ub.denominator() != 1)) {
+            const auto r = Rational{ub.denominator() - ub.numerator() % ub.denominator(), ub.denominator()};
+            ub += r;
+        }
+        assert(lb.denominator() == 1);
+        assert(ub.denominator() == 1);
+        MinimumNumOfStrides[kernel] = lb;
+        MaximumNumOfStrides[kernel] = ub;
+    }
+
+    const auto dataflow_end = std::chrono::high_resolution_clock::now();
+    const auto total = (dataflow_end - dataflow_start).count();
+
+    errs() << "finished compute dataflow: " << total << "\n";
+
+}
+
+#else
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyHardPartitionConstraints
+ ** ------------------------------------------------------------------------------------------------------------- */
+PartitionConstraintGraph PipelineAnalysis::identifyHardPartitionConstraints() const {
+
+    PartitionConstraintGraph H(PartitionCount);
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.Locality == BufferLocality::HardNonLocal) {
+            const auto producer = parent(streamSet, mBufferGraph);
+            const auto producerPartitionId = KernelPartitionId[producer];
+            for (const auto data : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+                const auto consumer = target(data, mBufferGraph);
+                const auto consumerPartitionId = KernelPartitionId[consumer];
+                assert (producerPartitionId <= consumerPartitionId);
+                add_edge(producerPartitionId, consumerPartitionId, H);
+
+            }
+        }
     }
 
     return H;
@@ -147,8 +663,13 @@ void PipelineAnalysis::computeDataFlowRates() {
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
         const auto var = free_variable();
+
+
+
         const auto expected = constant(ExpectedNumOfStrides[kernel]);
         assumptions[LowerBound].push_back(Z3_mk_le(ctx, var, expected));
+
+
         assumptions[UpperBound].push_back(Z3_mk_ge(ctx, var, expected));
         const auto expected_x_2 = constant(ExpectedNumOfStrides[kernel] * Rational{2});
         assumptions[UpperBound].push_back(Z3_mk_le(ctx, var, expected_x_2));
@@ -388,56 +909,48 @@ void PipelineAnalysis::computeDataFlowRates() {
     Z3_del_context(ctx);
     Z3_reset_memory();
 
-
-    size_t denom_lcm = 1;
-    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+    const auto & b = bounds[firstKernel];
+    auto g = gcd(b[LowerBound], b[UpperBound]);
+    for (auto kernel = firstKernel + 1; kernel <= lastKernel; ++kernel) {
         const auto & b = bounds[kernel];
-        const auto dl = b[LowerBound].denominator();
-        if (LLVM_UNLIKELY(dl != 1)) {
-            denom_lcm = boost::lcm(denom_lcm, dl);
-        }
-        const auto du = b[UpperBound].denominator();
-        if (LLVM_UNLIKELY(du != 1)) {
-            denom_lcm = boost::lcm(denom_lcm, du);
-        }
+        g = gcd(g, b[LowerBound]);
+        g = gcd(g, b[UpperBound]);
     }
-
-    auto f = [&](Rational & r) ->size_t {
-        if (LLVM_UNLIKELY(denom_lcm != 1)) {
-            r *= denom_lcm;
-        }
-        assert (r.denominator() == 1);
-        return r.numerator();
-    };
-
-    auto & b = bounds[firstKernel];
-    size_t num_gcd = boost::gcd(f(b[LowerBound]), f(b[UpperBound]));
-
-    for (auto kernel = firstKernel + 1U; kernel <= lastKernel; ++kernel) {
-        if (num_gcd == 1) break;
-        auto & b = bounds[kernel];
-        num_gcd = boost::gcd(num_gcd, f(b[LowerBound]));
-        num_gcd = boost::gcd(num_gcd, f(b[UpperBound]));
-    }
-    if (LLVM_UNLIKELY(num_gcd != 1)) {
+    if (LLVM_UNLIKELY(g > Rational{1})) {
         for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-            auto & b = bounds[kernel];
-            b[LowerBound] /= num_gcd;
-            b[UpperBound] /= num_gcd;
+            auto & r = bounds[kernel];
+            r[LowerBound] /= g;
+            r[UpperBound] /= g;
         }
     }
+
 
     // Then write them out
     MinimumNumOfStrides.resize(PipelineOutput + 1);
     MaximumNumOfStrides.resize(PipelineOutput + 1);
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-        const auto & b = bounds[kernel];
-        MinimumNumOfStrides[kernel] = b[LowerBound];
-        MaximumNumOfStrides[kernel] = b[UpperBound];
+        auto & b = bounds[kernel];
+        auto & lb = b[LowerBound];
+        auto & ub = b[UpperBound];
+        if (LLVM_UNLIKELY(lb.denominator() != 1)) {
+            const auto r = Rational{lb.numerator() % lb.denominator(), lb.denominator()};
+            lb -= r;
+            ub += r;
+        }
+        if (LLVM_UNLIKELY(ub.denominator() != 1)) {
+            const auto r = Rational{ub.denominator() - ub.numerator() % ub.denominator(), ub.denominator()};
+            ub += r;
+        }
+        assert(lb.denominator() == 1);
+        assert(ub.denominator() == 1);
+        MinimumNumOfStrides[kernel] = lb;
+        MaximumNumOfStrides[kernel] = ub;
     }
 
 }
+
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinkedIOPorts

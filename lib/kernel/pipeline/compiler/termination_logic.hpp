@@ -239,12 +239,17 @@ void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
         Value * atLeastOneExhausted = nullptr;
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const BufferPort & br = mBufferGraph[e];
-            if (LLVM_UNLIKELY(br.IsZeroExtended)) continue;
             Value * const closed = isClosed(b, br.Port);
-            Value * const avail = getLocallyAvailableItemCount(b, br.Port);
-            Value * const processed = mProcessedItemCount[br.Port]; assert (processed);
 
-            Value * const fullyConsumed = b->CreateAnd(closed, b->CreateICmpULE(avail, processed));
+            Value * fullyConsumed = nullptr;
+            if (LLVM_UNLIKELY(br.IsZeroExtended)) {
+                fullyConsumed = closed;
+            } else {
+                Value * const avail = getLocallyAvailableItemCount(b, br.Port);
+                Value * const processed = mProcessedItemCount[br.Port]; assert (processed);
+                fullyConsumed = b->CreateAnd(closed, b->CreateICmpULE(avail, processed));
+            }
+
             if (LLVM_UNLIKELY(br.IsPrincipal)) {
                 if (atLeastOneExhausted) {
                     RecursivelyDeleteTriviallyDeadInstructions(atLeastOneExhausted);

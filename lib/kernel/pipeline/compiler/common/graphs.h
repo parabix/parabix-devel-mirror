@@ -256,6 +256,9 @@ struct BufferNode {
     unsigned LookBehind = 0;
     unsigned MaxAdd = 0;
 
+    size_t   BufferStart;
+    size_t   BufferSize;
+
     bool isOwned() const {
         return (Type & BufferType::Unowned) == 0;
     }
@@ -395,7 +398,7 @@ struct PartitionData {
 
     Partition               Kernels;
     std::vector<Rational>   Repetitions;
-    OrderingDAWG            Orderings{1};
+    OrderingDAWG            Orderings;
     Rational                ExpectedRepetitions{0};
     size_t                  RequiredMemory = 0;
 
@@ -411,14 +414,12 @@ using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_p
 
 struct PartitionDataflowEdge {
     unsigned    KernelId;
-    RateId      RateType;
     Rational    Expected;
 
     PartitionDataflowEdge() = default;
 
-    PartitionDataflowEdge(unsigned id, RateId rateType, Rational expected)
+    PartitionDataflowEdge(unsigned id, Rational expected)
     : KernelId(id)
-    , RateType(rateType)
     , Expected(expected) {
 
     }
@@ -447,6 +448,7 @@ struct SchedulingNode {
     enum NodeType {
         IsKernel = 0
         , IsStreamSet = 1
+        , IsExternal = 2
     };
 
     NodeType Type = NodeType::IsKernel;

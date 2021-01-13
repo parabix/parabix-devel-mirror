@@ -320,19 +320,24 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
         const Kernel * const kernelObj = getKernel(kernel);
 
+        assert (kernelObj);
 
         const auto explicitFinalPartialStride = kernelObj->requiresExplicitPartialFinalStride();
         const auto nonLinear = mayHaveNonLinearIO(kernel);
 
         const auto borders = nonLinear ? '2' : '1';
-
-
-
         out << "v" << kernel << " [label=\"[" <<
-                kernel << "] " << name << "\\n"
-                " Expected:  ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
-                                print_rational(MaximumNumOfStrides[kernel]) << "]\\n"
-                "\" shape=rect,style=rounded,peripheries=" << borders;
+                kernel << "] " << name << "\\n";
+        if (ExpectedNumOfStrides.size() > 0) {
+            out << " Expected: ";
+            print_rational(ExpectedNumOfStrides[kernel]);
+            if (MinimumNumOfStrides.size() > 0) {
+                out << " ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
+                             print_rational(MaximumNumOfStrides[kernel]) << "]\\n";
+            }
+        }
+
+        out << "\" shape=rect,style=rounded,peripheries=" << borders;
                 if (explicitFinalPartialStride) {
                     out << ",color=\"blue\"";
                 }
@@ -354,7 +359,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
     printKernel(PipelineInput, "P_{in}", true);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
+        const Kernel * const kernel = getKernel(i); assert (kernel);
         auto name = kernel->getName().str();
         boost::replace_all(name, "\"", "\\\"");
         printKernel(i, name, false);
