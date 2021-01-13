@@ -939,11 +939,14 @@ void generateKeyProcessingLoops(BuilderRef b,
         // Determine a base position from which both the keyStart and the keyEnd
         // are accessible within SIZE_T_BITS - 8, and which will not overflow
         // the buffer.
+        Value * curPos = keyMarkPos;
+
         Value * startBase = b->CreateSub(keyStartPos, b->CreateURem(keyStartPos, b->getSize(8)));
         Value * markBase = b->CreateSub(keyMarkPos, b->CreateURem(keyMarkPos, sz_BITS));
         Value * keyBase = b->CreateSelect(b->CreateICmpULT(startBase, markBase), startBase, markBase);
         Value * bitOffset = b->CreateSub(keyStartPos, keyBase);
-        Value * mask = b->CreateShl(sz_COMPRESSION_MASK, bitOffset);
+        Value * mask = b->CreateShl(b->CreateSelect(b->CreateICmpEQ(curPos, prefixPos), b->CreateAdd(sz_COMPRESSION_MASK, b->getSize(4)), sz_COMPRESSION_MASK), bitOffset);
+        //Value * mask = b->CreateShl(sz_COMPRESSION_MASK, bitOffset);
         //b->CallPrintInt("mask", mask);
         Value * const keyBasePtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", keyBase), sizeTy->getPointerTo());
         Value * initialMask = b->CreateAlignedLoad(keyBasePtr, 1);
@@ -951,21 +954,22 @@ void generateKeyProcessingLoops(BuilderRef b,
         Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
         //b->CallPrintInt("updated", updated);
         b->CreateAlignedStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr, 1);
-        Value * curPos = keyMarkPos;
+
         // Write the suffixes.
         for (unsigned i = 0; i < lg.groupInfo.encoding_bytes - 1; i++) {
             Value * ZTF_suffix = b->CreateTrunc(b->CreateAnd(curHash, lg.SUFFIX_MASK, "ZTF_suffix"), b->getInt8Ty());
             b->CreateStore(ZTF_suffix, b->getRawOutputPointer("encodedBytes", curPos));
             curPos = b->CreateSub(curPos, sz_ONE);
+            prefixPos = b->CreateSub(prefixPos, sz_ONE);
             curHash = b->CreateLShr(curHash, lg.SUFFIX_BITS);
         }
-        // Now prepare the prefix - PREFIX_BASE + ... + remaining hash bits.
-        Value * ZTF_prefix = b->CreateTrunc(b->CreateAdd(lg.PREFIX_BASE, curHash, "ZTF_prefix"), b->getInt8Ty());
 
         //suppress prefix write if the length of previous symbol is same as current symbol
         //skip prefix if previous prefix is same as the current prefix? -> prefix memoization and comparison needed
-        b->CreateCondBr(b->CreateICmpEQ(curPos, prefixPos), writePrefix, nextKey);
+        b->CreateCondBr(b->CreateICmpEQ(curPos, prefixPos), nextKey, writePrefix);
         b->SetInsertPoint(writePrefix);
+        // Now prepare the prefix - PREFIX_BASE + ... + remaining hash bits.
+        Value * ZTF_prefix = b->CreateTrunc(b->CreateAdd(lg.PREFIX_BASE, curHash, "ZTF_prefix"), b->getInt8Ty());
         b->CreateStore(ZTF_prefix, b->getRawOutputPointer("encodedBytes", curPos));
 
         b->CreateBr(nextKey);
