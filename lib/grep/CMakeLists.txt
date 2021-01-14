@@ -11,7 +11,6 @@ SRC
     grep_kernel.cpp
     grep_toolchain.cpp
     nested_grep_engine.cpp
-    resolve_properties.cpp
     regex_passes.cpp
 DEPS
     kernel.pipeline

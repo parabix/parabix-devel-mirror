@@ -15,5 +15,6 @@ SRC
     resolve_properties.cpp
 DEPS
     re.compile
+    re.parse
     unicode.data
 )

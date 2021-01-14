@@ -19,7 +19,6 @@
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Casting.h>
 #include <grep/regex_passes.h>
-#include <grep/resolve_properties.h>
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/core/idisa_target.h>

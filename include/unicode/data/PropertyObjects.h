@@ -17,26 +17,6 @@
 namespace re { class RE; }
 
 namespace UCD {
-class PropertyObject;
-class BinaryPropertyObject;
-class EnumeratedPropertyObject;
-class ExtensionPropertyObject;
-class NumericPropertyObject;
-class StringPropertyObject;
-class StringOverridePropertyObject;
-}
-
-namespace grep {
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::PropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::BinaryPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::EnumeratedPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::ExtensionPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::NumericPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::StringPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::StringOverridePropertyObject * propObj, re::RE * pattern);
-}
-
-namespace UCD {
     
 std::string canonicalize_value_name(const std::string & prop_or_val);
 
@@ -46,8 +26,6 @@ typedef std::vector<uint64_t> (*GrepLinesFunctionType)(re::RE *, const char * bu
 
 class PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(PropertyObject *, re::RE *);
-
     enum class ClassTypeId : unsigned {
         BinaryProperty,
         EnumeratedProperty,
@@ -81,8 +59,6 @@ public:
 
 class BinaryPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(BinaryPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::BinaryProperty;
     }
@@ -109,8 +85,6 @@ private:
 
 class EnumeratedPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(EnumeratedPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::EnumeratedProperty;
     }
@@ -166,8 +140,6 @@ private:
 
 class ExtensionPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(ExtensionPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::ExtensionProperty;
     }
@@ -202,8 +174,6 @@ private:
 
 class NumericPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(NumericPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::NumericProperty;
     }
@@ -232,8 +202,6 @@ private:
 
 class StringPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(StringPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::StringProperty;
     }
@@ -268,8 +236,6 @@ private:
 
 class StringOverridePropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(StringOverridePropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::StringOverrideProperty;
     }
