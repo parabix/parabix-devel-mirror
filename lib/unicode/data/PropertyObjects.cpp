@@ -16,6 +16,9 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <unicode/data/PropertyObjectTable.h>
 #include <llvm/ADT/STLExtras.h>
+#include <util/aligned_allocator.h>
+#include <re/adt/adt.h>
+#include <re/analysis/re_analysis.h>
 
 using namespace llvm;
 
@@ -43,7 +46,11 @@ const std::string & PropertyObject::GetPropertyValueGrepString() {
 }
 
 const UnicodeSet PropertyObject::GetCodepointSet(const std::string &) {
-    report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
+    report_fatal_error("Property " + UCD::getPropertyFullName(the_property) + " unsupported.");
+}
+
+const UnicodeSet PropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    report_fatal_error("GetCodepointSetMatchingPattern for " + UCD::getPropertyFullName(the_property) + " unsupported.");
 }
 
 const std::string PropertyObject::GetStringValue(codepoint_t cp) const {
@@ -53,7 +60,7 @@ const std::string PropertyObject::GetStringValue(codepoint_t cp) const {
 const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     const int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val < 0) {
-        report_fatal_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
+        report_fatal_error("Enumerated Property " + UCD::getPropertyFullName(the_property) + ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
@@ -66,6 +73,29 @@ const UnicodeSet PropertyObject::GetReflexiveSet() const {
 const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_enum_val) const {
     assert (property_enum_val >= 0);
     return *(property_value_sets[property_enum_val]);
+}
+
+const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    AlignedAllocator<char, 32> alloc;
+    std::vector<std::string> accumulatedValues;
+
+    const std::string & str = GetPropertyValueGrepString();
+
+    const unsigned segmentSize = 8;
+    const auto n = str.length();
+    const auto w = 256 * segmentSize;
+    const auto m = w - (n % w);
+
+    char * aligned = alloc.allocate(n + m, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, m);
+    std::vector<uint64_t> matchedEnums = grep(re, aligned, n);
+    alloc.deallocate(aligned, 0);
+    UCD::UnicodeSet a;
+    for (const auto v : matchedEnums) {
+        a.insert(GetCodepointSet(v % GetEnumCount()));
+    }
+    return a;
 }
 
 std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
@@ -141,14 +171,14 @@ int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value
 }
 
 PropertyObject::iterator ExtensionPropertyObject::begin() const {
-    if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
+    if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(getPropertyObject(base_property))) {
         return obj->begin();
     }
     report_fatal_error("Iterators unsupported for this type of PropertyObject.");
 }
 
 PropertyObject::iterator ExtensionPropertyObject::end() const {
-    if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
+    if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(getPropertyObject(base_property))) {
         return obj->end();
     }
     report_fatal_error("Iterators unsupported for this type of PropertyObject.");
@@ -157,9 +187,34 @@ PropertyObject::iterator ExtensionPropertyObject::end() const {
 const UnicodeSet ExtensionPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val == -1) {
-        report_fatal_error("Extension Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
+        report_fatal_error("Extension Property " + UCD::getPropertyFullName(the_property) +  ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
+}
+
+const UnicodeSet ExtensionPropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    AlignedAllocator<char, 32> alloc;
+    std::vector<std::string> accumulatedValues;
+
+    UCD::EnumeratedPropertyObject * baseObj = llvm::cast<UCD::EnumeratedPropertyObject>(getPropertyObject(base_property));
+
+    const std::string & str = baseObj->GetPropertyValueGrepString();
+    const unsigned segmentSize = 8;
+    const auto n = str.length();
+    const auto w = 256 * segmentSize;
+    const auto m = w - (n % w);
+
+    char * aligned = alloc.allocate(n + m, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, m);
+    std::vector<uint64_t> matchedEnums = grep(re, aligned, n);
+    alloc.deallocate(aligned, 0);
+    UCD::UnicodeSet a;
+    int enumCount = baseObj->GetEnumCount();
+    for (const auto v : matchedEnums) {
+        a.insert(GetCodepointSet(v % enumCount));
+    }
+    return a;
 }
 
 const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const int property_enum_val) const {
@@ -168,23 +223,27 @@ const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const int property_e
 }
 
 int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
-    return cast<EnumeratedPropertyObject>(property_object_table[base_property])->GetPropertyValueEnumCode(value_spec);
+    return cast<EnumeratedPropertyObject>(getPropertyObject(base_property))->GetPropertyValueEnumCode(value_spec);
 }
 
 const std::string & ExtensionPropertyObject::GetPropertyValueGrepString() {
-    return property_object_table[base_property]->GetPropertyValueGrepString();
+    return getPropertyObject(base_property)->GetPropertyValueGrepString();
 }
 
 const UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) {
+    return GetCodepointSet(GetPropertyValueEnumCode(value_spec));
+}
+
+int BinaryPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     int property_enum_val = Binary_ns::Y;
     if (value_spec.length() != 0) {
         auto valit = Binary_ns::aliases_only_map.find(canonicalize_value_name(value_spec));
         if (valit == Binary_ns::aliases_only_map.end()) {
-            report_fatal_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
+            report_fatal_error("Binary Property " + UCD::getPropertyFullName(the_property) +  ": bad value: " + value_spec);
         }
         property_enum_val = valit->second;
     }
-    return GetCodepointSet(property_enum_val);
+    return property_enum_val;
 }
 
 const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum_val) {
@@ -227,7 +286,6 @@ const unsigned firstCodepointLengthAndVal(const std::string & s, codepoint_t & c
     return 0;
 }
 
-
 const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & value_spec) {
     if (value_spec == "NaN") {
         return mNaNCodepointSet;
@@ -248,6 +306,15 @@ const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & valu
         }
         return result_set;
     }
+}
+
+const UnicodeSet NumericPropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    UCD::UnicodeSet matched;
+    std::vector<uint64_t> matchedLines = grep(re, mStringBuffer, mBufSize);
+    for (const auto v : matchedLines) {
+        matched.insert(mExplicitCps[v]);
+    }
+    return matched;
 }
 
 const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value_spec) {
@@ -277,6 +344,20 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
         return result_set;
     }
 }
+
+const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    UCD::UnicodeSet matched(*re::matchableCodepoints(re) & mSelfCodepointSet);
+    if (re::matchesEmptyString(re)) {
+        matched.insert(mNullCodepointSet);
+    }
+    const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
+    std::vector<uint64_t> matchedLines = grep(re, mStringBuffer, bufSize);
+    for (const auto v : matchedLines) {
+        matched.insert(mExplicitCps[v]);
+    }
+    return matched;
+}
+
 
 const UnicodeSet StringPropertyObject::GetReflexiveSet() const {
     return mSelfCodepointSet;
@@ -345,12 +426,23 @@ const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) c
     return std::string(&mStringBuffer[offset], lgth);
 }
 
+const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
+    PropertyObject * baseObj = getPropertyObject(mBaseProperty);
+    UCD::UnicodeSet s = baseObj->GetCodepointSetMatchingPattern(re, grep) - mOverriddenSet;
+    const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
+    std::vector<uint64_t> matchedLines = grep(re, mStringBuffer, bufSize);
+    for (const auto v : matchedLines) {
+        s.insert(mExplicitCps[v]);
+    }
+    return s;
+}
+
 const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
-    report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+    report_fatal_error("Property " + UCD::getPropertyFullName(the_property) + " is obsolete.");
 }
 
 const UnicodeSet ObsoletePropertyObject::GetCodepointSet(const std::string &) {
-    report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+    report_fatal_error("Property " + UCD::getPropertyFullName(the_property) + " is obsolete.");
 }
 
 

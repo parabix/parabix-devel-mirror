@@ -18,9 +18,7 @@
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Casting.h>
-#include <grep/grep_name_resolve.h>
 #include <grep/regex_passes.h>
-#include <grep/resolve_properties.h>
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/core/idisa_target.h>
@@ -1289,6 +1287,29 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
     f(search_buffer, bufferLength, &accum);
 }
+
+class LineNumberAccumulator : public grep::MatchAccumulator {
+public:
+    LineNumberAccumulator() {}
+    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
+    std::vector<uint64_t> && getAccumulatedLines() { return std::move(mLineNums); }
+private:
+    std::vector<uint64_t> mLineNums;
+};
+
+void LineNumberAccumulator::accumulate_match(const size_t lineNum, char * /* line_start */, char * /* line_end */) {
+    mLineNums.push_back(lineNum);
+}
+
+std::vector<uint64_t> lineNumGrep(re::RE * pattern, const char * buffer, size_t bufSize) {
+      LineNumberAccumulator accum;
+      CPUDriver driver("driver");
+      grep::InternalSearchEngine engine(driver);
+      engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+      engine.grepCodeGen(pattern);
+      engine.doGrep(buffer, bufSize, accum);
+      return accum.getAccumulatedLines();
+  }
 
 InternalMultiSearchEngine::InternalMultiSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),

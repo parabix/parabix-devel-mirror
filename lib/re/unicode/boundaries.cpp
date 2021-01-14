@@ -1,10 +1,14 @@
 #include <re/unicode/boundaries.h>
 
 #include <re/adt/adt.h>
+#include <re/adt/re_name.h>
 #include <re/adt/printer_re.h>
 #include <re/analysis/validation.h>
 #include <re/transforms/re_transformer.h>
 #include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
+#include <unicode/data/PropertyObjects.h>
+#include <re/compile/re_compiler.h>
 
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
@@ -25,41 +29,26 @@
 using namespace llvm;
 
 namespace re {
-bool hasGraphemeClusterBoundary(const RE * re) {
-    if (isa<CC>(re) || isa<Range>(re)) {
-        return false;
-    } else if (const Name * n = dyn_cast<Name>(re)) {
-        if (n->getType() == Name::Type::ZeroWidth) {
-            const std::string nameString = n->getName();
-            return nameString == "\\b{g}";
-        }
-        return false;
-    } else if (const Alt * alt = dyn_cast<Alt>(re)) {
-        for (const RE * re : *alt) {
-            if (hasGraphemeClusterBoundary(re)) return true;
-        }
-        return false;
-    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        for (const RE * re : *seq) {
-            if (hasGraphemeClusterBoundary(re)) return true;
-        }
-        return false;
-    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
-        return hasGraphemeClusterBoundary(rep->getRE());
-    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
-        return hasGraphemeClusterBoundary(diff->getLH()) || hasGraphemeClusterBoundary(diff->getRH());
-    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
-        return hasGraphemeClusterBoundary(e->getLH()) || hasGraphemeClusterBoundary(e->getRH());
-    } else if (isa<Start>(re) || isa<End>(re)) {
-        return false;
-    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
-        return hasGraphemeClusterBoundary(a->getAsserted());
-    } else if (const Group * g = dyn_cast<Group>(re)) {
-        if ((g->getMode() == Group::Mode::GraphemeMode) && (g->getSense() == Group::Sense::On)) return true;
-        else return hasGraphemeClusterBoundary(g->getRE());
+
+struct GraphemeBoundaryAbsentValidator final : public RE_Validator {
+    
+    GraphemeBoundaryAbsentValidator()
+    : RE_Validator() {}
+    
+    bool validatePropertyExpression(const PropertyExpression * e) override {
+        return e->getPropertyCode() != UCD::g;
     }
-    else llvm_unreachable("Unknown RE type");
+
+    bool validateName(const Name * n) override {
+        return n->getFullName() != "\\b{g}";
+    }
+};
+
+bool hasGraphemeClusterBoundary(const RE * re) {
+    GraphemeBoundaryAbsentValidator v;
+    return !(v.validateRE(re));
 }
+
     
 struct WordBoundaryAbsentValidator final : public RE_Validator {
     
@@ -79,24 +68,26 @@ bool hasWordBoundary(const RE * re) {
 
 class GraphemeModeTransformer : public RE_Transformer {
 public:
-    GraphemeModeTransformer(bool inGraphemeMode = true) : RE_Transformer("ResolveGraphemeMode"), mGraphemeMode(inGraphemeMode) {}
+    GraphemeModeTransformer(bool inGraphemeMode = true) : RE_Transformer("ResolveGraphemeMode"),
+    mGraphemeMode(inGraphemeMode),
+    mGCB(makeBoundaryExpression("g"))
+    {}
     
     RE * transformName(Name * n) override {
         if (mGraphemeMode && (n->getName() == ".")) {
-            RE * GCB = makeZeroWidth("\\b{g}");
-            RE * nonGCB = makeDiff(makeSeq({}), GCB);
-            return makeSeq({makeAny(), makeRep(makeSeq({nonGCB, makeAny()}), 0, Rep::UNBOUNDED_REP), GCB});
+            RE * nonGCB = makeDiff(makeSeq({}), mGCB);
+            return makeSeq({makeAny(), makeRep(makeSeq({nonGCB, makeAny()}), 0, Rep::UNBOUNDED_REP), mGCB});
         }
         return n;
     }
     
     RE * transformCC(CC * cc) override {
-        if (mGraphemeMode) return makeSeq({cc, makeZeroWidth("\\b{g}")});
+        if (mGraphemeMode) return makeSeq({cc, mGCB});
         return cc;
     }
     
     RE * transformRange(Range * rg) override {
-        if (mGraphemeMode) return makeSeq({rg, makeZeroWidth("\\b{g}")});
+        if (mGraphemeMode) return makeSeq({rg, mGCB});
         return rg;
     }
     
@@ -120,7 +111,7 @@ public:
         for (auto i = seq->begin(); i != seq->end(); ++i) {
             bool atSingleChar = isa<CC>(*i) && (cast<CC>(*i)->count() == 1);
             if (afterSingleChar && mGraphemeMode && !atSingleChar) {
-                list.push_back(makeZeroWidth("\\b{g}"));
+                list.push_back(mGCB);
                 changed = true;
             }
             if (isa<CC>(*i)) {
@@ -133,7 +124,7 @@ public:
             afterSingleChar = atSingleChar;
         }
         if (afterSingleChar && mGraphemeMode) {
-            list.push_back(makeZeroWidth("\\b{g}"));
+            list.push_back(mGCB);
             changed = true;
         }
         if (!changed) return seq;
@@ -142,6 +133,7 @@ public:
 
 private:
     bool mGraphemeMode;
+    RE * mGCB;
 };
 
 RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
@@ -169,9 +161,9 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     // Similarly, the overriding of GB9b simplifies to a lookahead assertion
     // on a noncontrol.
     //
-    RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
-    RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
-    RE * GCB_Control = makeName("gcb", "control", Name::Type::UnicodeProperty);
+    RE * GCB_CR = makePropertyExpression("gcb", "cr");
+    RE * GCB_LF = makePropertyExpression("gcb", "lf");
+    RE * GCB_Control = makePropertyExpression("gcb", "control");
     RE * GCB_Control_CR_LF = makeAlt({GCB_Control, GCB_CR, GCB_LF});
     
     // Break at the start and end of text.
@@ -186,47 +178,113 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     
     
     // Do not break Hangul syllable sequences.
-    RE * GCB_L = makeName("gcb", "l", Name::Type::UnicodeProperty);
-    RE * GCB_V = makeName("gcb", "v", Name::Type::UnicodeProperty);
-    RE * GCB_LV = makeName("gcb", "lv", Name::Type::UnicodeProperty);
-    RE * GCB_LVT = makeName("gcb", "lvt", Name::Type::UnicodeProperty);
-    RE * GCB_T = makeName("gcb", "t", Name::Type::UnicodeProperty);
+    RE * GCB_L = makePropertyExpression("gcb", "l");
+    RE * GCB_V = makePropertyExpression("gcb", "v");
+    RE * GCB_LV = makePropertyExpression("gcb", "lv");
+    RE * GCB_LVT = makePropertyExpression("gcb", "lvt");
+    RE * GCB_T = makePropertyExpression("gcb", "t");
     RE * GCX_6 = makeSeq({Behind(GCB_L), Ahead(makeAlt({GCB_L, GCB_V, GCB_LV, GCB_LVT}))});
     RE * GCX_7 = makeSeq({Behind(makeAlt({GCB_LV, GCB_V})), Ahead(makeAlt({GCB_V, GCB_T}))});
     RE * GCX_8 = makeSeq({Behind(makeAlt({GCB_LVT, GCB_T})), Ahead(GCB_T)});
     
     // Do not break before extendiers or zero-width joiners.
-    RE * GCB_EX = makeName("gcb", "ex", Name::Type::UnicodeProperty);
-    RE * GCB_ZWJ = makeName("gcb", "zwj", Name::Type::UnicodeProperty);
+    RE * GCB_EX = makePropertyExpression("gcb", "ex");
+    RE * GCB_ZWJ = makePropertyExpression("gcb", "zwj");
     RE * GCX_9 = makeSeq({notBehind(GCB_Control_CR_LF), Ahead(makeAlt({GCB_EX, GCB_ZWJ}))});
 
     if (extendedGraphemeClusters) {
-        RE * GCB_SpacingMark = makeName("gcb", "sm", Name::Type::UnicodeProperty);
-        RE * GCB_Prepend = makeName("gcb", "pp", Name::Type::UnicodeProperty);
+        RE * GCB_SpacingMark = makePropertyExpression("gcb", "sm");
+        RE * GCB_Prepend = makePropertyExpression("gcb", "pp");
         RE * GCX_9a = makeSeq({notBehind(GCB_Control_CR_LF), Ahead(GCB_SpacingMark)});
         RE * GCX_9b = makeSeq({Behind(GCB_Prepend), notAhead(GCB_Control_CR_LF)});
         GCX_9 = makeAlt({GCX_9, GCX_9a, GCX_9b});
     }
 
-    RE * ExtendedPictographic = makeName("Extended_Pictographic", Name::Type::UnicodeProperty);
+    RE * ExtendedPictographic = makePropertyExpression("Extended_Pictographic");
     RE * EmojiSeq = makeSeq({ExtendedPictographic, makeRep(GCB_EX, 0, Rep::UNBOUNDED_REP), GCB_ZWJ});
     RE * GCX_11 = makeSeq({Behind(EmojiSeq), Ahead(ExtendedPictographic)});
     
-    RE * GCB_RI = makeName("gcb", "ri", Name::Type::UnicodeProperty);
+    RE * GCB_RI = makePropertyExpression("gcb", "ri");
     // Note: notBehind(RI) == sot | [^RI]
     RE * odd_RI_seq = makeSeq({notBehind(GCB_RI), makeRep(makeSeq({GCB_RI, GCB_RI}), 0, Rep::UNBOUNDED_REP), GCB_RI});
     RE * GCX_12_13 = makeSeq({Behind(odd_RI_seq), Ahead(GCB_RI)});
     
-    //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
+    //Name * gcb = makePropertyExpression("gcb");
     RE * GCX = makeAlt({GCX_6, GCX_7, GCX_8, GCX_9, GCX_11, GCX_12_13});
     
     // Otherwise, break everywhere.
     RE * GCB_999 = makeSeq({Behind(makeAny()), Ahead(makeAny())});
     
-    //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
     RE * gcb = makeAlt({GCB_1_5, makeDiff(GCB_999, GCX)});
+
+    gcb = UCD::linkProperties(gcb);
+    gcb = UCD::resolveProperties(gcb);
+    gcb = UCD::inlineSimpleProperties(gcb);
+    gcb = UCD::standardizeProperties(gcb);
+    gcb = UCD::externalizeProperties(gcb);
+
     return gcb;
 }
 
+RE * EnumeratedPropertyBoundary(UCD::EnumeratedPropertyObject * enumObj) {
+    unsigned enum_count = enumObj->GetEnumCount();
+    std::vector<RE *> assertions;
+    auto prop = enumObj->getPropertyCode();
+    std::vector<RE *> alts;
+    for (unsigned j = 0; j < enum_count; j++) {
+        std::string enumVal = enumObj->GetValueEnumName(j);
+        RE * expr = makePropertyExpression(UCD::getPropertyFullName(prop), enumVal);
+        alts.push_back(makeSeq({notBehind(expr), Ahead(expr)}));
+        alts.push_back(makeSeq({Behind(expr), notAhead(expr)}));
+    }
+    return makeAlt(alts.begin(), alts.end());
+}
+
+class BoundaryPropertyResolver : public RE_Transformer {
+public:
+    BoundaryPropertyResolver() : RE_Transformer("ResolveBoundaryProperties") {}
+    
+    RE * transformPropertyExpression(PropertyExpression * propExpr) {
+        if (propExpr->getKind() == PropertyExpression::Kind::Codepoint) {
+            return propExpr;
+        }
+        int prop_code = propExpr->getPropertyCode();
+        if (propExpr->getPropertyIdentifier() == "g") {
+            Name * gcb_name = makeZeroWidth("\\b{g}");
+            gcb_name->setDefinition(generateGraphemeClusterBoundaryRule());
+            return gcb_name;
+        }
+        if (propExpr->getPropertyIdentifier() == "w") {
+            Name * wb_name = makeZeroWidth("\\b{w}");
+            wb_name->setDefinition(nullptr);
+            RE_Compiler::UnsupportedRE("\\b{w} not yet supported.");
+            return wb_name;
+        }
+        if (prop_code >= 0) {
+            auto obj = UCD::getPropertyObject(static_cast<UCD::property_t>(prop_code));
+            if ((propExpr->getValueString() == "") && isa<UCD::EnumeratedPropertyObject>(obj)) {
+                return EnumeratedPropertyBoundary(cast<UCD::EnumeratedPropertyObject>(obj));
+            }
+            auto pe = makePropertyExpression(propExpr->getPropertyIdentifier(), propExpr->getValueString());
+            RE * a = makeLookAheadAssertion(pe);
+            RE * na = makeNegativeLookAheadAssertion(pe);
+            RE * b = makeLookBehindAssertion(pe);
+            RE * nb = makeNegativeLookBehindAssertion(pe);
+            RE * resolved = nullptr;
+            if (propExpr->getOperator() == PropertyExpression::Operator::NEq) {
+                resolved = makeAlt({makeSeq({b, a}), makeSeq({nb, na})});
+            } else {
+                resolved = makeAlt({makeSeq({b, na}), makeSeq({nb, a})});
+            }
+            return resolved;
+        }
+        RE_Compiler::UnsupportedRE(Printer_RE::PrintRE(propExpr));
+    }
+
+};
+
+RE * resolveBoundaryProperties(RE * r) {
+    return UCD::linkProperties(BoundaryPropertyResolver().transformRE(r));
+}
 
 }

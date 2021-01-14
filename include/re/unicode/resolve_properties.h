@@ -7,7 +7,8 @@
 
 namespace re {
     class RE;
-    class Name;    
+    class Name;
+    class PropertyExpression;
 }
 
 namespace UCD {
@@ -27,6 +28,19 @@ std::string resolvePropertyFunction(re::Name * const property);
  * desirable depending on the use case.
  */
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
+
+
+/*  Link all property expression nodes to their property_enum code. */
+re::RE * linkProperties(re::RE * r);
+
+re::RE * resolveProperties(re::RE * r, GrepLinesFunctionType grep = nullptr);
+
+re::RE * inlineSimpleProperties(re::RE * r);
+
+/*  Convert all property expression to standardized form. */
+re::RE * standardizeProperties(re::RE * r);
+
+re::RE * externalizeProperties(re::RE * r);
 
 }
 

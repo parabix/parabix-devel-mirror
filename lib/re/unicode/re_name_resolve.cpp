@@ -13,7 +13,37 @@ using namespace boost::container;
 using namespace llvm;
 
 namespace re {
-  
+
+    
+class EscapeNameResolver final : public RE_Transformer {
+public:
+    EscapeNameResolver(NameStandard c) : RE_Transformer("EscapeNames"), mStandard(c) {}
+    RE * transformName(Name * name) override {
+        std::string theName = name->getFullName();
+        if (theName == "\\d") {
+            if (mStandard == NameStandard::Posix) return makeRange(makeCC(0x30), makeCC(0x39));
+            return makePropertyExpression(PropertyExpression::Kind::Codepoint, "Nd");
+        }
+        if (theName == "\\s") {
+            return makePropertyExpression(PropertyExpression::Kind::Codepoint, "whitespace");
+        }
+        if (theName == "\\w") {
+            return makePropertyExpression(PropertyExpression::Kind::Codepoint, "word");
+        }
+        if (theName == "\\b") {
+            return makePropertyExpression(PropertyExpression::Kind::Boundary, "word");
+        }
+        return name;
+    }
+private:
+    NameStandard mStandard;
+};
+    
+RE * resolveEscapeNames(RE * re, NameStandard c) {
+    return EscapeNameResolver(c).transformRE(re);
+}
+    
+
 class UnicodeNameResolver final : public RE_Transformer {
 public:
     UnicodeNameResolver() : RE_Transformer("UnicodeNames") {}
