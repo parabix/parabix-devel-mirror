@@ -6,7 +6,6 @@
 
 #include <grep/regex_passes.h>
 
-#include <grep/grep_name_resolve.h>
 #include <grep/grep_engine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <re/adt/adt.h>
@@ -48,7 +47,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     //r = resolveBoundaryProperties(r);
     r = UCD::standardizeProperties(r);
     r = UCD::externalizeProperties(r);
-    r = grep::resolveUnicodeNames(r); // use full name resolution
+    //r = grep::resolveUnicodeNames(r); // use full name resolution
     validateNamesDefined(r);
     if (UnicodeLevel2IsSet() && validateAlphabet(&cc::Unicode, r)) {
         r = UCD::toNFD(r);

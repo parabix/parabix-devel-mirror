@@ -18,7 +18,6 @@
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Casting.h>
-#include <grep/grep_name_resolve.h>
 #include <grep/regex_passes.h>
 #include <grep/resolve_properties.h>
 #include <kernel/basis/s2p_kernel.h>
