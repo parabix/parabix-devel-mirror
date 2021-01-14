@@ -37,6 +37,7 @@
 #include <re/analysis/re_name_gather.h>
 #include <re/unicode/boundaries.h>
 #include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <kernel/unicode/charclasses.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
@@ -573,7 +574,6 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
                                   StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream) {
     
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
-    GCB = re::resolveUnicodeNames(GCB);
     const auto GCB_Sets = re::collectCCs(GCB, cc::Unicode);
     auto GCB_mpx = std::make_shared<cc::MultiplexedAlphabet>("GCB_mpx", GCB_Sets);
     GCB = transformCCs(GCB_mpx, GCB);

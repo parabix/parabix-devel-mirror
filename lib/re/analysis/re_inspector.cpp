@@ -39,6 +39,7 @@ void RE_Inspector::inspect(RE * const re) {
         INSPECT(Rep);
         INSPECT(Seq);
         INSPECT(Start);
+        INSPECT(PropertyExpression);
         default: llvm_unreachable("Unknown RE type");
     }
     #undef INSPECT
@@ -102,6 +103,9 @@ void RE_Inspector::inspectGroup(Group * g) {
 
 void RE_Inspector::inspectAssertion(Assertion * a) {
     inspect(a->getAsserted());
+}
+
+void RE_Inspector::inspectPropertyExpression(PropertyExpression * pe) {
 }
 
 } // namespace re
