@@ -162,6 +162,8 @@ private:
 RE * PropertyResolver::resolveCC (std::string value, bool is_negated) {
     RE * resolved = nullptr;
     if ((value.length() > 0) && (value[0] == '/')) {
+        if (mGrep == nullptr)
+            llvm::report_fatal_error("Recursive property expression found, but no grep function supplied");
         re::RE * propValueRe = re::RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
         return makeCC(mPropObj->GetCodepointSetMatchingPattern(propValueRe, mGrep), &cc::Unicode);
     }

@@ -186,7 +186,16 @@ RE * RE_Transformer::transformAssertion(Assertion * a) {
 }
 
 RE * RE_Transformer::transformPropertyExpression(PropertyExpression * pe) {
-    return pe;
+    if (mNameTransform == NameTransformationMode::None) {
+        return pe;
+    }
+    RE * const defn = pe->getResolvedRE();
+    if (LLVM_UNLIKELY(defn == nullptr)) {
+        llvm::report_fatal_error("Unresolved property expression: " + pe->getPropertyIdentifier());
+    }
+    RE * t = transform(defn);
+    if (t == defn) return pe;
+    return t;
 }
 
 } // namespace re

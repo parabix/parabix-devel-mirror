@@ -33,6 +33,13 @@ public:
         }
         return true;
     }
+    bool validatePropertyExpression(const PropertyExpression * p) override {
+        if ((p->getKind() == PropertyExpression::Kind::Boundary) && (p->getPropertyIdentifier() == "g")) {
+            if (mAnySeen) return false;
+            mGCBseen = true;
+        }
+        return true;
+    }
 private:
     bool mAnySeen;
     bool mGCBseen;

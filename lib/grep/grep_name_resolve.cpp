@@ -30,6 +30,7 @@ RE * UnicodeNameResolver::transformName(Name * name) {
     if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
         name->setDefinition(transform(name->getDefinition()));
     } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
+        llvm::errs() << "UnicodeNameResolver: processing " << name->getFullName() << "\n";
         if (UCD::resolvePropertyDefinition(name)) {
             name->setDefinition(transform(name->getDefinition()));
         } else {

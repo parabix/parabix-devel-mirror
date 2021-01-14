@@ -201,7 +201,7 @@ protected:
 
     virtual RE * parsePropertyExpression(PropertyExpression::Kind k);
 
-    Name * parseNamePatternExpression();
+    RE * parseNamePatternExpression();
 
     RE * makeComplement(RE * s);
     RE * makeZerowidthComplement(RE * s);

@@ -161,9 +161,9 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     // Similarly, the overriding of GB9b simplifies to a lookahead assertion
     // on a noncontrol.
     //
-    RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
-    RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
-    RE * GCB_Control = makeName("gcb", "control", Name::Type::UnicodeProperty);
+    RE * GCB_CR = makePropertyExpression("gcb", "cr");
+    RE * GCB_LF = makePropertyExpression("gcb", "lf");
+    RE * GCB_Control = makePropertyExpression("gcb", "control");
     RE * GCB_Control_CR_LF = makeAlt({GCB_Control, GCB_CR, GCB_LF});
     
     // Break at the start and end of text.
@@ -178,45 +178,51 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     
     
     // Do not break Hangul syllable sequences.
-    RE * GCB_L = makeName("gcb", "l", Name::Type::UnicodeProperty);
-    RE * GCB_V = makeName("gcb", "v", Name::Type::UnicodeProperty);
-    RE * GCB_LV = makeName("gcb", "lv", Name::Type::UnicodeProperty);
-    RE * GCB_LVT = makeName("gcb", "lvt", Name::Type::UnicodeProperty);
-    RE * GCB_T = makeName("gcb", "t", Name::Type::UnicodeProperty);
+    RE * GCB_L = makePropertyExpression("gcb", "l");
+    RE * GCB_V = makePropertyExpression("gcb", "v");
+    RE * GCB_LV = makePropertyExpression("gcb", "lv");
+    RE * GCB_LVT = makePropertyExpression("gcb", "lvt");
+    RE * GCB_T = makePropertyExpression("gcb", "t");
     RE * GCX_6 = makeSeq({Behind(GCB_L), Ahead(makeAlt({GCB_L, GCB_V, GCB_LV, GCB_LVT}))});
     RE * GCX_7 = makeSeq({Behind(makeAlt({GCB_LV, GCB_V})), Ahead(makeAlt({GCB_V, GCB_T}))});
     RE * GCX_8 = makeSeq({Behind(makeAlt({GCB_LVT, GCB_T})), Ahead(GCB_T)});
     
     // Do not break before extendiers or zero-width joiners.
-    RE * GCB_EX = makeName("gcb", "ex", Name::Type::UnicodeProperty);
-    RE * GCB_ZWJ = makeName("gcb", "zwj", Name::Type::UnicodeProperty);
+    RE * GCB_EX = makePropertyExpression("gcb", "ex");
+    RE * GCB_ZWJ = makePropertyExpression("gcb", "zwj");
     RE * GCX_9 = makeSeq({notBehind(GCB_Control_CR_LF), Ahead(makeAlt({GCB_EX, GCB_ZWJ}))});
 
     if (extendedGraphemeClusters) {
-        RE * GCB_SpacingMark = makeName("gcb", "sm", Name::Type::UnicodeProperty);
-        RE * GCB_Prepend = makeName("gcb", "pp", Name::Type::UnicodeProperty);
+        RE * GCB_SpacingMark = makePropertyExpression("gcb", "sm");
+        RE * GCB_Prepend = makePropertyExpression("gcb", "pp");
         RE * GCX_9a = makeSeq({notBehind(GCB_Control_CR_LF), Ahead(GCB_SpacingMark)});
         RE * GCX_9b = makeSeq({Behind(GCB_Prepend), notAhead(GCB_Control_CR_LF)});
         GCX_9 = makeAlt({GCX_9, GCX_9a, GCX_9b});
     }
 
-    RE * ExtendedPictographic = makeName("Extended_Pictographic", Name::Type::UnicodeProperty);
+    RE * ExtendedPictographic = makePropertyExpression("Extended_Pictographic");
     RE * EmojiSeq = makeSeq({ExtendedPictographic, makeRep(GCB_EX, 0, Rep::UNBOUNDED_REP), GCB_ZWJ});
     RE * GCX_11 = makeSeq({Behind(EmojiSeq), Ahead(ExtendedPictographic)});
     
-    RE * GCB_RI = makeName("gcb", "ri", Name::Type::UnicodeProperty);
+    RE * GCB_RI = makePropertyExpression("gcb", "ri");
     // Note: notBehind(RI) == sot | [^RI]
     RE * odd_RI_seq = makeSeq({notBehind(GCB_RI), makeRep(makeSeq({GCB_RI, GCB_RI}), 0, Rep::UNBOUNDED_REP), GCB_RI});
     RE * GCX_12_13 = makeSeq({Behind(odd_RI_seq), Ahead(GCB_RI)});
     
-    //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
+    //Name * gcb = makePropertyExpression("gcb");
     RE * GCX = makeAlt({GCX_6, GCX_7, GCX_8, GCX_9, GCX_11, GCX_12_13});
     
     // Otherwise, break everywhere.
     RE * GCB_999 = makeSeq({Behind(makeAny()), Ahead(makeAny())});
     
-    //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
     RE * gcb = makeAlt({GCB_1_5, makeDiff(GCB_999, GCX)});
+
+    gcb = UCD::linkProperties(gcb);
+    gcb = UCD::resolveProperties(gcb);
+    gcb = UCD::inlineSimpleProperties(gcb);
+    gcb = UCD::standardizeProperties(gcb);
+    gcb = UCD::externalizeProperties(gcb);
+
     return gcb;
 }
 

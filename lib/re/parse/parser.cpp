@@ -553,7 +553,7 @@ RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
     //return createName(prop);
 }
 
-Name * RE_Parser::parseNamePatternExpression(){
+RE * RE_Parser::parseNamePatternExpression(){
     require('{');
     std::stringstream nameRegexp;
     nameRegexp << "/(?m)^";
@@ -567,7 +567,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     }
     nameRegexp << "$";
     require('}');
-    return createName("na", nameRegexp.str());
+    return makePropertyExpression("na", nameRegexp.str());
 }
 
 
