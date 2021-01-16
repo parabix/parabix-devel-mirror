@@ -218,6 +218,11 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (bn.NonLocal) {
             out << "style=bold,";
         }
+        #ifdef PERMIT_BUFFER_MEMORY_REUSE
+        if (bn.Locality == BufferLocality::ThreadLocal) {
+            out << "color=blue,";
+        }
+        #endif
         out << "label=\"" << streamSet << "|{";
 
         const StreamSetBuffer * const buffer = bn.Buffer;

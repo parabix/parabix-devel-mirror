@@ -23,7 +23,15 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
         const auto handleName = makeBufferName(index, rd.Port);
         StreamSetBuffer * const buffer = bn.Buffer;
         Type * const handleType = buffer->getHandleType(b);
-        if (LLVM_LIKELY(bn.isOwned())) {
+
+        bool persistant = bn.isOwned();
+        #ifdef PERMIT_BUFFER_MEMORY_REUSE
+        // We automatically assign the buffer memory according to the buffer start position
+        if (bn.Locality == BufferLocality::ThreadLocal) {
+            persistant = false;
+        }
+        #endif
+        if (LLVM_LIKELY(persistant)) {
             if (LLVM_UNLIKELY(bn.NonLocal)) {
                 mTarget->addInternalScalar(handleType, handleName);
             } else {
@@ -54,11 +62,18 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
             Value * const handle = b->getScalarFieldPtr(handleName);
             assert (buffer->getHandle() == nullptr);
             buffer->setHandle(handle);
+            #ifdef PERMIT_BUFFER_MEMORY_REUSE
+            #warning TODO: buffer node alone should dictate whether its safe to do this
+            if (bn.Locality == BufferLocality::ThreadLocal && mThreadLocalStreamSetBaseAddress) {
+                assert (RequiredThreadLocalStreamSetMemory > 0);
+                assert (isa<StaticBuffer>(buffer));
+                Value * const startOffset = b->CreateMul(mExpectedNumOfStridesMultiplier, b->getSize(bn.BufferStart));
+                Value * const baseAddress = b->CreateGEP(mThreadLocalStreamSetBaseAddress, startOffset);
+                buffer->setBaseAddress(b, b->CreatePointerCast(baseAddress, buffer->getPointerType()));
+                buffer->setCapacity(b, b->getSize(bn.RequiredCapacity * b->getBitBlockWidth()));
+            }
+            #endif
         }
-    }
-    if (HasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
-        mZeroExtendBuffer = b->getScalarFieldPtr(ZERO_EXTENDED_BUFFER);
-        mZeroExtendSpace = b->getScalarFieldPtr(ZERO_EXTENDED_SPACE);
     }
 }
 
@@ -100,6 +115,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
                 b->CreateCall(func, params);
             }
         }
+
         // and allocate any output buffers
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto streamSet = target(e, mBufferGraph);
@@ -118,11 +134,17 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
             assert (buffer->getHandle());
 
             assert (isFromCurrentFunction(b, buffer->getHandle(), false));
+
+            #ifdef PERMIT_BUFFER_MEMORY_REUSE
+            if (bn.Locality == BufferLocality::ThreadLocal) {
+                continue;
+            }
+            #endif
+
             buffer->allocateBuffer(b, expectedNumOfStrides);
 
         }
     }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -130,13 +152,16 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
     loadInternalStreamSetHandles(b, nonLocal);
-
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.isUnowned() || bn.isShared() || bn.NonLocal != nonLocal) {
             continue;
         }
-
+        #ifdef PERMIT_BUFFER_MEMORY_REUSE
+        if (bn.Locality == BufferLocality::ThreadLocal) {
+            continue;
+        }
+        #endif
         StreamSetBuffer * const buffer = bn.Buffer;
         assert (isFromCurrentFunction(b, buffer->getHandle(), false));
         buffer->releaseBuffer(b);
@@ -156,10 +181,6 @@ void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
                 b->CreateFree(b->CreateLoad(b->CreateInBoundsGEP(traceData, {ZERO, ZERO})));
             }
         }
-    }
-    if (HasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
-        assert (isFromCurrentFunction(b, mZeroExtendBuffer, false));
-        b->CreateFree(b->CreateLoad(mZeroExtendBuffer));
     }
 }
 
@@ -677,7 +698,8 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-        const StreamSetBuffer * const buffer = bn.Buffer;
+        StreamSetBuffer * const buffer = bn.Buffer;
+
         if (bn.isOwned() && buffer->isLinear()) {
             Value * const produced = mInitiallyProducedItemCount[streamSet];
             Value * consumed = produced;
@@ -685,7 +707,19 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
                 consumed = mInitialConsumedItemCount[streamSet];
             }
             const BufferPort & br = mBufferGraph[e];
+
+            if (bn.Locality != BufferLocality::ThreadLocal) {
+
+            }
+
             buffer->prepareLinearBuffer(b, produced, consumed, br.LookBehind);
+
+            if (bn.Locality != BufferLocality::ThreadLocal) {
+
+            }
+
+        } else {
+            assert (bn.Locality != BufferLocality::ThreadLocal);
         }
     }
 }
@@ -697,23 +731,33 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
                                                 const BufferPort & rateData,
-                                                const StreamSetBuffer * const buffer,
+                                                const BufferNode & bufferNode,
                                                 Value * position) const {
+
+
+    const StreamSetBuffer * const buffer = bufferNode.Buffer;
     assert ("buffer cannot be null!" && buffer);
+    Value * const baseAddress = buffer->getBaseAddress(b);
+    if (bufferNode.isUnowned()) {
+        assert (bufferNode.Locality != BufferLocality::ThreadLocal);
+        return baseAddress;
+    }
+
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
     PointerType * const bufferType = buffer->getPointerType();
     Value * const blockIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
-    Value * const baseAddress = buffer->getBaseAddress(b);
 
-    const Binding & binding = rateData.Binding;
 
     if (LLVM_UNLIKELY(CheckAssertions)) {
+        const Binding & binding = rateData.Binding;
         b->CreateAssert(baseAddress, "%s.%s: baseAddress cannot be null",
                         mCurrentKernelName,
                         b->GetString(binding.getName()));
     }
+
     Value * const address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
+
     return b->CreatePointerCast(address, bufferType);
 }
 
@@ -733,7 +777,7 @@ void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> &
         const auto buffer = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];
         assert (isFromCurrentFunction(b, bn.Buffer->getHandle()));
-        baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt, bn.Buffer, processed);
+        baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt, bn, processed);
     }
 }
 

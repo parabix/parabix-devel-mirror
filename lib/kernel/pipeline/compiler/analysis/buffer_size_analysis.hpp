@@ -8,6 +8,9 @@ namespace kernel {
 
 #ifdef PERMIT_BUFFER_MEMORY_REUSE
 
+// TODO: nested pipeline kernels could report how much internal memory they require
+// and reason about that here (and in the scheduling phase)
+
 #define BUFFER_LAYOUT_INITIAL_CANDIDATES (20)
 #define BUFFER_LAYOUT_INITIAL_CANDIDATE_ATTEMPTS (100)
 
@@ -245,22 +248,22 @@ struct BufferLayoutOptimizer final : public EvolutionaryAlgorithm {
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief constructor
      ** ------------------------------------------------------------------------------------------------------------- */
-    BufferLayoutOptimizer(const unsigned candidateLength
+    BufferLayoutOptimizer(const unsigned numOfLocalStreamSets
                          , const unsigned firstKernel
                          , const unsigned lastKernel
                          , IntervalGraph && I
                          , std::vector<Pack> && allocations
                          , std::vector<size_t> && weight
                          , std::vector<int> && remaining )
-    : EvolutionaryAlgorithm (candidateLength, BUFFER_LAYOUT_MAX_POPULATION_SIZE, BUFFER_LAYOUT_MAX_EVOLUTIONARY_ROUNDS, BUFFER_LAYOUT_MUTATION_RATE)
+    : EvolutionaryAlgorithm (numOfLocalStreamSets, BUFFER_LAYOUT_MAX_POPULATION_SIZE, BUFFER_LAYOUT_MAX_EVOLUTIONARY_ROUNDS, BUFFER_LAYOUT_MUTATION_RATE)
     , firstKernel(firstKernel)
     , lastKernel(lastKernel)
     , I(std::move(I))
     , allocations(std::move(allocations))
     , weight(std::move(weight))
     , remaining(std::move(remaining))
-    , GC_Intervals(candidateLength)
-    , GC_ordering(candidateLength) {
+    , GC_Intervals(numOfLocalStreamSets)
+    , GC_ordering(numOfLocalStreamSets) {
 
     }
 
@@ -307,13 +310,13 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
     IntervalGraph I(n);
     std::vector<size_t> weight(n, 0);
     std::vector<int> remaining(n, 0); // NOTE: signed int type is necessary here
-    std::vector<int> mapping(n, -1);
+    std::vector<unsigned> mapping(n, -1U);
     std::vector<Pack> allocations(n);
 
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
 
-    unsigned candidateLength = 0;
+    unsigned numOfLocalStreamSets = 0;
 
     Population P1;
 
@@ -327,21 +330,26 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
 
     DataLayout DL(b->getModule());
 
+
+    auto alignment = b->getCacheAlignment();
+
+
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
-        const auto lastStreamSet = candidateLength;
+        const auto lastStreamSet = numOfLocalStreamSets;
 
         for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const auto streamSet = target(output, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[streamSet];
+            BufferNode & bn = mBufferGraph[streamSet];
 
             const auto i = streamSet - FirstStreamSet;
             assert (i < n);
 
-            if (bn.Locality == BufferLocality::Local) {
+            if (bn.Locality == BufferLocality::ThreadLocal) {
                 // determine the number of bytes this streamset requires
                 const BufferPort & producerRate = mBufferGraph[output];
                 const Binding & outputRate = producerRate.Binding;
+
 
                 Type * const type = StreamSetBuffer::resolveType(b, outputRate.getType());
                 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
@@ -349,25 +357,27 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
                 #else
                 const auto typeSize = DL.getTypeAllocSize(type).getFixedSize();
                 #endif
-                const auto segmentWidth = outputRate.getRate().getUpperBound() * Rational{typeSize};
 
-                const auto w = ceiling(segmentWidth * MaximumNumOfStrides[kernel]);
+                assert (bn.UnderflowCapacity == 0);
+
+                const auto c = bn.RequiredCapacity + bn.OverflowCapacity;
+                const auto w = round_up_to(c * typeSize, alignment);
 
                 assert (w > 0);
 
-                mapping[i] = candidateLength;
+                mapping[i] = numOfLocalStreamSets;
 
-                Pack & P = allocations[candidateLength];
+                Pack & P = allocations[numOfLocalStreamSets];
                 assert (P.A == 0);
                 P.A = kernel;
                 P.D = kernel;
                 P.S = w;
-                weight[candidateLength] = w;
+                weight[numOfLocalStreamSets] = w;
 
                 // record how many consumers exist before the streamset memory can be reused
-                remaining[candidateLength] = out_degree(streamSet, mBufferGraph);
+                remaining[numOfLocalStreamSets] = out_degree(streamSet, mBufferGraph);
 
-                ++candidateLength;
+                ++numOfLocalStreamSets;
             }
         }
 
@@ -379,7 +389,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
         // candidates have been generated. Instead we use a general interval graph
         // within the first-fit process but guide colouring based on candidate order.
 
-        for (unsigned i = lastStreamSet; i < candidateLength; ++i) {
+        for (unsigned i = lastStreamSet; i < numOfLocalStreamSets; ++i) {
             // NOTE: remaining may be less than 0
             if (remaining[i] > 0) {
                 for (unsigned j = 0; j < i; ++j) {
@@ -397,7 +407,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
             const auto i = streamSet - FirstStreamSet;
             assert (i < n);
             const auto j = mapping[i];
-            if (j >= 0) {
+            if (j != -1U) {
                 auto & r = remaining[j];
                 if ((--r) == 0) {
                     Pack & P = allocations[j];
@@ -431,15 +441,16 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
 //    out.flush();
 
 
-    BufferLayoutOptimizer BA(candidateLength, firstKernel, lastKernel,
+    BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
                              std::move(I), std::move(allocations), std::move(weight), std::move(remaining));
 
     OrderingDAWG O(1);
 
-    BA.runGA(O);
+    RequiredThreadLocalStreamSetMemory = BA.runGA(O);
 
     // TODO: apart from total memory, when would one layout be better than another?
-    // Can we quantify it based on the buffer graph order?
+    // Can we quantify it based on the buffer graph order? Currently, we just take
+    // the first one.
 
     const auto intervals = BA.getIntervals(O);
 
@@ -449,15 +460,17 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
         for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const auto streamSet = target(output, mBufferGraph);
             BufferNode & bn = mBufferGraph[streamSet];
-            if (bn.Locality == BufferLocality::Local) {
-                const auto & interval = intervals[l++];
+            if (bn.Locality == BufferLocality::ThreadLocal) {
+                assert ("inconsistent graph traversal?" && (mapping[streamSet - FirstStreamSet] == l));
+                const auto & interval = intervals[l];
                 bn.BufferStart = interval.first;
-                bn.BufferSize = interval.second - interval.first;
+
+                ++l;
             }
         }
     }
 
-    assert (l == candidateLength);
+    assert (l == numOfLocalStreamSets);
 
 }
 
@@ -466,7 +479,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief determineBufferLayout
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::determineBufferLayout() {
+void PipelineAnalysis::determineBufferLayout(BuilderRef /* b */) {
 
 
 }

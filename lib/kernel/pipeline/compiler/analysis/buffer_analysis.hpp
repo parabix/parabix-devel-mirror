@@ -86,170 +86,38 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         }
     }
 
-    const auto blockWidth = b->getBitBlockWidth();
-
     mInternalBuffers.resize(LastStreamSet - FirstStreamSet + 1);
-
-    std::vector<unsigned> minStride(LastKernel + 1U);
-
-    unsigned partitionRootId = 0U;
-    unsigned currentPartitionId = -1U;
-
-    std::vector<unsigned> minFactor(PipelineOutput + 1U);
-    std::vector<unsigned> maxFactor(PipelineOutput + 1U);
-
-
-    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
-        const auto pId = KernelPartitionId[kernel];
-        if (pId != currentPartitionId) {
-            currentPartitionId = pId;
-            partitionRootId = kernel;
-            minFactor[kernel] = floor(MinimumNumOfStrides[kernel]);
-            maxFactor[kernel] = ceiling(MaximumNumOfStrides[kernel]);
-        } else {
-            const auto m = MaximumNumOfStrides[kernel] / MaximumNumOfStrides[partitionRootId];
-            minFactor[kernel] = floor(m * minFactor[partitionRootId]);
-            maxFactor[kernel] = ceiling(m * maxFactor[partitionRootId]);
-        }
-    }
-    minFactor[PipelineOutput] = 1;
-    maxFactor[PipelineOutput] = 1;
 
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
         BufferNode & bn = mBufferGraph[streamSet];
         const auto producerOutput = in_edge(streamSet, mBufferGraph);
-        const BufferPort & producerRate = mBufferGraph[producerOutput];
-
-        bool nonLocal = false;
-
-        // Does this stream cross a partition boundary?
-        const auto producer = source(producerOutput, mBufferGraph);
-        if (producer == PipelineInput) {
-            nonLocal = true;
-        }
-        const auto producerPartitionId = KernelPartitionId[producer];
-
-        for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const auto consumer = target(ce, mBufferGraph);
-            if (producerPartitionId != KernelPartitionId[consumer]) {
-                nonLocal = true;
-                break;
-            }
-        }
 
         if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
 
-            // TODO: If we have an open system, then the input rate to this pipeline cannot
-            // be bounded a priori. During initialization, we could pass a "suggestion"
-            // argument to indicate what the outer pipeline believes its I/O rates will be.
-
-
-            // If this buffer is externally used, we cannot analyze the dataflow rate of
-            // external consumers. Default to dynamic for such buffers.
-
-            // Similarly if any internal consumer has a deferred rate, we cannot analyze
-            // any consumption rates.
-
-            nonLocal |= bn.isExternal() || producerRate.IsDeferred;
-
+            const BufferPort & producerRate = mBufferGraph[producerOutput];
             const Binding & output = producerRate.Binding;
-
-            auto maxDelay = producerRate.Delay;
-            auto maxLookAhead = producerRate.LookAhead;
-            auto maxLookBehind = producerRate.LookBehind;
-
-            auto bMin = floor(producerRate.Minimum) * minFactor[producer];
-            auto bMax = ceiling(producerRate.Maximum) * maxFactor[producer];
-
-            assert (producerRate.Maximum >= producerRate.Minimum);
-
-            if (producerRate.Minimum < producerRate.Maximum) {
-                nonLocal = true;
-            }
-
-            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-
-                const BufferPort & consumerRate = mBufferGraph[e];
-
-                const auto consumer = target(e, mBufferGraph);
-
-                const auto cMin = floor(consumerRate.Minimum) * minFactor[consumer];
-                const auto cMax = ceiling(consumerRate.Maximum) * maxFactor[consumer];
-
-                assert (cMax >= cMin);
-
-                // Could we consume less data than we produce?
-                if (consumerRate.Minimum < consumerRate.Maximum) {
-                    nonLocal = true;
-                // Or is the data consumption rate unpredictable despite its type?
-                } else if (LLVM_UNLIKELY(consumerRate.IsShared || consumerRate.IsDeferred)) {
-                    nonLocal = true;
-                }
-
-                assert (consumerRate.Maximum >= consumerRate.Minimum);
-
-                bMin = std::min(bMin, cMin);
-                bMax = std::max(bMax, cMax);
-
-//                // Get output overflow size
-                auto lookAhead = consumerRate.LookAhead;
-                if (consumerRate.Maximum > consumerRate.Minimum) {
-                    lookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
-                }
-
-                maxDelay = std::max(maxDelay, consumerRate.Delay);
-                maxLookAhead = std::max(maxLookAhead, lookAhead);
-                maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
-            }
-
-            // calculate overflow (copyback) and fascimile (copyforward) space
-            bn.LookAhead = maxLookAhead;
-            bn.LookBehind = maxLookBehind;
-
-            const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
-            const auto overflow1 = std::max(overflow0, bMax);
-            const auto overflowSize = round_up_to(overflow1, blockWidth) / blockWidth;
-
-            const auto underflow0 = std::max(bn.LookBehind, maxDelay);
-            const auto underflowSize = round_up_to(underflow0, blockWidth) / blockWidth;
-            const auto required = (bMax * 2) - bMin;
-
-            const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
-            const auto reqSize2 = 2 * (overflowSize + underflowSize);
-            auto requiredSize = std::max(reqSize1, reqSize2);
-
-            // if this buffer is "stateful", we cannot make it *thread* local
-            if (maxLookBehind || maxDelay || bn.CopyBack || maxLookAhead) {
-                nonLocal = true;
-            }
-
-            Type * const baseType = output.getType();
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
-            if (nonLocal) {
+            if (bn.NonLocal && (bn.Locality != BufferLocality::ThreadLocal)) {
                 // TODO: we can make some buffers static despite crossing a partition but only if we can guarantee
                 // an upper bound to the buffer size for all potential inputs. Build a dataflow analysis to
                 // determine this.
-                const auto bufferSize = requiredSize * mNumOfThreads;
-                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, !bn.NonLinear, 0U);
+                const auto bufferSize = bn.RequiredCapacity * mNumOfThreads;
+                buffer = new DynamicBuffer(b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
             } else {
-                assert (!bn.NonLinear);
-                buffer = new StaticBuffer(b, baseType, requiredSize, overflowSize, underflowSize, true, 0U);
+                buffer = new StaticBuffer(b, output.getType(), bn.RequiredCapacity, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
             }
             bn.Buffer = buffer;
+
         }
 
         assert ("missing buffer?" && bn.Buffer);
-
-        bn.NonLocal = nonLocal;
-
-     //   assert (nonLocal ^ (bn.Locality == BufferLocality::Local));
-
         mInternalBuffers[streamSet - FirstStreamSet].reset(bn.Buffer);
     }   
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -262,8 +130,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, RelationshipGraph::edge_descriptor>;
     using Vertex = graph_traits<Graph>::vertex_descriptor;
 
-    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
-        const RelationshipNode & node = mStreamGraph[i];
+    for (auto kernel = PipelineInput; kernel <= PipelineOutput; ++kernel) {
+
+        const RelationshipNode & node = mStreamGraph[kernel];
         const Kernel * const kernelObj = node.Kernel; assert (kernelObj);
 
         auto makeBufferPort = [&](const RelationshipType port,
@@ -289,7 +158,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             } else {
                 const auto strideLength = kernelObj->getStride();
                 if (LLVM_UNLIKELY(rate.isRelative())) {
-                    const Binding & ref = getBinding(i, getReference(i, port));
+                    const Binding & ref = getBinding(kernel, getReference(kernel, port));
                     const ProcessingRate & refRate = ref.getRate();
                     lb *= refRate.getLowerBound();
                     ub *= refRate.getUpperBound();
@@ -304,7 +173,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 bp.IsManaged = true;
             }
 
-            bool nonLocal = false;
+            bool cannotBePlacedIntoThreadLocalMemory = false;
             bool mustBeLinear = false;
 
             for (const Attribute & attr : binding.getAttributes()) {
@@ -313,15 +182,15 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                         bp.Add = std::max(bp.Add, attr.amount());
                         break;
                     case AttrId::Delayed:
-                        nonLocal = true;
+                        cannotBePlacedIntoThreadLocalMemory = true;
                         bp.Delay = std::max(bp.Delay, attr.amount());
                         break;
                     case AttrId::LookAhead:
-                        nonLocal = true;
+                        cannotBePlacedIntoThreadLocalMemory = true;
                         bp.LookAhead = std::max(bp.LookAhead, attr.amount());
                         break;
                     case AttrId::LookBehind:
-                        nonLocal = true;
+                        cannotBePlacedIntoThreadLocalMemory = true;
                         bp.LookBehind = std::max(bp.LookBehind, attr.amount());
                         break;
                     case AttrId::Truncate:
@@ -331,7 +200,8 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                         bp.IsPrincipal = true;
                         break;
                     case AttrId::Deferred:
-                        nonLocal = true;
+                        cannotBePlacedIntoThreadLocalMemory = true;
+                        mustBeLinear = true;
                         bp.IsDeferred = true;
                         break;
                     case AttrId::SharedManagedBuffer:
@@ -344,19 +214,20 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 }
             }
 
-            #warning make locality an enum?
-
-            if (LLVM_UNLIKELY(nonLocal)) {
-                BufferNode & bn = mBufferGraph[streamSet];
-                bn.Locality = BufferLocality::SoftNonLocal;
+            BufferNode & bn = mBufferGraph[streamSet];
+            if (cannotBePlacedIntoThreadLocalMemory) {
+                bn.NonLocal = true;
+            }
+            if (mustBeLinear) {
+                bn.NonLinear = false;
             }
 
             return bp;
         };
 
         // Evaluate the input/output ordering here and ensure that any reference port is stored first.
-        const auto numOfInputs = in_degree(i, mStreamGraph);
-        const auto numOfOutputs = out_degree(i, mStreamGraph);
+        const auto numOfInputs = in_degree(kernel, mStreamGraph);
+        const auto numOfOutputs = out_degree(kernel, mStreamGraph);
 
         const auto numOfPorts = numOfInputs + numOfOutputs;
 
@@ -369,7 +240,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
         #ifndef NDEBUG
         RelationshipType prior_in{};
         #endif
-        for (auto e : make_iterator_range(in_edges(i, mStreamGraph))) {
+        for (auto e : make_iterator_range(in_edges(kernel, mStreamGraph))) {
             const RelationshipType & port = mStreamGraph[e];
             #ifndef NDEBUG
             assert (prior_in < port);
@@ -401,7 +272,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
         #ifndef NDEBUG
         RelationshipType prior_out{};
         #endif
-        for (auto e : make_iterator_range(out_edges(i, mStreamGraph))) {
+        for (auto e : make_iterator_range(out_edges(kernel, mStreamGraph))) {
             const RelationshipType & port = mStreamGraph[e];
             #ifndef NDEBUG
             assert (prior_out < port);
@@ -484,7 +355,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 const auto streamSet = source(f, mStreamGraph);
                 assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
                 assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-                add_edge(streamSet, i, makeBufferPort(port, rn, streamSet), mBufferGraph);
+                add_edge(streamSet, kernel, makeBufferPort(port, rn, streamSet), mBufferGraph);
             } else {
                 const auto binding = target(e, mStreamGraph);
                 const RelationshipNode & rn = mStreamGraph[binding];
@@ -494,7 +365,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 const auto streamSet = target(f, mStreamGraph);
                 assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
                 assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-                add_edge(i, streamSet, makeBufferPort(port, rn, streamSet), mBufferGraph);
+                add_edge(kernel, streamSet, makeBufferPort(port, rn, streamSet), mBufferGraph);
             }
         }
     }
@@ -557,14 +428,148 @@ void PipelineAnalysis::identifyBufferLocality() {
 
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         BufferNode & bn = mBufferGraph[i];
-        assert (bn.Locality != BufferLocality::HardNonLocal);
+        assert (bn.Locality != BufferLocality::GloballyShared);
         const auto r = nonLocal[i - FirstStreamSet];
-        if (r == 1) {
-            bn.Locality = BufferLocality::SoftNonLocal;
-        } else if (r != 0) {
-            bn.Locality = BufferLocality::HardNonLocal;
+        if (r == 0) {
+            if (bn.NonLocal) {
+                bn.Locality = BufferLocality::PartitionLocal;
+            }
+        } else if (r == 1) {
+            bn.Locality = BufferLocality::PartitionLocal;
+        } else { // if (r != 0) {
+            bn.Locality = BufferLocality::GloballyShared;
         }
     }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief determineBufferSize
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::determineBufferSize(BuilderRef b) {
+
+    const auto blockWidth = b->getBitBlockWidth();
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+
+        BufferNode & bn = mBufferGraph[streamSet];
+        const auto producerOutput = in_edge(streamSet, mBufferGraph);
+        const BufferPort & producerRate = mBufferGraph[producerOutput];
+
+        bool nonLocal = false;
+
+        // Does this stream cross a partition boundary?
+        const auto producer = source(producerOutput, mBufferGraph);
+        if (producer == PipelineInput) {
+            nonLocal = true;
+        }
+        const auto producerPartitionId = KernelPartitionId[producer];
+
+        for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const auto consumer = target(ce, mBufferGraph);
+            if (producerPartitionId != KernelPartitionId[consumer]) {
+                nonLocal = true;
+                break;
+            }
+        }
+
+        if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
+
+            // TODO: If we have an open system, then the input rate to this pipeline cannot
+            // be bounded a priori. During initialization, we could pass a "suggestion"
+            // argument to indicate what the outer pipeline believes its I/O rates will be.
+
+
+            // If this buffer is externally used, we cannot analyze the dataflow rate of
+            // external consumers. Default to dynamic for such buffers.
+
+            // Similarly if any internal consumer has a deferred rate, we cannot analyze
+            // any consumption rates.
+
+            nonLocal |= bn.isExternal() || producerRate.IsDeferred;
+
+            const Binding & output = producerRate.Binding;
+
+            auto maxDelay = producerRate.Delay;
+            auto maxLookAhead = producerRate.LookAhead;
+            auto maxLookBehind = producerRate.LookBehind;
+
+            auto bMin = floor(producerRate.Minimum * MinimumNumOfStrides[producer]);
+            auto bMax = ceiling(producerRate.Maximum * MaximumNumOfStrides[producer]);
+
+            assert (producerRate.Maximum >= producerRate.Minimum);
+
+            if (producerRate.Minimum < producerRate.Maximum) {
+                nonLocal = true;
+            }
+
+            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+
+                const BufferPort & consumerRate = mBufferGraph[e];
+
+                const auto consumer = target(e, mBufferGraph);
+
+                const auto cMin = floor(consumerRate.Minimum * MinimumNumOfStrides[consumer]);
+                const auto cMax = ceiling(consumerRate.Maximum * MaximumNumOfStrides[consumer]);
+
+                assert (cMax >= cMin);
+
+                // Could we consume less data than we produce?
+                if (consumerRate.Minimum < consumerRate.Maximum) {
+                    nonLocal = true;
+                // Or is the data consumption rate unpredictable despite its type?
+                } else if (LLVM_UNLIKELY(consumerRate.IsShared || consumerRate.IsDeferred)) {
+                    nonLocal = true;
+                }
+
+                assert (consumerRate.Maximum >= consumerRate.Minimum);
+
+                bMin = std::min(bMin, cMin);
+                bMax = std::max(bMax, cMax);
+
+//                // Get output overflow size
+                auto lookAhead = consumerRate.LookAhead;
+                if (consumerRate.Maximum > consumerRate.Minimum) {
+                    lookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
+                }
+
+                maxDelay = std::max(maxDelay, consumerRate.Delay);
+                maxLookAhead = std::max(maxLookAhead, lookAhead);
+                maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
+            }
+
+            // calculate overflow (copyback) and fascimile (copyforward) space
+            bn.LookAhead = maxLookAhead;
+            bn.LookBehind = maxLookBehind;
+
+            const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
+            const auto overflow1 = std::max(overflow0, bMax);
+            const auto overflowSize = round_up_to(overflow1, blockWidth) / blockWidth;
+
+            const auto underflow0 = std::max(bn.LookBehind, maxDelay);
+            const auto underflowSize = round_up_to(underflow0, blockWidth) / blockWidth;
+            const auto required = (bMax * 2) - bMin;
+
+            const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
+            const auto reqSize2 = 2 * (overflowSize + underflowSize);
+            auto requiredSize = std::max(reqSize1, reqSize2);
+
+            // if this buffer is "stateful", we cannot make it *thread* local
+            if (maxLookBehind || maxDelay || bn.CopyBack || maxLookAhead) {
+                nonLocal = true;
+            }
+
+            bn.OverflowCapacity = overflowSize;
+            bn.UnderflowCapacity = underflowSize;
+            bn.RequiredCapacity = requiredSize;
+
+        }
+
+        bn.NonLocal = nonLocal;
+
+    }
+
+
 
 }
 

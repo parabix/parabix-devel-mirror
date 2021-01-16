@@ -806,7 +806,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     PointerType * const voidPtrTy = b->getVoidPtrTy();
 
-    for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+    for (const auto e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
         const RelationshipRef & host = mStreamSetGraph[e];
         const RelationshipRef & path = mStreamSetGraph[parent(e, mStreamSetGraph)];
         const StreamSetBuffer * const buffer = getInputStreamSetBuffer(host.Index);
@@ -827,7 +827,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     PointerType * const voidPtrPtrTy = voidPtrTy->getPointerTo();
 
-    for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+    for (const auto e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
         const RelationshipRef & host = mStreamSetGraph[e];
         const auto & buffer = mStreamSetOutputBuffers[host.Index];
 
@@ -974,7 +974,7 @@ Value * OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b,
         b->CreateUnlikelyCondBr(isFinal, calculateFinalItemCounts, executeKernel);
 
         b->SetInsertPoint(calculateFinalItemCounts);
-        for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & path = mStreamSetGraph[parent(e, mStreamSetGraph)];
             const Binding & input = kernel->getInputStreamSetBinding(path.Index);
             const ProcessingRate & rate = input.getRate();
@@ -990,7 +990,7 @@ Value * OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b,
 
         const auto numOfOutputs = out_degree(branchType, mStreamSetGraph);
         SmallVector<Value *, 16> pendingOutputItems(numOfOutputs, nullptr);
-        for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & path = mStreamSetGraph[child(e, mStreamSetGraph)];
             const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
             const ProcessingRate & rate = output.getRate();

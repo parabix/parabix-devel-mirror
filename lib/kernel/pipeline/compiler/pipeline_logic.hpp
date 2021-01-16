@@ -64,9 +64,20 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     // must be allocated dynamically.
 
     IntegerType * const sizeTy = b->getSizeTy();
+
     if (!ExternallySynchronized) {
         mTarget->addInternalScalar(sizeTy, NEXT_LOGICAL_SEGMENT_NUMBER, 0);
     }
+
+    mTarget->addInternalScalar(sizeTy, EXPECTED_NUM_OF_STRIDES_MULTIPLIER, 0);
+
+    #ifdef PERMIT_BUFFER_MEMORY_REUSE
+    if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
+        PointerType * const int8PtrTy = b->getInt8PtrTy();
+        mTarget->addThreadLocalScalar(int8PtrTy, BASE_THREAD_LOCAL_STREAMSET_MEMORY, 0);
+    }
+    #endif
+
     // NOTE: both the shared and thread local objects are parameters to the kernel.
     // They get automatically set by reading in the appropriate params.
 
@@ -96,6 +107,9 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addUnconsumedItemCountProperties(b, i);
         addFamilyKernelProperties(b, i);
     }
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -350,6 +364,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
  * @brief generateAllocateInternalStreamSetsMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
+    b->setScalarField(EXPECTED_NUM_OF_STRIDES_MULTIPLIER, expectedNumOfStrides);
     allocateOwnedBuffers(b, expectedNumOfStrides, true);
     initializeBufferExpansionHistory(b);
     resetInternalBufferHandles();
@@ -380,6 +395,14 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
     assert (mTarget->hasThreadLocal());
+    #ifdef PERMIT_BUFFER_MEMORY_REUSE
+    if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
+        ConstantInt * const reqMemory = b->getSize(RequiredThreadLocalStreamSetMemory);
+        Value * const base = b->CreateCacheAlignedMalloc(b->CreateMul(reqMemory, expectedNumOfStrides));
+        PointerType * const int8PtrTy = b->getInt8PtrTy();
+        b->setScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY, b->CreatePointerCast(base, int8PtrTy));
+    }
+    #endif
     allocateOwnedBuffers(b, expectedNumOfStrides, false);
     resetInternalBufferHandles();
 }
@@ -727,6 +750,7 @@ inline Value * PipelineCompiler::isProcessThread(BuilderRef b, Value * const thr
  * @brief generateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
+
     assert (mTarget->hasThreadLocal());
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = getKernel(i);
@@ -734,7 +758,7 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
             setActiveKernel(b, i, true);
             assert (mKernel == kernel);
             SmallVector<Value *, 2> args;
-            if (LLVM_LIKELY(!!mKernelSharedHandle)) {
+            if (LLVM_LIKELY(mKernelSharedHandle != nullptr)) {
                 args.push_back(mKernelSharedHandle);
             }
             args.push_back(mKernelThreadLocalHandle);
@@ -749,6 +773,12 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
     // Since all of the nested kernels thread local state is contained within
     // this pipeline thread's thread local state, freeing the pipeline's will
     // also free the inner kernels.
+    #ifdef PERMIT_BUFFER_MEMORY_REUSE
+    if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
+        Value * const addr = b->getScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY);
+        b->CreateFree(addr);
+    }
+    #endif
     b->CreateFree(getThreadLocalHandle());
 }
 

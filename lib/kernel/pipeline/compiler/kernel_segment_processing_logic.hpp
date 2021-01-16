@@ -37,6 +37,13 @@ void PipelineCompiler::start(BuilderRef b) {
     debugPrint(b, prefix + " +++ IS FINAL %" PRIu8 "+++", mIsFinal);
     #endif
 
+    #ifdef PERMIT_BUFFER_MEMORY_REUSE
+    if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
+        mExpectedNumOfStridesMultiplier = b->getScalarField(EXPECTED_NUM_OF_STRIDES_MULTIPLIER);
+        mThreadLocalStreamSetBaseAddress = b->getScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY);
+    }
+    #endif
+
     loadInternalStreamSetHandles(b, true);
     loadInternalStreamSetHandles(b, false);
     readExternalConsumerItemCounts(b);
@@ -371,7 +378,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
  * @brief verifyExpectedNumOfStrides
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::verifyExpectedNumOfStrides(BuilderRef b) {
-
+#ifdef TEST_EXPECTED_NUM_OF_STRIDES
     if (ExternallySynchronized) return;
 
     // TODO: would have to scale by external base segment size to use this assertion
@@ -407,8 +414,8 @@ void PipelineCompiler::verifyExpectedNumOfStrides(BuilderRef b) {
         b->CreateAssert(valid, "%s was expected to perform %" PRIu64 " strides "
                                " but only executed %" PRIu64,
                         mCurrentKernelName, mMaximumNumOfStrides, numOfStrides);
-
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -909,6 +916,8 @@ void PipelineCompiler::end(BuilderRef b) {
     }
 
    // b->GetInsertBlock()->getParent()->print(errs());
+   mExpectedNumOfStridesMultiplier = nullptr;
+   mThreadLocalStreamSetBaseAddress = nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

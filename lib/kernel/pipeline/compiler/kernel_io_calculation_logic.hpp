@@ -807,7 +807,15 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
 
     const BufferNode & bn = mBufferGraph[streamSet];
 
+    #ifdef PERMIT_BUFFER_MEMORY_REUSE
+    if (bn.Locality == BufferLocality::ThreadLocal) {
+        return;
+    }
+    #endif
+
     if (LLVM_UNLIKELY(bn.isOwned())) {
+
+
 
         const auto prefix = makeBufferName(mKernelId, outputPort);
         const StreamSetBuffer * const buffer = bn.Buffer;
@@ -1015,6 +1023,11 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b,
     assert (outputPort.Type == PortType::Output);
     const auto bufferVertex = getOutputBufferVertex(outputPort);
     const BufferNode & bn = mBufferGraph[bufferVertex];
+    #ifdef PERMIT_BUFFER_MEMORY_REUSE
+    if (bn.Locality == BufferLocality::ThreadLocal) {
+        return nullptr;
+    }
+    #endif
     if (LLVM_UNLIKELY(bn.isUnowned())) {
         return nullptr;
     }

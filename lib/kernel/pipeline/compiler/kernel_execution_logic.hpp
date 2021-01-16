@@ -150,7 +150,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
             const auto streamSet = source(port, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
-            const StreamSetBuffer * const buffer = bn.Buffer;
 
             const auto  deferred = rt.IsDeferred;
 
@@ -187,7 +186,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             Value * addr = nullptr;
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
                 assert ("internally synchronized I/O must be linear!" && !bn.NonLinear);
-                addr = getVirtualBaseAddress(b, rt, buffer, processed);
+                addr = getVirtualBaseAddress(b, rt, bn, processed);
             } else {
                 addr = mInputVirtualBaseAddressPhi[rt.Port];
             }
@@ -243,12 +242,13 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             produced = mAlreadyProducedPhi[rt.Port];
         }
         const auto managed = rt.IsShared || mKernelIsInternallySynchronized || rt.IsManaged;
+
         if (LLVM_UNLIKELY(rt.IsShared)) {
             addNextArg(b->CreatePointerCast(buffer->getHandle(), voidPtrTy));
         } else if (LLVM_UNLIKELY(managed)) {
             mReturnedOutputVirtualBaseAddressPtr[rt.Port] = addVirtualBaseAddressArg(b, buffer, args);
         } else {
-            addNextArg(b->CreatePointerCast(getVirtualBaseAddress(b, rt, buffer, produced), voidPtrTy));
+            addNextArg(b->CreatePointerCast(getVirtualBaseAddress(b, rt, bn, produced), voidPtrTy));
         }
 
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {

@@ -60,10 +60,13 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
         b->CreateBasicBlock(prefix + "_expandZeroExtensionBuffer", insertBefore);
     BasicBlock * const hasSufficientZeroExtendSpace =
         b->CreateBasicBlock(prefix + "_hasSufficientZeroExtendSpace", insertBefore);
-    assert (mZeroExtendSpace);
-    Value * const currentSpace = b->CreateLoad(mZeroExtendSpace);
-    assert (mZeroExtendBuffer);
-    Value * const currentBuffer = b->CreateLoad(mZeroExtendBuffer);
+
+    Value * const zeroExtendSpace = b->getScalarFieldPtr(ZERO_EXTENDED_SPACE);
+    Value * const currentSpace = b->CreateLoad(zeroExtendSpace);
+
+    Value * const zeroExtendBuffer = b->getScalarFieldPtr(ZERO_EXTENDED_BUFFER);
+    Value * const currentBuffer = b->CreateLoad(zeroExtendBuffer);
+
     requiredSpace = b->CreateRoundUp(requiredSpace, b->getSize(b->getCacheAlignment()));
 
     Value * const largeEnough = b->CreateICmpUGE(currentSpace, requiredSpace);
@@ -74,8 +77,8 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
     b->CreateFree(currentBuffer);
     Value * const newBuffer = b->CreateCacheAlignedMalloc(requiredSpace);
     b->CreateMemZero(newBuffer, requiredSpace, b->getCacheAlignment());
-    b->CreateStore(requiredSpace, mZeroExtendSpace);
-    b->CreateStore(newBuffer, mZeroExtendBuffer);
+    b->CreateStore(requiredSpace, zeroExtendSpace);
+    b->CreateStore(newBuffer, zeroExtendBuffer);
     b->CreateBr(hasSufficientZeroExtendSpace);
 
     b->SetInsertPoint(hasSufficientZeroExtendSpace);

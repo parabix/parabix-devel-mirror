@@ -47,6 +47,10 @@ public:
         // Construct the Stream and Scalar graphs
         P.transcribeRelationshipGraph(partitionGraph);
 
+        // P.printRelationshipGraph(P.mStreamGraph, errs(), "Streams");
+        // P.printRelationshipGraph(P.mScalarGraph, errs(), "Scalars");
+
+
         END_SCOPED_REGION
 
         P.generateInitialBufferGraph();
@@ -54,6 +58,8 @@ public:
         P.identifyBufferLocality();
 
         P.computeDataFlowRates();
+
+        P.determineBufferSize(b);
 
         P.determineBufferLayout(b);
 
@@ -158,6 +164,8 @@ private:
     void addStreamSetsToBufferGraph(BuilderRef b);
     void generateInitialBufferGraph();
 
+    void determineBufferSize(BuilderRef b);
+
     void determineBufferLayout(BuilderRef b);
 
     void identifyLinearBuffers();
@@ -228,6 +236,8 @@ public:
     unsigned                        LastScalar = 0;
     unsigned                        PartitionCount = 0;
     bool                            HasZeroExtendedStream = false;
+
+    size_t                          RequiredThreadLocalStreamSetMemory = 0;
 
     unsigned                        MaxNumOfInputPorts = 0;
     unsigned                        MaxNumOfOutputPorts = 0;

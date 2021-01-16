@@ -1158,8 +1158,6 @@ private:
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const {
 
-    using SchedulingMap = flat_map<Vertex, Vertex>;
-
     /// --------------------------------------------
     /// Construct our partition schedules
     /// --------------------------------------------
@@ -1903,8 +1901,12 @@ struct ProgramSchedulingAnalysis final : public EvolutionaryAlgorithm {
         Candidate candidate(candidateLength);
         std::iota(candidate.begin(), candidate.end(), 0);
         for (unsigned i = 0; i < INITIAL_SCHEDULING_POPULATION_ATTEMPTS; ++i) {
-            std::shuffle(candidate.begin(), candidate.end(), rng);
+            std::shuffle(candidate.begin(), candidate.end(), rng);            
+            #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
+            worker.nearest_valid_schedule(candidate);
+            #else
             repairCandidate(candidate);
+            #endif
             if (insertCandidate(candidate, initialPopulation)) {
                 if (initialPopulation.size() >= INITIAL_SCHEDULING_POPULATION_SIZE) {
                     r = false;
@@ -1954,8 +1956,6 @@ private:
  * @brief analyzeDataflowBetweenPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
 PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(PartitionGraph & P) const {
-
-    using DataflowMap = flat_map<Vertex, Vertex>;
 
     const auto activePartitions = (PartitionCount - 1);
 
@@ -2128,16 +2128,25 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(Partit
         Z3_optimize_assert_soft(ctx, solver, c, "1", nullptr);
     };
 
+    auto check = [&]() {
+        #if Z3_VERSION_INTEGER > 40500
+        return Z3_optimize_check(ctx, solver, 0, nullptr);
+        #else
+        return Z3_optimize_check(ctx, solver);
+        #endif
+    };
+
+
     const auto ONE = Z3_mk_int(ctx, 1, intType);
 
     for (unsigned i = 0; i < activePartitions; ++i) {
         auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
         hard_assert(Z3_mk_ge(ctx, v, ONE));
-        if (in_degree(i, G) == 0) {
-            Z3_optimize_minimize(ctx, solver, v);
-        } else {
-            Z3_optimize_maximize(ctx, solver, v);
-        }
+//        if (in_degree(i, G) == 0) {
+//            Z3_optimize_minimize(ctx, solver, v);
+//        } else {
+//            Z3_optimize_maximize(ctx, solver, v);
+//        }
         VarList[i] = v;
     }
 
@@ -2172,7 +2181,7 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(Partit
             }
         }
 
-        if (LLVM_UNLIKELY(Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE)) {
+        if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
 
             Z3_optimize_pop(ctx, solver);
 
@@ -2188,7 +2197,7 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(Partit
                 }
             }
 
-            if (LLVM_UNLIKELY(Z3_optimize_check(ctx, solver, 0, nullptr) == Z3_L_FALSE)) {
+            if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
                 report_fatal_error("Z3 failed to find a solution to partition scheduling solution");
             }
 

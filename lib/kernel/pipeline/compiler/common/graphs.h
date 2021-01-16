@@ -229,13 +229,10 @@ enum BufferType : unsigned {
 ENABLE_ENUM_FLAGS(BufferType)
 
 enum BufferLocality {
-    // buffer is purely consumed within a partition
-    Local
-    // buffer is has a cross-partition consumer but all
-    // of its consumers consume data at a fixed rate.
-    , SoftNonLocal
+    ThreadLocal
+    , PartitionLocal
 
-    , HardNonLocal
+    , GloballyShared
 };
 
 struct BufferNode {
@@ -246,7 +243,7 @@ struct BufferNode {
 
 #warning fix NonLocal flag to use Locality
 
-    BufferLocality Locality = BufferLocality::Local;
+    BufferLocality Locality = BufferLocality::ThreadLocal;
 
 
     unsigned CopyBack = 0;
@@ -256,8 +253,12 @@ struct BufferNode {
     unsigned LookBehind = 0;
     unsigned MaxAdd = 0;
 
-    size_t   BufferStart;
-    size_t   BufferSize;
+    size_t   BufferStart = 0;
+
+    size_t   RequiredCapacity = 0;
+    size_t   OverflowCapacity = 0;
+    size_t   UnderflowCapacity = 0;
+
 
     bool isOwned() const {
         return (Type & BufferType::Unowned) == 0;
@@ -400,13 +401,15 @@ struct PartitionData {
     std::vector<Rational>   Repetitions;
     OrderingDAWG            Orderings;
     Rational                ExpectedRepetitions{0};
+
+    std::vector<unsigned>   RateLinkedPartitionIds;
+
     size_t                  RequiredMemory = 0;
 
-//    PartitionData()
-//    : Orderings(1) {
 
-//    }
 };
+
+
 
 using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned>;
 

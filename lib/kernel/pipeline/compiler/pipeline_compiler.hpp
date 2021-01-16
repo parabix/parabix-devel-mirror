@@ -34,6 +34,10 @@ enum CycleCounter {
 };
 
 
+const static std::string BASE_THREAD_LOCAL_STREAMSET_MEMORY = "BLSM";
+
+const static std::string EXPECTED_NUM_OF_STRIDES_MULTIPLIER = "EnSM";
+
 const static std::string ZERO_EXTENDED_BUFFER = "ZeB";
 const static std::string ZERO_EXTENDED_SPACE = "ZeS";
 
@@ -291,7 +295,7 @@ public:
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
 
     void prepareLinearBuffers(BuilderRef b);
-    Value * getVirtualBaseAddress(BuilderRef b, const BufferPort & rateData, const StreamSetBuffer * const buffer, Value * position) const;
+    Value * getVirtualBaseAddress(BuilderRef b, const BufferPort & rateData, const BufferNode & bn, Value * position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
 
@@ -448,6 +452,8 @@ protected:
     const unsigned                              LastScalar;
     const unsigned                              PartitionCount;
 
+    const size_t                                RequiredThreadLocalStreamSetMemory;
+
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
     const bool                                  HasZeroExtendedStream;
@@ -474,8 +480,8 @@ protected:
     const Kernel *                              mKernel = nullptr;
     Value *                                     mKernelSharedHandle = nullptr;
     Value *                                     mKernelThreadLocalHandle = nullptr;
-    Value *                                     mZeroExtendBuffer = nullptr;
-    Value *                                     mZeroExtendSpace = nullptr;
+//    Value *                                     mZeroExtendBuffer = nullptr;
+//    Value *                                     mZeroExtendSpace = nullptr;
     Value *                                     mSegNo = nullptr;
     Value *                                     mNextSegNo = nullptr;
     Value *                                     mExhaustedInput = nullptr;
@@ -499,6 +505,9 @@ protected:
     BasicBlock *                                mKernelExit = nullptr;
     BasicBlock *                                mPipelineEnd = nullptr;
     BasicBlock *                                mRethrowException = nullptr;
+
+    Value *                                     mThreadLocalStreamSetBaseAddress = nullptr;
+    Value *                                     mExpectedNumOfStridesMultiplier = nullptr;
 
     Vec<AllocaInst *, 16>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 16>                       mVirtualBaseAddressPtr;
@@ -692,6 +701,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , FirstScalar(P.FirstScalar)
 , LastScalar(P.LastScalar)
 , PartitionCount(P.PartitionCount)
+
+, RequiredThreadLocalStreamSetMemory(P.RequiredThreadLocalStreamSetMemory)
 
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())

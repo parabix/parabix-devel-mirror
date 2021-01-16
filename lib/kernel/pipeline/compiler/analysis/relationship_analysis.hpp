@@ -447,9 +447,6 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
 
     transcribe(scalars, mScalarGraph);
 
-//    printRelationshipGraph(mStreamGraph, errs(), "Streams");
-//    printRelationshipGraph(mScalarGraph, errs(), "Scalars");
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
