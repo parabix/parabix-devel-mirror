@@ -948,10 +948,10 @@ bool canMMap(const std::string & fileName) {
 uint64_t GrepEngine::doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) {
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, GrepCallBackObject *, size_t maxCount);
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-    GrepCallBackObject handler;
     uint64_t resultTotal = 0;
 
     for (auto fileName : fileNames) {
+        GrepCallBackObject handler;
         bool useMMap = mPreferMMap && canMMap(fileName);
         int32_t fileDescriptor = openFile(fileName, strm);
         if (fileDescriptor == -1) return 0;
@@ -1058,10 +1058,12 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
             ssize_t bytes_read = read(fileDescriptor[i], current_base, fileSize[i]);
             close(fileDescriptor[i]);
             if (bytes_read <= 0) continue; // No data or error reading the file; skip.
-            if (mBinaryFilesMode == argv::WithoutMatch) {
+            if ((mBinaryFilesMode == argv::WithoutMatch) || (mBinaryFilesMode == argv::Binary)) {
                 auto null_byte_ptr = memchr(current_base, char (0), bytes_read);
-                if (null_byte_ptr != nullptr) {
-                    continue;  // Binary file; skip.
+                if (null_byte_ptr != nullptr) { // Binary file;
+                    // Silently skip in the WithoutMatch mode
+                    if (mBinaryFilesMode == argv::WithoutMatch) continue;
+                    strm << "Binary file: " << fileNames[i] << " skipped.\n";
                 }
             }
             accum.mFileNames.push_back(fileNames[i]);
