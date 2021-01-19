@@ -22,7 +22,7 @@ using namespace llvm;
 
 // #define FORCE_ASSERTIONS
 
-// #define DISABLE_OBJECT_CACHE
+#define DISABLE_OBJECT_CACHE
 
 namespace codegen {
 

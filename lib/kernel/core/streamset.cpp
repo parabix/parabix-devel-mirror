@@ -288,7 +288,7 @@ inline void ExternalBuffer::assertValidBlockIndex(BuilderPtr b, Value * blockInd
     }
 }
 
-void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
+void ExternalBuffer::copyBackLinearOutputBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
     /* do nothing */
 }
 
@@ -482,8 +482,15 @@ Value * StaticBuffer::getInternalCapacity(BuilderPtr b) const {
     return b->CreateMul(capacity, BLOCK_WIDTH, "internalCapacity");
 }
 
-void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
-    unsupported("setCapacity", "Static");
+void StaticBuffer::setCapacity(BuilderPtr b, Value * capacity) const {
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
+    Value * ptr = b->CreateInBoundsGEP(getHandle(), indices);
+    ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+    assert (capacity->getType()->isIntegerTy());
+    Value * const cap = b->CreateExactUDiv(capacity, BLOCK_WIDTH);
+    b->CreateStore(cap, ptr);
 }
 
 Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
@@ -495,8 +502,13 @@ Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
     return b->CreateLoad(base, "baseAddress");
 }
 
-void StaticBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const {
-    unsupported("setBaseAddress", "Static");
+void StaticBuffer::setBaseAddress(BuilderPtr b, Value * addr) const {
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    Value * const handle = getHandle(); assert (handle);
+    Value * const base = b->CreateInBoundsGEP(handle, indices);
+    b->CreateStore(addr, base);
 }
 
 Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
@@ -512,7 +524,7 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
     return b->CreateInBoundsGEP(base, capacity, "overflow");
 }
 
-void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * const produced, llvm::Value * const consumed, const unsigned lookBehind) const {
+void StaticBuffer::copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * const produced, llvm::Value * const consumed, const unsigned lookBehind) const {
     if (mLinear) {
 
         const auto blockWidth = b->getBitBlockWidth();
@@ -524,25 +536,52 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * const produce
         FixedArray<Value *, 2> indices;
         indices[0] = b->getInt32(0);
         indices[1] = b->getInt32(EffectiveCapacity);
-        Value * const capacityField = b->CreateInBoundsGEP(mHandle, indices);
+        Value * const capacityField = b->CreateInBoundsGEP(mHandle, indices);        
+        #error here
+        Value * adjConsumed = consumed;
+        if (lookBehind) {
+
+        }
+
+
         Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
-
-        indices[1] = b->getInt32(BaseAddress);
-        Value * const virtualBaseField = b->CreateInBoundsGEP(mHandle, indices);
-        Value * const virtualBase = b->CreateLoad(virtualBaseField);
-        assert (virtualBase->getType()->getPointerElementType() == mType);
-
         indices[1] = b->getInt32(MallocedAddress);
         Value * const mallocedAddrField = b->CreateInBoundsGEP(mHandle, indices);
         Value * const bufferStart = b->CreateLoad(mallocedAddrField);
-
-
-
-
         Value * const newBaseAddress = b->CreateGEP(bufferStart, b->CreateNeg(consumedChunks));
-        Value * const effectiveCapacity = b->CreateAdd(consumedChunks, b->getSize(mCapacity));
 
-        b->CreateStore(newBaseAddress, virtualBaseField);
+
+        indices[1] = b->getInt32(BaseAddress);
+        Value * const baseAddrField = b->CreateInBoundsGEP(mHandle, indices);
+
+        if (produced != consumed) {
+
+            BasicBlock * const ip = b->GetInsertBlock();
+            Function * const func = ip->getParent();
+            LLVMContext & C = b->getContext();
+
+            BasicBlock * const copyBack = BasicBlock::Create(C, "copyBack", func, ip->getNextNode());
+            BasicBlock * const afterCopyBack = BasicBlock::Create(C, "afterCopyBack", func, ip->getNextNode());
+
+            Value * const cond = b->CreateICmpULE(consumed, produced);
+            b->CreateCondBr(cond, copyBack, afterCopyBack);
+
+            b->SetInsertPoint(copyBack);
+            Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
+            Value * const unconsumedChunks = b->CreateSub(producedChunks, consumedChunks);
+            Value * const mallocAddress = b->CreateLoad(mallocedAddrField);
+            Constant * const CHUNK_SIZE = ConstantExpr::getSizeOf(mType);
+            Value * const bytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
+            Value * const virtualBase = b->CreateLoad(baseAddrField);
+            Value * const unreadDataPtr = b->CreateInBoundsGEP(virtualBase, consumedChunks);
+            b->CreateMemCpy(mallocAddress, unreadDataPtr, bytesToCopy, blockWidth / 8);
+            b->CreateBr(afterCopyBack);
+
+            b->SetInsertPoint(afterCopyBack);
+        }
+
+        b->CreateStore(newBaseAddress, baseAddrField);
+        Value * const effectiveCapacity = b->CreateAdd(consumedChunks, b->getSize(mCapacity));
         b->CreateStore(effectiveCapacity, capacityField);
     }
 }
@@ -720,7 +759,7 @@ void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* capacity */) cons
     unsupported("setCapacity", "Dynamic");
 }
 
-void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
+void DynamicBuffer::copyBackLinearOutputBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
     /* do nothing */
 }
 

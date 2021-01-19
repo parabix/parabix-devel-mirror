@@ -238,7 +238,6 @@ enum BufferLocality {
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     unsigned Type = 0;
-    bool NonLocal = false;
     bool NonLinear = false;
 
 #warning fix NonLocal flag to use Locality
@@ -280,7 +279,9 @@ struct BufferNode {
         return (Type & BufferType::Shared) != 0;
     }
 
-
+    bool isNonThreadLocal() const {
+        return (Locality != BufferLocality::ThreadLocal);
+    }
 
 };
 
@@ -402,16 +403,13 @@ struct PartitionData {
     OrderingDAWG            Orderings;
     Rational                ExpectedRepetitions{0};
 
-    std::vector<unsigned>   RateLinkedPartitionIds;
-
     size_t                  RequiredMemory = 0;
-
 
 };
 
+using LinkedPartitionGraph = adjacency_matrix<undirectedS>;
 
-
-using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned>;
+using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned, LinkedPartitionGraph>;
 
 using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
 

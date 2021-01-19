@@ -45,13 +45,6 @@ namespace kernel {
 
 #define HAMILTONIAN_PATH_MINIMUM_WEIGHT (0.001)
 
-
-static size_t init_time = 0;
-static size_t fitness_time = 0;
-static size_t repair_time = 0;
-static size_t evolutionary_time = 0;
-
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowWithinPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -268,8 +261,6 @@ public:
         }
 
         assert (numOfKernels > 1);
-
-        const auto fitness_start = std::chrono::high_resolution_clock::now();
 
         // Each node value in the interval graph marks the position of the candidate schedule
         // that produced the streamset.
@@ -503,10 +494,6 @@ is_bipartite_graph:
         }
 
         const auto result = chromaticNumber + worstCaseUnderapproximation;
-
-        const auto fitness_end = std::chrono::high_resolution_clock::now();
-        fitness_time += (fitness_end - fitness_start).count();
-
         return result;
     }
 
@@ -1573,26 +1560,15 @@ struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
      * @brief repair
      ** ------------------------------------------------------------------------------------------------------------- */
     void repair(Candidate & candidate) override {
-
         #ifndef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
-
-        const auto repair_start = std::chrono::high_resolution_clock::now();
-
         nearest_valid_schedule(candidate);
-
-        const auto repair_end = std::chrono::high_resolution_clock::now();
-        repair_time += (repair_end - repair_start).count();
-
         #endif
-
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief fitness
      ** ------------------------------------------------------------------------------------------------------------- */
     size_t fitness(const Candidate & candidate) override {
-
-        const auto fitness_start = std::chrono::high_resolution_clock::now();
         #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
         auto result = std::numeric_limits<size_t>::max();
         if (is_valid_hamiltonian_path(candidate)) {
@@ -1601,9 +1577,6 @@ struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
         #else
         const auto result = analyzer.analyze(candidate);
         #endif
-        const auto fitness_end = std::chrono::high_resolution_clock::now();
-        fitness_time += (fitness_end - fitness_start).count();
-
         return result;
     }
 

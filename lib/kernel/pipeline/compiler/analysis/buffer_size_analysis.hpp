@@ -307,6 +307,8 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
 
     const auto n = LastStreamSet - FirstStreamSet + 1U;
 
+    #warning TODO: can we insert a zero-extension region rather than having a secondary buffer?
+
     IntervalGraph I(n);
     std::vector<size_t> weight(n, 0);
     std::vector<int> remaining(n, 0); // NOTE: signed int type is necessary here

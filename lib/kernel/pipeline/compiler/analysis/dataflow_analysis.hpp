@@ -1731,7 +1731,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
             const BufferNode & node = mBufferGraph[streamSet];
 
             BufferPort & I = mBufferGraph[input];
-            if (node.NonLocal) {
+            if (node.isNonThreadLocal()) {
                 I.LocalPortId = nextLocalPortId++;
             } else {
                 ids.insert(I.GlobalPortId);

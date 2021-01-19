@@ -299,7 +299,7 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet
                             prior, consumed);
 
             const BufferNode & bn = mBufferGraph[streamSet];
-            if (!bn.NonLocal) {
+            if (bn.Locality == BufferLocality::ThreadLocal) {
                 Value * const produced = mLocallyAvailableItems[streamSet]; assert (produced);
                 // NOTE: static linear buffers are assumed to be threadlocal.
                 Value * const fullyConsumed = b->CreateICmpEQ(produced, consumed);

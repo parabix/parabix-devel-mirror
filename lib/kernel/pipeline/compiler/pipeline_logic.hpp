@@ -216,7 +216,7 @@ void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned 
         if (LLVM_UNLIKELY(br.IsDeferred)) {
             mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX, kernelId);
         }
-        mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+        mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX, kernelId);
     }
 
     for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {

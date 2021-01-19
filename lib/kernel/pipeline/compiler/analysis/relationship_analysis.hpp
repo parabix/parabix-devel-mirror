@@ -180,7 +180,7 @@ void addReferenceRelationships(const PortType portType, const unsigned index, co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief transcribeRelationshipGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partitionGraph) {
+LinkedPartitionGraph PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partitionGraph) {
 
     using Vertices = Vec<unsigned, 64>;
 
@@ -318,13 +318,16 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
     assert (origPartitionCount <= PartitionCount);
     assert ((origPartitionCount + 1) >= PartitionCount);
 
-    // Retain how much memory each partition required
-    RequiredPartitionMemory.resize(PartitionCount);
-    for (unsigned i = 0; i < origPartitionCount; ++i) {
-        const PartitionData & P = partitionGraph[i];
-        const auto m = ceiling(P.RequiredMemory * P.ExpectedRepetitions);
-        const auto j = remappedPartitionId[i];
-        RequiredPartitionMemory[j] = m;
+    // Mark which partitions are considered "linked" in that the only reason
+    // they are not within the same partition is that one of the kernels
+    // separating them could terminate early.
+
+    LinkedPartitionGraph L(PartitionCount);
+    const LinkedPartitionGraph & R = get_property(partitionGraph);
+    for (const auto e : make_iterator_range(edges(R))) {
+        const auto a = remappedPartitionId[source(e, R)];
+        const auto b = remappedPartitionId[target(e, R)];
+        add_edge(a, b, L);
     }
 
     // Originally, if the pipeline kernel does not have external I/O, both the pipeline in/out
@@ -447,6 +450,7 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
 
     transcribe(scalars, mScalarGraph);
 
+    return L;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

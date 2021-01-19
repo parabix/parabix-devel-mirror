@@ -253,7 +253,7 @@ bool PipelineCompiler::isBounded() const {
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-        if (bn.NonLocal) {
+        if (bn.isNonThreadLocal()) {
             const BufferPort & br = mBufferGraph[e];
             const Binding & binding = br.Binding;
             const ProcessingRate & rate = binding.getRate();

@@ -215,7 +215,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
     auto printStreamSet = [&](const unsigned streamSet) {
         out << "v" << streamSet << " [shape=record,";
         const BufferNode & bn = mBufferGraph[streamSet];
-        if (bn.NonLocal) {
+        if (bn.isNonThreadLocal()) {
             out << "style=bold,";
         }
         #ifdef PERMIT_BUFFER_MEMORY_REUSE

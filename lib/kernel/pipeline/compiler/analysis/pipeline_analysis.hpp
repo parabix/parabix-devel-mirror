@@ -31,8 +31,6 @@ public:
 
         P.generateInitialPipelineGraph(b);
 
-        BEGIN_SCOPED_REGION
-
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
 
@@ -45,17 +43,14 @@ public:
         P.schedulePartitionedProgram(partitionGraph);
 
         // Construct the Stream and Scalar graphs
-        P.transcribeRelationshipGraph(partitionGraph);
+        const auto linkedPartitions = P.transcribeRelationshipGraph(partitionGraph);
 
         // P.printRelationshipGraph(P.mStreamGraph, errs(), "Streams");
         // P.printRelationshipGraph(P.mScalarGraph, errs(), "Scalars");
 
-
-        END_SCOPED_REGION
-
         P.generateInitialBufferGraph();
 
-        P.identifyBufferLocality();
+        P.identifyBufferLocality(linkedPartitions);
 
         P.computeDataFlowRates();
 
@@ -122,7 +117,7 @@ private:
 
     void identifyPipelineInputs();
 
-    void transcribeRelationshipGraph(const PartitionGraph & partitionGraph);
+    LinkedPartitionGraph transcribeRelationshipGraph(const PartitionGraph & partitionGraph);
 
     void gatherInfo() {        
         MaxNumOfInputPorts = in_degree(PipelineOutput, mBufferGraph);
@@ -169,7 +164,7 @@ private:
     void determineBufferLayout(BuilderRef b);
 
     void identifyLinearBuffers();
-    void identifyBufferLocality();
+    void identifyBufferLocality(const LinkedPartitionGraph & L);
     void identifyLocalPortIds();
     // void identifyDirectUpdatesToStateObjects();
 
@@ -254,8 +249,6 @@ public:
     std::vector<Rational>           ExpectedNumOfStrides;
     std::vector<Rational>           MinimumNumOfStrides;
     std::vector<Rational>           MaximumNumOfStrides;
-
-    std::vector<size_t>             RequiredPartitionMemory;
 
     BufferGraph                     mBufferGraph;
     std::vector<unsigned>           mPartitionJumpIndex;

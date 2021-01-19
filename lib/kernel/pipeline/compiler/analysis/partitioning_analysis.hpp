@@ -506,23 +506,17 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     using SummaryGraph = adjacency_list<vecS, vecS, bidirectionalS, Partition, unsigned>;
 
-    using HardConstraintGraph = adjacency_matrix<undirectedS>;
-
     const auto n = KernelPartitionIdCount[ConsiderEarlyTermination];
 
     SummaryGraph S(n);
-
-    HardConstraintGraph C(n);
 
     for (unsigned i = 1; i < n; ++i) {
         add_edge(0, i, 0, S);
     }
 
+    LinkedPartitionGraph C(n);
+
     for (const auto streamSet : streamSets) {
-
-        unsigned hard_producer_pid, soft_producer_pid;
-
-        BEGIN_SCOPED_REGION
 
         assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
         assert (isa<StreamSet>(Relationships[streamSet].Relationship));
@@ -539,15 +533,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         const auto f = partitionMap.find(producer);
         assert (f != partitionMap.end());
-        std::tie(hard_producer_pid, soft_producer_pid) = f->second;
-
-        END_SCOPED_REGION
+        const auto producer_pid = f->second;
 
         for (const auto i1 : make_iterator_range(out_edges(streamSet, Relationships))) {
-
-            unsigned hard_consumer_pid, soft_consumer_pid;
-
-            BEGIN_SCOPED_REGION
 
             assert (Relationships[i1].Reason != ReasonType::Reference);
             const auto input = target(i1, Relationships);
@@ -560,21 +548,23 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
             const auto f = partitionMap.find(consumer);
             assert (f != partitionMap.end());
-            std::tie(hard_consumer_pid, soft_consumer_pid) = f->second;
+            const auto consumer_pid = f->second;
 
-            END_SCOPED_REGION
+            const auto a = producer_pid[ConsiderEarlyTermination];
+            const auto b = consumer_pid[ConsiderEarlyTermination];
 
-            if (hard_producer_pid == hard_consumer_pid) {
-                assert (soft_producer_pid == soft_consumer_pid);
+            if (a == b) {
+                assert (producer_pid[IgnoreEarlyTermination] == consumer_pid[IgnoreEarlyTermination]);
             } else {
-                add_edge(hard_producer_pid, hard_consumer_pid, streamSet, S);
-                if (soft_producer_pid != soft_consumer_pid) {
-                    add_edge(hard_producer_pid, hard_consumer_pid, C);
+                add_edge(a, b, streamSet, S);
+                if (producer_pid[IgnoreEarlyTermination]  != consumer_pid[IgnoreEarlyTermination]) {
+                    add_edge(a, b, C);
                 }
             }
 
         }
     }
+
 
     ordering.clear();
     if (LLVM_UNLIKELY(!lexical_ordering(S, ordering))) {
@@ -583,7 +573,18 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     assert (ordering[0] == 0);
 
-    PartitionGraph P(n);
+    LinkedPartitionGraph L(n);
+
+    for (const auto e : make_iterator_range(edges(S))) {
+        const auto a = source(e, S);
+        const auto b = target(e, S);
+        if (!edge(a, b, C).second) {
+            add_edge(ordering[a], ordering[b], L);
+            add_edge(a, b, C);
+        }
+    }
+
+    PartitionGraph P(n, std::move(L));
 
     PartitionIds.reserve(numOfKernels);
 
@@ -599,34 +600,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         P[j].Kernels.push_back(v);
         PartitionIds.emplace(v, j);
     }
-
-    assert (PartitionIds.size() == n);
-
-    flat_set<unsigned> targets;
-
-    for (unsigned i = 1; i < n; ++i) {
-        for (const auto e : make_iterator_range(out_edges(i, S))) {
-            targets.insert(target(e, S));
-        }
-        for (const auto e : make_iterator_range(out_edges(i, C))) {
-            const auto f = targets.find(target(e, C));
-            if (f != targets.end()) {
-                targets.erase(f);
-            }
-        }
-        if (targets.empty()) {
-            continue;
-        }
-
-        const auto j = ordering[i];
-        PartitionData & N = P[j];
-        for (const auto t : targets) {
-            N.RateLinkedPartitionIds.push_back(ordering[t]);
-        }
-
-        targets.clear();
-    }
-
 
     std::vector<unsigned> reverseMapping(n);
     for (unsigned i = 1; i < n; ++i) {

@@ -150,9 +150,15 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         const BufferNode & bn = mBufferGraph[streamSet];
         const BufferPort & br = mBufferGraph[e];
 
-        assert (bn.isInternal() || (bn.NonLocal && mCheckIO));
+        assert (bn.isInternal() || (bn.isNonThreadLocal() && mCheckIO));
 
-        if (mCheckIO && bn.NonLocal && unchecked(br.LocalPortId)) {
+        #ifdef CHECK_EVERY_IO_PORT
+        const auto check = true;
+        #else
+        const auto check = mCheckIO && bn.isNonThreadLocal() && unchecked(br.LocalPortId);
+        #endif
+
+        if (check) {
             checkForSufficientInputData(b, br, streamSet);
         } else { // ensure the accessible input count dominates all uses
             getAccessibleInputItems(b, br);
@@ -174,7 +180,11 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             const BufferPort & br = mBufferGraph[input];
             const BufferNode & bn = mBufferGraph[streamSet];
 
-            const auto check = (bn.NonLocal || bn.NonLinear) && unchecked(br.LocalPortId);
+            #ifdef CHECK_EVERY_IO_PORT
+            const auto check = true;
+            #else
+            const auto check = (bn.isNonThreadLocal() || bn.NonLinear) && unchecked(br.LocalPortId);
+            #endif
 
             if (LLVM_LIKELY(check)) {
                 Value * const strides = getNumOfAccessibleStrides(b, br, numOfInputStrides);
@@ -196,7 +206,12 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             const BufferNode & bn = mBufferGraph[streamSet];
             const BufferPort & br = mBufferGraph[output];
 
-            const auto check = (bn.NonLocal && bn.NonLinear) && unchecked(br.LocalPortId);
+
+            #ifdef CHECK_EVERY_IO_PORT
+            const auto check = true;
+            #else
+            const auto check = (bn.isNonThreadLocal() && bn.NonLinear) && unchecked(br.LocalPortId);
+            #endif
 
             if (LLVM_LIKELY(check)) {
                 if (numOfOutputStrides == nullptr) {
@@ -314,7 +329,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
 
     getInputVirtualBaseAddresses(b, inputVirtualBaseAddress);
 
-    assert ("unbounded zero extended input?" && ((mHasZeroExtendedInput == nullptr) || mIsBounded));
+//    assert ("unbounded zero extended input?" && ((mHasZeroExtendedInput == nullptr) || mIsBounded));
 
     assert (mKernelIsFinal);
 
@@ -607,7 +622,8 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
             }
             const auto streamSet = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
-            if (LLVM_UNLIKELY(bn.NonLocal)) {
+
+            if (LLVM_UNLIKELY(bn.Locality != BufferLocality::ThreadLocal)) {
                 Value * const processed =  mProcessedItemCount[br.Port];
                 Value * avail = getLocallyAvailableItemCount(b, br.Port);
 
@@ -635,7 +651,8 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
                     }
                     const auto streamSet = source(e, mBufferGraph);
                     const BufferNode & bn = mBufferGraph[streamSet];
-                    if (LLVM_UNLIKELY(bn.NonLocal)) {
+
+                    if (LLVM_UNLIKELY(bn.Locality != BufferLocality::ThreadLocal)) {
                         const Binding & binding = next.Binding;
                         const ProcessingRate & rate = binding.getRate();
                         useBranch = rate.isPartialSum();

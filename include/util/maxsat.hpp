@@ -147,6 +147,7 @@ struct _Z3_solver_proxy<Z3_solver> final : public Z3_solver_proxy {
     const Z3_solver solver;
 };
 
+#if Z3_VERSION_INTEGER > 40500
 template<>
 struct _Z3_solver_proxy<Z3_optimize> final : public Z3_solver_proxy {
 
@@ -182,6 +183,7 @@ struct _Z3_solver_proxy<Z3_optimize> final : public Z3_solver_proxy {
 
     const Z3_optimize solver;
 };
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * Fu & Malik procedure for MaxSAT. This procedure is based on unsat core extraction and the at-most-one constraint.
@@ -269,9 +271,11 @@ static int Z3_maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> soft)
     return _do_Z3_maxsat(proxy, soft);
 }
 
+#if Z3_VERSION_INTEGER > 40500
 static int Z3_maxsat(Z3_context ctx, Z3_optimize solver, std::vector<Z3_ast> soft) {
     _Z3_solver_proxy<Z3_optimize> proxy(ctx, solver);
     return _do_Z3_maxsat(proxy, soft);
 }
+#endif
 
 #endif // MAXSAT_HPP

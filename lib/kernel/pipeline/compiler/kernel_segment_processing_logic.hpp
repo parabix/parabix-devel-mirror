@@ -50,6 +50,8 @@ void PipelineCompiler::start(BuilderRef b) {
     initializePipelineInputTerminationSignal(b);
     identifyAllInternallySynchronizedKernels();
 
+
+
     mKernel = nullptr;
     mKernelId = 0;
 
@@ -97,7 +99,11 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
         const auto nonSourceKernel = in_degree(mKernelId, mBufferGraph) > 0;
         mMayLoopToEntry = nonSourceKernel && (mMayHaveNonLinearIO || mHasExplicitFinalPartialStride || ExternallySynchronized);
+        #ifdef CHECK_EVERY_IO_PORT
+        mCheckIO = nonSourceKernel;
+        #else
         mCheckIO = nonSourceKernel && (mIsPartitionRoot || mMayHaveNonLinearIO || TraceIO || hasExternalIO(mKernelId));
+        #endif
     } else {
         mHasExplicitFinalPartialStride = false;
         mMayHaveNonLinearIO = false;
@@ -105,6 +111,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         mIsBounded = false;
         mCheckIO = false;
     }
+
 
     #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
 
@@ -199,6 +206,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     #warning fix this to determine the initial (non-linear) number of strides
 
     b->SetInsertPoint(mKernelLoopEntry);
+
     if (kernelRequiresSynchronization) {
         determineNumOfLinearStrides(b);
     } else {
