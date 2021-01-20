@@ -114,7 +114,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
                 }
 
                 const auto scale = MaximumNumOfStrides[i] * Rational{mNumOfThreads};
-                params.push_back(b->CreateCeilUMulRate(expectedNumOfStrides, scale));
+                params.push_back(b->CreateCeilUMulRational(expectedNumOfStrides, scale));
                 b->CreateCall(func, params);
             }
         }
@@ -707,17 +707,29 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-        StreamSetBuffer * const buffer = bn.Buffer;
+//        StreamSetBuffer * const buffer = bn.Buffer;
 
-        if (bn.isOwned() && buffer->isLinear()) {
+        if (LLVM_UNLIKELY(bn.Locality == BufferLocality::ThreadLocal)) {
             Value * const produced = mInitiallyProducedItemCount[streamSet];
-            Value * consumed = produced;
-            if (LLVM_UNLIKELY(bn.Locality == BufferLocality::GloballyShared)) {
-                consumed = mInitialConsumedItemCount[streamSet];
-            }
-            const BufferPort & br = mBufferGraph[e];
-            buffer->copyBackLinearOutputBuffer(b, produced, consumed, br.LookBehind);
+            // purely threadlocal buffers are guaranteed to consume every produced
+            // item each segment.
+            bn.Buffer->copyBackLinearOutputBuffer(b, produced);
         }
+
+//        if (bn.isOwned() && buffer->isLinear()) {
+//            Value * const produced = mInitiallyProducedItemCount[streamSet];
+//            Value * consumed = produced;
+//            if (LLVM_UNLIKELY(bn.Locality != BufferLocality::ThreadLocal)) {
+//                consumed = mInitialConsumedItemCount[streamSet];
+//            }
+//            debugPrint(b, "StreamSet %" PRIu64 " produced=%" PRIu64 " consumed=%" PRIu64, b->getSize(streamSet), produced, consumed);
+
+//            const BufferPort & br = mBufferGraph[e];
+//            // buffer->copyBackLinearOutputBuffer(b, produced, consumed, br.LookBehind);
+
+
+
+//        }
     }
 }
 

@@ -71,6 +71,8 @@ public:
         return mLinear;
     }
 
+    unsigned getFieldWidth() const;
+
     size_t getUnderflowCapacity(BuilderPtr b) const;
 
     size_t getOverflowCapacity(BuilderPtr b) const;
@@ -128,7 +130,7 @@ public:
 
     virtual llvm::Value * getStreamLogicalBasePtr(BuilderPtr b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
-    virtual void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const = 0;
+    virtual void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consumed) const = 0;
 
     virtual void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const = 0;
 
@@ -192,7 +194,7 @@ public:
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const override;
 
-    void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
+    void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * produced) const override;
 
     void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
@@ -268,7 +270,7 @@ public:
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
-    void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
+    void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consumed) const override;
 
     void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
@@ -310,7 +312,7 @@ public:
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
-    void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
+    void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consumed) const override;
 
     void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 

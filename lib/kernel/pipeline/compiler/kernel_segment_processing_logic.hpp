@@ -362,7 +362,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
         if (mIsPartitionRoot) {
             const auto factor = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
-            mNumOfPartitionStrides = b->CreateMulRate(mTotalNumOfStridesAtExitPhi, factor);
+            mNumOfPartitionStrides = b->CreateMulRational(mTotalNumOfStridesAtExitPhi, factor);
             mNumOfPartitionStrides = b->CreateAdd(mNumOfPartitionStrides, mPartialPartitionStridesAtLoopExitPhi);
             #ifdef PRINT_DEBUG_MESSAGES
             debugPrint(b, "* " + prefix + ".partitionStridesAdded = %" PRIu64, mPartialPartitionStridesAtLoopExitPhi);

@@ -465,7 +465,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             assert (port.Type == PortType::Input && port.Number < i);
             assert (mProcessedInputItemPtr[port.Number]);
             Value * const ref = b->CreateLoad(mProcessedInputItemPtr[port.Number]);
-            processed = b->CreateMulRate(ref, rate.getRate());
+            processed = b->CreateMulRational(ref, rate.getRate());
         }
         assert (processed);
         assert (processed->getType() == sizeTy);
@@ -479,7 +479,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         if (LLVM_UNLIKELY(internallySynchronized || requiresItemCount(input))) {
             accessible = nextArg();
         } else {
-            accessible = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+            accessible = b->CreateCeilUMulRational(mFixedRateFactor, rate.getRate() / fixedRateLCM);
         }
         assert (accessible);
         assert (accessible->getType() == sizeTy);
@@ -560,7 +560,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             assert (port.Type == PortType::Input || (port.Type == PortType::Output && port.Number < i));
             const auto & items = (port.Type == PortType::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
             Value * const ref = b->CreateLoad(items[port.Number]);
-            produced = b->CreateMulRate(ref, rate.getRate());
+            produced = b->CreateMulRational(ref, rate.getRate());
         }
         assert (produced);
         assert (produced->getType() == sizeTy);
@@ -583,7 +583,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
                 writable = nextArg();
                 assert (writable && writable->getType() == sizeTy);
             } else if (mFixedRateFactor) {
-                writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+                writable = b->CreateCeilUMulRational(mFixedRateFactor, rate.getRate() / fixedRateLCM);
                 assert (writable && writable->getType() == sizeTy);
             }
             Value * capacity = nullptr;

@@ -585,7 +585,7 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     Value * const accessible = getAccessibleInputItems(condRef.Name);
     const Binding & binding = condRef.Binding;
     const auto condRate = binding.getRate().getLowerBound() * mTarget->getStride();
-    Value * const numOfStrides = b->CreateUDivRate(accessible, condRate);
+    Value * const numOfStrides = b->CreateUDivRational(accessible, condRate);
     Value * const largeEnough = b->CreateICmpULT(numOfStrides, spanCapacity);
     b->CreateLikelyCondBr(largeEnough, summarizeDemarcations, resizeSpan);
 
@@ -980,7 +980,7 @@ Value * OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b,
             const ProcessingRate & rate = input.getRate();
             if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
                 Value * const scaledInverseOfAccessibleInput =
-                    b->CreateMulRate(mAccessibleInputItems[path.Index], rateLCM / rate.getRate());
+                    b->CreateMulRational(mAccessibleInputItems[path.Index], rateLCM / rate.getRate());
                 minScaledInverseOfAccessibleInput =
                     b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
             }
@@ -995,7 +995,7 @@ Value * OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b,
             const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
             const ProcessingRate & rate = output.getRate();
             if (rate.isFixed()) {
-                pendingOutputItems[path.Index] = b->CreateCeilUDivRate(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
+                pendingOutputItems[path.Index] = b->CreateCeilUDivRational(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
             }
         }
         b->CreateBr(executeKernel);

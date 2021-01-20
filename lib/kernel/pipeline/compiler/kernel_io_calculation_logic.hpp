@@ -95,7 +95,7 @@ void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
     } else {
         const auto factor = (max / MaxPartitionStrideRate);
         assert (mNumOfPartitionStrides);
-        mMaximumNumOfStrides = b->CreateMulRate(mNumOfPartitionStrides, factor);
+        mMaximumNumOfStrides = b->CreateMulRational(mNumOfPartitionStrides, factor);
     }
 }
 
@@ -417,7 +417,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     Value * fixedRateFactor = nullptr;
     if (mFixedRateFactorPhi) {
         const Rational stride(mKernel->getStride());
-        fixedRateFactor  = b->CreateMulRate(mNumOfLinearStrides, stride * mFixedRateLCM);
+        fixedRateFactor  = b->CreateMulRational(mNumOfLinearStrides, stride * mFixedRateLCM);
     }
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
@@ -832,8 +832,6 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
 
     if (LLVM_UNLIKELY(bn.isOwned())) {
 
-
-
         const auto prefix = makeBufferName(mKernelId, outputPort);
         const StreamSetBuffer * const buffer = bn.Buffer;
 
@@ -1099,7 +1097,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
         if (rate.isFixed() && LLVM_UNLIKELY(input.isPrincipal())) {
             Value * const accessible = accessibleItems[port.Port.Number];
             const auto factor = mFixedRateLCM / rate.getRate();
-            principalFixedRateFactor = b->CreateMulRate(accessible, factor);
+            principalFixedRateFactor = b->CreateMulRational(accessible, factor);
             break;
         }
     }
@@ -1116,7 +1114,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
             const ProcessingRate & rate = input.getRate();
             if (principalFixedRateFactor && rate.isFixed()) {
                 const auto factor = rate.getRate() / mFixedRateLCM;
-                accessible = b->CreateCeilUMulRate(principalFixedRateFactor, factor);
+                accessible = b->CreateCeilUMulRational(principalFixedRateFactor, factor);
             } else {
                 Value * maxItems = b->CreateAdd(mAlreadyProcessedPhi[inputPort], getInputStrideLength(b, port));
                 // But since we may not necessarily be in our zero extension region, we must first
@@ -1137,7 +1135,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
             const ProcessingRate & rate = input.getRate();
             if (rate.isFixed()) {
                 Value * const fixedRateFactor =
-                    b->CreateMulRate(accessibleItems[port.Port.Number], mFixedRateLCM / rate.getRate());
+                    b->CreateMulRational(accessibleItems[port.Port.Number], mFixedRateLCM / rate.getRate());
                 minFixedRateFactor =
                     b->CreateUMin(minFixedRateFactor, fixedRateFactor);
             }
@@ -1157,7 +1155,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
 
             if (rate.isFixed()) {
                 const auto factor = rate.getRate() / mFixedRateLCM;
-                Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
+                Value * calculated = b->CreateCeilUMulRational(minFixedRateFactor, factor);
                 const auto k = port.TransitiveAdd;
 
                 // ... but ensure that it reflects whether it was produced with an
@@ -1177,7 +1175,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
                         y = b->CreateSub(xh, g);
                     }
                     const Rational r = factor / Rational{stride};
-                    Value * const z = b->CreateCeilUMulRate(y, r);
+                    Value * const z = b->CreateCeilUMulRational(y, r);
                     calculated = b->CreateSelect(isClosedNormally(b, inputPort), z, calculated);
 
 //                    Value * const outputFactor = b->CreateCeilUDivRate(calculated, factor);
@@ -1215,7 +1213,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
             partialPartitionStrides = b->getSize(0);
         } else {
             const auto factor = scale / (mFixedRateLCM * mKernel->getStride());
-            partialPartitionStrides = b->CreateMulRate(minFixedRateFactor, factor);
+            partialPartitionStrides = b->CreateMulRational(minFixedRateFactor, factor);
         }
         assert (partialPartitionStrides);
     }
@@ -1240,7 +1238,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
         Value * writable = nullptr;
         if (rate.isFixed() && minFixedRateFactor) {
             const auto factor = rate.getRate() / mFixedRateLCM;
-            writable = b->CreateCeilUMulRate(minFixedRateFactor, factor);
+            writable = b->CreateCeilUMulRational(minFixedRateFactor, factor);
         } else {
             writable = calculateNumOfLinearItems(b, port, ONE);
         }
@@ -1524,7 +1522,7 @@ Value * PipelineCompiler::calculateStrideLength(BuilderRef b, const BufferPort &
         const auto refInput = getInput(mKernelId, refPort);
         const BufferPort & ref = mBufferGraph[refInput];
         Value * const baseRate = calculateStrideLength(b, ref);
-        return b->CreateMulRate(baseRate, rate.getRate());
+        return b->CreateMulRational(baseRate, rate.getRate());
     }
     llvm_unreachable("unexpected rate type");
 }
@@ -1536,7 +1534,7 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const BufferPo
     const Binding & binding = port.Binding;
     const ProcessingRate & rate = binding.getRate();
     if (rate.isFixed() || rate.isBounded()) {
-        return b->CreateMulRate(linearStrides, rate.getUpperBound() * mKernel->getStride());
+        return b->CreateMulRational(linearStrides, rate.getUpperBound() * mKernel->getStride());
     } else if (rate.isGreedy()) {
         return getAccessibleInputItems(b, port);
     } else if (rate.isPartialSum()) {
@@ -1546,7 +1544,7 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const BufferPo
         const auto refInput = getInput(mKernelId, refPort);
         const BufferPort & ref = mBufferGraph[refInput];
         Value * const baseCount = calculateNumOfLinearItems(b, ref, linearStrides);
-        return b->CreateMulRate(baseCount, rate.getRate());
+        return b->CreateMulRational(baseCount, rate.getRate());
     }
     llvm_unreachable("unexpected rate type");
 }
