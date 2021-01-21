@@ -7,6 +7,7 @@ build_llvm5:
   image: luizperes/parabix:llvm-5.0.2
   script:
     - mkdir build && cd build
+    - git clone https://github.com/Z3Prover/z3.git && cd z3 && python scripts/mk_make.py && cd build && make && make install && cd ../..
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4
 
@@ -15,6 +16,7 @@ build_llvm5:
   image: luizperes/parabix:llvm-5.0.2
   script:
     - mkdir -p build && cd build
+    - git clone https://github.com/Z3Prover/z3.git && cd z3 && python scripts/mk_make.py && cd build && make && make install && cd ../..
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4 check && make kernel-tests
 
