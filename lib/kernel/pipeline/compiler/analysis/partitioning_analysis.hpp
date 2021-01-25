@@ -926,10 +926,11 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, var, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
-        __int64 num;
-        if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
+        int64_t z3_num;
+        if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &z3_num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
+        __int64 num = static_cast<__int64>(z3_num);
         assert (num >= 0 && num < static_cast<__int64>(numOfContractedPartitions));
         assert (partition_order[num] == -1U);
         partition_order[num] = i;
@@ -1216,10 +1217,11 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, var, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
-        __int64 num;
-        if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
+        int64_t z3_num;
+        if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &z3_num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
+        __int64 num = static_cast<__int64>(z3_num);
         assert (num >= 0 && num < static_cast<__int64>(numOfContractedKernels));
         assert (ordering[num] == -1U);
         ordering[num] = i;
