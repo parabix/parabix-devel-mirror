@@ -6,7 +6,9 @@ build_llvm6:
   stage: build
   image: luizperes/parabix:llvm-6.0.1
   script:
+    - mkdir -p /root/.cache/parabix/
     - mkdir build && cd build
+    - git clone https://github.com/Z3Prover/z3.git && cd z3 && python scripts/mk_make.py && cd build && make && make install && cd ../..
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4
 
@@ -14,7 +16,9 @@ build_llvm6:
   stage: test
   image: luizperes/parabix:llvm-6.0.1
   script:
+    - mkdir -p /root/.cache/parabix/
     - mkdir -p build && cd build
+    - git clone https://github.com/Z3Prover/z3.git && cd z3 && python scripts/mk_make.py && cd build && make && make install && cd ../..
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4 check && make kernel-tests
 
