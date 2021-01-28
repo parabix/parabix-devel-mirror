@@ -66,7 +66,7 @@ class Compressor:
                     self.compressed += bytearray(word, 'utf-8')
                 else:
                     self.compressed += hashVal
-                if extendedHash:
+                if len(word) > 1 and extendedHash:
                     self.compressed += extendedHash
             else:
                 self.encodeSuffix += 1
