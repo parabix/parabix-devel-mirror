@@ -6,14 +6,16 @@ import subprocess
 import optparse
 import codecs
 import binascii
+import uniseg.wordbreak
 import compress_words
 import decompress_words
-import uniseg.wordbreak
+import edelta_compression
 
 # --------------------------------------------------------------------
 
 CmpAlgorithmList = [
     compress_words.Compressor(),
+    edelta_compression.Compressor(),
 ]
 
 DecmpAlgorithmList = [
@@ -27,7 +29,7 @@ if __name__ == '__main__':
     option_parser = optparse.OptionParser(
         usage='python %prog [options] <grep_executable>', version='1.0')
     option_parser.add_option('-c', '--compress',
-                             dest='compress', type='string', default='../../QA/input.txt')
+                             dest='compress', type='string', default='../../build/Makefile')
     option_parser.add_option('-d', '--decompress',
                              dest='decompress', type='string')
     options, args = option_parser.parse_args(sys.argv[1:])
@@ -60,7 +62,7 @@ if __name__ == '__main__':
         for algorithm in CmpAlgorithmList:
             compressedData = algorithm.Compress(word_list)
         # write compressed data to output.z file
-        output_file = open(outputFilename+".z", "wb")
+        output_file = open(outputFilename+"."+algorithm.name+".z", "wb")
         output_file.write(compressedData)
         output_file.close()
         #print(compressedData, 'compressedData')
