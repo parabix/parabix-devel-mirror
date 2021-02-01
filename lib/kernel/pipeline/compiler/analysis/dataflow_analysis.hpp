@@ -5,6 +5,8 @@
 
 namespace kernel {
 
+using z3_int64_t = std::remove_pointer<function_traits<std::function<decltype(Z3_get_numeral_rational_int64)>>::arg<3>::type>::type;
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyHardPartitionConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -792,15 +794,13 @@ void PipelineAnalysis::computeDataFlowRates() {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
 
-        int64_t z3_num, z3_denom;
+        z3_int64_t z3_num, z3_denom;
         if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &z3_num, &z3_denom) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        __int64 num = static_cast<__int64>(z3_num);
-        __int64 denom = static_cast<__int64>(z3_denom);
-        assert (num > 0);
+        assert (z3_num > 0);
 
-        const auto r = Rational{num, denom};
+        const auto r = Rational{z3_num, z3_denom};
         for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
             current[kernel][bound] = r;
         }
@@ -836,14 +836,12 @@ void PipelineAnalysis::computeDataFlowRates() {
                         report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
                     }
 
-                    int64_t z3_num, z3_denom;
+                    z3_int64_t z3_num, z3_denom;
                     if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &z3_num, &z3_denom) != Z3_L_TRUE)) {
                         report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
                     }
-                    __int64 num = static_cast<__int64>(z3_num);
-                    __int64 denom = static_cast<__int64>(z3_denom);
-                    assert (num > 0);
-                    current[kernel][bound] = Rational{num, denom};
+                    assert (z3_num > 0);
+                    current[kernel][bound] = Rational{z3_num, z3_denom};
                 }
                 Z3_model_dec_ref(ctx, model);
 
