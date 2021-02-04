@@ -10,6 +10,7 @@ import uniseg.wordbreak
 import compress_words
 import decompress_words
 import edelta_compression
+import edelta_decompression
 
 # --------------------------------------------------------------------
 
@@ -20,6 +21,7 @@ CmpAlgorithmList = [
 
 DecmpAlgorithmList = [
     decompress_words.Decompressor(),
+    edelta_decompression.Decompressor(),
 ]
 
 # --------------------------------------------------------------------
@@ -29,7 +31,7 @@ if __name__ == '__main__':
     option_parser = optparse.OptionParser(
         usage='python %prog [options] <grep_executable>', version='1.0')
     option_parser.add_option('-c', '--compress',
-                             dest='compress', type='string', default='../../build/Makefile')
+                             dest='compress', type='string')
     option_parser.add_option('-d', '--decompress',
                              dest='decompress', type='string')
     options, args = option_parser.parse_args(sys.argv[1:])
@@ -56,9 +58,9 @@ if __name__ == '__main__':
         boundary_positions = []
         for word in uniseg.wordbreak.words(text):
             word_list.append(word)
-        # a vector representing the positions of word boundaries
-        for index in uniseg.wordbreak.word_boundaries(text):
-            boundary_positions.append(index)
+        # a vector representing the positions of word boundaries - future use?
+        #for index in uniseg.wordbreak.word_boundaries(text):
+        #    boundary_positions.append(index)
         for algorithm in CmpAlgorithmList:
             compressedData = algorithm.Compress(word_list)
         # write compressed data to output.z file
