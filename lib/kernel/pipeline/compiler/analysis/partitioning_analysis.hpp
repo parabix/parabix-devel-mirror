@@ -926,14 +926,13 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, var, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
-        int64_t z3_num;
+        Z3_int64 z3_num;
         if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &z3_num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        __int64 num = static_cast<__int64>(z3_num);
-        assert (num >= 0 && num < static_cast<__int64>(numOfContractedPartitions));
-        assert (partition_order[num] == -1U);
-        partition_order[num] = i;
+        assert (z3_num >= 0 && z3_num < static_cast<Z3_int64>(numOfContractedPartitions));
+        assert (partition_order[z3_num] == -1U);
+        partition_order[z3_num] = i;
     }
     Z3_model_dec_ref(ctx, model);
     END_SCOPED_REGION
@@ -1200,7 +1199,7 @@ found:  ++i;
 
     std::vector<unsigned> ordering(numOfContractedKernels);
     #ifndef NDEBUG
-    std::vector<__int64> test(numOfKernels);
+    std::vector<Z3_int64> test(numOfKernels);
     #endif
 
     #ifndef NDEBUG
@@ -1217,16 +1216,15 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, var, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
-        int64_t z3_num;
+        Z3_int64 z3_num;
         if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &z3_num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        __int64 num = static_cast<__int64>(z3_num);
-        assert (num >= 0 && num < static_cast<__int64>(numOfContractedKernels));
-        assert (ordering[num] == -1U);
-        ordering[num] = i;
+        assert (z3_num >= 0 && z3_num < static_cast<Z3_int64>(numOfContractedKernels));
+        assert (ordering[z3_num] == -1U);
+        ordering[z3_num] = i;
         #ifndef NDEBUG
-        test[i] = num;
+        test[i] = z3_num;
         #endif
     }
     Z3_model_dec_ref(ctx, model);
