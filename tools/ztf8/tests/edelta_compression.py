@@ -57,13 +57,14 @@ class Compressor:
                         pos, index-1)
                     if len(expandedWord) > len(self.expandWord):
                         self.expandWord = expandedWord
-                print(self.expandWord, 'self.expandWord')
+                #print(self.expandWord, 'self.expandWord')
                 # store the hash of the expandedWord and replace the symbol sequence
                 # with hashVal in the compressed data
-                if len(self.expandWord) > 5:
+                if len(self.expandWord) > 6:
                     expandHash = self.hashTable.get(self.expandWord, None)
                     if not expandHash:
                         extendedHash = bytearray(b'')
+                        extendedHash.append(self.expandSym)
                         extendedHash.append(len(self.expandWord))
                         lastSym = self.hashTable.get(
                             self.words[newIndex-1], None)

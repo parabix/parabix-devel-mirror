@@ -10,6 +10,7 @@ class Decompressor:
         self.decodePrefix = 192  # b'\xC0'
         self.decodeSuffix = 0    # b'\x00'
         self.decompressed = bytearray(b'')
+        self.expandSym = 218   # b'\xDA'
         self.words = []
         self.textBytes = ""
         self.word_list = OrderedDict()
@@ -34,8 +35,7 @@ class Decompressor:
                     plaintext.append(textBytes[index])
                     index += 1
                 words = self._Segment(plaintext)
-                # print(plaintext, 'plaintext')
-                # print(words, 'words')
+
                 newWords = []
                 for word in words:
                     if word not in self.word_list:
@@ -44,15 +44,15 @@ class Decompressor:
                     self.wordPos += len(word)
                 # create a hashTable incrementally similar to the compression hashTable with keys and values reversed
                 self._HashCode(newWords)
-            # check for symbol sequence codeword -> codeword length codeword
-            elif textBytes[index] >= 192 and index+4 < len(textBytes):
+            # check for symbol sequence codeword -> codeword '0xDA' length codeword
+            elif textBytes[index] >= 192 and index+5 < len(textBytes):
                 symLen1 = self._getCodeWordLen(index)
                 index += 2
-                if textBytes[index] < 256 and textBytes[index+1] >= 192:
-                    symLen2 = self._getCodeWordLen(index+1)
-                    self.decodedWordsLen += (textBytes[index] -
-                                             (symLen1+symLen2+1))
-                    index += 3
+                if textBytes[index] == self.expandSym and textBytes[index+2] >= 192:
+                    symLen2 = self._getCodeWordLen(index+2)
+                    self.decodedWordsLen += (textBytes[index+1] -
+                                             (symLen1+symLen2+2))
+                    index += 4
                 self.wordPos = index
             # just a single codeword encoded
             else:
@@ -62,10 +62,6 @@ class Decompressor:
 
         # refer to the hashTable to decode the encoded symbols
         self._Decode(textBytes)
-        # for items in self.hashTable.items():
-        #    print(items[0], items[1])
-        # for items in self.word_list.items():
-        #    print(items[0], items[1])
         return self.decompressed
 
     def _getCodeWordLen(self, index):
@@ -111,20 +107,17 @@ class Decompressor:
                     word = bytearray(b'')
                 word.append(textBytes[index])
                 word.append(textBytes[index+1])
-                # print(word, 'word')
                 index += 2
                 decmp = self.hashTable.get(bytes(word))
                 if decmp:
-                    # print(decmp[0], 'decmp')
                     self.decompressed += bytearray(decmp[0], 'utf-8')
                     # upon decoding current codeword, check if the following is a sequence of codewords
-                    # assumes that one non-encoded symbol between 2 consecutive codewords is length
+                    # assumes that one symbol with prefix '0xDA' between 2 consecutive codewords is length
                     # of symbols to be decompressed
-                    if (index+1 < len(textBytes) and textBytes[index+1] >= 192):
+                    if (index+1 < len(textBytes) and textBytes[index] == self.expandSym):
                         index = self.checkExtendedCodeword(
-                            index+1, word, textBytes[index])
-                        # print(index, 'index updated')
-                word = bytearray(b'')
+                            index+2, word, textBytes[index+1])
+                    word = bytearray(b'')
             else:
                 word.append(textBytes[index])
                 index += 1
@@ -138,7 +131,6 @@ class Decompressor:
             lastCodeword.append(self.textBytes[index+1])
             #print(firstCodeword, 'firstCodeword')
             #print(lastCodeword, 'lastCodeword')
-            #print(seqLength, 'seqLength')
             firstSym = self.hashTable.get(bytes(firstCodeword))
             lastSym = self.hashTable.get(bytes(lastCodeword))
             #print(firstSym, 'firstSym')
@@ -156,21 +148,9 @@ class Decompressor:
                     firstSymIndex = self.word_list.get(firstSym[0])
                     firstSymPos = firstSymIndex+bytesDecoded
                     # print(bytesDecoded, 'bytesDecoded')
-                    #print(firstSym[0], 'firstSym[0]')
-                    #print(firstSymPos, ' firstSymPos 1')
-                    #print(
-                    #    self.decompressed[firstSymPos+seqLength-len(lastSym[0]):firstSymPos+seqLength].decode('utf-8'), 'verify last sym')
-                    # self.decompressed += bytearray(firstSym[0], 'utf-8')
                     seqLength -= len(firstSym[0])
                     firstSymPos += len(firstSym[0])
-                    #print(firstSymPos, ' firstSymPos 2')
-                    #print(seqLength, 'seqLength 2')
-
-                #print(self.decompressed, 'self.decompressed 1')
                 start = firstSymPos
-                toCopy = seqLength
-                toCopyLastSym = self.decompressed[firstSymPos+seqLength-len(
-                    lastSym[0]):firstSymPos+seqLength].decode('utf-8')
                 self.decompressed.extend(
                     self.decompressed[start: start+seqLength])
             return index+2
