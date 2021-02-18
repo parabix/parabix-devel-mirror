@@ -28,7 +28,7 @@ merge_request_llvm6:
     - if: '$CI_MERGE_REQUEST_IID'
 
 .test-avx-default: &test-avx-default
-  stage: test
+  <<: *test-default
 
 test_avx2_llvm6:
   <<: *test-avx-default

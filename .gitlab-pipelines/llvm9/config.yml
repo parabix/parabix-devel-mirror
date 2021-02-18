@@ -27,7 +27,7 @@ merge_request_llvm9:
     - if: '$CI_MERGE_REQUEST_IID'
 
 .test-avx512-default: &test-avx512-default
-  stage: test
+  <<: *test-default
   tags:
     - avx512
 
