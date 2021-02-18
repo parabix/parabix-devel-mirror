@@ -4,21 +4,17 @@ stages:
 
 build_llvm6:
   stage: build
-  image: luizperes/parabix:llvm-6.0.1
   script:
-    - mkdir -p /root/.cache/parabix/
     - mkdir build && cd build
-    - git clone https://github.com/Z3Prover/z3.git && cd z3 && python scripts/mk_make.py && cd build && make && make install && cd ../..
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4
 
 .test-default: &test-default
   stage: test
-  image: luizperes/parabix:llvm-6.0.1
   script:
-    - mkdir -p /root/.cache/parabix/
     - mkdir -p build && cd build
-    - git clone https://github.com/Z3Prover/z3.git && cd z3 && python scripts/mk_make.py && cd build && make && make install && cd ../..
+    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
+    # LLVM 6 is currently the default LLVM on cs-osl machines
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4 check && make kernel-tests
 
@@ -33,12 +29,6 @@ merge_request_llvm6:
 
 .test-avx-default: &test-avx-default
   stage: test
-  script:
-    - mkdir -p build && cd build
-    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
-    # LLVM 6 is currently the default LLVM on cs-osl-08
-    - cmake -DCMAKE_BUILD_TYPE=Release ..
-    - make -j4 check && make kernel-tests
 
 test_avx2_llvm6:
   <<: *test-avx-default
