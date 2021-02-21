@@ -20,7 +20,7 @@ namespace UCD {
         Undefined = -1};
     const std::string & getPropertyEnumName(const property_t);
     const std::string & getPropertyFullName(const property_t);
-    property_t resolveProperty(std::string & propertyIdent);
+    property_t getPropertyCode(std::string & propertyIdent);
 }
 """
 
@@ -38,7 +38,7 @@ namespace UCD {
     const std::string & getPropertyFullName(const property_t p) {
         return property_full_name[p];
     }
-    property_t resolveProperty(std:: string & propertyIdent) {
+    property_t getPropertyCode(std::string & propertyIdent) {
         auto propit = alias_map.find(propertyIdent);
         if (propit == alias_map.end()) return Undefined;
         return static_cast<property_t>(propit->second);
@@ -577,11 +577,10 @@ class UCD_generator():
         cformat.close_header_file(f)
 
     def generate_UCD_Config_h(self):
-        setVersionfromReadMe_txt()
         f = cformat.open_header_file_for_write('UCD_Config')
         f.write("#include <utility>\n")
         f.write("namespace UCD {\n")
-        f.write("\tconst auto UnicodeVersion = \"%s\";\n" % UCD_config.version)
+        f.write("\tconst auto UnicodeVersion = \"%s\";\n" % UCD_config.UCD_version_string)
         f.write("\tusing codepoint_t = unsigned;\n")
         f.write("\tenum : codepoint_t { UNICODE_MAX = %s };\n" % UCD_config.UCD_max_code_point)
         f.write("\tusing interval_t = std::pair<codepoint_t, codepoint_t>;\n")
@@ -608,6 +607,10 @@ class UCD_generator():
 
 
 def UCD_main():
+    cformat.open_output_directory()
+    setVersionfromReadMe_txt()
+    if UCD_config.version != UCD_config.UCD_version_string:
+        print("UCD version mismatch %s vs %s" % (UCD_config.version, UCD_config.UCD_version_string))
     ucd = UCD_generator()
 
     # First parse all property names and their aliases

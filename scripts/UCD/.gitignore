@@ -1,0 +1,2 @@
+# Don't save UCD data directories or generated output files.
+UCD-*/

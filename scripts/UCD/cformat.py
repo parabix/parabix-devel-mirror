@@ -1,4 +1,5 @@
 import UCD_config, sys, time, re
+import os.path, shutil
 from datetime import date
 
 header_template = r"""#ifndef %s
@@ -25,9 +26,19 @@ cpp_template = r"""
 
 """
 
+def open_output_directory():
+    if os.path.exists(UCD_config.UCD_output_dir + ".bak"):
+        shutil.rmtree(UCD_config.UCD_output_dir + ".bak")
+    if os.path.exists(UCD_config.UCD_output_dir):
+        shutil.move(UCD_config.UCD_output_dir, UCD_config.UCD_output_dir + ".bak")
+    os.mkdir(UCD_config.UCD_output_dir)
+    os.mkdir(UCD_config.UCD_output_dir + "/include")
+    os.mkdir(UCD_config.UCD_output_dir + "/lib")
+
+
 def open_header_file_for_write(filename):
     generator_name = sys.argv[0]
-    f = open(UCD_config.UCD_output_dir + '/' + filename + '.h', 'w')
+    f = open(UCD_config.UCD_output_dir + '/include/' + filename + '.h', 'w')
     substitute_name_char_re = re.compile('[-\s]')
     hname = substitute_name_char_re.sub('_', filename.upper()) + '_H'
     f.write(header_template % (hname, hname, date.today().year, generator_name))
@@ -36,7 +47,7 @@ def open_header_file_for_write(filename):
 def open_cpp_file_for_write(filename):
    generator_name = sys.argv[0]
 
-   f = open(UCD_config.UCD_output_dir + '/' + filename + '.cpp', 'w')
+   f = open(UCD_config.UCD_output_dir + '/lib/' + filename + '.cpp', 'w')
    hname = filename.upper() + '_H'
    f.write(cpp_template % (date.today().year, generator_name, filename))
    return f
