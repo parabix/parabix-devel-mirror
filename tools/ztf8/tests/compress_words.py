@@ -1,5 +1,6 @@
 import codecs
 import binascii
+import copy
 
 # the compressed words range from "0xC0 0x00" till "0xD0 0xFF"
 # TODO: define upper bound of encoded symbols
@@ -8,13 +9,18 @@ import binascii
 # if word x is being compressed, look for all future occurrences of word x withing certain range.
 # keeping cursors at the beginning of all occurrences of word x, advance the cursor to find the longest common sequence of words
 # among all the occurrences of word x. Encode that sequence of words instead of a single word at a time.
+
+
 class Compressor:
     def __init__(self):
         self.name = "ztf"
-        self.hashTable = {}
+        # [hashTableLen3 = {}, hashTableLen4 = {}, hashTableLen5_8 = {}, hashTableLen9_16 = {}]
+        self.hashTableList = [{}, {}, {}, {}]
         self.encodePrefix = 192  # b'\xC0'
         self.encodeSuffix = 0    # b'\x00'
         self.compressed = bytearray(b'')
+        self.bitmix = [[4, 1, 7, 2, 0, 6, 5, 3], [1, 2, 4, 5, 0, 3, 6, 7], [
+            0, 5, 4, 6, 2, 3, 7, 1], [7, 1, 6, 4, 3, 0, 5, 2], [3, 2, 5, 4, 7, 6, 0, 1]]
 
     def Name(self):
         return 'words'
@@ -24,7 +30,7 @@ class Compressor:
         # encode one word or pair of words where consequent symbol is of length 1
         # to avoid generating longer encoded hash for single unicode character
         while index < (len(words)):
-            #if index+1 < len(words) and (len(words[index])l == 1 or len(words[index+1]) == 1):
+            # if index+1 < len(words) and (len(words[index])l == 1 or len(words[index+1]) == 1):
             if words[index] != '\n' and index+1 < len(words) and len(words[index+1]) == 1:
                 word = words[index] + words[index+1]
                 index += 2
@@ -37,26 +43,68 @@ class Compressor:
                 index += 1
             # if encoded hash for a symbol to be compressed is already calculated,
             # replace the symbol with encoded hash
-            hashVal = self.hashTable.get(word, None)
+            wLen = len(word)
+            if wLen < 3:
+                self.compressed += bytearray(word, 'utf-8')
+            elif wLen == 3:
+                hashTablePos = 0
+                hashVal = self.hashTableList[0].get(word, None)
+            elif wLen == 4:
+                hashTablePos = 1
+                hashVal = self.hashTableList[1].get(word, None)
+            elif wLen > 4 and wLen <= 8:
+                hashTablePos = 2
+                hashVal = self.hashTableList[2].get(word, None)
+            elif wLen > 8 and wLen <= 16:
+                hashTablePos = 3
+                hashVal = self.hashTableList[3].get(word, None)
+            else:
+                hashVal = None
+
             if hashVal:
                 self.compressed += hashVal
-            # maintain linebreaks in compressed data
-            # TODO: consider other Unicode linbreaks too
-            elif word == "\n":
-                self.compressed += bytearray(word, 'utf-8')
-            # if symbol is seen for the first time, encode symbol to create hash
-            # and write plaintext symbol to the compressed data
             else:
-                self.encodeSuffix += 1
-                if self.encodeSuffix == 255:
-                    self.encodePrefix += 1
-                    self.encodeSuffix = 0
-                # encodedWord = bytes([self.encodePrefix, self.encodeSuffix])
-                encodedWord = bytearray(b'')
-                encodedWord.append(self.encodePrefix)
-                encodedWord.append(self.encodeSuffix)
-                # print(encodedWord, 'encodedWord')
-                self.hashTable[word] = encodedWord
+                if wLen <= 16:
+                    encodedWord = self.getHashVal(word)
+                    self.hashTableList[hashTablePos][word] = encodedWord
                 self.compressed += bytearray(word, 'utf-8')
-        print(self.hashTable)
+            # print(self.hashTable)
         return self.compressed
+
+    def getHashVal(self, word):
+        bits = []
+        bitsShuffled = []
+        for i, w in enumerate(word):
+            dec = ord(w)
+            for bitPos in range(8):
+                bits.append((dec >> bitPos) & 1)
+            for pos, bit in enumerate(self.bitmix[0]):
+                # print(bits[pos + 8*i], 'bits[', pos + 8*i, ']')
+                # print(bits[bit], 'bits[', bit, ']')
+                b = 0 if bits[pos + 8*i] == bits[bit + 8*i] else 1
+                bitsShuffled.append(b)
+        print(bitsShuffled)
+        for i in range(4):
+            prevPos = pow(2, i)
+            temp = copy.deepcopy(bitsShuffled)
+            for symPos in range(pow(2, i), len(word)):
+                bitmixIdx = 0
+                while bitmixIdx < 8:
+                    sIndex = self.bitmix[i+1][bitmixIdx]
+                    print('temp[', bitmixIdx+(8*symPos), '] ',
+                          temp[bitmixIdx+(8*symPos)], 'temp[', 8 *
+                          (symPos-prevPos) + sIndex, '] ',
+                          temp[8*(symPos-prevPos) + sIndex])
+                    b = 0 if temp[bitmixIdx +
+                                  (8*symPos)] == temp[8*(symPos-prevPos) + sIndex] else 1
+                    bitsShuffled[bitmixIdx + 8*symPos] = b
+                    bitmixIdx += 1
+            print(bitsShuffled)
+        symLen = len(bitsShuffled)
+        bitsShuffled = bitsShuffled[::-1]
+        hashVal = 0
+        lastByte = bitsShuffled[:8]
+        hashVal = int("".join(str(x) for x in lastByte), 2)
+        hashVal = format(hashVal, '02x')
+        print(hashVal)
+        return (symLen//8), hashVal
