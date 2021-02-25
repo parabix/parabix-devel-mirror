@@ -43,6 +43,13 @@ protected:
     void generatePabloMethod() override;
 };
 
+class PhraseMarker : public pablo::PabloKernel {
+public:
+    PhraseMarker(BuilderRef kb, StreamSet * WordMarks, StreamSet * Phrasemarks);
+protected:
+    void generatePabloMethod() override;
+};
+
 class ByteRun final: public pablo::PabloKernel {
 public:
     ByteRun(BuilderRef b, StreamSet * const basis, StreamSet * excluded, StreamSet * runMask)

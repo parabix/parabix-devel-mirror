@@ -16,6 +16,7 @@
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <llvm/Support/raw_ostream.h>
+#include <pablo/pe_debugprint.h>
 #include <sstream>
 
 using namespace pablo;
@@ -83,6 +84,29 @@ void WordMarkKernel::generatePabloMethod() {
     if (f == nameMap.end()) llvm::report_fatal_error("Cannot find word property");
     PabloAST * wordChar = f->second;
     pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(0)), wordChar);
+}
+
+PhraseMarker::PhraseMarker(BuilderRef kb, StreamSet * WordMarks, StreamSet * PhraseMarks)
+: PabloKernel(kb, "PhraseMarker", {Binding{"WordMarks", WordMarks}}, {Binding{"PhraseMarks", PhraseMarks}}) { }
+
+void PhraseMarker::generatePabloMethod() {
+    pablo::PabloBuilder pb(getEntryScope());
+    PabloAST * WordMarks = getInputStreamSet("WordMarks")[0];
+    PabloAST * nonWord = pb.createNot(WordMarks);
+    PabloAST * oddNonWord = pb.createEveryNth(nonWord, pb.getInteger(2));
+    PabloAST * evenNonWord = pb.createIndexedAdvance(oddNonWord, nonWord, 1);
+    //pb.createDebugPrint(evenNonWord, "evenNonWord");
+    //pb.createDebugPrint(oddNonWord, "oddNonWord");
+
+    PabloAST * phrasePos1 = pb.createIntrinsicCall(pablo::Intrinsic::SpanUpTo, {pb.createAdvance(evenNonWord, 1), evenNonWord});
+    PabloAST * phrasePos2 = pb.createIntrinsicCall(pablo::Intrinsic::SpanUpTo, {pb.createAdvance(oddNonWord, 1), oddNonWord});
+
+    PabloAST * oddPhrasePosExceptFirst = pb.createAnd(pb.createOr(oddNonWord, WordMarks), phrasePos1);
+    PabloAST * evenPhrasePos = pb.createAnd(pb.createOr(evenNonWord, WordMarks), phrasePos2);
+    //pb.createDebugPrint(oddPhrasePosExceptFirst, "oddPhrasePosExceptFirst");
+    //pb.createDebugPrint(evenPhrasePos, "evenPhrasePos");
+
+    pb.createAssign(pb.createExtract(getOutputStreamVar("PhraseMarks"), pb.getInteger(0)), pb.createOr(evenPhrasePos, WordMarks));
 }
 
 void ByteRun::generatePabloMethod() {

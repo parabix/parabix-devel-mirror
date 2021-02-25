@@ -82,12 +82,19 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
 
     StreamSet * WordChars = P->CreateStreamSet(1);
     P->CreateKernelCall<WordMarkKernel>(u8basis, WordChars);
+
+    StreamSet * PhraseMarks = P->CreateStreamSet(1);
+    P->CreateKernelCall<PhraseMarker>(WordChars, PhraseMarks);
+    P->CreateKernelCall<DebugDisplayKernel>("PhraseMarks", PhraseMarks);
+
     StreamSet * const symbolRuns = P->CreateStreamSet(1);
-    P->CreateKernelCall<ZTF_Symbols>(u8basis, WordChars, symbolRuns);
+    P->CreateKernelCall<ZTF_Symbols>(u8basis, PhraseMarks, symbolRuns);
 
     StreamSet * const runIndex = P->CreateStreamSet(4);
     StreamSet * const overflow = P->CreateStreamSet(1);
     P->CreateKernelCall<RunIndex>(symbolRuns, runIndex, overflow);
+    //P->CreateKernelCall<DebugDisplayKernel>("symbolRuns", symbolRuns);
+    //P->CreateKernelCall<DebugDisplayKernel>("runIndex", runIndex);
 
     StreamSet * const bixHashes = P->CreateStreamSet(encodingScheme1.MAX_HASH_BITS);
     P->CreateKernelCall<BixHash>(u8basis, symbolRuns, bixHashes);
@@ -95,14 +102,14 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
 
     StreamSet * const hashValues = P->CreateStreamSet(1, 16);
     std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
-    //P->CreateKernelCall<DebugDisplayKernel>("runIndex", runIndex);
     P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
     //P->CreateKernelCall<DebugDisplayKernel>("hashValues", hashValues);
 
     StreamSet * u8bytes = codeUnitStream;
     std::vector<StreamSet *> extractionMasks;
     for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
-        StreamSet * groupMarks = P->CreateStreamSet(1);StreamSet * longSymSequence = P->CreateStreamSet(1);
+        StreamSet * groupMarks = P->CreateStreamSet(1);
+        StreamSet * longSymSequence = P->CreateStreamSet(1);
         P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks, longSymSequence);
         //P->CreateKernelCall<DebugDisplayKernel>("groupMarks", groupMarks);
         //P->CreateKernelCall<DebugDisplayKernel>("longSymSequence", longSymSequence);
