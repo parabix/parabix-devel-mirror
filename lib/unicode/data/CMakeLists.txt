@@ -11,6 +11,7 @@ SRC
     Equivalence.cpp
     PropertyAliases.cpp
     PropertyObjects.cpp
+    RadicalSets.cpp
 DEPS
     unicode.core
 )
