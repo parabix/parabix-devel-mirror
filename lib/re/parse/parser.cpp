@@ -23,6 +23,8 @@
 #include <re/parse/fixed_string_parser.h>
 #include <re/adt/adt.h>
 #include <re/adt/printer_re.h>
+#include <unicode/core/unicode_set.h>
+#include <unicode/data/RadicalSets.h>
 
 using namespace llvm;
 
@@ -134,7 +136,12 @@ RE * RE_Parser::parse_next_item() {
     else if (accept('(')) return parse_group();
     else if (accept('[')) return parse_extended_bracket_expression();
     else if (accept('\\')) return parse_escaped();
-    else return createCC(parse_literal_codepoint());
+    else {
+        auto cp = parse_literal_codepoint();
+        auto radicalSet = UCD::getRadicalSet(cp);
+        if (radicalSet == nullptr) return createCC(cp);
+        return makeCC(*radicalSet);
+    }
 }
     
     
