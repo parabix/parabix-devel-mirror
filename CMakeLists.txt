@@ -390,6 +390,16 @@ add_test(
     WORKING_DIRECTORY ${QA_DIR}/base64
     COMMAND python base64test.py ${BIN_DIR}/base64)
 
+add_test(
+  NAME gb18030_single_threaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=1")
+
+add_test(
+  NAME gb18030_multithreaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
+
 
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
@@ -419,6 +429,14 @@ add_custom_target (editd_test
 add_custom_target (base64_test
     WORKING_DIRECTORY ${QA_DIR}/base64
     COMMAND python base64test.py "${BIN_DIR}/base64")
+
+add_custom_target(gb18030_single_threaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=1")
+
+add_custom_target(gb18030_multithreaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
 
 add_custom_target (abc_gen
     WORKING_DIRECTORY ${QA_DIR}
