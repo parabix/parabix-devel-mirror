@@ -1,21 +1,16 @@
 import codecs
 import binascii
 import copy
-
-# the compressed words range from "0xC0 0x00" till "0xD0 0xFF"
-# TODO: define upper bound of encoded symbols
-
-# next steps:
-# if word x is being compressed, look for all future occurrences of word x withing certain range.
-# keeping cursors at the beginning of all occurrences of word x, advance the cursor to find the longest common sequence of words
-# among all the occurrences of word x. Encode that sequence of words instead of a single word at a time.
-
+import itertools
+import nltk
 
 class Compressor:
     def __init__(self):
         self.name = "ztf"
         # [hashTableLen3 = {}, hashTableLen4 = {}, hashTableLen5_8 = {}, hashTableLen9_16 = {}]
-        self.hashTableList = [{}, {}, {}, {}]
+        self.wordsLen = 0
+        self.words = []
+        self.hashTableList = [{}, {}, {}, {}, {}]
         self.prefixList = [192, 196, 200, 208]
         self.encodePrefix = 192  # b'\xC0'
         self.encodeSuffix = 0    # b'\x00'
@@ -26,23 +21,79 @@ class Compressor:
     def Name(self):
         return 'words'
 
-    def Compress(self, words):
+    def CompressPairs(self, words):
+        wordPairs = nltk.bigrams(words)
+        self.generatehashTables(wordPairs)
+        self.words = words
         index = 0
+        self.wordsLen = len(words)
+        wordEncoding = []
         # encode one word or pair of words where consequent symbol is of length 1
         # to avoid generating longer encoded hash for single unicode character
-        while index < (len(words)):
-            if index+2 < len(words):
-                extendedLen = len(words[index]) + \
-                    len(words[index+1]) + len(words[index+2])
-                if (extendedLen > 4 and extendedLen < 16):
-                    word = words[index] + words[index+1] + words[index+2]
-                    index += 3
+        while index < self.wordsLen:
+            if index+1 < self.wordsLen:
+                word = words[index] + words[index+1]
+            # if encoded hash for the word pair to be compressed is already calculated,
+            # replace the word pair with encoded hash, else fall back to individual word based compression
+            wLen = len(word)
+            hashVal = None
+            if wLen == 3:
+                hashTablePos = 0
+                hashVal, notUsed = self.hashTableList[0].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[0][word] = [hashVal, 0]
+            elif wLen == 4:
+                hashTablePos = 1
+                hashVal, notUsed = self.hashTableList[1].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[1][word] = [hashVal, 0]
+            elif wLen > 4 and wLen <= 8:
+                hashTablePos = 2
+                hashVal, notUsed = self.hashTableList[2].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[2][word] = [hashVal, 0]
+            elif wLen > 8 and wLen <= 16:
+                hashTablePos = 3
+                hashVal, notUsed = self.hashTableList[3].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[3][word] = [hashVal, 0]
+            elif wLen > 16 and wLen <= 32:
+                hashTablePos = 4
+                hashVal, notUsed = self.hashTableList[4].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[4][word] = [hashVal, 0]
+
+            if hashVal:
+                if wordEncoding:
+                    self.fallbackToWordCmp(wordEncoding)
+                    wordEncoding = []
+                if notUsed:
+                    self.compressed += bytearray(word, 'utf-8')
                 else:
-                    word = words[index]
-                    index += 1
+                    self.compressed += hashVal
+                index += 2
             else:
-                word = words[index]
+                if len(words[index]) >= 3:
+                    wordEncoding.append(words[index])
+                else:
+                    self.compressed += bytearray(words[index], 'utf-8')
                 index += 1
+        return self.compressed
+
+    def CompressWords(self, words):
+        self.words = words
+        index = 0
+        self.wordsLen = len(words)
+        # encode one word or pair of words where consequent symbol is of length 1
+        # to avoid generating longer encoded hash for single unicode character
+        while index < self.wordsLen:
+            word, index = self.getLongestLenPhrase(index)
+            # print(word, 'word')
             # if encoded hash for a symbol to be compressed is already calculated,
             # replace the symbol with encoded hash
             wLen = len(word)
@@ -51,19 +102,40 @@ class Compressor:
                 self.compressed += bytearray(word, 'utf-8')
             elif wLen == 3:
                 hashTablePos = 0
-                hashVal = self.hashTableList[0].get(word, None)
+                hashVal, notUsed = self.hashTableList[0].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[0][word] = [hashVal, 0]
             elif wLen == 4:
                 hashTablePos = 1
-                hashVal = self.hashTableList[1].get(word, None)
+                hashVal, notUsed = self.hashTableList[1].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[1][word] = [hashVal, 0]
             elif wLen > 4 and wLen <= 8:
                 hashTablePos = 2
-                hashVal = self.hashTableList[2].get(word, None)
+                hashVal, notUsed = self.hashTableList[2].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[2][word] = [hashVal, 0]
             elif wLen > 8 and wLen <= 16:
                 hashTablePos = 3
-                hashVal = self.hashTableList[3].get(word, None)
+                hashVal, notUsed = self.hashTableList[3].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[3][word] = [hashVal, 0]
+            elif wLen > 16 and wLen <= 32:
+                hashTablePos = 4
+                hashVal, notUsed = self.hashTableList[4].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[4][word] = [hashVal, 0]
 
             if hashVal:
-                self.compressed += hashVal
+                if notUsed:
+                    self.compressed += bytearray(word, 'utf-8')
+                else:
+                    self.compressed += hashVal
             else:
                 if 3 <= wLen <= 16:
                     wordLen, encodedSuffix = self.getHashVal(word)
@@ -72,10 +144,125 @@ class Compressor:
                     encodedWord.append(encodedPrefix)
                     encodedWord.append(encodedSuffix)
                     # print(encodedWord, 'encodedWord')
-                    self.hashTableList[hashTablePos][word] = encodedWord
+                    self.hashTableList[hashTablePos][word] = [encodedWord, 1]
                 self.compressed += bytearray(word, 'utf-8')
-            # print(self.hashTable)
         return self.compressed
+
+    def generatehashTables(self, wordPairs):
+        for pair in wordPairs:
+            pair = ''.join(pair)
+            pairLen = len(pair)
+            hashVal = None
+            if pairLen < 3:
+                continue
+            elif pairLen == 3:
+                hashTablePos = 0
+                hashVal, notUsed = self.hashTableList[0].get(
+                    pair, [None, None])
+            elif pairLen == 4:
+                hashTablePos = 1
+                hashVal, notUsed = self.hashTableList[1].get(
+                    pair, [None, None])
+            elif pairLen > 4 and pairLen <= 8:
+                hashTablePos = 2
+                hashVal, notUsed = self.hashTableList[2].get(
+                    pair, [None, None])
+            elif pairLen > 8 and pairLen <= 16:
+                hashTablePos = 3
+                hashVal, notUsed = self.hashTableList[3].get(
+                    pair, [None, None])
+            elif pairLen > 16 and pairLen <= 32:
+                hashTablePos = 4
+                hashVal, notUsed = self.hashTableList[4].get(
+                    pair, [None, None])
+
+            # if hashVal:
+                # move these to the final hashTable
+            #    continue
+            if not hashVal:
+                if 3 <= pairLen <= 16:
+                    wordLen, encodedSuffix = self.getHashVal(pair)
+                    encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
+                    encodedWord = bytearray(b'')
+                    encodedWord.append(encodedPrefix)
+                    encodedWord.append(encodedSuffix)
+                    # print(encodedWord, 'encodedWord')
+                    # self.hashTableList[hashTablePos][pair] = [encodedWord, notUsed=1]
+                    self.hashTableList[hashTablePos][pair] = [encodedWord, 1]
+
+    def fallbackToWordCmp(self, words):
+        index = 0
+        wordsLen = len(words)
+        while index < wordsLen:
+            word = words[index]
+            index += 1
+            # if encoded hash for a symbol to be compressed is already calculated,
+            # replace the symbol with encoded hash
+            wLen = len(word)
+            hashVal = None
+            if wLen < 3:
+                self.compressed += bytearray(word, 'utf-8')
+            elif wLen == 3:
+                hashTablePos = 0
+                hashVal, notUsed = self.hashTableList[0].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[0][word] = [hashVal, 0]
+            elif wLen == 4:
+                hashTablePos = 1
+                hashVal, notUsed = self.hashTableList[1].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[1][word] = [hashVal, 0]
+            elif wLen > 4 and wLen <= 8:
+                hashTablePos = 2
+                hashVal, notUsed = self.hashTableList[2].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[2][word] = [hashVal, 0]
+            elif wLen > 8 and wLen <= 16:
+                hashTablePos = 3
+                hashVal, notUsed = self.hashTableList[3].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[3][word] = [hashVal, 0]
+            elif wLen > 16 and wLen <= 32:
+                hashTablePos = 4
+                hashVal, notUsed = self.hashTableList[4].get(
+                    word, [None, None])
+                if notUsed:
+                    self.hashTableList[4][word] = [hashVal, 0]
+
+            if hashVal:
+                if notUsed:
+                    self.compressed += bytearray(word, 'utf-8')
+                else:
+                    self.compressed += hashVal
+            else:
+                if 3 <= wLen <= 16:
+                    wordLen, encodedSuffix = self.getHashVal(word)
+                    encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
+                    encodedWord = bytearray(b'')
+                    encodedWord.append(encodedPrefix)
+                    encodedWord.append(encodedSuffix)
+                    # print(encodedWord, 'encodedWord')
+                    self.hashTableList[hashTablePos][word] = [encodedWord, 1]
+                self.compressed += bytearray(word, 'utf-8')
+
+    def pairwise(self, iterable):
+        a, b = itertools.tee(iterable)
+        next(b, None)
+        return itertools.zip_longest(a, b)
+
+    def getLongestLenPhrase(self, curIndex):
+        word = self.words[curIndex]
+        curIndex += 1
+        while curIndex < self.wordsLen:
+            if len(word) + len(self.words[curIndex]) >= 16:
+                break
+            word += self.words[curIndex]
+            curIndex += 1
+        return word, curIndex
 
     def getPrefix(self, suffix, lgth):
         if lgth == 3:
@@ -88,10 +275,12 @@ class Compressor:
             pfxBase = self.prefixList[3]
         # TODO : clean the process of retreiving remaining hash bits!
         remHashBits = suffix * pow(2, 7)
+        # print(remHashBits % 8, 'remHashBits 1')
         remHashBits = format(remHashBits, '02x')
         remHashBits = remHashBits[len(remHashBits)-2::]
         remHashBits = bin(int(remHashBits, 16)).zfill(8)[::-1]
         remHashBits = int(remHashBits[::7])
+        # print(remHashBits, 'remHashBits 2')
         return (pfxBase+remHashBits)
 
     def getHashVal(self, word):
