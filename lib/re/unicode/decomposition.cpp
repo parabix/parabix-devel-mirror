@@ -16,6 +16,7 @@
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>
+#include <unicode/data/PropertyObjectTable.h>
 #include <unicode/data/PropertyValueAliases.h>
 
 

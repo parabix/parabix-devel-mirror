@@ -314,9 +314,6 @@ public:
     UnsupportedPropertyObject(property_t p, ClassTypeId)
     : PropertyObject(p, ClassTypeId::UnsupportedProperty) {}
 };
-    
-    
-PropertyObject * getPropertyObject(property_t property_code);
 
 }
 

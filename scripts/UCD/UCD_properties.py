@@ -349,16 +349,16 @@ class UCD_generator():
         f.write(PropertyAliases_h_template % (enum_text))
         cformat.close_header_file(f)
         f = cformat.open_cpp_file_for_write('PropertyAliases')
-        cformat.write_imports(f, ["<string>", "<unordered_map>", "<vector>", "<unicode/data/PropertyAliases.h>"])
+        cformat.write_imports(f, ["<string>", "<unordered_map>", "<vector>", '<unicode/data/PropertyAliases.h>'])
         f.write(PropertyAliases_cpp_template % (enum_text2, full_name_text, map_text))
         cformat.close_cpp_file(f)
 
     def load_property_value_info(self):
         initializePropertyValues(self.property_object_map, self.property_lookup_map)
 
-    def generate_PropertyValueAliases_h(self):
+    def generate_PropertyValueAliases(self):
         f = cformat.open_header_file_for_write('PropertyValueAliases')
-        cformat.write_imports(f, ['"PropertyAliases.h"', "<vector>", "<unordered_map>", "<string>"])
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', "<vector>", "<unordered_map>", "<string>"])
         f.write("namespace UCD {\n")
         #  Generate the aliases for all Binary properties.
         enum_text = cformat.multiline_fill(['N', 'Y'], ',', 12)
@@ -417,7 +417,10 @@ class UCD_generator():
         else:
             print("%s: unsupported property.")
             return
+        p = property_code.upper()
+        f.write("PropertyObject * get_%s_PropertyObject() {  return & %s_ns::property_object; }\n" % (p, p))
         self.supported_props.append(property_code)
+
 
     def generate_property_value_file(self, filename_root, property_code):
         if not property_code in self.property_object_map.keys():
@@ -426,77 +429,77 @@ class UCD_generator():
         property_object = self.property_object_map[property_code]
         parse_property_data(self.property_object_map[property_code], filename_root + '.txt')
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code)
         f.write("}\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
     def generate_multisection_properties_file(self, filename_root):
         props = parse_multisection_property_data(filename_root + '.txt', self.property_object_map, self.property_lookup_map)
         #(props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in sorted(props):
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
     def generate_multicolumn_properties_file(self, filename_root, prop_code_list):
         props = parse_multicolumn_property_data(filename_root + '.txt', self.property_object_map, self.property_lookup_map, prop_code_list)
         #(props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
             if p in self.property_object_map: self.emit_property(f, p)
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
-    def generate_UnicodeData_h(self):
+    def generate_UnicodeData(self):
         basename = 'UnicodeData'
         parse_UnicodeData_txt(self.property_object_map)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         prop_code_list = ['na', 'dm', 'suc', 'slc', 'stc', 'na1', 'isc', 'nv']
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
-    def generate_SpecialCasing_h(self):
+    def generate_SpecialCasing(self):
         basename = 'SpecialCasing'
         parse_SpecialCasing_txt(self.property_object_map)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in ['lc', 'uc', 'tc']:
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
-    def generate_ScriptExtensions_h(self):
+    def generate_ScriptExtensions(self):
         filename_root = 'ScriptExtensions'
         property_code = 'scx'
         extension_object = self.property_object_map['scx']
         extension_object.setBaseProperty(self.property_object_map['sc'])
         parse_property_data(extension_object, filename_root+'.txt')
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         prop_list = self.property_object_map['sc'].name_list_order
         value_map = extension_object.value_map
         f.write("\nnamespace UCD {\n")
@@ -512,13 +515,14 @@ class UCD_generator():
         f.write("        UCD::sc,\n")
         f.write("       {")
         f.write(cformat.multiline_fill(set_list, ',', 8))
-        f.write("\n        }};\n    }\n}\n")
-        cformat.close_header_file(f)
+        f.write("\n        }};\n    }\n\n")
+        f.write("PropertyObject * get_SCX_PropertyObject() {  return & SCX_ns::property_object; }\n}\n")
+        cformat.close_cpp_file(f)
         print("%s: %s bytes" % (basename, sum([value_map[v].bytes() for v in value_map.keys()])))
         self.supported_props.append(property_code)
         self.property_data_headers.append(basename)
 
-    def generate_CompatibilityProperties_h(self):
+    def generate_CompatibilityProperties(self):
         basename = 'CompatibilityProperties'
         # alnum
         alnum = self.property_object_map["alnum"]
@@ -550,33 +554,46 @@ class UCD_generator():
         join_c = self.property_object_map["Join_C"].value_map['Y']
         word.fromUnicodeSet(union_of_all([alpha, digit, connector, mark, join_c]))
 
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in Compatibility_Properties:
             if p in self.property_object_map: self.emit_property(f, p)
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
 
-    def generate_PropertyObjectTable_h(self):
+    def generate_PropertyObjectTable(self):
         f = cformat.open_header_file_for_write('PropertyObjectTable')
-        cformat.write_imports(f, ['"PropertyObjects.h"', '"PropertyAliases.h"', '<array>'])
-        cformat.write_imports(f, ['"%s.h"' % fname for fname in self.property_data_headers])
+        cformat.write_imports(f, ['<unicode/data/PropertyObjects.h>', '"PropertyAliases.h"'])
+        f.write("\nnamespace UCD {\n")
+        for p in self.property_enum_name_list:
+            if p in self.supported_props:
+                f.write("PropertyObject * get_%s_PropertyObject();\n" % p.upper())
+        f.write("\nPropertyObject * getPropertyObject(property_t property_code);\n}\n")
+        cformat.close_header_file(f)
+        f = cformat.open_cpp_file_for_write('PropertyObjectTable')
+        cformat.write_imports(f, ['<unicode/data/PropertyObjectTable.h>', '<array>'])
         f.write("\nnamespace UCD {\n")
         objlist = []
         for p in self.property_enum_name_list:
             k = self.property_object_map[p].getPropertyKind()
             if p in self.supported_props:
-                objlist.append("&%s_ns::property_object" % p.upper())
+                objlist.append("get_%s_PropertyObject()" % p.upper())
             else:
                 objlist.append("new UnsupportedPropertyObject(%s, PropertyObject::ClassTypeId::%sProperty)" % (p, k))
         f.write("\n  const std::array<PropertyObject *, %i> property_object_table = {{\n    " % len(objlist))
-        f.write(",\n    ".join(objlist) + '  }};\n}\n')
-        cformat.close_header_file(f)
+        f.write(",\n    ".join(objlist) + '  }};\n\n')
+        f.write("PropertyObject * getPropertyObject(property_t property_code) {\n")
+        f.write("    return property_object_table[property_code];\n}\n}")
 
-    def generate_UCD_Config_h(self):
+        cformat.close_cpp_file(f)
+
+
+
+
+    def generate_UCD_Config(self):
         f = cformat.open_header_file_for_write('UCD_Config')
         f.write("#include <utility>\n")
         f.write("namespace UCD {\n")
@@ -588,19 +605,19 @@ class UCD_generator():
         cformat.close_header_file(f)
 
 
-    def genCaseFolding_h(self):
+    def genCaseFolding(self):
         basename = 'CaseFolding'
         fold_data = parse_CaseFolding_txt(self.property_object_map)
         cm = simple_CaseClosure_map(fold_data)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>', '<vector>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>', '<vector>'])
         f.write(foldDeclarations)
         f.write(genFoldEntryData(cm))
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, 'scf')
         self.emit_property(f, 'cf')
         f.write("}\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.supported_props.append(['scf', 'cf'])
         self.property_data_headers.append(basename)
 
@@ -623,11 +640,11 @@ def UCD_main():
     # Next parse all property value names and their aliases.  Generate the data.
     ucd.load_property_value_info()
 
-    ucd.generate_UnicodeData_h()
+    ucd.generate_UnicodeData()
 
-    ucd.generate_SpecialCasing_h()
+    ucd.generate_SpecialCasing()
 
-    ucd.genCaseFolding_h()
+    ucd.genCaseFolding()
 
     ucd.generate_multicolumn_properties_file('NameAliases', ['Name_Alias', 'Alias_Kind'])
 
@@ -642,7 +659,7 @@ def UCD_main():
     ucd.generate_property_value_file('Scripts', 'sc')
     #
     # # Script Extensions
-    ucd.generate_ScriptExtensions_h()
+    ucd.generate_ScriptExtensions()
     # #
     # General Category
     ucd.generate_property_value_file('extracted/DerivedGeneralCategory', 'gc')
@@ -709,17 +726,17 @@ def UCD_main():
     #
     ucd.generate_property_value_file('Jamo', 'JSN')
     #
-    ucd.generate_CompatibilityProperties_h()
+    ucd.generate_CompatibilityProperties()
     #
         # Binary properties from PropList.txt
     ucd.generate_multisection_properties_file('emoji/emoji-data')
 
     #
-    ucd.generate_PropertyValueAliases_h()
+    ucd.generate_PropertyValueAliases()
 
-    ucd.generate_PropertyObjectTable_h()
+    ucd.generate_PropertyObjectTable()
 
-    ucd.generate_UCD_Config_h()
+    ucd.generate_UCD_Config()
 
 if __name__ == "__main__":
   UCD_main()

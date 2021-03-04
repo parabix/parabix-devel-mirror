@@ -8,6 +8,7 @@
 #include <re/unicode/re_name_resolve.h>
 #include <re/unicode/resolve_properties.h>
 #include <unicode/data/PropertyObjects.h>
+#include <unicode/data/PropertyObjectTable.h>
 #include <re/compile/re_compiler.h>
 
 #include <vector>                  // for vector, allocator
