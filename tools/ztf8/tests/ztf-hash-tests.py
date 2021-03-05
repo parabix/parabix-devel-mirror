@@ -48,7 +48,7 @@ if __name__ == '__main__':
     else:
         fileName = options.compress
         with open(fileName, 'rt') as infile:
-            text = infile.read(1000000)
+            text = infile.read(10000000)
 
     if options.decompress:
         for algorithm in DecmpAlgorithmList:
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         # for index in uniseg.wordbreak.word_boundaries(text):
         #    boundary_positions.append(index)
         for algorithm in CmpAlgorithmList:
-            compressedData = algorithm.CompressPairs(word_list)
+            compressedData = algorithm.CompressPhrase(word_list, 3)
             #compressedData = algorithm.CompressWords(word_list)
         # write compressed data to output.z file
         output_file = open(outputFilename+"."+algorithm.name+".z", "wb")
