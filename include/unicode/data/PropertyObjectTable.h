@@ -12,6 +12,7 @@
 #include <unicode/data/PropertyObjects.h>
 
 namespace UCD {
+PropertyObject * get_IDENTITY_PropertyObject();
 PropertyObject * get_NV_PropertyObject();
 PropertyObject * get_CF_PropertyObject();
 PropertyObject * get_DM_PropertyObject();

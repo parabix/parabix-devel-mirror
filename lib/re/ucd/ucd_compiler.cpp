@@ -394,7 +394,7 @@ UCDCompiler::RangeList UCDCompiler::byteDefinitions(const RangeList & list, cons
 template <typename RangeListOrUnicodeSet>
 UCDCompiler::RangeList UCDCompiler::rangeIntersect(const RangeListOrUnicodeSet & list, const codepoint_t lo, const codepoint_t hi) {
     RangeList result;
-    for (const auto i : list) {
+    for (const auto & i : list) {
         if ((lo_codepoint(i) <= hi) && (hi_codepoint(i) >= lo)) {
             result.emplace_back(std::max(lo, lo_codepoint(i)), std::min(hi, hi_codepoint(i)));
         }

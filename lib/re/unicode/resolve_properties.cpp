@@ -389,8 +389,8 @@ RE * standardizeProperties(RE * r) {
 }
 
 struct SimplePropertyInliner : public RE_Transformer {
-    const int MAX_CC_SIZE_TO_INLINE = 1;
-    const int MAX_BOUNDARY_ALTS_TO_INLINE = 2;
+    const unsigned MAX_CC_SIZE_TO_INLINE = 1;
+    const unsigned MAX_BOUNDARY_ALTS_TO_INLINE = 2;
     SimplePropertyInliner() : RE_Transformer("SimplePropertyInliner") {}
     RE * transformPropertyExpression (PropertyExpression * exp) override {
         if (exp->getKind() == PropertyExpression::Kind::Codepoint) {

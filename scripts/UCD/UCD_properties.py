@@ -59,6 +59,9 @@ EnumeratedProperty_template = r"""
     }
 """
 
+def buffer_allocation_length(buffer_length):
+    return (max(buffer_length,1) + 255) & -256
+
 def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map):
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} mapping to <none>
@@ -96,7 +99,7 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
                          prop_enum_up = property_code.upper(),
                          string_buffer = string_buffer,
                          buffer_offsets = cformat.multiline_fill(['%i' % o for o in buffer_offsets], ',', 8),
-                         allocation_length = (buffer_length + 255) & -256,
+                         allocation_length = buffer_allocation_length(buffer_length),
                          null_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(null_set)], ',', 8),
                          null_set_value = null_set.generate("null_codepoint_set", 8),
                          reflexive_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(reflexive_set)], ',', 8),
@@ -138,7 +141,7 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
                          overridden = overridden_code,
                          string_buffer = string_buffer,
                          buffer_offsets = cformat.multiline_fill(['%i' % o for o in buffer_offsets], ',', 8),
-                         allocation_length = (buffer_length + 255) & -256,
+                         allocation_length = buffer_allocation_length(buffer_length),
                          overridden_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(override_set)], ',', 8),
                          overridden_set_value = override_set.generate("explicitly_defined_set", 8),
                          explicitly_defined_cp_count = len(cps),
@@ -174,7 +177,7 @@ def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
                          prop_enum_up = property_code.upper(),
                          string_buffer = string_buffer,
                          buffer_length = buffer_length,
-                         allocation_length = (buffer_length + 255) & -256,
+                         allocation_length = buffer_allocation_length(buffer_length),
                          NaN_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(NaN_set)], ',', 8),
                          NaN_set_value = NaN_set.generate("NaN_set", 8),
                          explicitly_defined_cp_count = len(cps),
@@ -331,10 +334,19 @@ class UCD_generator():
         self.missing_specs = {}
         self.binary_properties = {}
 
+    def add_identity_property(self):
+        self.property_enum_name_list = ['identity'] + self.property_enum_name_list
+        ident_obj = StringPropertyObject()
+        ident_obj.setID('identity', 'Identity')
+        ident_obj.setDefaultValue("<code point>")
+        ident_obj.finalizeProperty()
+        self.property_object_map['identity'] = ident_obj
+
     def load_property_name_info(self):
         (self.property_enum_name_list, self.property_object_map) = parse_PropertyAlias_txt()
-        self.property_lookup_map = getPropertyLookupMap(self.property_object_map)
         self.full_name_map = {}
+        self.add_identity_property()
+        self.property_lookup_map = getPropertyLookupMap(self.property_object_map)
         for p in self.property_enum_name_list:
             self.full_name_map[p] = self.property_object_map[p].getPropertyFullName()
 
@@ -421,6 +433,16 @@ class UCD_generator():
         f.write("PropertyObject * get_%s_PropertyObject() {  return & %s_ns::property_object; }\n" % (p, p))
         self.supported_props.append(property_code)
 
+
+    def generate_Identity_property(self):
+        basename = 'Identity'
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
+        f.write("\nnamespace UCD {\n")
+        self.emit_property(f, 'identity')
+        f.write("}\n")
+        cformat.close_cpp_file(f)
+        self.property_data_headers.append(basename)
 
     def generate_property_value_file(self, filename_root, property_code):
         if not property_code in self.property_object_map.keys():
@@ -639,6 +661,8 @@ def UCD_main():
     #
     # Next parse all property value names and their aliases.  Generate the data.
     ucd.load_property_value_info()
+
+    ucd.generate_Identity_property()
 
     ucd.generate_UnicodeData()
 

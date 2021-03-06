@@ -6,9 +6,10 @@ Generating UCD data files.
 
 2. python3 UCD_properties.py
 3. python3 UCD_equivalence.py
-4. copy generated include/UCD_Config.h to include/unicode/core
+4, python3 Unihan_parser.py  -- for CJK Radical support
+5. copy generated include/UCD_Config.h to include/unicode/core
    copy other generated include files to include/unicode/data
    copy generated src files to lib/unicode/data
 
-5. python3 generate_UCD_tests.py > proptest.xml
+6. python3 generate_UCD_tests.py > proptest.xml
    copy proptest.xml to the QA directory

@@ -18,6 +18,7 @@ def union_of_all(uset_list):
 class PropertyObject():
     def __init__(self):
         self.default_value = None
+        self.aliases = []
     def setID(self, prop_code, long_name):
         self.property_code = prop_code
         self.full_name = long_name
@@ -236,6 +237,8 @@ class StringPropertyObject(PropertyObject):
             self.reflexive_set = uset_union(self.reflexive_set, uset_complement(uset_union(explicitly_defined_cps, self.null_str_set)))
         else:
             self.null_str_set = uset_union(self.null_str_set, uset_complement(uset_union(explicitly_defined_cps, self.reflexive_set)))
+
+
 
 class StringOverridePropertyObject(PropertyObject):
     def __init__(self, overridden_code):

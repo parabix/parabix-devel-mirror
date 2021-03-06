@@ -29,6 +29,7 @@ SRC
     Equivalence.cpp
     GraphemeBreakProperty.cpp
     HangulSyllableType.cpp
+    Identity.cpp
     IndicPositionalCategory.cpp
     IndicSyllabicCategory.cpp
     Jamo.cpp

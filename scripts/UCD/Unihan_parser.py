@@ -104,7 +104,7 @@ namespace UCD {
 
 %s
 
-static std::map<codepoint_t, const UnicodeSet *> RadicalSetMap = %s;
+static std::map<codepoint_t, const UnicodeSet *> RadicalSetMap = %s
 
 const UnicodeSet * getRadicalSet(codepoint_t radical_cp) {
     auto f = RadicalSetMap.find(radical_cp);

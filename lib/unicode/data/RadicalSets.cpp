@@ -4364,7 +4364,7 @@ static std::map<codepoint_t, const UnicodeSet *> RadicalSetMap =
     {0x9f9f, &kangXi_213s},
     {0x2fd5, &kangXi_214},
     {0x9fa0, &kangXi_214}};
-;
+
 
 const UnicodeSet * getRadicalSet(codepoint_t radical_cp) {
     auto f = RadicalSetMap.find(radical_cp);

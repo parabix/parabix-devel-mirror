@@ -13,7 +13,8 @@
 
 namespace UCD {
 
-  const std::array<PropertyObject *, 143> property_object_table = {{
+  const std::array<PropertyObject *, 144> property_object_table = {{
+    get_IDENTITY_PropertyObject(),
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
