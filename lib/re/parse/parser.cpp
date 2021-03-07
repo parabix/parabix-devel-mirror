@@ -512,15 +512,12 @@ RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
                 current = (++mCursor).pos();
             }
             ++mCursor;
-            //return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
-            //return createName(prop, std::string(val_start-1, current));
             return makePropertyExpression(k, prop, op, std::string(val_start, current));
         }
         if (*val_start == '@') {
             // property-value is @property@ or @identity@
             auto previous = val_start;
             auto current = (++mCursor).pos();
-            val_start = current;
             
             while (true) {
                 if (*current == '@' && *previous != '\\') {
@@ -535,9 +532,7 @@ RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
                 current = (++mCursor).pos();
             }
             ++mCursor;
-            //return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
-            //return createName(prop, std::string(val_start-1, current));
-            return makePropertyExpression(k, prop, op, std::string(val_start, mCursor.pos()));
+            return makePropertyExpression(k, prop, op, std::string(val_start, current));
         }
         else {
             // property-value is normal string

@@ -173,19 +173,20 @@ RE * PropertyResolver::resolveCC (std::string value, bool is_negated) {
         std::string otherProp = canonicalize_value_name(value.substr(1));
         if (otherProp == "identity") { // the codepoint maps to itself under the property
             resolved = makeCC(mPropObj->GetReflexiveSet(), &cc::Unicode);
-        }
-        auto propCode2 = getPropertyCode(otherProp);
-        if (propCode2 == UCD::Undefined) {
-            UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
-        }
-        auto propObj2 = getPropertyObject(propCode2);
-        if (isa<BinaryPropertyObject>(mPropObj) && isa<BinaryPropertyObject>(propObj2)) {
-            UnicodeSet s1 = cast<BinaryPropertyObject>(mPropObj)->GetCodepointSet(UCD::Binary_ns::Y);
-            UnicodeSet s2 = cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y);
-            resolved = makeCC(~(s1 ^ s2), &cc::Unicode);
-        }
-        else {  // TODO:  deal with string properties - the main use case.
-            UnicodePropertyExpressionError("unsupported");
+        } else {
+            auto propCode2 = getPropertyCode(otherProp);
+            if (propCode2 == UCD::Undefined) {
+                UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
+            }
+            auto propObj2 = getPropertyObject(propCode2);
+            if (isa<BinaryPropertyObject>(mPropObj) && isa<BinaryPropertyObject>(propObj2)) {
+                UnicodeSet s1 = cast<BinaryPropertyObject>(mPropObj)->GetCodepointSet(UCD::Binary_ns::Y);
+                UnicodeSet s2 = cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y);
+                resolved = makeCC(~(s1 ^ s2), &cc::Unicode);
+            }
+            else {  // TODO:  deal with string properties - the main use case.
+                UnicodePropertyExpressionError("unsupported property type");
+            }
         }
     } else {
         resolved = makeCC(mPropObj->GetCodepointSet(value), &cc::Unicode);
