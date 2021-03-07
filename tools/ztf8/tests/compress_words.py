@@ -36,39 +36,10 @@ class Compressor:
             # if encoded hash for a symbol to be compressed is already calculated,
             # replace the symbol with encoded hash
             wLen = len(word)
-            hashVal = None
             if wLen < 3:
                 self.compressed += bytearray(word, 'utf-8')
-            elif wLen == 3:
-                hashTablePos = 0
-                hashVal, notUsed = self.hashTableList[0].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[0][word] = [hashVal, 0]
-            elif wLen == 4:
-                hashTablePos = 1
-                hashVal, notUsed = self.hashTableList[1].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[1][word] = [hashVal, 0]
-            elif wLen > 4 and wLen <= 8:
-                hashTablePos = 2
-                hashVal, notUsed = self.hashTableList[2].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[2][word] = [hashVal, 0]
-            elif wLen > 8 and wLen <= 16:
-                hashTablePos = 3
-                hashVal, notUsed = self.hashTableList[3].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[3][word] = [hashVal, 0]
-            elif wLen > 16 and wLen <= 32:
-                hashTablePos = 4
-                hashVal, notUsed = self.hashTableList[4].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[4][word] = [hashVal, 0]
+            hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                wLen, word)
 
             if hashVal:
                 if notUsed:
@@ -83,92 +54,32 @@ class Compressor:
                     encodedWord.append(encodedPrefix)
                     encodedWord.append(encodedSuffix)
                     # print(encodedWord, 'encodedWord')
-                    if not self.hashVals.get(hex((encodedPrefix << 8) | encodedSuffix)+str(wLen)):
-                        self.hashTableList[hashTablePos][word] = [
-                            encodedWord, 1]
-                        self.hashVals[hex((encodedPrefix << 8)
-                                          | encodedSuffix)+str(wLen)] = word
+                    self.checkForDuplicateHashVal(
+                        encodedPrefix, encodedSuffix, encodedWord, wLen, hashTablePos, word, 1)
                 self.compressed += bytearray(word, 'utf-8')
+        print(len(words), 'words length')
+        print("hash table size")
+        for h in self.hashTableList:
+            print(len(h))
         return self.compressed
 
     def CompressPhrase(self, words, numWords):
-        #print(words, 'CompressPhrase words')
+        # print(words, 'CompressPhrase words')
+        self.words = words
         if numWords == 2:
             wordPhrases = nltk.bigrams(words)
+            # need function modification to accept bigrams
+            self.CompressWords(words)
         if numWords == 3:
             wordPhrases = nltk.trigrams(words)
-        self.generatehashTables(wordPhrases)
-        self.words = words
-        index = 0
-        self.wordsLen = len(words)
-        fallBack = []
-
-        while index < self.wordsLen:
-            if index+2 < self.wordsLen:
-                #fbWord = words[index+1] + words[index+2]
-                word = words[index] + words[index+1] + words[index+2]
-            else:
-                fallBack.extend(words[index::])
-                # remaining words/phrases to check
-                self.fallbackToWordCmp(fallBack, numWords-1)
-                fallBack = []
-                break
-            # if encoded hash for the phrase to be compressed is already calculated,
-            # replace the phrase with encoded hash, else fall back to pair or individual word based compression
-            wLen = len(word)
-            hashVal = None
-            if wLen == 3:
-                hashTablePos = 0
-                hashVal, notUsed = self.hashTableList[0].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[0][word] = [hashVal, 0]
-            elif wLen == 4:
-                hashTablePos = 1
-                hashVal, notUsed = self.hashTableList[1].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[1][word] = [hashVal, 0]
-            elif wLen > 4 and wLen <= 8:
-                hashTablePos = 2
-                hashVal, notUsed = self.hashTableList[2].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[2][word] = [hashVal, 0]
-            elif wLen > 8 and wLen <= 16:
-                hashTablePos = 3
-                hashVal, notUsed = self.hashTableList[3].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[3][word] = [hashVal, 0]
-            elif wLen > 16 and wLen <= 32:
-                hashTablePos = 4
-                hashVal, notUsed = self.hashTableList[4].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[4][word] = [hashVal, 0]
-
-            if hashVal:
-                if fallBack and len(fallBack) >= 3:
-                    #print(fallBack, 'fallBack')
-                    self.fallbackToWordCmp(fallBack, numWords-1)
-                    fallBack = []
-                if notUsed:
-                    fallBack.append(words[index])
-                    index += 1
-                else:
-                    self.compressed += hashVal
-                    index += 3
-            else:
-                if wLen < 3:
-                    self.compressed += bytearray(word, 'utf-8')
-                    index += 2
-                else:
-                    fallBack.append(words[index])
-                    index += 1
-        if fallBack:
-            self.fallbackToWordCmp(fallBack, numWords-1)
-            fallBack = []
+            self.prepareHashTables(wordPhrases, numWords)
+            self.phraseOfThreeWords(words, numWords, len(words))
+        if numWords == 4:
+            wordPhrases = nltk.everygrams(words, 4, 4)
+            self.prepareHashTables(wordPhrases, numWords)
+            self.phraseOfFourWords(words, numWords, len(words))
+        # for phrase in wordPhrases:
+        #    print(phrase, 'phrase')
         print(len(words), 'words length')
         print("hash table size")
         for h in self.hashTableList:
@@ -177,68 +88,112 @@ class Compressor:
             #    print(i)
         return self.compressed
 
-    def generatehashTables(self, wordPhrases):
-        for phrase in wordPhrases:
-            phrase = ''.join(phrase)
-            phraseLen = len(phrase)
-            hashVal = None
-            if phraseLen < 3:
-                continue
-            elif phraseLen == 3:
-                hashTablePos = 0
-                hashVal, notUsed = self.hashTableList[0].get(
-                    phrase, [None, None])
-            elif phraseLen == 4:
-                hashTablePos = 1
-                hashVal, notUsed = self.hashTableList[1].get(
-                    phrase, [None, None])
-            elif phraseLen > 4 and phraseLen <= 8:
-                hashTablePos = 2
-                hashVal, notUsed = self.hashTableList[2].get(
-                    phrase, [None, None])
-            elif phraseLen > 8 and phraseLen <= 16:
-                hashTablePos = 3
-                hashVal, notUsed = self.hashTableList[3].get(
-                    phrase, [None, None])
-            elif phraseLen > 16 and phraseLen <= 32:
-                hashTablePos = 4
-                hashVal, notUsed = self.hashTableList[4].get(
-                    phrase, [None, None])
+    def phraseOfFourWords(self, words, numWords, wordsLen):
+        index = 0
+        fallBack = []
 
-            # if hashVal:
-                # move these to the final hashTable
-            #    continue
-            if not hashVal:
-                if 3 <= phraseLen <= 32:
-                    wordLen, encodedSuffix = self.getHashVal(phrase)
+        while index < wordsLen:
+            if index+(numWords-1) < wordsLen:
+                word = words[index] + words[index+1] + \
+                    words[index+2] + words[index+3]
+            else:
+                fallBack.extend(words[index::])
+                break
+            #print(word, 'word')
+            # if encoded hash for the phrase to be compressed is already calculated,
+            # replace the phrase with encoded hash, else fall back to pair or individual word based compression
+            wLen = len(word)
+            hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                wLen, word)
+
+            if hashVal:
+                if fallBack:
+                    # print(fallBack, 'fallBack')
+                    self.phraseOfThreeWords(
+                        fallBack, numWords-1, len(fallBack))
+                    fallBack = []
+                # avoid the use of notUsed by creating hashTable on the fly
+                if notUsed:
+                    fallBack.append(words[index])
+                    index += 1
+                else:
+                    self.compressed += hashVal
+                    index += 4
+            else:
+                if wLen < 3:
+                    self.compressed += bytearray(word, 'utf-8')
+                    index += 4
+                else:
+                    fallBack.append(words[index])
+                    index += 1
+        if fallBack:
+            self.phraseOfThreeWords(fallBack, numWords-1, len(fallBack))
+            fallBack = []
+
+    def phraseOfThreeWords(self, words, numWords, wordsLen):
+        if wordsLen == 2:
+            self.phraseOfTwoWords(words, numWords-1)
+            return
+        if wordsLen == 1:
+            self.phraseOfOneWord(words)
+            return
+        #print(words, 'phraseOfThreeWords')
+        index = 0
+        fallBack = []
+
+        while index < wordsLen:
+            fbWord = words[index]
+            if index+(numWords-1) < wordsLen:
+                word = fbWord + words[index+1] + words[index+2]
+            else:
+                fallBack.extend(words[index::])
+                break
+
+            #print(word, 'word')
+            # if encoded hash for the phrase to be compressed is already calculated,
+            # replace the phrase with encoded hash, else fall back to pair or individual word based compression
+            wLen = len(word)
+            hashVal = None
+            hashTablePos = -1
+            if wLen < 3:
+                # if index+3 >= wordsLen:
+                if fallBack:
+                    self.phraseOfTwoWords(tryFallBack, numWords-1)
+                    tryFallBack = []
+                self.compressed += bytearray(word, 'utf-8')
+                index += 3
+            else:
+                hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                    wLen, word)
+
+            if hashVal:
+                if fallBack:
+                    self.phraseOfTwoWords(fallBack, numWords-1)
+                    fallBack = []
+                # if hashVal found, that means this phrase was already found and been added in the
+                # hash table already
+                self.compressed += hashVal
+                index += 3
+            else:
+                if 3 <= wLen <= 32:
+                    fallBack.append(fbWord)
+                    wordLen, encodedSuffix = self.getHashVal(word)
                     encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
                     encodedWord = bytearray(b'')
                     encodedWord.append(encodedPrefix)
                     encodedWord.append(encodedSuffix)
-                    # print(encodedWord, 'encodedWord')
-                    # self.hashTableList[hashTablePos][phrase] = [encodedWord, notUsed=1]
-                    if not self.hashVals.get(hex((encodedPrefix << 8) | encodedSuffix)+str(phraseLen)):
-                        # print(hex((encodedPrefix << 8) | encodedSuffix) +
-                        #      str(phraseLen), 'key')
-                        # print(self.hashVals[
-                        #    hex((encodedPrefix << 8) | encodedSuffix)+str(phraseLen)], 'value')
-                        #print(phrase, 'phrase to be added', encodedWord)
-                        # else:
-                        self.hashTableList[hashTablePos][phrase] = [
-                            encodedWord, 1]
-                        # only encode the longest possible phrases
-                        self.hashVals[hex((encodedPrefix << 8)
-                                          | encodedSuffix)+str(phraseLen)] = phrase
+                    self.checkForDuplicateHashVal(
+                        encodedPrefix, encodedSuffix, encodedWord, wLen, hashTablePos, word, numWords)
+                index += 1
+        if fallBack:
+            self.phraseOfTwoWords(fallBack, numWords-1)
+            fallBack = []
 
-    def fallbackToWordCmp(self, words, numWords):
-        #print(words, 'fallbackToWordCmp')
-        if numWords <= 0 or not words:
-            return
-        if numWords == 2:
-            wordPhrasesGen = nltk.bigrams(words)
-            wordPhrases = list(wordPhrasesGen)
+    def phraseOfTwoWords(self, words, numWords):
         if numWords == 1:
-            wordPhrases = words
+            self.phraseOfOneWord(words)
+            return
+        #print(words, 'phraseOfTwoWords')
         tryFallBack = []
         index = 0
         wordsLen = len(words)
@@ -249,56 +204,30 @@ class Compressor:
             else:
                 tryFallBack.append(fbWord)
                 # remaining words/phrases to check
-                self.fallbackToWordCmp1(tryFallBack)
-                tryFallBack = []
-                return
+                break
             # if encoded hash for a symbol to be compressed is already calculated,
             # replace the symbol with encoded hash
             wLen = len(word)
             hashVal = None
+            hashTablePos = -1
             if wLen < 3:
-                if index+2 >= wordsLen:
-                    self.fallbackToWordCmp1(tryFallBack)
+                # if index+2 >= wordsLen:
+                if tryFallBack:
+                    self.phraseOfOneWord(tryFallBack)
                     tryFallBack = []
                 self.compressed += bytearray(word, 'utf-8')
                 # skip a potential phrase after a smaller phrase of len 2
                 index += 2
-            elif wLen == 3:
-                hashTablePos = 0
-                hashVal, notUsed = self.hashTableList[0].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[0][word] = [hashVal, 0]
-            elif wLen == 4:
-                hashTablePos = 1
-                hashVal, notUsed = self.hashTableList[1].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[1][word] = [hashVal, 0]
-            elif wLen > 4 and wLen <= 8:
-                hashTablePos = 2
-                hashVal, notUsed = self.hashTableList[2].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[2][word] = [hashVal, 0]
-            elif wLen > 8 and wLen <= 16:
-                hashTablePos = 3
-                hashVal, notUsed = self.hashTableList[3].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[3][word] = [hashVal, 0]
-            elif wLen > 16 and wLen <= 32:
-                hashTablePos = 4
-                hashVal, notUsed = self.hashTableList[4].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[4][word] = [hashVal, 0]
+            else:
+                hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                    wLen, word)
 
             if hashVal:
                 if tryFallBack and len(tryFallBack) >= 2:
-                    #print(tryFallBack, 'tryFallBack')
-                    self.fallbackToWordCmp1(tryFallBack)
-                    tryFallBack = []
+                    # print(tryFallBack, 'tryFallBack')
+                    if tryFallBack:
+                        self.phraseOfOneWord(tryFallBack)
+                        tryFallBack = []
                 # if notUsed:
                     # tryFallBack.append(fbWord)
                     # self.compressed += bytearray(word, 'utf-8')
@@ -307,7 +236,7 @@ class Compressor:
                 index += 2
             else:
                 if 3 <= wLen <= 32:
-                    #print(word, 'hashVal not found for bigram')
+                    # print(word, 'hashVal not found for bigram')
                     # phrase start word and individual word position are same in the list
                     tryFallBack.append(fbWord)
                     wordLen, encodedSuffix = self.getHashVal(word)
@@ -316,25 +245,17 @@ class Compressor:
                     encodedWord.append(encodedPrefix)
                     encodedWord.append(encodedSuffix)
                     # print(encodedWord, 'encodedWord')
-                    if not self.hashVals.get(hex((encodedPrefix << 8) | encodedSuffix)):
-                        # print(hex((encodedPrefix << 8) |
-                        #          encodedSuffix)+str(wLen), 'key')
-                        # print(self.hashVals[
-                        #    hex((encodedPrefix << 8) | encodedSuffix)+str(wLen)], 'value')
-                        #print(word, 'word to be added', encodedWord)
-                        # else:
-                        self.hashTableList[hashTablePos][word] = [
-                            encodedWord, 1]
-                        self.hashVals[hex((encodedPrefix << 8)
-                                          | encodedSuffix)+str(wLen)] = word
+                    self.checkForDuplicateHashVal(
+                        encodedPrefix, encodedSuffix, encodedWord, wLen, hashTablePos, word, numWords)
                     index += 1
-        self.fallbackToWordCmp1(tryFallBack)
-        tryFallBack = []
+        if tryFallBack:
+            self.phraseOfOneWord(tryFallBack)
+            tryFallBack = []
 
-    def fallbackToWordCmp1(self, words):
-        #print(words, 'fallbackToWordCmp111111111')
-        wordPhrases = words
-        tryFallBack = []
+    def phraseOfOneWord(self, words):
+        if not words:
+            return
+        #print(words, 'phraseOfOneWord')
         index = 0
         wordsLen = len(words)
         while index < wordsLen:
@@ -344,43 +265,14 @@ class Compressor:
             # replace the symbol with encoded hash
             wLen = len(word)
             hashVal = None
+            hashTablePos = -1
             if wLen < 3:
                 self.compressed += bytearray(word, 'utf-8')
-            elif wLen == 3:
-                hashTablePos = 0
-                hashVal, notUsed = self.hashTableList[0].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[0][word] = [hashVal, 0]
-            elif wLen == 4:
-                hashTablePos = 1
-                hashVal, notUsed = self.hashTableList[1].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[1][word] = [hashVal, 0]
-            elif wLen > 4 and wLen <= 8:
-                hashTablePos = 2
-                hashVal, notUsed = self.hashTableList[2].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[2][word] = [hashVal, 0]
-            elif wLen > 8 and wLen <= 16:
-                hashTablePos = 3
-                hashVal, notUsed = self.hashTableList[3].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[3][word] = [hashVal, 0]
-            elif wLen > 16 and wLen <= 32:
-                hashTablePos = 4
-                hashVal, notUsed = self.hashTableList[4].get(
-                    word, [None, None])
-                if notUsed:
-                    self.hashTableList[4][word] = [hashVal, 0]
+            else:
+                hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                    wLen, word)
 
             if hashVal:
-                # if notUsed:
-                #    self.compressed += bytearray(word, 'utf-8')
-                # else:
                 self.compressed += hashVal
             else:
                 if 3 <= wLen <= 32:
@@ -390,26 +282,76 @@ class Compressor:
                     encodedWord = bytearray(b'')
                     encodedWord.append(encodedPrefix)
                     encodedWord.append(encodedSuffix)
-                    # print(encodedWord, 'encodedWord')
-                    if self.hashVals.get(hex((encodedPrefix << 8) | encodedSuffix)+str(wLen)):
-                        tryFallBack.append(word)
-                        # print(hex((encodedPrefix << 8) |
-                        #          encodedSuffix)+str(wLen), 'key')
-                        # print(self.hashVals[
-                        #    hex((encodedPrefix << 8) | encodedSuffix)+str(wLen)], 'value')
-                        #print(word, 'word to be added ', encodedWord)
-                    else:
-                        self.hashTableList[hashTablePos][word] = [
-                            encodedWord, 1]
-                        self.hashVals[hex((encodedPrefix << 8)
-                                          | encodedSuffix)+str(wLen)] = word
-                    #print(word, 'plaintext single word added')
+                    self.checkForDuplicateHashVal(
+                        encodedPrefix, encodedSuffix, encodedWord, wLen, hashTablePos, word, 1)
                     self.compressed += bytearray(word, 'utf-8')
 
-    def pairwise(self, iterable):
-        a, b = itertools.tee(iterable)
-        next(b, None)
-        return itertools.zip_longest(a, b)
+    def checkForDuplicateHashVal(self, prefix, suffix, encodedWord, wLen, hashTablePos, word, numWords):
+        if not self.hashVals.get(hex((prefix << 8) | suffix)+str(wLen)+str(numWords)):
+            self.hashTableList[hashTablePos][word] = [
+                encodedWord, 1]
+            self.hashVals[hex((prefix << 8)
+                              | suffix)+str(wLen)+str(numWords)] = word
+
+    def getHashValfromTable(self, wLen, word):
+        hashVal = None
+        hashTablePos = -1
+        notUsed = 1
+        if wLen == 3:
+            hashTablePos = 0
+            hashVal, notUsed = self.hashTableList[0].get(
+                word, [None, None])
+            if notUsed:
+                self.hashTableList[0][word] = [hashVal, 0]
+        elif wLen == 4:
+            hashTablePos = 1
+            hashVal, notUsed = self.hashTableList[1].get(
+                word, [None, None])
+            if notUsed:
+                self.hashTableList[1][word] = [hashVal, 0]
+        elif wLen > 4 and wLen <= 8:
+            hashTablePos = 2
+            hashVal, notUsed = self.hashTableList[2].get(
+                word, [None, None])
+            if notUsed:
+                self.hashTableList[2][word] = [hashVal, 0]
+        elif wLen > 8 and wLen <= 16:
+            hashTablePos = 3
+            hashVal, notUsed = self.hashTableList[3].get(
+                word, [None, None])
+            if notUsed:
+                self.hashTableList[3][word] = [hashVal, 0]
+        elif wLen > 16 and wLen <= 32:
+            hashTablePos = 4
+            hashVal, notUsed = self.hashTableList[4].get(
+                word, [None, None])
+            if notUsed:
+                self.hashTableList[4][word] = [hashVal, 0]
+        return hashVal, hashTablePos, notUsed
+
+    def prepareHashTables(self, wordPhrases, numWords):
+        for phrase in wordPhrases:
+            phrase = ''.join(phrase)
+            phraseLen = len(phrase)
+            hashVal = None
+            if phraseLen < 3:
+                continue
+            hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                phraseLen, phrase)
+            # if hashVal:
+            # move these to the final hashTable
+            #    continue
+            if not hashVal:
+                if hashTablePos != -1:
+                    wordLen, encodedSuffix = self.getHashVal(phrase)
+                    encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
+                    encodedWord = bytearray(b'')
+                    encodedWord.append(encodedPrefix)
+                    encodedWord.append(encodedSuffix)
+                    # print(encodedWord, 'encodedWord')
+                    # self.hashTableList[hashTablePos][phrase] = [encodedWord, notUsed=1]
+                    self.checkForDuplicateHashVal(
+                        encodedPrefix, encodedSuffix, encodedWord, phraseLen, hashTablePos, phrase, numWords)
 
     def getLongestLenPhrase(self, curIndex):
         word = self.words[curIndex]

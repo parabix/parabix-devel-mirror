@@ -48,7 +48,7 @@ if __name__ == '__main__':
     else:
         fileName = options.compress
         with open(fileName, 'rt') as infile:
-            text = infile.read(10000000)
+            text = infile.read(1000000)
 
     if options.decompress:
         for algorithm in DecmpAlgorithmList:
@@ -69,12 +69,12 @@ if __name__ == '__main__':
             word_list.append(word)
             output_file.write(word)
         output_file.close()
-
+        #print(word_list, 'word_list')
         # a vector representing the positions of word boundaries - future use?
         # for index in uniseg.wordbreak.word_boundaries(text):
         #    boundary_positions.append(index)
         for algorithm in CmpAlgorithmList:
-            compressedData = algorithm.CompressPhrase(word_list, 3)
+            compressedData = algorithm.CompressPhrase(word_list, 4)
             #compressedData = algorithm.CompressWords(word_list)
         # write compressed data to output.z file
         output_file = open(outputFilename+"."+algorithm.name+".z", "wb")
