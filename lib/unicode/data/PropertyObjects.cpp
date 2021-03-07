@@ -14,6 +14,7 @@
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <unicode/core/unicode_set.h>
 #include <unicode/data/PropertyObjectTable.h>
 #include <llvm/ADT/STLExtras.h>
 #include <util/aligned_allocator.h>
@@ -52,6 +53,18 @@ const std::string PropertyObject::GetStringValue(codepoint_t cp) const {
     report_fatal_error("GetStringValue unsupported");
 }
 
+const UnicodeSet PropertyObject::GetPropertyIntersection(PropertyObject * p) {
+    return UnicodeSet();
+}
+
+const UnicodeSet PropertyObject::GetReflexiveSet() const {
+    return UnicodeSet();
+}
+
+const UnicodeSet PropertyObject::GetNullSet() const {
+    return UnicodeSet();
+}
+
 const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     const int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val < 0) {
@@ -59,11 +72,6 @@ const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & v
     }
     return GetCodepointSet(property_enum_val);
 }
-
-const UnicodeSet PropertyObject::GetReflexiveSet() const {
-    return UnicodeSet();
-}
-
 
 const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_enum_val) const {
     assert (property_enum_val >= 0);
@@ -251,6 +259,12 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
     return *mN;
 }
 
+const UnicodeSet BinaryPropertyObject::GetPropertyIntersection(PropertyObject * p) {
+    if (BinaryPropertyObject * b = dyn_cast<BinaryPropertyObject>(p)) {
+        return mY & b->GetCodepointSet(UCD::Binary_ns::Y);
+    } else return UnicodeSet();
+}
+
 const std::string & BinaryPropertyObject::GetPropertyValueGrepString() {
     if (mPropertyValueGrepString.empty()) {
         std::stringstream buffer;
@@ -340,6 +354,19 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
     }
 }
 
+const UnicodeSet StringPropertyObject::GetPropertyIntersection(PropertyObject * p) {
+    UnicodeSet intersection;
+    if (isa<StringPropertyObject>(p) || isa<StringOverridePropertyObject>(p)) {
+        intersection = (mNullCodepointSet & p->GetNullSet()) + (mSelfCodepointSet & p->GetReflexiveSet());
+        for (unsigned i = 0; i < mExplicitCps.size(); i++) {
+            if (GetStringValue(mExplicitCps[i]) == p->GetStringValue(mExplicitCps[i])) {
+                intersection.insert(mExplicitCps[i]);
+            }
+        }
+        return intersection;
+    } else return UnicodeSet();
+}
+
 const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
     UCD::UnicodeSet matched(*re::matchableCodepoints(re) & mSelfCodepointSet);
     if (re::matchesEmptyString(re)) {
@@ -353,6 +380,9 @@ const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * r
     return matched;
 }
 
+const UnicodeSet StringPropertyObject::GetNullSet() const {
+    return mNullCodepointSet;
+}
 
 const UnicodeSet StringPropertyObject::GetReflexiveSet() const {
     return mSelfCodepointSet;
@@ -400,6 +430,10 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string
     return result_set;
 }
 
+const UnicodeSet StringOverridePropertyObject::GetNullSet() const {
+    return getPropertyObject(mBaseProperty)->GetNullSet() - mOverriddenSet;
+}
+
 const UnicodeSet StringOverridePropertyObject::GetReflexiveSet() const {
     return getPropertyObject(mBaseProperty)->GetReflexiveSet() - mOverriddenSet;
 }
@@ -421,6 +455,19 @@ const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) c
     return std::string(&mStringBuffer[offset], lgth);
 }
 
+const UnicodeSet StringOverridePropertyObject::GetPropertyIntersection(PropertyObject * p) {
+    UnicodeSet intersection = getPropertyObject(mBaseProperty)->GetPropertyIntersection(p) - mOverriddenSet;
+    if (isa<StringPropertyObject>(p) || isa<StringOverridePropertyObject>(p)) {
+        for (unsigned i = 0; i < mExplicitCps.size(); i++) {
+            llvm::errs() << "mExplicitCps[i] = " << mExplicitCps[i] << "\n";
+            if (GetStringValue(mExplicitCps[i]) == p->GetStringValue(mExplicitCps[i])) {
+                intersection.insert(mExplicitCps[i]);
+            }
+        }
+        return intersection;
+    } else return UnicodeSet();
+}
+
 const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re::RE * re, GrepLinesFunctionType grep) {
     PropertyObject * baseObj = getPropertyObject(mBaseProperty);
     UCD::UnicodeSet s = baseObj->GetCodepointSetMatchingPattern(re, grep) - mOverriddenSet;
@@ -439,6 +486,5 @@ const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
 const UnicodeSet ObsoletePropertyObject::GetCodepointSet(const std::string &) {
     report_fatal_error("Property " + UCD::getPropertyFullName(the_property) + " is obsolete.");
 }
-
 
 }

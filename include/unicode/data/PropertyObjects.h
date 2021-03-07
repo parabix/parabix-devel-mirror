@@ -48,8 +48,10 @@ public:
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
     virtual const UnicodeSet GetCodepointSet(const std::string & prop_value_string);
     virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType);
-    virtual const UnicodeSet GetReflexiveSet() const;
-    virtual const std::string GetStringValue(UCD::codepoint_t cp) const;
+    virtual const UnicodeSet GetNullSet() const;   // The set of codepoints mapping to the empty string.
+    virtual const UnicodeSet GetReflexiveSet() const;  // The set of codepoints mapping to themselves.
+    virtual const std::string GetStringValue(UCD::codepoint_t cp) const;  // The mapping for a codepoint.
+    virtual const UnicodeSet GetPropertyIntersection(PropertyObject * p);
 
     virtual const std::string & GetPropertyValueGrepString();
     const property_t the_property;
@@ -76,6 +78,7 @@ public:
     const UnicodeSet GetCodepointSet(const std::string & prop_value_string) override;
     // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
+    const UnicodeSet GetPropertyIntersection(PropertyObject * p) override;
     const std::string & GetPropertyValueGrepString() override;
 private:
     const UnicodeSet mY;
@@ -221,8 +224,10 @@ public:
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
+    const UnicodeSet GetNullSet() const override;
     const UnicodeSet GetReflexiveSet() const override;
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
+    const UnicodeSet GetPropertyIntersection(PropertyObject * p) override;
 
 private:
     const UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
@@ -255,10 +260,12 @@ public:
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
+    const UnicodeSet GetNullSet() const override;
     const UnicodeSet GetReflexiveSet() const override;
     const UCD::property_t GetBaseProperty() {return mBaseProperty;}
     const UnicodeSet & GetOverriddenSet() const {return mOverriddenSet;}
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
+    const UnicodeSet GetPropertyIntersection(PropertyObject * p) override;
 
 private:
     UCD::property_t mBaseProperty;  // the base object that provides default values for this property unless overridden.
