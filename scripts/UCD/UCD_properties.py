@@ -666,9 +666,9 @@ def UCD_main():
 
     ucd.generate_UnicodeData()
 
-    ucd.generate_SpecialCasing()
-
     ucd.genCaseFolding()
+
+    ucd.generate_SpecialCasing()
 
     ucd.generate_multicolumn_properties_file('NameAliases', ['Name_Alias', 'Alias_Kind'])
 

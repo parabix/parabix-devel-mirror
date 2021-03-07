@@ -1060,6 +1060,9 @@ Unterminated</datafile>
 <grepcase regexp="\p{script=/(Kata|Hira).ana/}" datafile="hiragana_and_katakana" greplines="1 2 3 4 5"/>
 <grepcase regexp="\p{script=/(kata|Hira).ana/}" datafile="hiragana_and_katakana" greplines="1 2 3"/>
 <grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" greplines="1 2 3"/>
+<grepcase regexp="\P{slc=@lc}" datafile="../All_good" greplines="272"/>
+<grepcase regexp="\P{lc=@slc}" datafile="../All_good" greplines="272"/>
+
 
 <grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" flags="-c -enable-object-cache=0 -thread-num=2" greplines="9958 126660 126661 126662 126663 126664 126665 126666"/>
 <grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" greplines="224 225 226 227 228 229"/>

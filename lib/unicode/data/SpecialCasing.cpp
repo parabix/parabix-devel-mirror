@@ -16,159 +16,27 @@
 namespace UCD {
     namespace LC_ns {
         /** Code Point Ranges for lc (possibly overriding values from slc)
-        [00df, 00df], [0130, 0130], [0149, 0149], [01f0, 01f0],
-        [0390, 0390], [03b0, 03b0], [0587, 0587], [1e96, 1e9a],
-        [1f50, 1f50], [1f52, 1f52], [1f54, 1f54], [1f56, 1f56],
-        [1f80, 1faf], [1fb2, 1fb4], [1fb6, 1fb7], [1fbc, 1fbc],
-        [1fc2, 1fc4], [1fc6, 1fc7], [1fcc, 1fcc], [1fd2, 1fd3],
-        [1fd6, 1fd7], [1fe2, 1fe4], [1fe6, 1fe7], [1ff2, 1ff4],
-        [1ff6, 1ff7], [1ffc, 1ffc], [fb00, fb06], [fb13, fb17]**/
+        [0130, 0130]**/
 
         
         namespace {
         const static UnicodeSet::run_t __explicitly_defined_set_runs[] = {
-        {Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
-        {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
-        {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
-        {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
+        {Empty, 9}, {Mixed, 1}, {Empty, 34806}};
         const static UnicodeSet::bitquad_t  __explicitly_defined_set_quads[] = {
-        0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
-        0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
-        0x00cc10dc, 0x10dc00dc, 0x00f8007f};
+        0x00010000};
         }
 
-        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 13, 0};
+        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 1, 0};
 
 
 
         const static std::vector<unsigned> buffer_offsets = {
-        0, 3, 7, 10, 13, 16, 19, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62,
-        66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122,
-        126, 130, 134, 138, 142, 146, 150, 154, 158, 162, 166, 170, 174,
-        178, 182, 186, 190, 194, 198, 202, 206, 210, 214, 218, 222, 226,
-        230, 234, 238, 242, 246, 250, 254, 258, 262, 266, 270, 274, 278,
-        282, 286, 290, 294, 298, 302, 306, 310, 314, 318, 322, 326, 330,
-        334, 338, 342, 346, 350, 354, 358, 362, 366, 370, 374, 378, 382,
-        386, 390, 394, 398, 402, 406};
-        const static char string_buffer LLVM_ALIGNAS(64) [512] = u8R"__(ß
-i̇
-ŉ
-ǰ
-ΐ
-ΰ
-և
-ẖ
-ẗ
-ẘ
-ẙ
-ẚ
-ὐ
-ὒ
-ὔ
-ὖ
-ᾀ
-ᾁ
-ᾂ
-ᾃ
-ᾄ
-ᾅ
-ᾆ
-ᾇ
-ᾀ
-ᾁ
-ᾂ
-ᾃ
-ᾄ
-ᾅ
-ᾆ
-ᾇ
-ᾐ
-ᾑ
-ᾒ
-ᾓ
-ᾔ
-ᾕ
-ᾖ
-ᾗ
-ᾐ
-ᾑ
-ᾒ
-ᾓ
-ᾔ
-ᾕ
-ᾖ
-ᾗ
-ᾠ
-ᾡ
-ᾢ
-ᾣ
-ᾤ
-ᾥ
-ᾦ
-ᾧ
-ᾠ
-ᾡ
-ᾢ
-ᾣ
-ᾤ
-ᾥ
-ᾦ
-ᾧ
-ᾲ
-ᾳ
-ᾴ
-ᾶ
-ᾷ
-ᾳ
-ῂ
-ῃ
-ῄ
-ῆ
-ῇ
-ῃ
-ῒ
-ΐ
-ῖ
-ῗ
-ῢ
-ΰ
-ῤ
-ῦ
-ῧ
-ῲ
-ῳ
-ῴ
-ῶ
-ῷ
-ῳ
-ﬀ
-ﬁ
-ﬂ
-ﬃ
-ﬄ
-ﬅ
-ﬆ
-ﬓ
-ﬔ
-ﬕ
-ﬖ
-ﬗ
+        0, 4};
+        const static char string_buffer LLVM_ALIGNAS(64) [256] = u8R"__(i̇
 )__";
 
         const static std::vector<codepoint_t> defined_cps{
-        0x00df, 0x0130, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96,
-        0x1e97, 0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56,
-        0x1f80, 0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86, 0x1f87,
-        0x1f88, 0x1f89, 0x1f8a, 0x1f8b, 0x1f8c, 0x1f8d, 0x1f8e, 0x1f8f,
-        0x1f90, 0x1f91, 0x1f92, 0x1f93, 0x1f94, 0x1f95, 0x1f96, 0x1f97,
-        0x1f98, 0x1f99, 0x1f9a, 0x1f9b, 0x1f9c, 0x1f9d, 0x1f9e, 0x1f9f,
-        0x1fa0, 0x1fa1, 0x1fa2, 0x1fa3, 0x1fa4, 0x1fa5, 0x1fa6, 0x1fa7,
-        0x1fa8, 0x1fa9, 0x1faa, 0x1fab, 0x1fac, 0x1fad, 0x1fae, 0x1faf,
-        0x1fb2, 0x1fb3, 0x1fb4, 0x1fb6, 0x1fb7, 0x1fbc, 0x1fc2, 0x1fc3,
-        0x1fc4, 0x1fc6, 0x1fc7, 0x1fcc, 0x1fd2, 0x1fd3, 0x1fd6, 0x1fd7,
-        0x1fe2, 0x1fe3, 0x1fe4, 0x1fe6, 0x1fe7, 0x1ff2, 0x1ff3, 0x1ff4,
-        0x1ff6, 0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04,
-        0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
+        0x0130};
         static StringOverridePropertyObject property_object(lc,
                                                     slc,
                                                     std::move(explicitly_defined_set),
@@ -179,42 +47,41 @@ i̇
 PropertyObject * get_LC_PropertyObject() {  return & LC_ns::property_object; }
     namespace UC_ns {
         /** Code Point Ranges for uc (possibly overriding values from suc)
-        [00df, 00df], [0130, 0130], [0149, 0149], [01f0, 01f0],
-        [0390, 0390], [03b0, 03b0], [0587, 0587], [1e96, 1e9a],
-        [1f50, 1f50], [1f52, 1f52], [1f54, 1f54], [1f56, 1f56],
-        [1f80, 1faf], [1fb2, 1fb4], [1fb6, 1fb7], [1fbc, 1fbc],
-        [1fc2, 1fc4], [1fc6, 1fc7], [1fcc, 1fcc], [1fd2, 1fd3],
-        [1fd6, 1fd7], [1fe2, 1fe4], [1fe6, 1fe7], [1ff2, 1ff4],
-        [1ff6, 1ff7], [1ffc, 1ffc], [fb00, fb06], [fb13, fb17]**/
+        [00df, 00df], [0149, 0149], [01f0, 01f0], [0390, 0390],
+        [03b0, 03b0], [0587, 0587], [1e96, 1e9a], [1f50, 1f50],
+        [1f52, 1f52], [1f54, 1f54], [1f56, 1f56], [1f80, 1faf],
+        [1fb2, 1fb4], [1fb6, 1fb7], [1fbc, 1fbc], [1fc2, 1fc4],
+        [1fc6, 1fc7], [1fcc, 1fcc], [1fd2, 1fd3], [1fd6, 1fd7],
+        [1fe2, 1fe4], [1fe6, 1fe7], [1ff2, 1ff4], [1ff6, 1ff7],
+        [1ffc, 1ffc], [fb00, fb06], [fb13, fb17]**/
 
         
         namespace {
         const static UnicodeSet::run_t __explicitly_defined_set_runs[] = {
-        {Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
+        {Empty, 6}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 4},
         {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
         {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
         {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
         const static UnicodeSet::bitquad_t  __explicitly_defined_set_quads[] = {
-        0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
-        0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
-        0x00cc10dc, 0x10dc00dc, 0x00f8007f};
+        0x80000000, 0x00000200, 0x00010000, 0x00010000, 0x00010000,
+        0x00000080, 0x07c00000, 0x00550000, 0x10dcffff, 0x00cc10dc,
+        0x10dc00dc, 0x00f8007f};
         }
 
-        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 13, 0};
+        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 12, 0};
 
 
 
         const static std::vector<unsigned> buffer_offsets = {
-        0, 3, 6, 10, 14, 21, 28, 33, 37, 41, 45, 49, 53, 58, 65, 72, 79, 85,
-        91, 97, 103, 109, 115, 121, 127, 133, 139, 145, 151, 157, 163, 169,
-        175, 181, 187, 193, 199, 205, 211, 217, 223, 229, 235, 241, 247,
-        253, 259, 265, 271, 277, 283, 289, 295, 301, 307, 313, 319, 325,
-        331, 337, 343, 349, 355, 361, 367, 373, 378, 383, 388, 395, 400,
-        406, 411, 416, 421, 428, 433, 440, 447, 452, 459, 466, 473, 478,
-        483, 490, 496, 501, 506, 511, 518, 523, 526, 529, 532, 536, 540,
-        543, 546, 551, 556, 561, 566, 571};
+        0, 3, 7, 11, 18, 25, 30, 34, 38, 42, 46, 50, 55, 62, 69, 76, 82, 88,
+        94, 100, 106, 112, 118, 124, 130, 136, 142, 148, 154, 160, 166, 172,
+        178, 184, 190, 196, 202, 208, 214, 220, 226, 232, 238, 244, 250,
+        256, 262, 268, 274, 280, 286, 292, 298, 304, 310, 316, 322, 328,
+        334, 340, 346, 352, 358, 364, 370, 375, 380, 385, 392, 397, 403,
+        408, 413, 418, 425, 430, 437, 444, 449, 456, 463, 470, 475, 480,
+        487, 493, 498, 503, 508, 515, 520, 523, 526, 529, 533, 537, 540,
+        543, 548, 553, 558, 563, 568};
         const static char string_buffer LLVM_ALIGNAS(64) [768] = u8R"__(SS
-İ
 ʼN
 J̌
 Ϊ́
@@ -319,19 +186,19 @@ ST
 )__";
 
         const static std::vector<codepoint_t> defined_cps{
-        0x00df, 0x0130, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96,
-        0x1e97, 0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56,
-        0x1f80, 0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86, 0x1f87,
-        0x1f88, 0x1f89, 0x1f8a, 0x1f8b, 0x1f8c, 0x1f8d, 0x1f8e, 0x1f8f,
-        0x1f90, 0x1f91, 0x1f92, 0x1f93, 0x1f94, 0x1f95, 0x1f96, 0x1f97,
-        0x1f98, 0x1f99, 0x1f9a, 0x1f9b, 0x1f9c, 0x1f9d, 0x1f9e, 0x1f9f,
-        0x1fa0, 0x1fa1, 0x1fa2, 0x1fa3, 0x1fa4, 0x1fa5, 0x1fa6, 0x1fa7,
-        0x1fa8, 0x1fa9, 0x1faa, 0x1fab, 0x1fac, 0x1fad, 0x1fae, 0x1faf,
-        0x1fb2, 0x1fb3, 0x1fb4, 0x1fb6, 0x1fb7, 0x1fbc, 0x1fc2, 0x1fc3,
-        0x1fc4, 0x1fc6, 0x1fc7, 0x1fcc, 0x1fd2, 0x1fd3, 0x1fd6, 0x1fd7,
-        0x1fe2, 0x1fe3, 0x1fe4, 0x1fe6, 0x1fe7, 0x1ff2, 0x1ff3, 0x1ff4,
-        0x1ff6, 0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04,
-        0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
+        0x00df, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96, 0x1e97,
+        0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56, 0x1f80,
+        0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86, 0x1f87, 0x1f88,
+        0x1f89, 0x1f8a, 0x1f8b, 0x1f8c, 0x1f8d, 0x1f8e, 0x1f8f, 0x1f90,
+        0x1f91, 0x1f92, 0x1f93, 0x1f94, 0x1f95, 0x1f96, 0x1f97, 0x1f98,
+        0x1f99, 0x1f9a, 0x1f9b, 0x1f9c, 0x1f9d, 0x1f9e, 0x1f9f, 0x1fa0,
+        0x1fa1, 0x1fa2, 0x1fa3, 0x1fa4, 0x1fa5, 0x1fa6, 0x1fa7, 0x1fa8,
+        0x1fa9, 0x1faa, 0x1fab, 0x1fac, 0x1fad, 0x1fae, 0x1faf, 0x1fb2,
+        0x1fb3, 0x1fb4, 0x1fb6, 0x1fb7, 0x1fbc, 0x1fc2, 0x1fc3, 0x1fc4,
+        0x1fc6, 0x1fc7, 0x1fcc, 0x1fd2, 0x1fd3, 0x1fd6, 0x1fd7, 0x1fe2,
+        0x1fe3, 0x1fe4, 0x1fe6, 0x1fe7, 0x1ff2, 0x1ff3, 0x1ff4, 0x1ff6,
+        0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04, 0xfb05,
+        0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(uc,
                                                     suc,
                                                     std::move(explicitly_defined_set),
@@ -342,42 +209,37 @@ ST
 PropertyObject * get_UC_PropertyObject() {  return & UC_ns::property_object; }
     namespace TC_ns {
         /** Code Point Ranges for tc (possibly overriding values from stc)
-        [00df, 00df], [0130, 0130], [0149, 0149], [01f0, 01f0],
-        [0390, 0390], [03b0, 03b0], [0587, 0587], [1e96, 1e9a],
-        [1f50, 1f50], [1f52, 1f52], [1f54, 1f54], [1f56, 1f56],
-        [1f80, 1faf], [1fb2, 1fb4], [1fb6, 1fb7], [1fbc, 1fbc],
-        [1fc2, 1fc4], [1fc6, 1fc7], [1fcc, 1fcc], [1fd2, 1fd3],
-        [1fd6, 1fd7], [1fe2, 1fe4], [1fe6, 1fe7], [1ff2, 1ff4],
-        [1ff6, 1ff7], [1ffc, 1ffc], [fb00, fb06], [fb13, fb17]**/
+        [00df, 00df], [0149, 0149], [01f0, 01f0], [0390, 0390],
+        [03b0, 03b0], [0587, 0587], [1e96, 1e9a], [1f50, 1f50],
+        [1f52, 1f52], [1f54, 1f54], [1f56, 1f56], [1fb2, 1fb2],
+        [1fb4, 1fb4], [1fb6, 1fb7], [1fc2, 1fc2], [1fc4, 1fc4],
+        [1fc6, 1fc7], [1fd2, 1fd3], [1fd6, 1fd7], [1fe2, 1fe4],
+        [1fe6, 1fe7], [1ff2, 1ff2], [1ff4, 1ff4], [1ff6, 1ff7],
+        [fb00, fb06], [fb13, fb17]**/
 
         
         namespace {
         const static UnicodeSet::run_t __explicitly_defined_set_runs[] = {
-        {Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
+        {Empty, 6}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 4},
         {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
-        {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
-        {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
+        {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2},
+        {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
         const static UnicodeSet::bitquad_t  __explicitly_defined_set_quads[] = {
-        0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
-        0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
-        0x00cc10dc, 0x10dc00dc, 0x00f8007f};
+        0x80000000, 0x00000200, 0x00010000, 0x00010000, 0x00010000,
+        0x00000080, 0x07c00000, 0x00550000, 0x00d40000, 0x00cc00d4,
+        0x00d400dc, 0x00f8007f};
         }
 
-        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 13, 0};
+        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 19, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 12, 0};
 
 
 
         const static std::vector<unsigned> buffer_offsets = {
-        0, 3, 6, 10, 14, 21, 28, 33, 37, 41, 45, 49, 53, 58, 65, 72, 79, 83,
-        87, 91, 95, 99, 103, 107, 111, 115, 119, 123, 127, 131, 135, 139,
-        143, 147, 151, 155, 159, 163, 167, 171, 175, 179, 183, 187, 191,
-        195, 199, 203, 207, 211, 215, 219, 223, 227, 231, 235, 239, 243,
-        247, 251, 255, 259, 263, 267, 271, 277, 281, 286, 291, 298, 302,
-        308, 312, 317, 322, 329, 333, 340, 347, 352, 359, 366, 373, 378,
-        383, 390, 396, 400, 405, 410, 417, 421, 424, 427, 430, 434, 438,
-        441, 444, 449, 454, 459, 464, 469};
-        const static char string_buffer LLVM_ALIGNAS(64) [512] = u8R"__(Ss
-İ
+        0, 3, 7, 11, 18, 25, 30, 34, 38, 42, 46, 50, 55, 62, 69, 76, 82, 87,
+        92, 99, 105, 110, 115, 122, 129, 136, 141, 148, 155, 162, 167, 172,
+        179, 185, 190, 195, 202, 205, 208, 211, 215, 219, 222, 225, 230,
+        235, 240, 245, 250};
+        const static char string_buffer LLVM_ALIGNAS(64) [256] = u8R"__(Ss
 ʼN
 J̌
 Ϊ́
@@ -392,66 +254,14 @@ Aʾ
 Υ̓̀
 Υ̓́
 Υ̓͂
-ᾈ
-ᾉ
-ᾊ
-ᾋ
-ᾌ
-ᾍ
-ᾎ
-ᾏ
-ᾈ
-ᾉ
-ᾊ
-ᾋ
-ᾌ
-ᾍ
-ᾎ
-ᾏ
-ᾘ
-ᾙ
-ᾚ
-ᾛ
-ᾜ
-ᾝ
-ᾞ
-ᾟ
-ᾘ
-ᾙ
-ᾚ
-ᾛ
-ᾜ
-ᾝ
-ᾞ
-ᾟ
-ᾨ
-ᾩ
-ᾪ
-ᾫ
-ᾬ
-ᾭ
-ᾮ
-ᾯ
-ᾨ
-ᾩ
-ᾪ
-ᾫ
-ᾬ
-ᾭ
-ᾮ
-ᾯ
 Ὰͅ
-ᾼ
 Άͅ
 Α͂
 ᾼ͂
-ᾼ
 Ὴͅ
-ῌ
 Ήͅ
 Η͂
 ῌ͂
-ῌ
 Ϊ̀
 Ϊ́
 Ι͂
@@ -462,11 +272,9 @@ Aʾ
 Υ͂
 Ϋ͂
 Ὼͅ
-ῼ
 Ώͅ
 Ω͂
 ῼ͂
-ῼ
 Ff
 Fi
 Fl
@@ -482,19 +290,12 @@ St
 )__";
 
         const static std::vector<codepoint_t> defined_cps{
-        0x00df, 0x0130, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96,
-        0x1e97, 0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56,
-        0x1f80, 0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86, 0x1f87,
-        0x1f88, 0x1f89, 0x1f8a, 0x1f8b, 0x1f8c, 0x1f8d, 0x1f8e, 0x1f8f,
-        0x1f90, 0x1f91, 0x1f92, 0x1f93, 0x1f94, 0x1f95, 0x1f96, 0x1f97,
-        0x1f98, 0x1f99, 0x1f9a, 0x1f9b, 0x1f9c, 0x1f9d, 0x1f9e, 0x1f9f,
-        0x1fa0, 0x1fa1, 0x1fa2, 0x1fa3, 0x1fa4, 0x1fa5, 0x1fa6, 0x1fa7,
-        0x1fa8, 0x1fa9, 0x1faa, 0x1fab, 0x1fac, 0x1fad, 0x1fae, 0x1faf,
-        0x1fb2, 0x1fb3, 0x1fb4, 0x1fb6, 0x1fb7, 0x1fbc, 0x1fc2, 0x1fc3,
-        0x1fc4, 0x1fc6, 0x1fc7, 0x1fcc, 0x1fd2, 0x1fd3, 0x1fd6, 0x1fd7,
-        0x1fe2, 0x1fe3, 0x1fe4, 0x1fe6, 0x1fe7, 0x1ff2, 0x1ff3, 0x1ff4,
-        0x1ff6, 0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04,
-        0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
+        0x00df, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96, 0x1e97,
+        0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56, 0x1fb2,
+        0x1fb4, 0x1fb6, 0x1fb7, 0x1fc2, 0x1fc4, 0x1fc6, 0x1fc7, 0x1fd2,
+        0x1fd3, 0x1fd6, 0x1fd7, 0x1fe2, 0x1fe3, 0x1fe4, 0x1fe6, 0x1fe7,
+        0x1ff2, 0x1ff4, 0x1ff6, 0x1ff7, 0xfb00, 0xfb01, 0xfb02, 0xfb03,
+        0xfb04, 0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(tc,
                                                     stc,
                                                     std::move(explicitly_defined_set),

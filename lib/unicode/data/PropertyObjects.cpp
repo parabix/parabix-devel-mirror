@@ -459,7 +459,6 @@ const UnicodeSet StringOverridePropertyObject::GetPropertyIntersection(PropertyO
     UnicodeSet intersection = getPropertyObject(mBaseProperty)->GetPropertyIntersection(p) - mOverriddenSet;
     if (isa<StringPropertyObject>(p) || isa<StringOverridePropertyObject>(p)) {
         for (unsigned i = 0; i < mExplicitCps.size(); i++) {
-            llvm::errs() << "mExplicitCps[i] = " << mExplicitCps[i] << "\n";
             if (GetStringValue(mExplicitCps[i]) == p->GetStringValue(mExplicitCps[i])) {
                 intersection.insert(mExplicitCps[i]);
             }

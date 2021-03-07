@@ -238,6 +238,10 @@ class StringPropertyObject(PropertyObject):
         else:
             self.null_str_set = uset_union(self.null_str_set, uset_complement(uset_union(explicitly_defined_cps, self.reflexive_set)))
 
+    def getStringValue(self, cp):
+        if (cp in self.cp_value_map): return self.cp_value_map[cp]
+        if self.default_value == "<code point>": return chr(cp)
+        return ""
 
 
 class StringOverridePropertyObject(PropertyObject):
@@ -246,6 +250,9 @@ class StringOverridePropertyObject(PropertyObject):
         self.cp_value_map = {}
         self.overridden_code = overridden_code
         self.overridden_set = empty_uset()
+
+    def setBaseObject(self, base_object):
+        self.base_object = base_object
 
     def getPropertyKind(self):
         return "StringOverride"
@@ -258,7 +265,9 @@ class StringOverridePropertyObject(PropertyObject):
             stringValue = s
         else:
             raise Exception("Expecting codepoint string, but got " + stringValue)
-        for cp in range(cp_lo, cp_hi+1): self.cp_value_map[cp] = stringValue
+        for cp in range(cp_lo, cp_hi+1):
+            if stringValue != self.base_object.getStringValue(cp):
+                self.cp_value_map[cp] = stringValue
 
     def finalizeProperty(self):
         explicitly_defined_cps = empty_uset()

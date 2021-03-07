@@ -45,6 +45,7 @@ Emoji_Properties = ["Emoji", "Emoji_Presentation", "Emoji_Modifier", "Emoji_Modi
 Compatibility_Properties = ["alnum", "xdigit", "blank", "print", "word", "graph"]
 # Grapheme Cluster Break and Word Boundary properties
 Boundary_Properties = ["g", "w"]
+Overridden_Properties = ["uc", "lc", "tc", "cf"]
 
 def parse_PropertyAlias_txt():
     property_object_map = {}
@@ -69,8 +70,9 @@ def parse_PropertyAlias_txt():
         elif property_kind == "Catalog":   # Age, Block, Script
             property_object_map[property_code] = EnumeratedPropertyObject()
         elif property_kind == "String":
-            if property_code in ["uc", "lc", "tc", "cf"]:
-                property_object_map[property_code] = StringOverridePropertyObject("s" + property_code)
+            if property_code in Overridden_Properties:
+                overridden_code = "s" + property_code
+                property_object_map[property_code] = StringOverridePropertyObject(overridden_code)
             else:
                 property_object_map[property_code] = StringPropertyObject()
         elif property_kind == "Numeric":
@@ -102,6 +104,9 @@ def parse_PropertyAlias_txt():
         property_object_map[prop_code] = BoundaryPropertyObject()
         property_object_map[prop_code].setID(prop_code, p)
         property_object_map[prop_code].setAliases([])
+    for p in Overridden_Properties:
+        property_object_map[p].setBaseObject(property_object_map['s' + p])
+
     return (property_enum_name_list, property_object_map)
 
 
@@ -458,11 +463,16 @@ def parse_CaseFolding_txt(property_object_map):
         if fold_type == 'S' or fold_type == 'C':
             # fold value is guaranteed to be a single codepoint
             property_object_map['scf'].addDataRecord(cp, cp, fold_val)
-        else:
-            if fold_type == 'F':
-                property_object_map['cf'].addDataRecord(cp, cp, fold_val)
         fold_map[fold_type][cp] = fold_val
     property_object_map['scf'].finalizeProperty()
+    for t in lines:
+        if UCD_skip.match(t): continue  # skip comment and blank lines
+        (cp, cp_hi, fields) = parse_data_record(t)
+        (fold_type, fold_val) = (fields[0], fields[1])
+        if not fold_type in fold_map: fold_map[fold_type] = {}
+        if fold_type == 'F':
+            property_object_map['cf'].addDataRecord(cp, cp, fold_val)
+        fold_map[fold_type][cp] = fold_val
     property_object_map['cf'].finalizeProperty()
     return fold_map
 
