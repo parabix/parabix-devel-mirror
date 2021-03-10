@@ -78,11 +78,11 @@ class Compressor:
             # self.CompressWords(words)
         if numWords == 3:
             wordPhrases = nltk.trigrams(words)
-            self.prepareHashTables(wordPhrases, numWords)
+            #self.prepareHashTables(wordPhrases, numWords)
             self.phraseOfThreeWords(words, numWords, len(words))
         if numWords == 4:
             wordPhrases = nltk.everygrams(words, 4, 4)
-            self.prepareHashTables(wordPhrases, numWords)
+            #self.prepareHashTables(wordPhrases, numWords)
             self.phraseOfFourWords(words, numWords, len(words))
         # for phrase in wordPhrases:
         #    print(phrase)
@@ -109,6 +109,8 @@ class Compressor:
             # if encoded hash for the phrase to be compressed is already calculated,
             # replace the phrase with encoded hash, else fall back to pair or individual word based compression
             wLen = len(word)
+            hashVal = None
+            hashTablePos = -1
             hashVal, hashTablePos, notUsed = self.getHashValfromTable(
                 wLen, word)
 
@@ -118,20 +120,33 @@ class Compressor:
                     self.phraseOfThreeWords(
                         fallBack, numWords-1, len(fallBack))
                     fallBack = []
-                # bypass the use of notUsed by creating hashTable on the fly
-                if notUsed:
-                    fallBack.append(words[index])
-                    index += 1
-                else:
-                    #print('compress:', word, '-->', hashVal)
-                    self.compressed += hashVal
-                    index += 4
+                # creating hashTable on the fly
+                #print('compress:', word, '-->', hashVal)
+                self.compressed += hashVal
+                index += 4
             else:
                 if wLen < 3:
+                    if fallBack:
+                        self.phraseOfThreeWords(
+                            fallBack, numWords-1, len(fallBack))
+                        fallBack = []
                     self.compressed += bytearray(word, 'utf-8')
                     index += 4
-                else:
+                elif wLen <= 32:
                     fallBack.append(words[index])
+                    wordLen, encodedSuffix = self.getHashVal(
+                        word, 1)
+                    encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
+                    encodedWord = bytearray(b'')
+                    encodedWord.append(encodedPrefix)
+                    encodedWord.append(encodedSuffix)
+
+                    codeWordHex = str(hex((encodedPrefix << 8) |
+                                          encodedSuffix))
+                    codeword = str(wLen)+codeWordHex[2:]
+                    self.checkForDuplicateHashVal(
+                        encodedPrefix, encodedSuffix, encodedWord, wLen, hashTablePos, word, numWords, codeword, 1)  # sfxBytesLen=1
+
                     index += 1
         if fallBack:
             self.phraseOfThreeWords(fallBack, numWords-1, len(fallBack))
@@ -242,10 +257,6 @@ class Compressor:
                     if tryFallBack:
                         self.phraseOfOneWord(tryFallBack)
                         tryFallBack = []
-                # if notUsed:
-                    # tryFallBack.append(fbWord)
-                    # self.compressed += bytearray(word, 'utf-8')
-                # else:
                 self.compressed += hashVal
                 index += 2
             else:
