@@ -5,6 +5,8 @@
 
 #include <kernel/util/bixhash.h>
 #include <pablo/builder.hpp>
+#include <pablo/pe_debugprint.h>
+#include <llvm/Support/raw_ostream.h>
 #include <vector>
 #include <algorithm>
 #include <random>
