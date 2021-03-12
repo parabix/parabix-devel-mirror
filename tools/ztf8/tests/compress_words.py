@@ -431,49 +431,43 @@ class Compressor:
             pfxBase = self.prefixList[4]
         # TODO : clean the process of retreiving remaining hash bits!
         remHashBits = suffix * pow(2, 7)
-        # print(remHashBits % 8, 'remHashBits 1')
         remHashBits = format(remHashBits, '02x')
         remHashBits = remHashBits[len(remHashBits)-2::]
         remHashBits = bin(int(remHashBits, 16)).zfill(8)[::-1]
         remHashBits = int(remHashBits[::7])
-        # print(remHashBits, 'remHashBits 2')
         return (pfxBase+remHashBits)
 
     def getHashVal(self, word, sfxBytesLen):
-        bits = []
+        byteToBinary = []
         bitsShuffled = []
-        for i, w in enumerate(word):
-            dec = ord(w)
+        toBinary = []
+        wordBytes = bytes(word, 'utf-8')
+        for byte in wordBytes:
+            # convert to 8-bit binary equivalent of byte
             for bitPos in range(8):
-                bits.append((dec >> bitPos) & 1)
+                toBinary.append((byte >> bitPos) & 1)
+            byteToBinary = toBinary[::-1]
             for pos, bit in enumerate(self.bitmix[0]):
-                # print(bits[pos + 8*i], 'bits[', pos + 8*i, ']')
-                # print(bits[bit], 'bits[', bit, ']')
-                b = 0 if bits[pos + 8*i] == bits[bit + 8*i] else 1
+                b = 0 if byteToBinary[pos] == byteToBinary[bit] else 1
                 bitsShuffled.append(b)
-        # print(bitsShuffled)
+            toBinary = []
         for i in range(4):
             prevPos = pow(2, i)
             temp = copy.deepcopy(bitsShuffled)
-            for symPos in range(pow(2, i), len(word)):
+            for bytePos in range(prevPos, len(word)):
                 bitmixIdx = 0
                 while bitmixIdx < 8:
                     sIndex = self.bitmix[i+1][bitmixIdx]
-                    # print('temp[', bitmixIdx+(8*symPos), '] ',
-                    #      temp[bitmixIdx+(8*symPos)], 'temp[', 8 *
-                    #      (symPos-prevPos) + sIndex, '] ',
-                    #      temp[8*(symPos-prevPos) + sIndex])
-                    b = 0 if temp[bitmixIdx +
-                                  (8*symPos)] == temp[8*(symPos-prevPos) + sIndex] else 1
-                    bitsShuffled[bitmixIdx + 8*symPos] = b
+                    # print('temp[', bitmixIdx+(8*bytePos), '] ',
+                    #      temp[bitmixIdx+(8*bytePos)], 'temp[', 8 *
+                    #      (bytePos-prevPos) + sIndex, '] ',
+                    #      temp[8*(bytePos-prevPos) + sIndex])
+                    b = 0 if temp[bitmixIdx+(8*bytePos)] == temp[8*(bytePos-prevPos) + sIndex] else 1
+                    bitsShuffled[bitmixIdx + (8*bytePos)] = b
                     bitmixIdx += 1
-            # print(bitsShuffled)
-        symLen = len(bitsShuffled)
-        bitsShuffled = bitsShuffled[::-1]
+        # bitsShuffled = bitsShuffled[::-1]
         hashVal = 0
         lastByte = bitsShuffled[(sfxBytesLen-1)*8: (sfxBytesLen*8)]
-        #print(bitsShuffled, 'bitsShuffled')
-        #print(lastByte, 'lastByte')
         if lastByte:
             hashVal = int("".join(str(x) for x in lastByte), 2)
         # hashVal = format(hashVal, '02x')
