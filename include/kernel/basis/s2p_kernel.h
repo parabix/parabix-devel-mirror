@@ -16,7 +16,6 @@ namespace kernel {
 
 class S2PKernel final : public MultiBlockKernel {
 public:
-
     S2PKernel(BuilderRef b,
               StreamSet * const codeUnitStream,
               StreamSet * const BasisBits,
@@ -28,6 +27,24 @@ protected:
 private:
     bool mAbortOnNull;
     unsigned mNumOfStreams;
+};
+
+class BitPairsKernel final : public MultiBlockKernel {
+public:
+    BitPairsKernel(BuilderRef b,
+              StreamSet * const codeUnitStream,
+              StreamSet * const bitPairs);
+protected:
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+};
+
+class S2P_CompletionKernel final : public MultiBlockKernel {
+public:
+    S2P_CompletionKernel(BuilderRef b,
+              StreamSet * const bitPairs,
+              StreamSet * const BasisBits);
+protected:
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 };
 
 class S2PMultipleStreamsKernel final : public MultiBlockKernel {

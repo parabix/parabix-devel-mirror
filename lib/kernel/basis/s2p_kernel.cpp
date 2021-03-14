@@ -25,14 +25,20 @@ void s2p_step(BuilderRef iBuilder, Value * s0, Value * s1, Value * hi_mask, unsi
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
 
-void s2p(BuilderRef iBuilder, Value * input[], Value * output[]) {
-    Value * bit66442200[4];
-    Value * bit77553311[4];
-
+void s2p_bitpairs(BuilderRef iBuilder, Value * input[], Value * bitpairs[]) {
     for (unsigned i = 0; i < 4; i++) {
         Value * s0 = input[2 * i];
         Value * s1 = input[2 * i + 1];
-        s2p_step(iBuilder, s0, s1, iBuilder->simd_himask(2), 1, bit77553311[i], bit66442200[i]);
+        s2p_step(iBuilder, s0, s1, iBuilder->simd_himask(2), 1, bitpairs[2*i], bitpairs[2*i+1]);
+    }
+}
+
+void s2p_completion(BuilderRef iBuilder, Value * bitpairs[], Value * output[]) {
+    Value * bit66442200[4];
+    Value * bit77553311[4];
+    for (unsigned i = 0; i < 4; i++) {
+        bit77553311[i] = bitpairs[2*i];
+        bit66442200[i] = bitpairs[2*i + 1];
     }
     Value * bit44440000[2];
     Value * bit66662222[2];
@@ -48,6 +54,12 @@ void s2p(BuilderRef iBuilder, Value * input[], Value * output[]) {
     s2p_step(iBuilder, bit55551111[0], bit55551111[1], iBuilder->simd_himask(8), 4, output[5], output[1]);
     s2p_step(iBuilder, bit66662222[0], bit66662222[1], iBuilder->simd_himask(8), 4, output[6], output[2]);
     s2p_step(iBuilder, bit77773333[0], bit77773333[1], iBuilder->simd_himask(8), 4, output[7], output[3]);
+}
+
+void s2p(BuilderRef iBuilder, Value * input[], Value * output[]) {
+    Value * bitpairs[8];
+    s2p_bitpairs(iBuilder, input, bitpairs);
+    s2p_completion(iBuilder, bitpairs, output);
 }
 
 /* Alternative transposition model, but small field width packs are problematic. */
@@ -189,6 +201,73 @@ S2PKernel::S2PKernel(BuilderRef b,
         addAttribute(MayFatallyTerminate());
     }
 }
+
+void BitPairsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * bitPairLoop = b->CreateBasicBlock("bitPairLoop");
+    BasicBlock * bitPairFinalize = b->CreateBasicBlock("bitPairFinalize");
+    Constant * const ZERO = b->getSize(0);
+    b->CreateBr(bitPairLoop);
+    b->SetInsertPoint(bitPairLoop);
+    PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
+    blockOffsetPhi->addIncoming(ZERO, entry);
+    Value * bytepack[8];
+    for (unsigned i = 0; i < 8; i++) {
+        bytepack[i] = b->loadInputStreamPack("byteStream", ZERO, b->getInt32(i), blockOffsetPhi);
+    }
+    Value * bitpairs[8];
+    s2p_bitpairs(b, bytepack, bitpairs);
+    for (unsigned i = 0; i < 8; ++i) {
+        b->storeOutputStreamPack("bitPairs", ZERO, b->getInt32(i), blockOffsetPhi, bitpairs[i]);
+    }
+    Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
+    blockOffsetPhi->addIncoming(nextBlk, bitPairLoop);
+    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
+
+    b->CreateCondBr(moreToDo, bitPairLoop, bitPairFinalize);
+    b->SetInsertPoint(bitPairFinalize);
+}
+
+BitPairsKernel::BitPairsKernel(BuilderRef b,
+                               StreamSet * const codeUnitStream,
+                               StreamSet * const bitPairs)
+: MultiBlockKernel(b, "BitPairs"
+, {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
+                   , {Binding{"bitPairs", bitPairs}}, {}, {}, {}) {}
+
+void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * s2pLoop = b->CreateBasicBlock("s2pLoop");
+    BasicBlock * s2pFinalize = b->CreateBasicBlock("s2pFinalize");
+    Constant * const ZERO = b->getSize(0);
+    b->CreateBr(s2pLoop);
+    b->SetInsertPoint(s2pLoop);
+    PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
+    blockOffsetPhi->addIncoming(ZERO, entry);
+    Value * bitPairs[8];
+    for (unsigned i = 0; i < 8; i++) {
+        bitPairs[i] = b->loadInputStreamPack("bitPairs", ZERO, b->getInt32(i), blockOffsetPhi);
+    }
+    Value * basisbits[8];
+    s2p_completion(b, bitPairs, basisbits);
+    for (unsigned i = 0; i < 8; ++i) {
+        b->storeOutputStreamBlock("basisBits", b->getInt32(i), blockOffsetPhi, basisbits[i]);
+    }
+    Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
+    blockOffsetPhi->addIncoming(nextBlk, s2pLoop);
+    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
+    b->CreateCondBr(moreToDo, s2pLoop, s2pFinalize);
+    b->SetInsertPoint(s2pFinalize);
+}
+
+S2P_CompletionKernel::S2P_CompletionKernel(BuilderRef b,
+                                           StreamSet * const bitPairs,
+                                           StreamSet * const BasisBits)
+: MultiBlockKernel(b, "S2P_Completion"
+, {Binding{"bitPairs", bitPairs, FixedRate(), Principal()}}
+                   , {Binding{"basisBits", BasisBits}}, {}, {}, {}) {}
+
+
 
 inline std::string makeMultiS2PName(const StreamSets & outputStreams, const bool aligned) {
     std::string buffer;
