@@ -3,6 +3,7 @@ import binascii
 import copy
 import itertools
 import nltk
+import uniseg.wordbreak
 
 
 class Compressor:
@@ -19,12 +20,22 @@ class Compressor:
         self.encodePrefix = 192  # b'\xC0'
         self.encodeSuffix = 0    # b'\x00'
         self.compressed = bytearray(b'')
+        # TODO: perform bit mixing with all of the previous bytes for a phrase.
+        # When picking a suffix, choose a byte from same position of bitshuffled for phrases of equal length
         self.bitmix = [[4, 1, 7, 2, 0, 6, 5, 3], [1, 2, 4, 5, 0, 3, 6, 7], [
             0, 5, 4, 6, 2, 3, 7, 1], [7, 1, 6, 4, 3, 0, 5, 2], [3, 2, 5, 4, 7, 6, 0, 1]]
         self.hashVals = {}
+        self.collisionsCWLenExceeded = 0
+        self.noSuffixCollisions = 0
 
     def Name(self):
         return 'words'
+
+    def readSegment(self, text):
+        words = []
+        for word in uniseg.wordbreak.words(text):
+            words.append(word)
+        return words
 
     def CompressWords(self, words):
         self.words = words
@@ -69,32 +80,72 @@ class Compressor:
         #    print(len(h))
         return self.compressed
 
-    def CompressPhrase(self, words, numWords):
+    def CompressPhrase(self, fileName, numWords):
         # print(words, 'CompressPhrase words')
-        self.words = words
-        if numWords == 2:
-            wordPhrases = nltk.bigrams(words)
-            self.phraseOfTwoWords(words, numWords)
-            # need function modification to accept bigrams
-            # self.CompressWords(words)
-        if numWords == 3:
-            # wordPhrases = nltk.trigrams(words)
-            # self.prepareHashTables(wordPhrases, numWords)
-            self.phraseOfThreeWords(words, numWords, len(words))
-        if numWords == 4:
-            # wordPhrases = nltk.everygrams(words, 4, 4)
-            # self.prepareHashTables(wordPhrases, numWords)
-            self.phraseOfFourWords(words, numWords, len(words))
+        with open(fileName, 'rt') as infile:
+            while True:
+                # self.lengthwisePhrasesList = [{}, {}, {}, {}, {}]
+                self.collisionsCWLenExceeded = 0
+                self.noSuffixCollisions = 0
+                segment = infile.read(1000000)
+                if not segment:
+                    break
+                words = self.readSegment(segment)
+                self.words = words
+                if numWords == 2:
+                    wordPhrases = nltk.bigrams(words)
+                    self.phraseOfTwoWords(words, numWords)
+                    # need function modification to accept bigrams
+                    # self.CompressWords(words)
+                if numWords == 3:
+                    # wordPhrases = nltk.trigrams(words)
+                    # self.prepareHashTables(wordPhrases, numWords)
+                    self.phraseOfThreeWords(words, numWords, len(words))
+                if numWords == 4:
+                    # wordPhrases = nltk.everygrams(words, 4, 4)
+                    # self.prepareHashTables(wordPhrases, numWords)
+                    self.phraseOfFourWords(words, numWords, len(words))
+                # for phrase in wordPhrases:
+                #    print(phrase)
+                print(len(words), 'words length')
+                print('collisions: collisionsCWLenExceeded -> ',
+                      self.collisionsCWLenExceeded)
+                print('collisions: noSuffixCollisions -> ',
+                      self.noSuffixCollisions)
+                print("codewordHashTableList table size")
+                for h in self.codewordHashTableList:
+                    print(len(h))
+                    # for i in h.items():
+                    #    print(i)
+                print("lengthwisePhrasesList table size")
+                for h in self.lengthwisePhrasesList:
+                    print(len(h))
+        infile.close()
         return self.compressed
+
+    def getPhrase(self, words, curIdx, numWords, wordsLen):
+        phrase = ""
+        singleByteSyms = 0
+        numWordsCopy = numWords
+        while curIdx < wordsLen and numWords > 0:
+            phrase += words[curIdx]
+            # exclude space and new line character as words in phrases
+            if len(words[curIdx]) == ' ' or words[curIdx] == '\n':
+                singleByteSyms += 1
+            else:
+                numWords -= 1
+            curIdx += 1
+        return phrase, singleByteSyms
 
     def phraseOfFourWords(self, words, numWords, wordsLen):
         index = 0
         fallBack = []
 
         while index < wordsLen:
+            # remove this check?
             if index+(numWords-1) < wordsLen:
-                word = words[index] + words[index+1] + \
-                    words[index+2] + words[index+3]
+                word, singleByteSyms = self.getPhrase(
+                    words, index, numWords, wordsLen)
             else:
                 fallBack.extend(words[index::])
                 break
@@ -109,50 +160,58 @@ class Compressor:
 
             if hashVal:
                 if fallBack:
-                    # print(fallBack, 'fallBack')
                     self.phraseOfThreeWords(
                         fallBack, numWords-1, len(fallBack))
                     fallBack = []
-                # print('compress:', word, 'len:', wLen, 'hashVal:', hashVal)
                 self.compressed += hashVal
-                index += 4
+                index += (singleByteSyms + numWords)
             else:
+                # this might not be needed if we are creating phrases of 4 words of length > 1
                 if wLen < 3:  # add the word to fallback and let oneword phrase take care of it?
                     if fallBack:
                         self.phraseOfThreeWords(
                             fallBack, numWords-1, len(fallBack))
                         fallBack = []
                     self.compressed += bytearray(word, 'utf-8')
-                    index += 4
-                elif wLen <= 32:
-                    fallBack.append(words[index])
-                    self.checkPhraseFreq(
+                    # to be on the safer side; though this branch would not be taken
+                    index += (singleByteSyms + numWords)
+                elif 3 <= wLen <= 32:
+                    encodedWord = self.checkPhraseFreq(
                         wLen, hashTablePos, word, 1, None, None)
-                index += 1
+                    if encodedWord is not None:
+                        if fallBack:
+                            self.phraseOfThreeWords(
+                                fallBack, numWords-1, len(fallBack))
+                            fallBack = []
+                        self.compressed += encodedWord
+                        index += (singleByteSyms + numWords)
+                    else:
+                        fallBack.append(words[index])
+                        index += 1
+                elif wLen > 32:
+                    fallBack.append(words[index])
+                    index += 1
         if fallBack:
             self.phraseOfThreeWords(fallBack, numWords-1, len(fallBack))
             fallBack = []
 
     def phraseOfThreeWords(self, words, numWords, wordsLen):
+        #print(words, 'phraseOfThreeWords')
         if wordsLen == 2:
             self.phraseOfTwoWords(words, numWords-1)
             return
         if wordsLen == 1:
             self.phraseOfOneWord(words)
             return
-        # print(words, 'phraseOfThreeWords')
         index = 0
         fallBack = []
-
         while index < wordsLen:
-            fbWord = words[index]
             if index+(numWords-1) < wordsLen:
-                word = fbWord + words[index+1] + words[index+2]
+                word, singleByteSyms = self.getPhrase(
+                    words, index, numWords, wordsLen)
             else:
                 fallBack.extend(words[index::])
                 break
-
-            # print(word, 'word')
             # if encoded hash for the phrase to be compressed is already calculated,
             # replace the phrase with encoded hash, else fall back to pair or individual word based compression
             wLen = len(word)
@@ -160,47 +219,56 @@ class Compressor:
             hashTablePos = -1
             if wLen < 3:
                 if fallBack:
-                    self.phraseOfTwoWords(tryFallBack, numWords-1)
-                    tryFallBack = []
+                    self.phraseOfTwoWords(fallBack, numWords-1)
+                    fallBack = []
                 self.compressed += bytearray(word, 'utf-8')
-                index += 3
+                index += (singleByteSyms + numWords)
             else:
                 hashVal, hashTablePos, notUsed = self.getHashValfromTable(
                     wLen, word)
 
             if hashVal:
-                # print('compress:', word, 'len:', wLen, 'hashVal:', hashVal)
                 if fallBack:
                     self.phraseOfTwoWords(fallBack, numWords-1)
                     fallBack = []
                 # if hashVal found, that means this phrase was already found and been added in the
                 # hash table already
                 self.compressed += hashVal
-                index += 3
+                index += (singleByteSyms + numWords)
             else:
                 if 3 <= wLen <= 32:
-                    fallBack.append(fbWord)
-                    self.checkPhraseFreq(
+                    encodedWord = self.checkPhraseFreq(
                         wLen, hashTablePos, word, 1, None, None)
-                index += 1
+                    if encodedWord is not None:
+                        if fallBack:
+                            self.phraseOfTwoWords(fallBack, numWords-1)
+                            fallBack = []
+                        self.compressed += encodedWord
+                        index += (singleByteSyms + numWords)
+                    else:
+                        fallBack.append(words[index])
+                        index += 1
+                elif wLen > 32:
+                    fallBack.append(words[index])
+                    index += 1
         if fallBack:
             self.phraseOfTwoWords(fallBack, numWords-1)
             fallBack = []
 
     def phraseOfTwoWords(self, words, numWords):
+        #print(words, 'phraseOfTwoWords')
         if numWords == 1:
             self.phraseOfOneWord(words)
             return
-        # print(words, 'phraseOfTwoWords')
-        tryFallBack = []
+        fallBack = []
         index = 0
         wordsLen = len(words)
         while index < wordsLen:
-            fbWord = words[index]
             if index+1 < wordsLen:
-                word = fbWord + words[index+1]
+                word, singleByteSyms = self.getPhrase(
+                    words, index, numWords, wordsLen)
             else:
-                tryFallBack.append(fbWord)
+                fallBack.extend(words[index::])
                 # remaining words/phrases to check
                 break
             # if encoded hash for a symbol to be compressed is already calculated,
@@ -209,45 +277,54 @@ class Compressor:
             hashVal = None
             hashTablePos = -1
             if wLen < 3:
-                # if index+2 >= wordsLen:
-                if tryFallBack:
-                    self.phraseOfOneWord(tryFallBack)
-                    tryFallBack = []
+                if fallBack:
+                    self.phraseOfOneWord(fallBack)
+                    fallBack = []
                 self.compressed += bytearray(word, 'utf-8')
-                index += 2
+                index = index + singleByteSyms + numWords
             else:
                 hashVal, hashTablePos, notUsed = self.getHashValfromTable(
                     wLen, word)
 
             if hashVal:
-                # print('compress:', word, 'len:', wLen, 'hashVal:', hashVal)
-                if tryFallBack and len(tryFallBack) >= 2:
-                    if tryFallBack:
-                        self.phraseOfOneWord(tryFallBack)
-                        tryFallBack = []
+                if fallBack and len(fallBack) >= 2:
+                    if fallBack:
+                        self.phraseOfOneWord(fallBack)
+                        fallBack = []
                 self.compressed += hashVal
-                index += 2
+                index = index + singleByteSyms + numWords
             else:
                 if 3 <= wLen <= 32:
-                    tryFallBack.append(fbWord)
-                    self.checkPhraseFreq(
-                        wLen, hashTablePos, word, 1, None, None)  # sfxBytesLen=1
+                    # sfxBytesLen=1
+                    encodedWord = self.checkPhraseFreq(
+                        wLen, hashTablePos, word, 1, None, None)
+                    if encodedWord is not None:
+                        if fallBack:
+                            self.phraseOfOneWord(fallBack)
+                            fallBack = []
+                        self.compressed += encodedWord
+                        index = index + singleByteSyms + numWords
+                    else:
+                        fallBack.append(words[index])
+                        index += 1
+                elif wLen > 32:
+                    fallBack.append(words[index])
                     index += 1
-        if tryFallBack:
-            self.phraseOfOneWord(tryFallBack)
-            tryFallBack = []
+        if fallBack:
+            self.phraseOfOneWord(fallBack)
+            fallBack = []
 
     def phraseOfOneWord(self, words):
         if not words:
             return
-        # print(words, 'phraseOfOneWord')
+        #print(words, 'phraseOfOneWord')
         index = 0
         wordsLen = len(words)
         while index < wordsLen:
             word = words[index]
             index += 1
-            # if encoded hash for a symbol to be compressed is already calculated,
-            # replace the symbol with encoded hash
+            # TODO : step 2 of single word optimization
+
             wLen = len(word)
             hashVal = None
             hashTablePos = -1
@@ -258,12 +335,16 @@ class Compressor:
                     wLen, word)
 
             if hashVal:
-                # print('compress:', word, 'len:', wLen, 'hashVal:', hashVal)
                 self.compressed += hashVal
             else:
                 if 3 <= wLen <= 32:
-                    self.checkPhraseFreq(
+                    encodedWord = self.checkPhraseFreq(
                         wLen, hashTablePos, word, 1, None, None)
+                    if encodedWord is not None:
+                        self.compressed += encodedWord
+                    else:
+                        self.compressed += bytearray(word, 'utf-8')
+                elif wLen > 32:
                     self.compressed += bytearray(word, 'utf-8')
 
     def getCodeword(self, word):
@@ -285,21 +366,24 @@ class Compressor:
                 wordLen, encodedSuffix = self.getHashVal(
                     word, sfxBytesLen+1)
                 if encodedSuffix == 0:
-                    return
+                    self.noSuffixCollisions += 1
+                    return None
                 encodedWord.append(encodedSuffix)
                 sfxHex = str(hex(encodedSuffix))
                 codeword += sfxHex[2:]
                 if len(codeword) > 8 or len(encodedWord) >= wLen:
-                    return
+                    self.collisionsCWLenExceeded += 1
+                    return None
                 self.checkPhraseFreq(
                     wLen, hashTablePos, word, sfxBytesLen+1, encodedWord, codeword)
             else:
                 self.codewordHashTableList[hashTablePos][word] = [
                     encodedWord, 1]
-                # print(word, '-->', encodedWord)
                 self.hashVals[codeword] = word  # +str(numWords)
+                return encodedWord
         else:
             self.lengthwisePhrasesList[hashTablePos][word] = 1
+            return None
 
     def getHashValfromTable(self, wLen, word):
         hashVal = None
@@ -405,7 +489,7 @@ class Compressor:
                     #      temp[bitmixIdx+(8*bytePos)], 'temp[', 8 *
                     #      (bytePos-prevPos) + sIndex, '] ',
                     #      temp[8*(bytePos-prevPos) + sIndex])
-                    b = 0 if temp[bitmixIdx+(8*bytePos)] == temp[8*(bytePos-prevPos) + sIndex] else 1
+                    b = 0 if temp[bitmixIdx+(8*bytePos)] == temp[8 * (bytePos-prevPos) + sIndex] else 1
                     bitsShuffled[bitmixIdx + (8*bytePos)] = b
                     bitmixIdx += 1
         # bitsShuffled = bitsShuffled[::-1]
