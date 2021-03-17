@@ -17,8 +17,6 @@ class Compressor:
         # sub-divide length prefix further into num of words in the phrase of particular length
         # [192, 200, 208, 216, 232]
         self.prefixList = [192, 196, 200, 208, 216]
-        self.encodePrefix = 192  # b'\xC0'
-        self.encodeSuffix = 0    # b'\x00'
         self.compressed = bytearray(b'')
         # TODO: perform bit mixing with all of the previous bytes for a phrase.
         # When picking a suffix, choose a byte from same position of bitshuffled for phrases of equal length
@@ -62,7 +60,7 @@ class Compressor:
             else:
                 if 3 <= wLen <= 32:
                     wordLen, encodedSuffix = self.getHashVal(
-                        word, 1)
+                        word, wLen)
                     encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
                     encodedWord = bytearray(b'')
                     encodedWord.append(encodedPrefix)
@@ -163,6 +161,8 @@ class Compressor:
                     self.phraseOfThreeWords(
                         fallBack, numWords-1, len(fallBack))
                     fallBack = []
+                #self.compressed += bytearray(word+'->', 'utf-8')
+                #self.compressed += bytearray(str(hashVal), 'utf-8')
                 self.compressed += hashVal
                 index += (singleByteSyms + numWords)
             else:
@@ -183,6 +183,8 @@ class Compressor:
                             self.phraseOfThreeWords(
                                 fallBack, numWords-1, len(fallBack))
                             fallBack = []
+                        #self.compressed += bytearray(word+'->', 'utf-8')
+                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
                         self.compressed += encodedWord
                         index += (singleByteSyms + numWords)
                     else:
@@ -233,6 +235,8 @@ class Compressor:
                     fallBack = []
                 # if hashVal found, that means this phrase was already found and been added in the
                 # hash table already
+                #self.compressed += bytearray(word+'->', 'utf-8')
+                #self.compressed += bytearray(str(hashVal), 'utf-8')
                 self.compressed += hashVal
                 index += (singleByteSyms + numWords)
             else:
@@ -243,6 +247,8 @@ class Compressor:
                         if fallBack:
                             self.phraseOfTwoWords(fallBack, numWords-1)
                             fallBack = []
+                        #self.compressed += bytearray(word+'->', 'utf-8')
+                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
                         self.compressed += encodedWord
                         index += (singleByteSyms + numWords)
                     else:
@@ -291,6 +297,8 @@ class Compressor:
                     if fallBack:
                         self.phraseOfOneWord(fallBack)
                         fallBack = []
+                #self.compressed += bytearray(word+'->', 'utf-8')
+                #self.compressed += bytearray(str(hashVal), 'utf-8')
                 self.compressed += hashVal
                 index = index + singleByteSyms + numWords
             else:
@@ -302,6 +310,8 @@ class Compressor:
                         if fallBack:
                             self.phraseOfOneWord(fallBack)
                             fallBack = []
+                        #self.compressed += bytearray(word+'->', 'utf-8')
+                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
                         self.compressed += encodedWord
                         index = index + singleByteSyms + numWords
                     else:
@@ -335,12 +345,16 @@ class Compressor:
                     wLen, word)
 
             if hashVal:
+                #self.compressed += bytearray(word+'->', 'utf-8')
+                #self.compressed += bytearray(str(hashVal), 'utf-8')
                 self.compressed += hashVal
             else:
                 if 3 <= wLen <= 32:
                     encodedWord = self.checkPhraseFreq(
                         wLen, hashTablePos, word, 1, None, None)
                     if encodedWord is not None:
+                        #self.compressed += bytearray(word+'->', 'utf-8')
+                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
                         self.compressed += encodedWord
                     else:
                         self.compressed += bytearray(word, 'utf-8')
@@ -349,7 +363,7 @@ class Compressor:
 
     def getCodeword(self, word):
         wLen = len(word)
-        wordLen, encodedSuffix = self.getHashVal(word, 1)
+        wordLen, encodedSuffix = self.getHashVal(word, wLen)
         encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
         encodedWord = bytearray(b'')
         encodedWord.append(encodedPrefix)
@@ -363,6 +377,8 @@ class Compressor:
             if not codeword:
                 encodedWord, codeword = self.getCodeword(word)
             if self.hashVals.get(codeword, None):
+                return None
+                # ignore generating additional suffix byte for the ease of decompression
                 wordLen, encodedSuffix = self.getHashVal(
                     word, sfxBytesLen+1)
                 if encodedSuffix == 0:
@@ -489,7 +505,8 @@ class Compressor:
                     #      temp[bitmixIdx+(8*bytePos)], 'temp[', 8 *
                     #      (bytePos-prevPos) + sIndex, '] ',
                     #      temp[8*(bytePos-prevPos) + sIndex])
-                    b = 0 if temp[bitmixIdx+(8*bytePos)] == temp[8 * (bytePos-prevPos) + sIndex] else 1
+                    b = 0 if temp[bitmixIdx+(8*bytePos)] == temp[8 *
+                                                                 (bytePos-prevPos) + sIndex] else 1
                     bitsShuffled[bitmixIdx + (8*bytePos)] = b
                     bitmixIdx += 1
         # bitsShuffled = bitsShuffled[::-1]
