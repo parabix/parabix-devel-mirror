@@ -18,22 +18,22 @@ namespace kernel {
 
 using BuilderRef = Kernel::BuilderRef;
 
-void s2p_step(BuilderRef iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
-    Value * t0 = iBuilder->hsimd_packh(16, s0, s1);
-    Value * t1 = iBuilder->hsimd_packl(16, s0, s1);
-    p0 = iBuilder->simd_if(1, hi_mask, t0, iBuilder->simd_srli(16, t1, shift));
-    p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
+void s2p_step(BuilderRef b, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
+    Value * t0 = b->hsimd_packh(16, s0, s1);
+    Value * t1 = b->hsimd_packl(16, s0, s1);
+    p0 = b->simd_if(1, hi_mask, t0, b->simd_srli(16, t1, shift));
+    p1 = b->simd_if(1, hi_mask, b->simd_slli(16, t0, shift), t1);
 }
 
-void s2p_bitpairs(BuilderRef iBuilder, Value * input[], Value * bitpairs[]) {
+void s2p_bitpairs(BuilderRef b, Value * input[], Value * bitpairs[]) {
     for (unsigned i = 0; i < 4; i++) {
         Value * s0 = input[2 * i];
         Value * s1 = input[2 * i + 1];
-        s2p_step(iBuilder, s0, s1, iBuilder->simd_himask(2), 1, bitpairs[2*i], bitpairs[2*i+1]);
+        s2p_step(b, s0, s1, b->simd_himask(2), 1, bitpairs[2*i], bitpairs[2*i+1]);
     }
 }
 
-void s2p_completion(BuilderRef iBuilder, Value * bitpairs[], Value * output[]) {
+void s2p_completion(BuilderRef b, Value * bitpairs[], Value * output[]) {
     Value * bit66442200[4];
     Value * bit77553311[4];
     for (unsigned i = 0; i < 4; i++) {
@@ -45,54 +45,73 @@ void s2p_completion(BuilderRef iBuilder, Value * bitpairs[], Value * output[]) {
     Value * bit55551111[2];
     Value * bit77773333[2];
     for (unsigned j = 0; j<2; j++) {
-        s2p_step(iBuilder, bit66442200[2*j], bit66442200[2*j+1],
-                 iBuilder->simd_himask(4), 2, bit66662222[j], bit44440000[j]);
-        s2p_step(iBuilder, bit77553311[2*j], bit77553311[2*j+1],
-                 iBuilder->simd_himask(4), 2, bit77773333[j], bit55551111[j]);
+        s2p_step(b, bit66442200[2*j], bit66442200[2*j+1],
+                 b->simd_himask(4), 2, bit66662222[j], bit44440000[j]);
+        s2p_step(b, bit77553311[2*j], bit77553311[2*j+1],
+                 b->simd_himask(4), 2, bit77773333[j], bit55551111[j]);
     }
-    s2p_step(iBuilder, bit44440000[0], bit44440000[1], iBuilder->simd_himask(8), 4, output[4], output[0]);
-    s2p_step(iBuilder, bit55551111[0], bit55551111[1], iBuilder->simd_himask(8), 4, output[5], output[1]);
-    s2p_step(iBuilder, bit66662222[0], bit66662222[1], iBuilder->simd_himask(8), 4, output[6], output[2]);
-    s2p_step(iBuilder, bit77773333[0], bit77773333[1], iBuilder->simd_himask(8), 4, output[7], output[3]);
+    s2p_step(b, bit44440000[0], bit44440000[1], b->simd_himask(8), 4, output[4], output[0]);
+    s2p_step(b, bit55551111[0], bit55551111[1], b->simd_himask(8), 4, output[5], output[1]);
+    s2p_step(b, bit66662222[0], bit66662222[1], b->simd_himask(8), 4, output[6], output[2]);
+    s2p_step(b, bit77773333[0], bit77773333[1], b->simd_himask(8), 4, output[7], output[3]);
 }
 
-void s2p(BuilderRef iBuilder, Value * input[], Value * output[]) {
+void s2p(BuilderRef b, Value * input[], Value * output[]) {
     Value * bitpairs[8];
-    s2p_bitpairs(iBuilder, input, bitpairs);
-    s2p_completion(iBuilder, bitpairs, output);
+    s2p_bitpairs(b, input, bitpairs);
+    s2p_completion(b, bitpairs, output);
 }
 
 /* Alternative transposition model, but small field width packs are problematic. */
 #if 0
-void s2p_ideal(BuilderRef iBuilder, Value * input[], Value * output[]) {
+void s2p_ideal(BuilderRef b, Value * input[], Value * output[]) {
     Value * hi_nybble[4];
     Value * lo_nybble[4];
     for (unsigned i = 0; i<4; i++) {
         Value * s0 = input[2*i];
         Value * s1 = input[2*i+1];
-        hi_nybble[i] = iBuilder->hsimd_packh(8, s0, s1);
-        lo_nybble[i] = iBuilder->hsimd_packl(8, s0, s1);
+        hi_nybble[i] = b->hsimd_packh(8, s0, s1);
+        lo_nybble[i] = b->hsimd_packl(8, s0, s1);
     }
     Value * pair76[2];
     Value * pair54[2];
     Value * pair32[2];
     Value * pair10[2];
     for (unsigned i = 0; i<2; i++) {
-        pair76[i] = iBuilder->hsimd_packh(4, hi_nybble[2*i], hi_nybble[2*i+1]);
-        pair54[i] = iBuilder->hsimd_packl(4, hi_nybble[2*i], hi_nybble[2*i+1]);
-        pair32[i] = iBuilder->hsimd_packh(4, lo_nybble[2*i], lo_nybble[2*i+1]);
-        pair10[i] = iBuilder->hsimd_packl(4, lo_nybble[2*i], lo_nybble[2*i+1]);
+        pair76[i] = b->hsimd_packh(4, hi_nybble[2*i], hi_nybble[2*i+1]);
+        pair54[i] = b->hsimd_packl(4, hi_nybble[2*i], hi_nybble[2*i+1]);
+        pair32[i] = b->hsimd_packh(4, lo_nybble[2*i], lo_nybble[2*i+1]);
+        pair10[i] = b->hsimd_packl(4, lo_nybble[2*i], lo_nybble[2*i+1]);
     }
-    output[7] = iBuilder->hsimd_packh(2, pair76[0], pair76[1]);
-    output[6] = iBuilder->hsimd_packl(2, pair76[0], pair76[1]);
-    output[5] = iBuilder->hsimd_packh(2, pair54[0], pair54[1]);
-    output[4] = iBuilder->hsimd_packl(2, pair54[0], pair54[1]);
-    output[3] = iBuilder->hsimd_packh(2, pair32[0], pair32[1]);
-    output[2] = iBuilder->hsimd_packl(2, pair32[0], pair32[1]);
-    output[1] = iBuilder->hsimd_packh(2, pair10[0], pair10[1]);
-    output[0] = iBuilder->hsimd_packl(2, pair10[0], pair10[1]);
+    output[7] = b->hsimd_packh(2, pair76[0], pair76[1]);
+    output[6] = b->hsimd_packl(2, pair76[0], pair76[1]);
+    output[5] = b->hsimd_packh(2, pair54[0], pair54[1]);
+    output[4] = b->hsimd_packl(2, pair54[0], pair54[1]);
+    output[3] = b->hsimd_packh(2, pair32[0], pair32[1]);
+    output[2] = b->hsimd_packl(2, pair32[0], pair32[1]);
+    output[1] = b->hsimd_packh(2, pair10[0], pair10[1]);
+    output[0] = b->hsimd_packl(2, pair10[0], pair10[1]);
 }
 #endif
+
+// Transposition of each group of 64 bits.
+Value * s2p_bytes(BuilderRef b, Value * r) {
+    Value * b7531 = b->simd_select_hi(2, r);
+    Value * b6420 = b->simd_select_lo(2, r);
+    Value * b7531_2 = b->simd_slli(16, b7531, 7);
+    Value * b6420_2 = b->simd_srli(16, b7531, 7);
+    Value * pairs = b->simd_if(1, b->simd_himask(16), b->simd_or(b7531, b7531_2), b->simd_or(b6420, b6420_2));
+    Value * b7362 = b->simd_select_hi(4, pairs);
+    Value * b5140 = b->simd_select_lo(4, pairs);
+    Value * b7362_2 = b->simd_slli(32, b7362, 14);
+    Value * b5140_2 = b->simd_srli(32, b5140, 14);
+    Value * quads = b->simd_if(1, b->simd_himask(32), b->simd_or(b7362, b7362_2), b->simd_or(b5140, b5140_2));
+    Value * b7654 = b->simd_select_hi(8, quads);
+    Value * b3210 = b->simd_select_lo(8, quads);
+    Value * b7654_2 = b->simd_slli(64, b7654, 28);
+    Value * b3210_2 = b->simd_srli(64, b3210, 28);
+    return b->simd_if(1, b->simd_himask(64), b->simd_or(b7654, b7654_2), b->simd_or(b3210, b3210_2));
+}
 
 void S2PKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
     Module * m = b->getModule();
