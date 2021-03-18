@@ -25,6 +25,9 @@ class Compressor:
         self.hashVals = {}
         self.collisionsCWLenExceeded = 0
         self.noSuffixCollisions = 0
+        self.printPlainText = False
+        self.printWordCodeword = False
+        self.hideHashVal = False
 
     def Name(self):
         return 'words'
@@ -49,14 +52,11 @@ class Compressor:
             wLen = len(word)
             if wLen < 3:
                 self.compressed += bytearray(word, 'utf-8')
-            hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+            hashVal, hashTablePos, startIdx = self.getHashValfromTable(
                 wLen, word)
 
             if hashVal:
-                if notUsed:
-                    self.compressed += bytearray(word, 'utf-8')
-                else:
-                    self.compressed += hashVal
+                self.compressed += hashVal
             else:
                 if 3 <= wLen <= 32:
                     wordLen, encodedSuffix = self.getHashVal(
@@ -78,7 +78,11 @@ class Compressor:
         #    print(len(h))
         return self.compressed
 
-    def CompressPhrase(self, fileName, numWords):
+    def CompressPhrase(self, fileName, numWords, printPlainText, printWordCodeword):
+        self.printPlainText = printPlainText
+        self.printWordCodeword = printWordCodeword
+        if self.printPlainText or self.printWordCodeword:
+            self.hideHashVal = True
         # print(words, 'CompressPhrase words')
         with open(fileName, 'rt') as infile:
             while True:
@@ -97,11 +101,11 @@ class Compressor:
                     # self.CompressWords(words)
                 if numWords == 3:
                     # wordPhrases = nltk.trigrams(words)
-                    # self.prepareHashTables(wordPhrases, numWords)
+                    # self.prepareHashTables(wordPhrases, numWords, 0)
                     self.phraseOfThreeWords(words, numWords, len(words))
                 if numWords == 4:
                     # wordPhrases = nltk.everygrams(words, 4, 4)
-                    # self.prepareHashTables(wordPhrases, numWords)
+                    # self.prepareHashTables(wordPhrases, numWords, 0)
                     self.phraseOfFourWords(words, numWords, len(words))
                 # for phrase in wordPhrases:
                 #    print(phrase)
@@ -128,7 +132,9 @@ class Compressor:
         while curIdx < wordsLen and numWords > 0:
             phrase += words[curIdx]
             # exclude space and new line character as words in phrases
-            if len(words[curIdx]) == ' ' or words[curIdx] == '\n':
+            # if len(words[curIdx]) == 1:
+            #    singleByteSyms += 1
+            if words[curIdx] == ' ' or words[curIdx] == '\n':
                 singleByteSyms += 1
             else:
                 numWords -= 1
@@ -153,7 +159,7 @@ class Compressor:
             wLen = len(word)
             hashVal = None
             hashTablePos = -1
-            hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+            hashVal, hashTablePos, startIdx = self.getHashValfromTable(
                 wLen, word)
 
             if hashVal:
@@ -161,9 +167,13 @@ class Compressor:
                     self.phraseOfThreeWords(
                         fallBack, numWords-1, len(fallBack))
                     fallBack = []
-                #self.compressed += bytearray(word+'->', 'utf-8')
-                #self.compressed += bytearray(str(hashVal), 'utf-8')
-                self.compressed += hashVal
+                if self.printPlainText:
+                    self.compressed += bytearray(word, 'utf-8')
+                if self.printWordCodeword:
+                    self.compressed += bytearray(word+'-41>', 'utf-8')
+                    self.compressed += bytearray(str(hashVal), 'utf-8')
+                if not self.hideHashVal:
+                    self.compressed += hashVal
                 index += (singleByteSyms + numWords)
             else:
                 # this might not be needed if we are creating phrases of 4 words of length > 1
@@ -177,15 +187,20 @@ class Compressor:
                     index += (singleByteSyms + numWords)
                 elif 3 <= wLen <= 32:
                     encodedWord = self.checkPhraseFreq(
-                        wLen, hashTablePos, word, 1, None, None)
+                        wLen, hashTablePos, word, numWords+singleByteSyms, None, None, index)
                     if encodedWord is not None:
                         if fallBack:
                             self.phraseOfThreeWords(
                                 fallBack, numWords-1, len(fallBack))
                             fallBack = []
-                        #self.compressed += bytearray(word+'->', 'utf-8')
-                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
-                        self.compressed += encodedWord
+                        if self.printPlainText:
+                            self.compressed += bytearray(word, 'utf-8')
+                        if self.printWordCodeword:
+                            self.compressed += bytearray(word+'-42>', 'utf-8')
+                            self.compressed += bytearray(
+                                str(encodedWord), 'utf-8')
+                        if not self.hideHashVal:
+                            self.compressed += encodedWord
                         index += (singleByteSyms + numWords)
                     else:
                         fallBack.append(words[index])
@@ -226,7 +241,7 @@ class Compressor:
                 self.compressed += bytearray(word, 'utf-8')
                 index += (singleByteSyms + numWords)
             else:
-                hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                hashVal, hashTablePos, startIdx = self.getHashValfromTable(
                     wLen, word)
 
             if hashVal:
@@ -235,21 +250,30 @@ class Compressor:
                     fallBack = []
                 # if hashVal found, that means this phrase was already found and been added in the
                 # hash table already
-                #self.compressed += bytearray(word+'->', 'utf-8')
-                #self.compressed += bytearray(str(hashVal), 'utf-8')
-                self.compressed += hashVal
+                if self.printPlainText:
+                    self.compressed += bytearray(word, 'utf-8')
+                if self.printWordCodeword:
+                    self.compressed += bytearray(word+'-31>', 'utf-8')
+                    self.compressed += bytearray(str(hashVal), 'utf-8')
+                if not self.hideHashVal:
+                    self.compressed += hashVal
                 index += (singleByteSyms + numWords)
             else:
                 if 3 <= wLen <= 32:
                     encodedWord = self.checkPhraseFreq(
-                        wLen, hashTablePos, word, 1, None, None)
+                        wLen, hashTablePos, word, numWords+singleByteSyms, None, None, index)
                     if encodedWord is not None:
                         if fallBack:
                             self.phraseOfTwoWords(fallBack, numWords-1)
                             fallBack = []
-                        #self.compressed += bytearray(word+'->', 'utf-8')
-                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
-                        self.compressed += encodedWord
+                        if self.printPlainText:
+                            self.compressed += bytearray(word, 'utf-8')
+                        if self.printWordCodeword:
+                            self.compressed += bytearray(word+'-32>', 'utf-8')
+                            self.compressed += bytearray(
+                                str(encodedWord), 'utf-8')
+                        if not self.hideHashVal:
+                            self.compressed += encodedWord
                         index += (singleByteSyms + numWords)
                     else:
                         fallBack.append(words[index])
@@ -289,7 +313,7 @@ class Compressor:
                 self.compressed += bytearray(word, 'utf-8')
                 index = index + singleByteSyms + numWords
             else:
-                hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                hashVal, hashTablePos, startIdx = self.getHashValfromTable(
                     wLen, word)
 
             if hashVal:
@@ -297,22 +321,31 @@ class Compressor:
                     if fallBack:
                         self.phraseOfOneWord(fallBack)
                         fallBack = []
-                #self.compressed += bytearray(word+'->', 'utf-8')
-                #self.compressed += bytearray(str(hashVal), 'utf-8')
-                self.compressed += hashVal
+                if self.printPlainText:
+                    self.compressed += bytearray(word, 'utf-8')
+                if self.printWordCodeword:
+                    self.compressed += bytearray(word+'-21>', 'utf-8')
+                    self.compressed += bytearray(str(hashVal), 'utf-8')
+                if not self.hideHashVal:
+                    self.compressed += hashVal
                 index = index + singleByteSyms + numWords
             else:
                 if 3 <= wLen <= 32:
                     # sfxBytesLen=1
                     encodedWord = self.checkPhraseFreq(
-                        wLen, hashTablePos, word, 1, None, None)
+                        wLen, hashTablePos, word, numWords+singleByteSyms, None, None, index)
                     if encodedWord is not None:
                         if fallBack:
                             self.phraseOfOneWord(fallBack)
                             fallBack = []
-                        #self.compressed += bytearray(word+'->', 'utf-8')
-                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
-                        self.compressed += encodedWord
+                        if self.printPlainText:
+                            self.compressed += bytearray(word, 'utf-8')
+                        if self.printWordCodeword:
+                            self.compressed += bytearray(word+'-22>', 'utf-8')
+                            self.compressed += bytearray(
+                                str(encodedWord), 'utf-8')
+                        if not self.hideHashVal:
+                            self.compressed += encodedWord
                         index = index + singleByteSyms + numWords
                     else:
                         fallBack.append(words[index])
@@ -341,21 +374,30 @@ class Compressor:
             if wLen < 3:
                 self.compressed += bytearray(word, 'utf-8')
             else:
-                hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+                hashVal, hashTablePos, startIdx = self.getHashValfromTable(
                     wLen, word)
 
             if hashVal:
-                #self.compressed += bytearray(word+'->', 'utf-8')
-                #self.compressed += bytearray(str(hashVal), 'utf-8')
-                self.compressed += hashVal
+                if self.printPlainText:
+                    self.compressed += bytearray(word, 'utf-8')
+                if self.printWordCodeword:
+                    self.compressed += bytearray(word+'-11>', 'utf-8')
+                    self.compressed += bytearray(str(hashVal), 'utf-8')
+                if not self.hideHashVal:
+                    self.compressed += hashVal
             else:
                 if 3 <= wLen <= 32:
                     encodedWord = self.checkPhraseFreq(
-                        wLen, hashTablePos, word, 1, None, None)
+                        wLen, hashTablePos, word, 1, None, None, index)
                     if encodedWord is not None:
-                        #self.compressed += bytearray(word+'->', 'utf-8')
-                        #self.compressed += bytearray(str(encodedWord), 'utf-8')
-                        self.compressed += encodedWord
+                        if self.printPlainText:
+                            self.compressed += bytearray(word, 'utf-8')
+                        if self.printWordCodeword:
+                            self.compressed += bytearray(word+'-12>', 'utf-8')
+                            self.compressed += bytearray(
+                                str(encodedWord), 'utf-8')
+                        if not self.hideHashVal:
+                            self.compressed += encodedWord
                     else:
                         self.compressed += bytearray(word, 'utf-8')
                 elif wLen > 32:
@@ -372,15 +414,17 @@ class Compressor:
         codeword = str(wLen)+codeWordHex[2:]
         return encodedWord, codeword
 
-    def checkPhraseFreq(self, wLen, hashTablePos, word, sfxBytesLen, encodedWord, codeword):
-        if self.lengthwisePhrasesList[hashTablePos].get(word, None):
+    def checkPhraseFreq(self, wLen, hashTablePos, word, numSymsInPhrase, encodedWord, codeword, startIdx):
+        phraseSeenAtIdx = self.lengthwisePhrasesList[hashTablePos].get(
+            word, None)
+        if phraseSeenAtIdx:
             if not codeword:
                 encodedWord, codeword = self.getCodeword(word)
             if self.hashVals.get(codeword, None):
                 return None
                 # ignore generating additional suffix byte for the ease of decompression
                 wordLen, encodedSuffix = self.getHashVal(
-                    word, sfxBytesLen+1)
+                    word, numSymsInPhrase+1)
                 if encodedSuffix == 0:
                     self.noSuffixCollisions += 1
                     return None
@@ -391,65 +435,61 @@ class Compressor:
                     self.collisionsCWLenExceeded += 1
                     return None
                 self.checkPhraseFreq(
-                    wLen, hashTablePos, word, sfxBytesLen+1, encodedWord, codeword)
+                    wLen, hashTablePos, word, numSymsInPhrase+1, encodedWord, codeword)
             else:
+                if startIdx < phraseSeenAtIdx+numSymsInPhrase:
+                    #print(phraseSeenAtIdx, 'phraseSeenAtIdx')
+                    #print(startIdx, 'startIdx')
+                    #print(wLen, ' wLen->', word, 'overlapping word')
+                    return None
                 self.codewordHashTableList[hashTablePos][word] = [
-                    encodedWord, 1]
+                    encodedWord, startIdx]
                 self.hashVals[codeword] = word  # +str(numWords)
                 return encodedWord
         else:
-            self.lengthwisePhrasesList[hashTablePos][word] = 1
+            self.lengthwisePhrasesList[hashTablePos][word] = startIdx
+            #print(hashTablePos, ' word added-->', word)
             return None
 
     def getHashValfromTable(self, wLen, word):
         hashVal = None
         hashTablePos = -1
-        notUsed = 1
+        startIdx = 1
         if wLen == 3:
             hashTablePos = 0
-            hashVal, notUsed = self.codewordHashTableList[0].get(
+            hashVal, startIdx = self.codewordHashTableList[0].get(
                 word, [None, None])
-            if notUsed:
-                self.codewordHashTableList[0][word] = [hashVal, 0]
         elif wLen == 4:
             hashTablePos = 1
-            hashVal, notUsed = self.codewordHashTableList[1].get(
+            hashVal, startIdx = self.codewordHashTableList[1].get(
                 word, [None, None])
-            if notUsed:
-                self.codewordHashTableList[1][word] = [hashVal, 0]
         elif wLen > 4 and wLen <= 8:
             hashTablePos = 2
-            hashVal, notUsed = self.codewordHashTableList[2].get(
+            hashVal, startIdx = self.codewordHashTableList[2].get(
                 word, [None, None])
-            if notUsed:
-                self.codewordHashTableList[2][word] = [hashVal, 0]
         elif wLen > 8 and wLen <= 16:
             hashTablePos = 3
-            hashVal, notUsed = self.codewordHashTableList[3].get(
+            hashVal, startIdx = self.codewordHashTableList[3].get(
                 word, [None, None])
-            if notUsed:
-                self.codewordHashTableList[3][word] = [hashVal, 0]
         elif wLen > 16 and wLen <= 32:
             hashTablePos = 4
-            hashVal, notUsed = self.codewordHashTableList[4].get(
+            hashVal, startIdx = self.codewordHashTableList[4].get(
                 word, [None, None])
-            if notUsed:
-                self.codewordHashTableList[4][word] = [hashVal, 0]
-        return hashVal, hashTablePos, notUsed
+        return hashVal, hashTablePos, startIdx
 
-    def prepareHashTables(self, wordPhrases, numWords):
+    def prepareHashTables(self, wordPhrases, numWords, singleByteSyms):
         for phrase in wordPhrases:
             phrase = ''.join(phrase)
             phraseLen = len(phrase)
             hashVal = None
             if phraseLen < 3:
                 continue
-            hashVal, hashTablePos, notUsed = self.getHashValfromTable(
+            hashVal, hashTablePos, startIdx = self.getHashValfromTable(
                 phraseLen, phrase)
             if not hashVal:
                 if hashTablePos != -1:
                     self.checkPhraseFreq(
-                        phraseLen, hashTablePos, phrase, 1, None, None)
+                        phraseLen, hashTablePos, phrase, numWords+singleByteSyms, None, None)
 
     def getLongestLenPhrase(self, curIndex):
         word = self.words[curIndex]
@@ -494,13 +534,14 @@ class Compressor:
                 b = 0 if byteToBinary[pos] == byteToBinary[bit] else 1
                 bitsShuffled.append(b)
             toBinary = []
-        for i in range(4):
-            prevPos = pow(2, i)
+        prevPos = 0
+        for i in range(1, len(word)):  # 4
+            prevPos += 1  # pow(2, i)
             temp = copy.deepcopy(bitsShuffled)
             for bytePos in range(prevPos, len(word)):
                 bitmixIdx = 0
                 while bitmixIdx < 8:
-                    sIndex = self.bitmix[i+1][bitmixIdx]
+                    sIndex = self.bitmix[(i+1) % 4][bitmixIdx]
                     # print('temp[', bitmixIdx+(8*bytePos), '] ',
                     #      temp[bitmixIdx+(8*bytePos)], 'temp[', 8 *
                     #      (bytePos-prevPos) + sIndex, '] ',

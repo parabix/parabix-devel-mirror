@@ -36,19 +36,27 @@ if __name__ == '__main__':
                              dest='compress', type='string')
     option_parser.add_option('-d', '--decompress',
                              dest='decompress', type='string')
+    option_parser.add_option('-p', '--print-plaintext',
+                             dest='plaintext', type='string')
+    option_parser.add_option('-w', '--print-word-codeword',
+                             dest='wordCodeword', type='string')
     options, args = option_parser.parse_args(sys.argv[1:])
 
     # Create a file to hold the generated encoded data.
     outputFilename = 'output'
+    printPlainText = False
+    printWordCodeword = False
 
     if options.decompress:
         fileName = options.decompress
         with open(fileName, 'rb') as infile:
             text = infile.read()
     else:
+        if options.plaintext:
+            printPlainText = True
+        if options.wordCodeword:
+            printWordCodeword = True
         fileName = options.compress
-        with open(fileName, 'rt') as infile:
-            text = infile.read(1000000)
 
     if options.decompress:
         for algorithm in DecmpAlgorithmList:
@@ -60,22 +68,12 @@ if __name__ == '__main__':
         boundary_positions = []
         #word_list = nltk.word_tokenize(text)
         #print(word_list, 'word_list')
-        output_file = open("wordList", "w")
-        # for word in word_list:
-        #    print(word)
-        #    output_file.write(word)
-        # output_file.close()
-        for word in uniseg.wordbreak.words(text):
-            word_list.append(word)
-            output_file.write(word)
-        output_file.close()
-        #print(word_list, 'word_list')
         # a vector representing the positions of word boundaries - future use?
         # for index in uniseg.wordbreak.word_boundaries(text):
         #    boundary_positions.append(index)
         for algorithm in CmpAlgorithmList:
-            compressedData = algorithm.CompressPhrase(word_list, 4)
-            #compressedData = algorithm.CompressWords(word_list)
+            compressedData = algorithm.CompressPhrase(
+                fileName, 4, printPlainText, printWordCodeword)
         # write compressed data to output.z file
         output_file = open(outputFilename+"."+algorithm.name+".z", "wb")
         output_file.write(compressedData)
