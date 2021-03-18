@@ -44,7 +44,7 @@ The word alphabet is a compound of the first two letters of the Greek alphabet, 
     | 'The '                  | 0xC4 0x8C     |    2    |   4    |
     | 'letters'               | 0xC9 0xC9     |    1    |   7    |
 
-    2. If the phrase is seen for the first time in the text, we would calculate the corresponding codeword value for that phrase and save it in one of the hash tables based on the length of the phrase.
+    2. If the phrase is seen for the first time in the text, we memoize the occurence and calculate the corresponding codeword value for that phrase only if it is occurring repeatedly. The calculated codeword is saved in one of the hash tables based on the length of the phrase. The memoization of phrase is carried out to carefully utilize the codeword space and avoid unnecessary collisions.
        * Once the codeword for the phrase is calculated, we add the first word of the phrase to a fallBack array to check if it can be encoded as a smaller phrase (of 3,2 or 1 word).
        * The fallback mechanism continues until all the words of the longer phrase are compressed either in smaller group of words or individual words. Only the phrases/ words of length > 2 are compressed as the maximum codeword length currently being handled is 4 bytes.
     > The hash tables are separate for phrases of different length. If the codeword for two different phrases of different length is same, in order to utilize the opportunity of compressing as many  phrases as possible, we keep the phrases (key) and their codewords (values) in different hash tables.
@@ -93,9 +93,89 @@ Let's walk through the steps of codewrod calculation for word 'alpha'
 
 * The prefix is calculated based on the current availability of unused bits in the prefix byte to be used.
 
-## Results:
+## Results: (To be filled)
 
 
 
 
+## Decompression:
 
+1. While parsing the compressed byte sequence, if any invalid start byte of UTF-8 sequence is observed(0xC0-0xDF), we capture 2 consecutive bytes and treat it as a codeword.
+2. The codeword corresponds to one of the phrases occurred previously in the compressed byte sequence.
+3. We can identify the length range of decompressed phrase from the codeword prefix.
+
+    | start byte  | end byte | Length |
+    |:-----------:|---------:|--------|
+    |    0xC0     |   0xC3   |   3    |
+    |    0xC4     |   0xC8   |   4    |
+    |    0xC9     |   0xCF   |  5-8   |
+    |    0xD0     |   0xD7   |  8-16  |
+    |    0xD8     |   0xDF   |  17-32 |
+
+4. Upon finding the length range of phrase from codeword prefix, we use rolling hash method to find the actual phrase that corresponds to the codeword.
+
+The modern English ALPHABET is a Latin alphabet consisting of 26 letters, each having an upper- and lower-case form.
+It originated around the 7th century from Latin script. Since then, letters have been added or removed to give the current Modern English alphabet of 26 letters with no diacritics, diagraphs, and special characters. 
+The word alphabet is a compound of the first two letters of the Greek alphabet, alpha and beta.
+
+Compressed form:
+For ease of reading, the codewords are represented in their hexadecimal format wrapped as a bytearray (b'bytes')
+
+The modern English alphabet is a Latin (b'\xc8\xcc') consisting of 26 letters, each having an upper- and lower-case form.
+It originated around the 7th century from (b'\xc9\xbb') script. Since then, (b'\xc8B') have been added or removed to give (b'\xc1!') current Modern(b'\xd9\xa9')(b'\xd1\xc9') with no diacritics, diagraphs, and special characters. 
+(b'\xc1-') word (b'\xd1-') compound of (b'\xc1!') first two (b'\xc8B')(b'\xc8\xe8') Greek (b'\xc8\xcc'), alpha and beta.
+
+The hashtable of compressed phrases is as below:
+
+Phrases of lenght 3:
+('the', [bytearray(b'\xc1!'), 84])
+('The', [bytearray(b'\xc1-'), 20])
+
+Phrases of length 4:
+
+Phrases of length 5-8:
+('alphabet', [bytearray(b'\xc8\xcc'), 15])
+('Latin', [bytearray(b'\xc9\xbb'), 58])
+('letters', [bytearray(b'\xc8B'), 68])
+(' of the', [bytearray(b'\xc8\xe8'), 12])
+
+Phrases of length 9-16:
+(' of 26 letters', [bytearray(b'\xd1\xc9'), 92])
+(' alphabet is a', [bytearray(b'\xd1-'), 120])
+
+Phrases of length 17-32:
+(' English alphabet', [bytearray(b'\xd9\xa9'), 88])
+
+4.1 What rolling hash does here is -
+* When a codeword is encountered, it looks at the previous plaintext bytes in an incremental manner to find the first matching phrase that corresponds to the codeword observed. 
+* For codeword '\xc8\xcc', from the prefix we know that the decompressed phrase is of length 5-8.
+* From the plaintext retreived so far, we segment all the phrases of length 5, 6, 7 and 8 and calculate their codeword until we find the phrase which matches the current codeword.
+PROBLEM: As the compression is achieved by analyzing the input data to figure out most occurring phrases, while decompressing and finding the matching phrase, if some other phrase also generates the same codeword before we find the actual phrase that corresponds to the codeword at hand, we might end up replacing the codeword with incorrect phrase. We can see that in the example decompression of above input snippet.
+
+The modern English alphabet is a Latin alphabet consisting of 26 letters, each having an upper- and lower-case form.
+It originated around the 7th century from Latin script. Since then, letters have been added or removed to give the current Modern modern English alphabetThe modern with no diacritics, diagraphs, and special characters. 
+The wordmodern English compound of the first two letters.
+It  Greek alphabet
+
+Hashtable generated while decompression:
+
+Phrases of length 3:
+b'\xc1!', 'the'
+b'\xc1-', 'The'
+
+Phrases of length 4:
+
+Phrases of length 5-8:
+b'\xc8\xcc', 'alphabet'
+b'\xc9\xbb', 'Latin'
+b'\xc8B', 'letters'
+b'\xc8\xe8', '.\nIt '
+
+Phrases of length 9-16:
+b'\xd1\xc9', 'The modern'
+b'\xd1-', 'modern English'
+
+Phrases of length 17-32:
+b'\xd9\xa9', ' modern English alphabet'
+
+* To tackle this, we tried to perform bitmix of every previous byte with the subsequent byte of the phrase while generating the codeword prefix and fetch the byte at position corresponding to length of phrase to maintain the randomness of the data.
