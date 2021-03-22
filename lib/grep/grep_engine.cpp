@@ -362,9 +362,11 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         } else if (SplitTransposition) {
-            StreamSet * BitPairs = P->CreateStreamSet(1, 8);
+            StreamSet * BitPairs = P->CreateStreamSet(8, 1);
             P->CreateKernelCall<BitPairsKernel>(ByteStream, BitPairs);
-            P->CreateKernelCall<S2P_CompletionKernel>(BitPairs, BasisBits);
+            StreamSet * BitQuads = P->CreateStreamSet(8, 1);
+            P->CreateKernelCall<BitQuadsKernel>(BitPairs, BitQuads);
+            P->CreateKernelCall<S2P_CompletionKernel>(BitQuads, BasisBits);
         } else {
             P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }
@@ -963,7 +965,9 @@ uint64_t GrepEngine::doGrep(const std::vector<std::string> & fileNames, std::ost
 
         close(fileDescriptor);
         if (handler.binaryFileSignalled()) {
-            llvm::errs() << "Binary file " << fileName << "\n";
+            //llvm::errs() << "Binary file " << fileName << "\n";
+            showResult(grepResult, fileName, strm);
+            resultTotal += grepResult;
         }
         else {
             showResult(grepResult, fileName, strm);

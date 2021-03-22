@@ -38,6 +38,15 @@ protected:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 };
 
+class BitQuadsKernel final : public MultiBlockKernel {
+public:
+    BitQuadsKernel(BuilderRef b,
+              StreamSet * const bitPairs,
+              StreamSet * const bitQuads);
+protected:
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+};
+
 class S2P_CompletionKernel final : public MultiBlockKernel {
 public:
     S2P_CompletionKernel(BuilderRef b,
