@@ -240,6 +240,8 @@ struct BufferNode {
     unsigned LookBehind = 0;
     unsigned MaxAdd = 0;
 
+    unsigned OutputItemCountId = 0;
+
     bool isOwned() const {
         return (Type & BufferType::Unowned) == 0;
     }

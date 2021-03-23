@@ -480,7 +480,58 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             }
         }
     }
+
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyLinearBuffers
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::identifyOutputNodeIds() {
+
+    const auto n = LastStreamSet - FirstStreamSet + 1;
+
+    flat_map<const StreamSet *, unsigned> StreamSetToNodeIdMap;
+    StreamSetToNodeIdMap.reserve(n);
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
+        const StreamSet * const ss = cast<StreamSet>(mStreamGraph[streamSet].Relationship);
+        StreamSetToNodeIdMap.emplace(ss, streamSet - FirstStreamSet);
+    }
+
+    using LengthEqualityGraph = adjacency_list<vecS, vecS, undirectedS>;
+
+    LengthEqualityGraph G(n);
+
+    for (const auto & pair : mLengthAssertions) {
+        unsigned id[2];
+        for (unsigned i = 0; i < 2; ++i) {
+            const auto f = StreamSetToNodeIdMap.find(pair[i]);
+            if (f == StreamSetToNodeIdMap.end()) {
+                report_fatal_error("Length equality assertions contains an unknown streamset");
+            }
+            id[i] = f->second;
+        }
+        add_edge(id[0], id[1], G);
+    }
+
+    std::vector<int> component(n);
+    const auto k = connected_components(G, &component[0]);
+
+    std::vector<unsigned> linkedId(k, 0);
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        BufferNode & bn = mBufferGraph[streamSet];
+        const auto i = component[streamSet - FirstStreamSet];
+        assert (i < k);
+        if (linkedId[i] == 0) {
+            linkedId[i] = streamSet;
+        }
+        bn.OutputItemCountId = linkedId[i];
+    }
+
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinearBuffers

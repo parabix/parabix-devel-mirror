@@ -367,6 +367,7 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
             StreamSet * BitQuads = P->CreateStreamSet(8, 1);
             P->CreateKernelCall<BitQuadsKernel>(BitPairs, BitQuads);
             P->CreateKernelCall<S2P_CompletionKernel>(BitQuads, BasisBits);
+            P->AssertEqualLength(BasisBits, ByteStream);
         } else {
             P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }

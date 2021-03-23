@@ -190,6 +190,8 @@ void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned 
         mTarget->addThreadLocalScalar(localStateTy, name + KERNEL_THREAD_LOCAL_SUFFIX, kernelId);
     }
 
+
+
     for (const auto e : make_iterator_range(in_edges(kernelId, mBufferGraph))) {
 //        const auto streamSet = source(e, mBufferGraph);
 //        const BufferNode & bn = mBufferGraph[streamSet];
@@ -206,8 +208,6 @@ void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned 
     }
 
     for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {
-//        const auto streamSet = target(e, mBufferGraph);
-//        const BufferNode & bn = mBufferGraph[streamSet];
 //        if (LLVM_UNLIKELY(bn.isExternal())) {
 //            continue;
 //        }

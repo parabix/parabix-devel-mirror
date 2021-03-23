@@ -49,13 +49,18 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b, Value * con
  * @brief computeFullyProducedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b, Value * const terminated) {
-
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort port{PortType::Output, i};
-        Value * produced = mUpdatedProducedPhi[port];
-        Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, terminated);
-        mFullyProducedItemCount[port]->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & br = mBufferGraph[e];
+        const auto port = br.Port;
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        Value * produced = nullptr;
+        if (LLVM_UNLIKELY(bn.OutputItemCountId != streamSet)) {
+            produced = mLocallyAvailableItems[bn.OutputItemCountId];
+        } else {
+            produced = computeFullyProducedItemCount(b, mKernelId, port, mUpdatedProducedPhi[port], terminated);
+        }
+        mFullyProducedItemCount[port]->addIncoming(produced, mKernelLoopExitPhiCatch);
     }
 }
 
