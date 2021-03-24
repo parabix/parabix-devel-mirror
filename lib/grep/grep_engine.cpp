@@ -362,12 +362,7 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         } else if (SplitTransposition) {
-            StreamSet * BitPairs = P->CreateStreamSet(8, 1);
-            P->CreateKernelCall<BitPairsKernel>(ByteStream, BitPairs);
-            StreamSet * BitQuads = P->CreateStreamSet(8, 1);
-            P->CreateKernelCall<BitQuadsKernel>(BitPairs, BitQuads);
-            P->CreateKernelCall<S2P_CompletionKernel>(BitQuads, BasisBits);
-            P->AssertEqualLength(BasisBits, ByteStream);
+            Staged_S2P(P, ByteStream, BasisBits);
         } else {
             P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }

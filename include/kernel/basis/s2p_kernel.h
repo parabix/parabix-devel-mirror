@@ -7,6 +7,7 @@
 
 #include <re/alphabet/alphabet.h>
 #include <pablo/pablo_kernel.h>
+#include <kernel/pipeline/driver/driver.h>
 #include <string>
 
 namespace IDISA { class IDISA_Builder; }  // lines 14-14
@@ -14,6 +15,10 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
+    
+void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
+                StreamSet * codeUnitStream, StreamSet * BasisBits);
+    
 class S2PKernel final : public MultiBlockKernel {
 public:
     S2PKernel(BuilderRef b,

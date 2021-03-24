@@ -11,6 +11,9 @@
 #include <pablo/pe_pack.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
+#include <kernel/pipeline/pipeline_builder.h>
+#include <kernel/pipeline/driver/driver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 
 using namespace llvm;
 
@@ -361,7 +364,15 @@ S2P_CompletionKernel::S2P_CompletionKernel(BuilderRef b,
 , {Binding{"bitQuads", bitQuads, FixedRate(), Principal()}}
                    , {Binding{"basisBits", BasisBits}}, {}, {}, {}) {}
 
-
+void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
+                StreamSet * ByteStream, StreamSet * BasisBits) {
+    StreamSet * BitPairs = P->CreateStreamSet(8, 1);
+    P->CreateKernelCall<BitPairsKernel>(ByteStream, BitPairs);
+    StreamSet * BitQuads = P->CreateStreamSet(8, 1);
+    P->CreateKernelCall<BitQuadsKernel>(BitPairs, BitQuads);
+    P->CreateKernelCall<S2P_CompletionKernel>(BitQuads, BasisBits);
+    P->AssertEqualLength(BasisBits, ByteStream);
+}
 
 inline std::string makeMultiS2PName(const StreamSets & outputStreams, const bool aligned) {
     std::string buffer;
