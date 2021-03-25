@@ -59,47 +59,22 @@ void s2p_bitquads(BuilderRef b, Value * bitpairs[], Value * bitquads[]) {
     }
 }
 
-void s2p_completion(BuilderRef b, Value * bitquads[], Value * output[]) {
+void s2p_completion_from_quads(BuilderRef b, Value * bitquads[], Value * output[]) {
     for (unsigned i = 0; i < 4; i++) {
         s2p_step(b, bitquads[2*i], bitquads[2*i + 1], b->simd_himask(8), 4, output[i+4], output[i]);
     }
 }
-    
-/*
-    Value * bit66442200[4];
-    Value * bit77553311[4];
-    for (unsigned i = 0; i < 4; i++) {
-        bit77553311[i] = bitpairs[2*i];
-        bit66442200[i] = bitpairs[2*i + 1];
-    }
-    Value * bit44440000[2];
-    Value * bit66662222[2];
-    Value * bit55551111[2];
-    Value * bit77773333[2];
-    for (unsigned j = 0; j<2; j++) {
-        s2p_step(b, bit66442200[2*j], bit66442200[2*j+1],
-                 b->simd_himask(4), 2, bit66662222[j], bit44440000[j]);
-        s2p_step(b, bit77553311[2*j], bit77553311[2*j+1],
-                 b->simd_himask(4), 2, bit77773333[j], bit55551111[j]);
-    }
-    s2p_step(b, bit44440000[0], bit44440000[1], b->simd_himask(8), 4, output[4], output[0]);
-    s2p_step(b, bit55551111[0], bit55551111[1], b->simd_himask(8), 4, output[5], output[1]);
-    s2p_step(b, bit66662222[0], bit66662222[1], b->simd_himask(8), 4, output[6], output[2]);
-    s2p_step(b, bit77773333[0], bit77773333[1], b->simd_himask(8), 4, output[7], output[3]);
-}*/
+
+void s2p_completion_from_pairs(BuilderRef b, Value * bitpairs[], Value * output[]) {
+    Value * bitquads[8];
+    s2p_bitquads(b, bitpairs, bitquads);
+    s2p_completion_from_quads(b, bitquads, output);
+}
 
 void s2p(BuilderRef b, Value * input[], Value * output[]) {
     Value * bitpairs[8];
-    Value * bitquads[8];
     s2p_bitpairs(b, input, bitpairs);
-    s2p_bitquads(b, bitpairs, bitquads);
-    for (unsigned i = 0; i < 8; i++) {
-        //b->CallPrintRegister("bitpairs[" + std::to_string(i) + "]", bitpairs[i]);
-    }
-    for (unsigned i = 0; i < 8; i++) {
-        //b->CallPrintRegister("bitquads[" + std::to_string(i) + "]", bitquads[i]);
-    }
-    s2p_completion(b, bitquads, output);
+    s2p_completion_from_pairs(b, bitpairs, output);
 }
 
 /* Alternative transposition model, but small field width packs are problematic. */
@@ -261,6 +236,33 @@ S2PKernel::S2PKernel(BuilderRef b,
     }
 }
 
+class BitPairsKernel final : public MultiBlockKernel {
+public:
+    BitPairsKernel(BuilderRef b,
+              StreamSet * const codeUnitStream,
+              StreamSet * const bitPairs);
+protected:
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+};
+
+class BitQuadsKernel final : public MultiBlockKernel {
+public:
+    BitQuadsKernel(BuilderRef b,
+              StreamSet * const bitPairs,
+              StreamSet * const bitQuads);
+protected:
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+};
+
+class S2P_CompletionKernel final : public MultiBlockKernel {
+public:
+    S2P_CompletionKernel(BuilderRef b,
+              StreamSet * const bitPairs,
+              StreamSet * const BasisBits);
+protected:
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+};
+
 void BitPairsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * bitPairLoop = b->CreateBasicBlock("bitPairLoop");
@@ -345,7 +347,7 @@ void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const n
         //b->CallPrintRegister("s2p bitQuads[" + std::to_string(i) + "]", bitQuads[i]);
     }
     Value * basisbits[8];
-    s2p_completion(b, bitQuads, basisbits);
+    s2p_completion_from_quads(b, bitQuads, basisbits);
     for (unsigned i = 0; i < 8; ++i) {
         b->storeOutputStreamBlock("basisBits", b->getInt32(i), blockOffsetPhi, basisbits[i]);
         //b->CallPrintRegister("s2p basisBits[" + std::to_string(i) + "]", basisbits[i]);
@@ -373,74 +375,6 @@ void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
     P->CreateKernelCall<S2P_CompletionKernel>(BitQuads, BasisBits);
     P->AssertEqualLength(BasisBits, ByteStream);
 }
-
-inline std::string makeMultiS2PName(const StreamSets & outputStreams, const bool aligned) {
-    std::string buffer;
-    raw_string_ostream out(buffer);
-    out << "s2p";
-    for (unsigned i = 0; i < outputStreams.size(); ++i) {
-        if (i) out << ".";
-        out << outputStreams[i]->getNumElements();
-    }
-    out << (aligned ? "a" : "u");
-    out.flush();
-    return buffer;
-}
-
-S2PMultipleStreamsKernel::S2PMultipleStreamsKernel(BuilderRef b,
-        StreamSet * codeUnitStream,
-        const StreamSets & outputStreams,
-        const bool aligned)
-: MultiBlockKernel(b, makeMultiS2PName(outputStreams, aligned),
-// input
-{Binding{"byteStream", codeUnitStream}},
-{}, {}, {}, {}),
-mAligned(aligned) {
-    for (unsigned i = 0; i < outputStreams.size(); i++) {
-        mOutputStreamSets.emplace_back("basisBits_" + std::to_string(i), outputStreams[i]);
-    }
-}
-
-void S2PMultipleStreamsKernel::generateMultiBlockLogic(BuilderRef b, Value *const numOfBlocks) {
-    BasicBlock * entry = b->GetInsertBlock();
-    BasicBlock * processBlock = b->CreateBasicBlock("processBlock");
-    BasicBlock * s2pDone = b->CreateBasicBlock("s2pDone");
-    Constant * const ZERO = b->getSize(0);
-
-    b->CreateBr(processBlock);
-
-    b->SetInsertPoint(processBlock);
-    PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
-    blockOffsetPhi->addIncoming(ZERO, entry);
-
-    Value * bytepack[8];
-    for (unsigned i = 0; i < 8; i++) {
-        if (mAligned) {
-            bytepack[i] = b->loadInputStreamPack("byteStream", ZERO, b->getInt32(i), blockOffsetPhi);
-        } else {
-            Value * ptr = b->getInputStreamPackPtr("byteStream", ZERO, b->getInt32(i), blockOffsetPhi);
-            // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
-            bytepack[i] = b->CreateAlignedLoad(ptr, 1);
-        }
-    }
-    Value * basisbits[8];
-    s2p(b, bytepack, basisbits);
-
-    unsigned k = 0;
-    for (unsigned i = 0; i < getNumOfStreamOutputs(); ++i) {
-        const auto m = getOutputStreamSet(i)->getNumElements();
-        for (unsigned j = 0; j < m; j++) {
-            b->storeOutputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j), blockOffsetPhi, basisbits[k++]);
-        }
-    }
-
-    Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
-    blockOffsetPhi->addIncoming(nextBlk, processBlock);
-    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
-    b->CreateCondBr(moreToDo, processBlock, s2pDone);
-    b->SetInsertPoint(s2pDone);
-}
-
 
 S2P_21Kernel::S2P_21Kernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
 : MultiBlockKernel(b, "s2p_21",

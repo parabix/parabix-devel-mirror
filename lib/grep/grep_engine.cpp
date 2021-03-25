@@ -829,8 +829,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
 
         StreamSet * FilteredBasis = E->CreateStreamSet(8, 1);
-        E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
-
+        if (SplitTransposition) {
+            Staged_S2P(E, Filtered, FilteredBasis);
+        } else {
+            E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
+        }
         // Baais bit streams expanded with 0 bits for each string to be inserted.
         StreamSet * ExpandedBasis = E->CreateStreamSet(8);
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);

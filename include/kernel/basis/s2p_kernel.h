@@ -34,45 +34,11 @@ private:
     unsigned mNumOfStreams;
 };
 
-class BitPairsKernel final : public MultiBlockKernel {
-public:
-    BitPairsKernel(BuilderRef b,
-              StreamSet * const codeUnitStream,
-              StreamSet * const bitPairs);
-protected:
-    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
-};
-
-class BitQuadsKernel final : public MultiBlockKernel {
-public:
-    BitQuadsKernel(BuilderRef b,
-              StreamSet * const bitPairs,
-              StreamSet * const bitQuads);
-protected:
-    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
-};
-
-class S2P_CompletionKernel final : public MultiBlockKernel {
-public:
-    S2P_CompletionKernel(BuilderRef b,
-              StreamSet * const bitPairs,
-              StreamSet * const BasisBits);
-protected:
-    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
-};
-
-class S2PMultipleStreamsKernel final : public MultiBlockKernel {
-public:
-    S2PMultipleStreamsKernel(BuilderRef b,
-                             StreamSet * codeUnitStream,
-                             const StreamSets & outputStreams,
-                             const bool aligned = true);
-protected:
-    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
-private:
-    const bool mAligned;
-};
-
+// Equivalent to S2P, but split into stages for better balancing
+// with multiple cores.
+void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
+                StreamSet * codeUnitStream, StreamSet * BasisBits);
+    
 
 class S2P_21Kernel final : public MultiBlockKernel {
 public:
