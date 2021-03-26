@@ -622,12 +622,15 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
         const auto prefix = makeBufferName(mKernelId, port);
-        Value * produced = mProducedItemCount[port];
-        if (mKernelIsInternallySynchronized) {
+        Value * produced = nullptr;
+        if (LLVM_UNLIKELY(bn.OutputItemCountId != streamSet)) {
+            produced = mLocallyAvailableItems[bn.OutputItemCountId];
+        } else if (mKernelIsInternallySynchronized) {
             produced = mProducedItemCount[port];
         } else {
             produced = mProducedAtTerminationPhi[port];
         }
+
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
         Value * packIndex = nullptr;
