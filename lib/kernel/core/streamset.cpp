@@ -529,15 +529,10 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * const produce
 
         indices[1] = b->getInt32(BaseAddress);
         Value * const virtualBaseField = b->CreateInBoundsGEP(mHandle, indices);
-        Value * const virtualBase = b->CreateLoad(virtualBaseField);
-        assert (virtualBase->getType()->getPointerElementType() == mType);
 
         indices[1] = b->getInt32(MallocedAddress);
         Value * const mallocedAddrField = b->CreateInBoundsGEP(mHandle, indices);
         Value * const bufferStart = b->CreateLoad(mallocedAddrField);
-
-
-
 
         Value * const newBaseAddress = b->CreateGEP(bufferStart, b->CreateNeg(consumedChunks));
         Value * const effectiveCapacity = b->CreateAdd(consumedChunks, b->getSize(mCapacity));
@@ -857,6 +852,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             b->CreateStore(mallocAddress, priorBufferField);
             b->CreateStore(expandedBuffer, mallocAddrField);
             b->CreateMemCpy(expandedBuffer, unreadDataPtr, bytesToCopy, blockSize);
+
             BasicBlock * const expandAndCopyBackExit = b->GetInsertBlock();
             b->CreateBr(updateBaseAddress);
 

@@ -15,6 +15,10 @@ bool PabloTransposition;
 static cl::opt<bool, true> OptPabloTransposition("enable-pablo-s2p", cl::location(PabloTransposition),
                                                  cl::desc("Enable experimental pablo transposition."), cl::init(false));
 
+bool SplitTransposition;
+static cl::opt<bool, true> OptSplitTransposition("enable-split-s2p", cl::location(SplitTransposition),
+                                                 cl::desc("Enable experimental split transposition."), cl::init(true));
+
 bool UnicodeIndexing;
 static cl::opt<bool, true> OptUnicodeIndexing("UnicodeIndexing", cl::location(UnicodeIndexing),
                                               cl::desc("Enable CC multiplexing and Unicode indexing."), cl::init(false));

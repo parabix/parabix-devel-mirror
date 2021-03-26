@@ -236,10 +236,10 @@ void PipelineCompiler::readProcessedItemCounts(BuilderRef b) {
 void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
         const BufferPort & br = mBufferGraph[e];
         const auto outputPort = br.Port;
         const auto prefix = makeBufferName(mKernelId, outputPort);
-        const auto streamSet = target(e, mBufferGraph);
         Value * const produced = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
         mProducedItemCountPtr[outputPort] = produced;
         mInitiallyProducedItemCount[streamSet] = b->CreateLoad(produced);

@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
-
+#include <boost/graph/connected_components.hpp>
 
 namespace kernel {
 
@@ -34,6 +34,7 @@ public:
         // Construct the Stream and Scalar graphs
         P.transcribeRelationshipGraph();
         P.generateInitialBufferGraph();
+        P.identifyOutputNodeIds();
 
         P.computeDataFlowRates();
         P.identifyTerminationChecks();
@@ -124,6 +125,7 @@ private:
 
     void addStreamSetsToBufferGraph(BuilderRef b);
     void generateInitialBufferGraph();
+    void identifyOutputNodeIds();
     void identifyLinearBuffers();
     void identifyNonLocalBuffers();
     void identifyLocalPortIds();

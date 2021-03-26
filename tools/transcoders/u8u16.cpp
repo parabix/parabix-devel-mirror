@@ -48,6 +48,9 @@ static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 d
 
 static cl::opt<bool> BranchingMode("branch", cl::desc("Use Experimental branching pipeline mode"), cl::cat(u8u16Options));
 
+static cl::opt<bool> SplitTransposition("enable-split-s2p",
+                                                 cl::desc("Enable experimental split transposition."), cl::init(false));
+
 inline bool useAVX2() {
     return enableAVXdel && AVX2_available() && codegen::BlockSize == 256;
 }
@@ -276,7 +279,11 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver, cc::ByteNumbering byteN
 
     // Transposed bits from s2p
     StreamSet * BasisBits = P->CreateStreamSet(8);
-    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    if (SplitTransposition) {
+        Staged_S2P(P, ByteStream, BasisBits);
+    } else {
+        P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    }
 
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
     StreamSet * u8bits = P->CreateStreamSet(16);

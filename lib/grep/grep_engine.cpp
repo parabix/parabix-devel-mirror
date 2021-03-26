@@ -361,6 +361,8 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
+        } else if (SplitTransposition) {
+            Staged_S2P(P, ByteStream, BasisBits);
         } else {
             P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }
@@ -827,8 +829,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
 
         StreamSet * FilteredBasis = E->CreateStreamSet(8, 1);
-        E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
-
+        if (SplitTransposition) {
+            Staged_S2P(E, Filtered, FilteredBasis);
+        } else {
+            E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
+        }
         // Baais bit streams expanded with 0 bits for each string to be inserted.
         StreamSet * ExpandedBasis = E->CreateStreamSet(8);
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
