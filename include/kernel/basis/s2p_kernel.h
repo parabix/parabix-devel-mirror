@@ -16,9 +16,6 @@ namespace llvm { class Value; }
 namespace kernel {
 
     
-void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
-                StreamSet * codeUnitStream, StreamSet * BasisBits);
-    
 class S2PKernel final : public MultiBlockKernel {
 public:
     S2PKernel(BuilderRef b,
@@ -37,8 +34,9 @@ private:
 // Equivalent to S2P, but split into stages for better balancing
 // with multiple cores.
 void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
-                StreamSet * codeUnitStream, StreamSet * BasisBits);
-    
+                StreamSet * codeUnitStream, StreamSet * BasisBits,
+                bool completionFromQuads = false);
+
 
 class S2P_21Kernel final : public MultiBlockKernel {
 public:

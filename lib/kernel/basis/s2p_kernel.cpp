@@ -257,10 +257,12 @@ protected:
 class S2P_CompletionKernel final : public MultiBlockKernel {
 public:
     S2P_CompletionKernel(BuilderRef b,
-              StreamSet * const bitPairs,
-              StreamSet * const BasisBits);
+                         StreamSet * const bitPacks,
+                         StreamSet * const BasisBits,
+                         bool completionFromQuads = false);
 protected:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+    bool mCompletionFromQuads;
 };
 
 void BitPairsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
@@ -341,16 +343,18 @@ void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const n
     b->SetInsertPoint(s2pLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(ZERO, entry);
-    Value * bitQuads[8];
-    for (unsigned i = 0; i < 8; i++) {
-        bitQuads[i] = b->loadInputStreamBlock("bitQuads", b->getInt32(i), blockOffsetPhi);
-        //b->CallPrintRegister("s2p bitQuads[" + std::to_string(i) + "]", bitQuads[i]);
-    }
     Value * basisbits[8];
-    s2p_completion_from_quads(b, bitQuads, basisbits);
+    Value * bitPacks[8];
+    for (unsigned i = 0; i < 8; i++) {
+        bitPacks[i] = b->loadInputStreamBlock("bitPacks", b->getInt32(i), blockOffsetPhi);
+    }
+    if (mCompletionFromQuads) {
+        s2p_completion_from_quads(b, bitPacks, basisbits);
+    } else {
+        s2p_completion_from_pairs(b, bitPacks, basisbits);
+    }
     for (unsigned i = 0; i < 8; ++i) {
         b->storeOutputStreamBlock("basisBits", b->getInt32(i), blockOffsetPhi, basisbits[i]);
-        //b->CallPrintRegister("s2p basisBits[" + std::to_string(i) + "]", basisbits[i]);
     }
     Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, s2pLoop);
@@ -360,19 +364,26 @@ void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const n
 }
 
 S2P_CompletionKernel::S2P_CompletionKernel(BuilderRef b,
-                                           StreamSet * const bitQuads,
-                                           StreamSet * const BasisBits)
-: MultiBlockKernel(b, "S2P_Completion"
-, {Binding{"bitQuads", bitQuads, FixedRate(), Principal()}}
-                   , {Binding{"basisBits", BasisBits}}, {}, {}, {}) {}
+                                           StreamSet * const bitPacks,
+                                           StreamSet * const BasisBits,
+                                           bool completionFromQuads)
+    : MultiBlockKernel(b, completionFromQuads ? "S2PfromQuads" : "S2PfromPairs",
+                       {Binding{"bitPacks", bitPacks, FixedRate(), Principal()}},
+                       {Binding{"basisBits", BasisBits}}, {}, {}, {}), mCompletionFromQuads(completionFromQuads) {
+    }
 
 void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
-                StreamSet * ByteStream, StreamSet * BasisBits) {
+                StreamSet * ByteStream, StreamSet * BasisBits,
+                bool completionFromQuads) {
     StreamSet * BitPairs = P->CreateStreamSet(8, 1);
     P->CreateKernelCall<BitPairsKernel>(ByteStream, BitPairs);
-    StreamSet * BitQuads = P->CreateStreamSet(8, 1);
-    P->CreateKernelCall<BitQuadsKernel>(BitPairs, BitQuads);
-    P->CreateKernelCall<S2P_CompletionKernel>(BitQuads, BasisBits);
+    if (completionFromQuads) {
+        StreamSet * BitQuads = P->CreateStreamSet(8, 1);
+        P->CreateKernelCall<BitQuadsKernel>(BitPairs, BitQuads);
+        P->CreateKernelCall<S2P_CompletionKernel>(BitQuads, BasisBits, completionFromQuads);
+    } else {
+        P->CreateKernelCall<S2P_CompletionKernel>(BitPairs, BasisBits, completionFromQuads);
+    }
     P->AssertEqualLength(BasisBits, ByteStream);
 }
 
