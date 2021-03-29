@@ -20,7 +20,7 @@ class Compressor:
         # lengthGroup 5-8 : 5(C8,CC), 6(C9, CD), 7(CA,CE), 8(CB,CF)
         # lengthGroup 9-16: 9(D0,D8), 10(D1,D9), 11(D2,DA), 12(D3,DB), 13(D4,DC), 14(D5,DD), 15(D6,DE), 16(D7,DF)
         # lengthGroup 17-32: 17,25(F8), 18,26(F9), 18,27(FA), 19,28(FB), 20,29(FC), 21,30(FD), 22,31(FE), 23,32(FF)
-        self.prefixList = [192, 196, 200, 208, 248]
+        self.prefixList = [192, 200, 208, 224, 240]
         self.compressed = bytearray(b'')
         # TODO: perform bit mixing with all of the previous bytes for a phrase.
         # When picking a suffix, choose a byte from same position of bitshuffled for phrases of equal length
@@ -65,13 +65,13 @@ class Compressor:
                 if 3 <= wLen <= 32:
                     wordLen, encodedSuffix = self.getHashVal(
                         word, wLen)
-                    encodedPrefix = self.getPrefix(encodedSuffix, wordLen)
+                    encodedPrefix = self.getPrefix(encodedSuffix[0], wordLen)
                     encodedWord = bytearray(b'')
                     encodedWord.append(encodedPrefix)
-                    encodedWord.append(encodedSuffix)
+                    encodedWord.append(encodedSuffix[0])
                     # print(encodedWord, 'encodedWord')
                     codeWordHex = str(hex((encodedPrefix << 8) |
-                                          encodedSuffix))
+                                          encodedSuffix[0]))
                     codeword = str(wLen)+codeWordHex[2:]  # +str(numWords)
                     self.checkPhraseFreq(
                         wLen, hashTablePos, word, 1, None, None)
@@ -90,7 +90,6 @@ class Compressor:
         # print(words, 'CompressPhrase words')
         with open(fileName, 'rt') as infile:
             while True:
-                # self.lengthwisePhrasesList = [{}, {}, {}, {}, {}]
                 self.collisionsCWLenExceeded = 0
                 self.noSuffixCollisions = 0
                 segment = infile.read(1000000)
@@ -217,7 +216,7 @@ class Compressor:
             fallBack = []
 
     def phraseOfThreeWords(self, words, numWords, wordsLen):
-        #print(words, 'phraseOfThreeWords')
+        # print(words, 'phraseOfThreeWords')
         if wordsLen == 2:
             self.phraseOfTwoWords(words, numWords-1)
             return
@@ -290,7 +289,7 @@ class Compressor:
             fallBack = []
 
     def phraseOfTwoWords(self, words, numWords):
-        #print(words, 'phraseOfTwoWords')
+        # print(words, 'phraseOfTwoWords')
         if numWords == 1:
             self.phraseOfOneWord(words)
             return
@@ -364,13 +363,14 @@ class Compressor:
     def phraseOfOneWord(self, words):
         if not words:
             return
-        #print(words, 'phraseOfOneWord')
+        # print(words, 'phraseOfOneWord')
         index = 0
         wordsLen = len(words)
         while index < wordsLen:
             word = words[index]
             index += 1
             # TODO : step 2 of single word optimization
+
             wLen = len(word)
             hashVal = None
             hashTablePos = -1
@@ -409,13 +409,16 @@ class Compressor:
     def getCodeword(self, word, numSymsInPhrase):
         wLen = len(word)
         wordLen, encodedSuffix = self.getHashVal(word, numSymsInPhrase)
-        #print(word, 'word --> len:', wLen)
-        encodedPrefix = self.getPrefix(encodedSuffix, wLen)
-        #print(encodedPrefix, 'encodedPrefix')
+        # print(word, 'word --> len:', wLen)
+        encodedPrefix = self.getPrefix(encodedSuffix[0], wLen)
+        # print(encodedPrefix, 'encodedPrefix')
         encodedWord = bytearray(b'')
         encodedWord.append(encodedPrefix)
-        encodedWord.append(encodedSuffix)
-        codeWordHex = str(hex((encodedPrefix << 8) | encodedSuffix))
+        finalSuffix = "0"
+        for suffix in encodedSuffix:
+            encodedWord.append(suffix)
+            finalSuffix = str(hex((finalSuffix << 8) | suffix))
+        codeWordHex = str(hex((encodedPrefix << 8) | finalSuffix))
         codeword = str(wLen)+codeWordHex[2:]
         return encodedWord, codeword
 
@@ -427,25 +430,11 @@ class Compressor:
                 encodedWord, codeword = self.getCodeword(word, numSymsInPhrase)
             if self.hashVals.get(codeword, None):
                 return None
-                # ignore generating additional suffix byte for the ease of decompression
-                wordLen, encodedSuffix = self.getHashVal(
-                    word, numSymsInPhrase+1)
-                if encodedSuffix == 0:
-                    self.noSuffixCollisions += 1
-                    return None
-                encodedWord.append(encodedSuffix)
-                sfxHex = str(hex(encodedSuffix))
-                codeword += sfxHex[2:]
-                if len(codeword) > 8 or len(encodedWord) >= wLen:
-                    self.collisionsCWLenExceeded += 1
-                    return None
-                self.checkPhraseFreq(
-                    wLen, hashTablePos, word, numSymsInPhrase+1, encodedWord, codeword)
             else:
                 if startIdx < phraseSeenAtIdx+numSymsInPhrase:
-                    #print(phraseSeenAtIdx, 'phraseSeenAtIdx')
-                    #print(startIdx, 'startIdx')
-                    #print(wLen, ' wLen->', word, 'overlapping word')
+                    # print(phraseSeenAtIdx, 'phraseSeenAtIdx')
+                    # print(startIdx, 'startIdx')
+                    # print(wLen, ' wLen->', word, 'overlapping word')
                     return None
                 self.codewordHashTableList[hashTablePos][word] = [
                     encodedWord, startIdx]
@@ -453,6 +442,7 @@ class Compressor:
                 return encodedWord
         else:
             self.lengthwisePhrasesList[hashTablePos][word] = startIdx
+            # print(hashTablePos, ' word added-->', word)
             return None
 
     def getHashValfromTable(self, wLen, word):
@@ -505,41 +495,66 @@ class Compressor:
             curIndex += 1
         return word, curIndex
 
-    def getSubPrefix(self, lastBit, rangeStart, subLen, rangeLen):
-        if lastBit == 0:
-            return rangeLen - rangeStart
-        else:
-            return subLen + (rangeLen - rangeStart)
+    def getSubPrefix(self, lastNbits, rangeStart, subLen, phraseLen):
+        #    0   1   2   3    ---> sublen = num of cols
+        #    5   6   7   8    ---> len of phrase
+        # 0  D0  D1  D2  D3   ---> pfx based on last 3 bits of suffix; last 3 bits of suffix determine the row num to pick the pfx from.
+        # 1  D4  D5  D6  D7
+        # 2  D8  D9  DA  DB
+        # 3  DC  DD  DE  DF
+        # subLen + (phraseLen - rangeStart) + (subLen * lastNbits)
+        return (phraseLen - rangeStart) + (subLen * lastNbits)
 
     def getPrefix(self, suffix, lgth):
-        if suffix == 0:
-            return suffix
         if lgth == 3:
             pfxBase = self.prefixList[0]
-            # add last 2 bits of suffix to get the final pfxBase
-            pfxBase += int(bin(suffix)[-2::], 2)
+            # add last 3 bits of suffix to get the final pfxBase
+            binSfx = bin(suffix)[2:]
+            pfxBase += int(binSfx[-3:], 2)
         elif lgth == 4:
             pfxBase = self.prefixList[1]
-            # add last 2 bits of suffix to get the final pfxBase
-            pfxBase += int(bin(suffix)[-2::], 2)
+            # add last 3 bits of suffix to get the final pfxBase
+            binSfx = bin(suffix)[2:]
+            pfxBase += int(binSfx[-3:], 2)
         elif lgth <= 8:
             pfxBase = self.prefixList[2]
-            pfx = self.getSubPrefix(int(bin(suffix)[-1::], 2), 5, 4, lgth)
+            if suffix == 0:
+                lastNbits = 0
+            else:
+                binSfx = bin(suffix)[2:]
+                lastNbits = int(binSfx[-2:], 2)
+            pfx = self.getSubPrefix(lastNbits, 5, 4, lgth)
             pfxBase += pfx
         elif lgth <= 16:
             pfxBase = self.prefixList[3]
-            pfx = self.getSubPrefix(int(bin(suffix)[-1::], 2), 9, 8, lgth)
+            if suffix == 0:
+                lastNbits = 0
+            else:
+                binSfx = bin(suffix)[2:]
+                lastNbits = int(binSfx[-1:], 2)
+            pfx = self.getSubPrefix(lastNbits, 9, 8, lgth)
             pfxBase += pfx
         elif lgth <= 32:
             pfxBase = self.prefixList[4]
-            pfx = (lgth-17) % 7
+            pfx = (lgth-17) % 15
             pfxBase += pfx
         return pfxBase
+
+    def getNumSuffixBytes(self, wordLen):
+        numSuffix = -1
+        if wordLen >= 3 and wordLen <= 8:
+            numSuffix = 1
+        elif wordLen <= 16:
+            numSuffix = 2
+        elif wordLen <= 32:
+            numSuffix = 3
+        return numSuffix
 
     def getHashVal(self, word, numWordsInPhrase):
         byteToBinary = []
         bitsShuffled = []
         toBinary = []
+        wordLen = len(word)
         wordBytes = bytes(word, 'utf-8')
         for byte in wordBytes:
             # convert to 8-bit binary equivalent of byte
@@ -551,10 +566,10 @@ class Compressor:
                 bitsShuffled.append(b)
             toBinary = []
         prevPos = 0
-        for i in range(1, len(word)):  # 4
+        for i in range(1, wordLen):  # range(4)
             prevPos += 1  # pow(2, i)
             temp = copy.deepcopy(bitsShuffled)
-            for bytePos in range(prevPos, len(word)):
+            for bytePos in range(prevPos, wordLen):
                 bitmixIdx = 0
                 while bitmixIdx < 8:
                     sIndex = self.bitmix[i % 4][bitmixIdx]
@@ -569,11 +584,20 @@ class Compressor:
                                                                  (bytePos-prevPos) + sIndex] else 1
                     bitsShuffled[bitmixIdx + (8*bytePos)] = b
                     bitmixIdx += 1
-        # bitsShuffled = bitsShuffled[::-1]
         hashVal = 0
-        totalBytes = len(bitsShuffled) // 8
-        lastByte = bitsShuffled[(numWordsInPhrase-1)*8: (numWordsInPhrase*8)]
-        if lastByte:
-            hashVal = int("".join(str(x) for x in lastByte), 2)
-        # hashVal = format(hashVal, '02x')
-        return len(word), hashVal
+        #print(bitsShuffled, 'bitsShuffled')
+        totalBytes = wordLen
+        numSuffix = self.getNumSuffixBytes(wordLen)
+        suffixes = []
+        sfx = 1
+        # switch between numWordsInPhrase and wordLen in below line
+        bytePos = wordLen-1
+        while bytePos >= 0 and sfx <= numSuffix:
+            lastByte = bitsShuffled[bytePos*8: ((bytePos+1)*8)]
+            if lastByte:
+                hashVal = int("".join(str(x) for x in lastByte), 2)
+                #print(hashVal, 'hashVal')
+                suffixes.append(hashVal)
+                sfx += 1
+            bytePos -= 1
+        return wordLen, suffixes

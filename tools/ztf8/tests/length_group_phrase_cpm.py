@@ -14,14 +14,14 @@ class LGPhraseCompressor:
         self.words = []
         self.codewordHashTableList = [{}, {}, {}, {}, {}]
         self.lengthwisePhrasesList = [{}, {}, {}, {}, {}]
-        self.prefixList = [192, 196, 200, 208, 248]
+        #C0-C7, C8-CF, D0-DF, E0-EF, F0-FF
+        self.prefixList = [192, 200, 208, 224, 240]
         self.compressed = bytearray(b'')
         self.cmp = bytearray(b'')
         self.bitmix = [[4, 1, 7, 2, 0, 6, 5, 3], [1, 2, 4, 5, 0, 3, 6, 7], [
             0, 5, 4, 6, 2, 3, 7, 1], [7, 1, 6, 4, 3, 0, 5, 2], [3, 2, 5, 4, 7, 6, 0, 1]]
         self.hashVals = {}
-        self.collisionsCWLenExceeded = 0
-        self.noSuffixCollisions = 0
+        self.noSuffixCollisions = [0, 0, 0, 0, 0]
         self.printPlainText = False
         self.printWordCodeword = False
         self.hideHashVal = False
@@ -36,8 +36,6 @@ class LGPhraseCompressor:
             self.hideHashVal = True
         with open(fileName, 'rt') as infile:
             while True:
-                #self.collisionsCWLenExceeded = 0
-                #self.noSuffixCollisions = 0
                 segment = infile.read(1000000)
                 if not segment:
                     break
@@ -60,8 +58,9 @@ class LGPhraseCompressor:
         print(len(words), 'words length')
         # print('collisions: collisionsCWLenExceeded -> ',
         #      self.collisionsCWLenExceeded)
-        print('collisions: noSuffixCollisions -> ',
-              self.noSuffixCollisions)
+        for collisions, i in enumerate(self.noSuffixCollisions):
+            print('collisions: ', i, ' --> ',
+                  collisions)
         print("codewordHashTableList table size")
         for h in self.codewordHashTableList:
             print(len(h))
@@ -140,39 +139,42 @@ class LGPhraseCompressor:
             else:
                 codeWord = bytearray(b'')
                 if compressed[index] >= 192 and compressed[index] <= 223 and index+1 < length:
-                    # ambiguous!!!!!!
-                    # if compressed[index+1] >= 128:
-                    #    plaintext.append(compressed[index])
-                    #    plaintext.append(compressed[index+1])
-                    # else:
-                    codeWord.append(compressed[index])
-                    codeWord.append(compressed[index+1])
+                    if compressed[index+1] >= 128:
+                        plaintext.append(compressed[index])
+                        plaintext.append(compressed[index+1])
+                    else:
+                        codeWord.append(compressed[index])
+                        codeWord.append(compressed[index+1])
                     index += 2
                 elif compressed[index] >= 224 and compressed[index] <= 239 and index+2 < length:
                     if compressed[index+1] >= 128 and compressed[index+2] >= 128:
                         plaintext.append(compressed[index])
                         plaintext.append(compressed[index+1])
                         plaintext.append(compressed[index+2])
-                        index += 3
                     else:
                         codeWord.append(compressed[index])
                         codeWord.append(compressed[index+1])
-                        index += 2
+                        codeWord.append(compressed[index+2])
+                    index += 3
                 elif compressed[index] >= 240 and compressed[index] <= 247 and index+3 < length:
                     if compressed[index+1] >= 128 and compressed[index+2] >= 128 and compressed[index+3] >= 128:
                         plaintext.append(compressed[index])
                         plaintext.append(compressed[index+1])
                         plaintext.append(compressed[index+2])
                         plaintext.append(compressed[index+3])
-                        index += 4
                     else:
                         codeWord.append(compressed[index])
                         codeWord.append(compressed[index+1])
-                        index += 2
+                        codeWord.append(compressed[index+2])
+                        codeWord.append(compressed[index+3])
+                    index += 4
                 else:
                     codeWord.append(compressed[index])
                     codeWord.append(compressed[index+1])
-                    index += 2
+                    codeWord.append(compressed[index+2])
+                    codeWord.append(compressed[index+3])
+                    #print(codeWord, 'codeWord extra')
+                    index += 4
                 if codeWord:
                     #print(codeWord, 'codeWord')
                     #print(plaintext, 'plaintext')
@@ -216,14 +218,26 @@ class LGPhraseCompressor:
         wLen = len(word)
         wordLen, encodedSuffix = compress_words.Compressor().getHashVal(word,
                                                                         numSymsInPhrase)
-        #print(word, 'word --> len:', wLen)
-        encodedPrefix = compress_words.Compressor().getPrefix(encodedSuffix, wLen)
-        #print(encodedPrefix, 'encodedPrefix')
+        print(encodedSuffix, 'encodedSuffix')
+        encodedPrefix = 0
+        sfxIdx = 0
+        # while encodedPrefix == 0:
+        encodedPrefix = compress_words.Compressor().getPrefix(encodedSuffix[0], wLen)
+        #sfxIdx += 1
+        if encodedPrefix <= 247:
+            # switch just one of the suffix bytes(first one) to ASCII value
+            # for i in range(len(encodedSuffix)):
+            encodedSuffix[0] = encodedSuffix[0] % 128
+            #print(encodedSuffix, 'encodedSuffix')
         encodedWord = bytearray(b'')
         encodedWord.append(encodedPrefix)
-        encodedWord.append(encodedSuffix)
-        codeWordHex = str(hex((encodedPrefix << 8) | encodedSuffix))
-        codeword = str(wLen)+codeWordHex[2:]
+        finalSuffix = ""
+        for suffix in encodedSuffix:
+            encodedWord.append(suffix)
+            finalSuffix += str(hex(suffix)[2:])
+        codeWordHex = str(hex(encodedPrefix)[2:]) + finalSuffix
+        codeword = str(wLen)+codeWordHex
+        #print(encodedWord, 'encodedWord')
         return encodedWord, codeword
 
     def checkPhraseFreq(self, wLen, hashTablePos, word, numSymsInPhrase, encodedWord, codeword, startIdx):
@@ -233,28 +247,15 @@ class LGPhraseCompressor:
             if not codeword:
                 encodedWord, codeword = self.getCodeword(word, numSymsInPhrase)
             if self.hashVals.get(codeword, None):
-                self.noSuffixCollisions += 1
+                self.noSuffixCollisions[hashTablePos] += 1
                 return None
-                # ignore generating additional suffix byte for the ease of decompression
-                wordLen, encodedSuffix = compress_words.Compressor().getHashVal(
-                    word, numSymsInPhrase+1)
-                if encodedSuffix == 0:
-                    self.noSuffixCollisions += 1
-                    return None
-                encodedWord.append(encodedSuffix)
-                sfxHex = str(hex(encodedSuffix))
-                codeword += sfxHex[2:]
-                if len(codeword) > 8 or len(encodedWord) >= wLen:
-                    self.collisionsCWLenExceeded += 1
-                    return None
-                self.checkPhraseFreq(
-                    wLen, hashTablePos, word, numSymsInPhrase+1, encodedWord, codeword)
             else:
                 if startIdx < phraseSeenAtIdx+numSymsInPhrase:
                     #print(phraseSeenAtIdx, 'phraseSeenAtIdx')
                     #print(startIdx, 'startIdx')
                     #print(wLen, ' wLen->', word, 'overlapping word')
                     return None
+                #print('word->', word, ' hash->', encodedWord)
                 self.codewordHashTableList[hashTablePos][word] = [
                     encodedWord, startIdx]
                 self.hashVals[codeword] = word  # +str(numWords)
