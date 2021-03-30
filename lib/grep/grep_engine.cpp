@@ -314,7 +314,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     if (matchesToEOLrequired()) {
         // Move matches to EOL.   This may be achieved internally by modifying
-        // the regular expression or externally.   The internal approach is more
+        // the regular expression or externally.   The internal approach is
         // generally more efficient, but cannot be used if colorization is needed
         // or in UnicodeLines mode.
         if ((mGrepRecordBreak == GrepRecordBreakKind::Unicode) || (mEngineKind == EngineKind::EmitMatches) || mInvertMatches || UnicodeIndexing) {
@@ -418,7 +418,8 @@ void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & 
     }
     if (PropertyKernels) {
         for (auto e : mExternalNames) {
-            if (isa<re::CC>(e->getDefinition())) {
+            re::RE * def = cast<re::Name>(e)->getDefinition();
+            if (isa<re::PropertyExpression>(def)) {
                 auto name = e->getFullName();
                 StreamSet * property = P->CreateStreamSet(1, 1);
                 //errs() << "preparing external: " << name << "\n";

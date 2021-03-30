@@ -504,8 +504,26 @@ inline void UCDCompiler::makeTargets(PabloBuilder & entry, NameMap & names) {
 
     for (auto & t : names) {
         Name * const name = t.first;
-        CC * const cc = dyn_cast<CC>(name->getDefinition());
-        if (cc && (cc->getAlphabet() == &cc::Unicode)) {
+        RE * defn = name->getDefinition();
+        if (PropertyExpression * pe = dyn_cast<PropertyExpression>(defn)) {
+            CC * const cc = dyn_cast<CC>(pe->getResolvedRE());
+            if (cc && (cc->getAlphabet() == &cc::Unicode)) {
+                const auto f = CCs.find(cc);
+                // This check may not be needed. Memoization ought to detect duplicate classes earlier.
+                if (LLVM_LIKELY(f == CCs.end())) {
+                    PabloAST * const value = t.second ? t.second : zeroes;
+                    mTargetValue.emplace(cc, value);
+                    Var * const var = entry.createVar(name->getName(), value);
+                    mTarget.emplace(cc, var);
+                    CCs.emplace(cc, var);
+                    t.second = var;
+                } else {
+                    t.second = f->second;
+                }
+            } else {
+                report_fatal_error(name->getName() + " is not defined by a Unicode CC!");
+            }
+        } else if (CC * const cc = dyn_cast<CC>(defn)) {
             const auto f = CCs.find(cc);
             // This check may not be needed. Memoization ought to detect duplicate classes earlier.
             if (LLVM_LIKELY(f == CCs.end())) {
