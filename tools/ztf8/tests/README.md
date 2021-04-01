@@ -286,6 +286,94 @@ The compression results for some files with diverse input and bigger file sizes 
 
 * With the current available results and looking at the number of collisions, we can say that the potential of compression is higher if we have a larger codeword space.
 
+### Codeword space expansion:
+
+The codeword space has been expanded to have 3-byte codewords for phrases of length 9-16 and 4-byte codewords for phrases of length 17-32.
+A slight modification to codeword definition is, in order to consider a UTF-8 sequence invalid, we are ensuring at least 1 ASCII byte (instead of all ASCII suffix bytes) after every multibyte UTF-8 prefix.
+
+#### New compression results:
+
+>
+    sh-3.2# time python3 ztf-hash-tests.py -c UnicodeData.txt > output.debug
+    real 8m9.483s
+    user 5m33.261s
+    sys 1m40.207s
+    sh-3.2#
+    sh-3.2# ls -l
+    total 350240
+    -rw-r--r--@  1 chintana  staff   1851767 23 Mar 19:22 UnicodeData.txt
+    -rw-r--r--   1 root      staff   1139399 29 Mar 14:08 output.length-group-phrase-compression.z
+
+* collisions:
+    | phrase len  | # collisions | # codewords  |  # phrases identified |
+    |:-----------:|-------------:|-------------:|----------------------:|
+    |     3       |   16948      |       88     |        3291           |
+    |     4       |   52027      |      103     |       23596           |
+    |    5-8      |  145644      |      508     |      233886           |
+    |    9-16     |   43974      |     3285     |      194984           |
+    |    17-32    |    9198      |     2977     |      132205           |
+
+    The compression ratio was better with codewords of length 2 only for UnicodeData.txt. However, we can see reduced collisions for phrases of length > 9.
+
+>
+    sh-3.2# time python3 ztf-hash-tests.py -c viwikibooks-20141221-pages-articles.xml > output.debug
+
+    real 31m55.692s
+    user 22m48.389s
+    sys 6m47.487s
+    sh-3.2# ls -l
+    total 403240
+    -rw-r--r--   1 root      staff   4008144 29 Mar 17:13 output.length-group-phrase-compression.z
+    -rw-r--r--   1 root      staff  11846638 23 Mar 21:02 viwikibooks-20141221-pages-articles.xml
+
+* collisions:
+    | phrase len  | # collisions | # codewords  |  # phrases identified |
+    |:-----------:|-------------:|-------------:|----------------------:|
+    |     3       |   446900     |      128     |       19620           |
+    |     4       |   472737     |      128     |       45634           |
+    |    5-8      |  1088156     |      512     |      337125           |
+    |    9-16     |   95774      |    47464     |     1067212           |
+    |    17-32    |    3247      |    21143     |      698383           |
+
+>
+    sh-3.2# time python3 ztf-hash-tests.py -c idwikibooks-20141221-pages-articles.xml > output.debug
+    real 55m17.942s
+    user 41m41.051s
+    sys 13m0.326s
+    sh-3.2# ls -l
+    total 317912
+    -rw-r--r--   1 root      staff  15202378 23 Mar 21:03 idwikibooks-20141221-pages-articles.xml
+    -rw-r--r--   1 root      staff   8673346 29 Mar 18:14 output.length-group-phrase-compression.z
+
+* collisions:
+    | phrase len  | # collisions | # codewords  |  # phrases identified |
+    |:-----------:|-------------:|-------------:|----------------------:|
+    |     3       |   278166     |      128     |       19775           |
+    |     4       |   438049     |      128     |       49771           |
+    |    5-8      |  1670323     |      512     |      520388           |
+    |    9-16     |   296255     |    77489     |     1879965           |
+    |    17-32    |     3384     |    57630     |     2939319           |
+
+>
+    sh-3.2# time python3 ztf-hash-tests.py -c fawikibooks-20141217-pages-articles.xml > output.debug
+    real	37m2.672s
+    user	28m48.557s
+    sys	6m43.832s
+
+    sh-3.2# ls -l
+    total 308016
+    -rw-r--r--   1 root      staff  20153325 23 Mar 21:04 fawikibooks-20141217-pages-articles.xml
+    -rw-r--r--   1 root      staff   3605238 29 Mar 20:06 output.length-group-phrase-compression.z
+
+* collisions:
+    | phrase len  | # collisions | # codewords  |  # phrases identified |
+    |:-----------:|-------------:|-------------:|----------------------:|
+    |     3       |   297237     |      128     |       20480           |
+    |     4       |   325876     |      128     |       44555           |
+    |    5-8      |   593753     |      512     |      285913           |
+    |    9-16     |    95107     |    42057     |     1182760           |
+    |    17-32    |    14796     |    39045     |     1638923           |
+
 ## Decompression:
 
 The basic flow of decompression follows the steps below:
