@@ -10,6 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 #include <boost/intrusive/detail/math.hpp>
+#include <boost/utility/value_init.hpp>
 #include "config.h"
 
 using namespace boost;

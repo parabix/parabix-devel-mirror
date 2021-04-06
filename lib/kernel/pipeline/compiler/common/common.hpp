@@ -3,6 +3,7 @@
 
 #include "graphs.h"
 #include <boost/iterator/iterator_facade.hpp>
+#include <random>
 
 namespace kernel {
 
@@ -17,6 +18,7 @@ using Vec = SmallVector<T, n>;
 
 using Allocator = SlabAllocator<>;
 
+using random_engine = std::default_random_engine; // TODO: look into xorshift for this
 
 // Many of the topological orderings of the graphs are simply
 // a reverse traversal through the nodes of the graph.
@@ -62,6 +64,54 @@ struct reverse_traversal {
     }
 
     reverse_traversal(const size_t n) : N(n) { }
+
+private:
+
+    const size_t N;
+
+};
+
+struct forward_traversal {
+
+    struct iterator : public boost::iterator_facade<
+        iterator, const size_t, boost::forward_traversal_tag> {
+
+    friend struct reverse_traversal;
+    friend class boost::iterator_core_access;
+
+        iterator() = default;
+
+        explicit iterator(size_t n) : counter(n) { }
+
+    private:
+
+        void increment() {
+            ++counter;
+        }
+
+        bool equal(iterator const& other) const {
+            return this->counter == other.counter;
+        }
+
+        const size_t & dereference() const { return counter; }
+
+    private:
+        size_t counter;
+    };
+
+    inline iterator begin() const {
+        return iterator(0);
+    }
+
+    inline iterator end() const {
+        return iterator(N);
+    }
+
+    inline unsigned size() const {
+        return N;
+    }
+
+    forward_traversal(const size_t n) : N(n) { }
 
 private:
 

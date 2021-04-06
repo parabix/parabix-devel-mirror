@@ -177,6 +177,238 @@ void addReferenceRelationships(const PortType portType, const unsigned index, co
 
 } // end of anonymous namespace
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief transcribeRelationshipGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::transcribeRelationshipGraph() {
+
+    using Vertices = Vec<unsigned, 64>;
+
+    // Compute the lexographical ordering of G
+    std::vector<unsigned> O;
+    if (LLVM_UNLIKELY(!lexical_ordering(Relationships, O))) {
+        // TODO: inspect G to determine what type of cycle. E.g., do we have circular references in the binding of
+        // a kernel or is it a problem with the I/O relationships?
+        report_fatal_error("Pipeline contains a cycle");
+    }
+
+    // TODO: in u32u8, calls to the StreamExpand/FieldDeposit kernels could be "merged" if we had the ability to
+    // "re-execute" pipeline code with a different input kernel & I/O state. However, we may not necessarily want
+    // to just re-execute the same kernel and may instead want to do the full sequence before repeating.
+
+    Vertices kernels;
+    Vertices bindings;
+    Vertices streamSets;
+    Vertices callees;
+    Vertices scalars;
+
+    for (const auto i : O) {
+        const RelationshipNode & rn = Relationships[i];
+        switch (rn.Type) {
+            case RelationshipNode::IsKernel:
+                assert (rn.Kernel);
+                kernels.push_back(i);
+                break;
+            case RelationshipNode::IsRelationship:
+                assert (rn.Relationship);
+                if (isa<StreamSet>(rn.Relationship)) {
+                    streamSets.push_back(i);
+                } else { assert (isa<Scalar>(rn.Relationship));
+                    scalars.push_back(i);
+                }
+                break;
+            case RelationshipNode::IsCallee:
+                assert (&rn.Callee);
+                callees.push_back(i);
+                break;
+            case RelationshipNode::IsBinding:
+                assert (&rn.Binding);
+                bindings.push_back(i);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // Transcribe the pipeline graph based on the lexical ordering, accounting for any auxillary
+    // kernels and subsituted kernels/relationships.
+
+    const unsigned numOfKernels = kernels.size();
+    const unsigned numOfStreamSets = streamSets.size();
+    const unsigned numOfBindings = bindings.size();
+    const unsigned numOfCallees = callees.size();
+    const unsigned numOfScalars = scalars.size();
+
+    SmallVector<unsigned, 256> subsitution(num_vertices(Relationships), -1U);
+
+    LastKernel = PipelineInput + numOfKernels - 2;
+
+    // Now fill in all of the remaining kernels subsitute position
+    KernelPartitionId.resize(numOfKernels);
+    ExpectedNumOfStrides.resize(numOfKernels);
+
+    KernelPartitionId[PipelineInput] = 0;
+
+    auto currentOrigPartitionId = -1U;
+    auto outputPartitionId = -1U;
+
+    assert (kernels[0] == PipelineInput);
+    assert (kernels[numOfKernels - 1] == PipelineOutput);
+
+    for (unsigned i = 0; i < (numOfKernels - 1); ++i) {
+        const auto in = kernels[i];
+        assert (subsitution[in] == -1U);
+        const auto out = PipelineInput + i;
+        subsitution[in] = out;
+
+        const auto f = PartitionIds.find(in);
+        assert (f != PartitionIds.end());
+        const auto origPartitionId = f->second;
+
+        // renumber the partitions to reflect the selected ordering
+        #ifndef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
+        if (origPartitionId != currentOrigPartitionId) {
+        #endif
+            ++outputPartitionId;
+            currentOrigPartitionId = origPartitionId;
+        #ifndef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
+        }
+        #endif
+        KernelPartitionId[out] = outputPartitionId;
+    }
+
+    const auto newPipelineOutput = LastKernel + 1U;
+    KernelPartitionId[newPipelineOutput] = ++outputPartitionId;
+    subsitution[PipelineOutput] = newPipelineOutput;
+
+
+    // our new partition count can exceed the original one by at most one
+    PartitionCount = outputPartitionId + 1U;
+
+    // Originally, if the pipeline kernel does not have external I/O, both the pipeline in/out
+    // nodes would be placed into the same (ignored) set but this won't be true after scheduling.
+    // Similarly, if we disable partitioning, every kernel will be placed into its own partition.
+    // Accept whatever the prior loops determines is the new partition count.
+
+    PipelineOutput = newPipelineOutput;
+
+    FirstStreamSet = PipelineOutput + 1U;
+    LastStreamSet = PipelineOutput + numOfStreamSets;
+    FirstBinding = LastStreamSet + 1U;
+    LastBinding = LastStreamSet + numOfBindings;
+
+    FirstCall = PipelineOutput + 1U;
+    LastCall = PipelineOutput + numOfCallees;
+    FirstScalar = LastCall + 1U;
+    LastScalar = LastCall + numOfScalars;
+
+    assert (KernelPartitionId[PipelineInput] == 0);
+
+    assert (Relationships[kernels[PipelineInput]].Kernel == mPipelineKernel);
+    assert (Relationships[kernels[PipelineOutput]].Kernel == mPipelineKernel);
+
+    for (unsigned i = 0; i < numOfStreamSets; ++i) {
+        assert (subsitution[streamSets[i]] == -1U);
+        subsitution[streamSets[i]] = FirstStreamSet + i;
+    }
+    for (unsigned i = 0; i < numOfBindings; ++i) {
+        assert (subsitution[bindings[i]] == -1U);
+        subsitution[bindings[i]] = FirstBinding  + i;
+    }
+    for (unsigned i = 0; i < numOfCallees; ++i) {
+        assert (subsitution[callees[i]] == -1U);
+        subsitution[callees[i]] = FirstCall + i;
+    }
+    for (unsigned i = 0; i < numOfScalars; ++i) {
+        assert (subsitution[scalars[i]] == -1U);
+        subsitution[scalars[i]] = FirstScalar + i;
+    }
+
+    SmallVector<std::pair<RelationshipType, unsigned>, 64> temp;
+
+    auto transcribe = [&](const Vertices & V, RelationshipGraph & H) {
+        for (const auto j : V) {
+            assert (j < subsitution.size());
+            const auto v = subsitution[j];
+            assert (j < num_vertices(Relationships));
+            assert (v < num_vertices(H));
+            H[v] = Relationships[j];
+        }
+    };
+
+    auto copy_in_edges = [&](const Vertices & V, RelationshipGraph & H,
+            const RelationshipNode::RelationshipNodeType type) {
+        for (const auto j : V) {
+            const auto v = subsitution[j];
+            for (const auto e : make_iterator_range(in_edges(j, Relationships))) {
+                const auto i = source(e, Relationships);
+                if (Relationships[i].Type == type) {
+                    assert (Relationships[e].Reason != ReasonType::OrderingConstraint);
+                    const auto u = subsitution[i];
+                    assert (u < num_vertices(H));
+                    temp.emplace_back(Relationships[e], u);
+                }
+            }
+            std::sort(temp.begin(), temp.end());
+            for (const auto & e : temp) {
+                add_edge(e.second, v, e.first, H);
+            }
+            temp.clear();
+        }
+    };
+
+    auto copy_out_edges = [&](const Vertices & V, RelationshipGraph & H,
+            const RelationshipNode::RelationshipNodeType type) {
+        for (const auto j : V) {
+            const auto v = subsitution[j];
+            for (const auto e : make_iterator_range(out_edges(j, Relationships))) {
+                const auto i = target(e, Relationships);
+                if (Relationships[i].Type == type) {
+                    assert (Relationships[e].Reason != ReasonType::OrderingConstraint);
+                    const auto w = subsitution[i];
+                    assert (w < num_vertices(H));
+                    temp.emplace_back(Relationships[e], w);
+                }
+            }
+            std::sort(temp.begin(), temp.end());
+            for (const auto & e : temp) {
+                add_edge(v, e.second, e.first, H);
+            }
+            temp.clear();
+        }
+    };
+
+    // create the stream graph
+    mStreamGraph = RelationshipGraph{numOfKernels + numOfBindings + numOfStreamSets};
+
+    transcribe(kernels, mStreamGraph);
+    copy_in_edges(kernels, mStreamGraph, RelationshipNode::IsBinding);
+    copy_out_edges(kernels, mStreamGraph, RelationshipNode::IsBinding);
+
+    transcribe(streamSets, mStreamGraph);
+    copy_in_edges(streamSets, mStreamGraph, RelationshipNode::IsBinding);
+    copy_out_edges(streamSets, mStreamGraph, RelationshipNode::IsBinding);
+
+    transcribe(bindings, mStreamGraph);
+    copy_out_edges(bindings, mStreamGraph, RelationshipNode::IsBinding);
+
+     // create the scalar graph
+    mScalarGraph = RelationshipGraph{numOfKernels + numOfCallees + numOfScalars};
+
+    transcribe(kernels, mScalarGraph);
+    copy_in_edges(kernels, mScalarGraph, RelationshipNode::IsRelationship);
+    copy_out_edges(kernels, mScalarGraph, RelationshipNode::IsRelationship);
+
+    transcribe(callees, mScalarGraph);
+    copy_in_edges(callees, mScalarGraph, RelationshipNode::IsRelationship);
+    copy_out_edges(callees, mScalarGraph, RelationshipNode::IsRelationship);
+
+    transcribe(scalars, mScalarGraph);
+}
+
+#if 0
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief transcribeRelationshipGraph
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -452,6 +684,7 @@ LinkedPartitionGraph PipelineAnalysis::transcribeRelationshipGraph(const Partiti
 
     return L;
 }
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitialPipelineGraph
@@ -891,7 +1124,7 @@ void PipelineAnalysis::addPopCountKernels(BuilderRef b, Kernels & kernels, Kerne
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief combineDuplicateKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::combineDuplicateKernels(BuilderRef b, const Kernels & kernels, ProgramGraph & G) /*static*/ {
+void PipelineAnalysis::combineDuplicateKernels(BuilderRef /* b */, const Kernels & kernels, ProgramGraph & G) /*static*/ {
 
     using StreamSetVector = std::vector<std::pair<unsigned, StreamSetPort>>;
     using ScalarVector = std::vector<unsigned>;
@@ -1148,6 +1381,640 @@ inline void PipelineAnalysis::removeUnusedKernels(const unsigned p_in, const uns
     }
 
 }
+
+#ifdef ENABLE_GRAPH_TESTING_FUNCTIONS
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateRandomPipelineGraph
+ *
+ * Generate a random graph of the desired size.
+ *
+ * NOTE: I/O port rates will only be Fixed([1,4])
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::generateRandomPipelineGraph(BuilderRef b, const uint64_t seed,
+                                                   const unsigned desiredKernels,
+                                                   const unsigned desiredStreamSets,
+                                                   const unsigned desiredPartitions) {
+
+    using random_engine = std::default_random_engine;
+
+    using TreeGraph = adjacency_list<vecS, vecS, bidirectionalS>;
+
+    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+
+    struct PivotGroup {
+        unsigned FirstKernel = 0;
+        unsigned LastKernel = 0;
+        unsigned FirstStreamSet = 0;
+        unsigned LastStreamSet = 0;
+    };
+
+    struct KernelRange {
+        unsigned FirstKernel = 0;
+        unsigned LastKernel = 0;
+
+        KernelRange() = default;
+        KernelRange(unsigned firstKernel, unsigned lastKernel)
+        : FirstKernel(firstKernel), LastKernel(lastKernel) { }
+    };
+
+    using SPGraph = adjacency_list<vecS, listS, bidirectionalS, PivotGroup, KernelRange>;
+
+    using SPVertex = SPGraph::vertex_descriptor;
+
+    if (LLVM_UNLIKELY(desiredKernels > desiredStreamSets)) {
+        llvm::report_fatal_error("Cannot generate a random graph with more kernels than streamsets");
+    }
+    if (LLVM_UNLIKELY(desiredPartitions > desiredKernels)) {
+        llvm::report_fatal_error("Cannot generate a random graph with more partitions than kernels");
+    }
+    if (LLVM_UNLIKELY(desiredKernels < 2)) {
+        llvm::report_fatal_error("Cannot generate a random graph with a single kernel");
+    }
+
+    random_engine rng(seed);
+
+    SPGraph S;
+
+    BEGIN_SCOPED_REGION
+
+    // Inspired by "Generating All Series-Parallel Graphs" (2005), to generate a SP-graph, we first create a
+    // tree T with N leaves. Each leaf of T is represents an edge in the SP-graph. This permits us to control
+    // the basic shape of our program and density of our subgraphs.
+
+    // Construct a graph from leaf to root
+
+    TreeGraph T(desiredPartitions);
+
+    BEGIN_SCOPED_REGION
+
+    auto remainingOnLevel = desiredPartitions;
+    auto nodesOnPriorLevel = 0;
+    unsigned nextTreeNode = 0;
+
+    for (;;) {
+        std::geometric_distribution<unsigned> numOfChildren(0.5);
+        const auto m = std::min(numOfChildren(rng) + 1U, remainingOnLevel);
+        const auto r = add_vertex(T);
+        for (unsigned i = 0; i < m; ++i) {
+            assert (nextTreeNode < r);
+            add_edge(r, nextTreeNode++, T);
+        }
+        ++nodesOnPriorLevel;
+        assert (remainingOnLevel >= m);
+        remainingOnLevel -= m;
+        if (remainingOnLevel == 0) {
+            if (nodesOnPriorLevel == 1) {
+                break;
+            }
+            remainingOnLevel = nodesOnPriorLevel;
+            nodesOnPriorLevel = 0;
+        }
+    }
+
+    END_SCOPED_REGION
+
+    // Do a few random branch movements to randomize the tree a little
+
+    BEGIN_SCOPED_REGION
+
+    const auto M = num_vertices(T) - 1U;
+
+    for (unsigned i = 0; i < M; ++i) {
+        assert (in_degree(i, T) > 0);
+        std::geometric_distribution<unsigned> levelsToMove(0.7);
+        auto l = levelsToMove(rng);
+        if (l > 0) {
+            const auto p = parent(i, T);
+            // ... but avoid creating a new leaf node
+            if (out_degree(p, T) > 1) {
+                auto r = p;
+                while (l--) {
+                    if (in_degree(r, T) == 0) {
+                        break;
+                    }
+                    r = parent(r, T);
+                }
+                if (LLVM_LIKELY(p != r)) {
+                    remove_edge(p, i, T);
+                    add_edge(r, i, T);
+                }
+            }
+
+        }
+    }
+
+    END_SCOPED_REGION
+
+    // Now that we have a tree T, recursively iterate through it to construct our SP-Graph S.
+    // Leaf nodes represent K_2 subgraphs and internal nodes decide how they're combined.
+    // With our root node always starting on level 1, each even-level internal node marks a
+    // parallel composition of its children and series for any odd-level nodes.
+
+    SmallVector<SPVertex, 16> unused;
+
+    auto addSPVertex = [&]() {
+        if (unused.empty()) {
+            return add_vertex(S);
+        } else {
+            return unused.pop_back_val();
+        }
+    };
+
+    std::function<void(unsigned, unsigned, SPVertex &, SPVertex &)> makeSeriesParallelGraph =
+            [&](const unsigned node, const unsigned depth, SPVertex & s, SPVertex & t) {
+
+        if (out_degree(node, T) == 0) {
+
+            s = addSPVertex();
+            t = addSPVertex();
+            add_edge(s, t, S);
+
+        } else {
+
+            graph_traits<TreeGraph>::out_edge_iterator ei, ei_end;
+            std::tie(ei, ei_end) = out_edges(node, T);
+
+            makeSeriesParallelGraph(target(*ei, T), depth + 1, s, t);
+
+            if ((depth & 1) == 0) { // parallel composition
+                while (++ei != ei_end) {
+                    SPVertex x, y;
+                    makeSeriesParallelGraph(target(*ei, T), depth + 1, x, y);
+                    for (const auto e : make_iterator_range(out_edges(x, S))) {
+                        add_edge(s, target(e, S), S);
+                    }
+                    clear_vertex(x, S);
+                    unused.push_back(x);
+                    for (const auto e : make_iterator_range(in_edges(y, S))) {
+                        add_edge(source(e, S), t, S);
+                    }
+                    clear_vertex(y, S);
+                    unused.push_back(y);
+                }
+            } else { // series composition
+                while (++ei != ei_end) {
+                    SPVertex x, y;
+                    makeSeriesParallelGraph(target(*ei, T), depth + 1, x, y);
+                    for (const auto e : make_iterator_range(out_edges(x, S))) {
+                        add_edge(t, target(e, S), S);
+                    }
+                    clear_vertex(x, S);
+                    unused.push_back(x);
+                    t = y;
+                }
+            }
+
+        }
+
+    };
+
+    SPVertex root, dummy;
+    makeSeriesParallelGraph(num_vertices(T) - 1U, 1U, root, dummy);
+
+    assert (num_edges(S) == desiredPartitions);
+    graph_traits<SPGraph>::vertex_iterator vi, vi_end;
+    std::tie(vi, vi_end) = vertices(S);
+    assert (root == *vi);
+    for (++vi; vi != vi_end; ) {
+        auto v = *vi++;
+        if (in_degree(v, S) == 0) {
+            assert (out_degree(v, S) == 0);
+            remove_vertex(v, S);
+        }
+    }
+
+    // Distribute a small number of pivot nodes linking our potential partitions
+    // (i.e., the edges of S)
+
+    unsigned numOfPivots = 0;
+
+    std::geometric_distribution<unsigned> numOfPivotDist(0.7);
+
+    const auto n = num_vertices(S);
+    assert (n > 0);
+    const auto m = num_edges(S);
+    assert (m < desiredKernels);
+
+    std::vector<unsigned> groupSizes(n + m);
+
+    auto maxKernels = desiredKernels - m;
+
+    for (;;) {
+        for (unsigned i = 0; i < n; ++i) {
+            const auto k = numOfPivotDist(rng) + 1U;
+            groupSizes[i] = k;
+//            PivotGroup & K = S[v];
+//            K.FirstKernel = numOfPivots;
+            numOfPivots += k;
+//            K.LastKernel = numOfPivots;
+        }
+        if (numOfPivots <= maxKernels) {
+            break;
+        }
+    }
+
+    auto remainingKernels = maxKernels - numOfPivots;
+    const auto mean = (double)(remainingKernels) / (double)(m);
+    const auto stddev = mean * 0.2;
+    std::normal_distribution<double> dist(mean, stddev);
+
+    for (unsigned i = 0; i != m; ++i) {
+        const unsigned r = std::round(std::abs(dist(rng)));
+        const auto k = std::min<unsigned>(r, remainingKernels);
+        groupSizes[n + i] = k + 1U;
+        assert (k <= remainingKernels);
+        remainingKernels -= k;
+    }
+
+    // just evenly distribute any remaining kernels
+    while (remainingKernels--) {
+        std::uniform_int_distribution<unsigned> dist(0, m - 1);
+        groupSizes[dist(rng)]++;
+    }
+
+    // To simplify the remaining algorithm, ensure the range of kernels
+    // to use in each pivot/group adheres to the topological ordering of S.
+    // Later when we add in a few random potentially long-lived streamsets,
+    // we can insert them between any pair of kernels u, v s.t. u < v
+    // without worrying about whether we're introducing a cycle.
+
+    flat_map<SPVertex, unsigned> unvisited;
+    for (const auto u : make_iterator_range(vertices(S))) {
+        unvisited.emplace(u, in_degree(u, S));
+    }
+
+    unsigned pivotIdx = 0;
+    unsigned groupIdx = n;
+
+    auto u = root;
+
+    unsigned currentKernel = 0;
+
+    SmallVector<SPVertex, 16> Q;
+
+    for (;;) {
+
+        PivotGroup & P = S[u];
+        P.FirstKernel = currentKernel;
+        currentKernel += groupSizes[pivotIdx++];
+        P.LastKernel = currentKernel;
+
+        for (const auto e : make_iterator_range(out_edges(u, S))) {
+
+            KernelRange & K = S[e];
+            K.FirstKernel = currentKernel;
+            currentKernel += groupSizes[groupIdx++];
+            K.LastKernel = currentKernel;
+
+            const auto v = target(e, S);
+            const auto f = unvisited.find(v);
+            assert (f != unvisited.end());
+            unsigned & remaining = f->second;
+            assert (remaining > 0);
+            if (--remaining == 0) {
+                Q.push_back(v);
+            }
+
+        }
+
+        if (Q.empty()) {
+            break;
+        }
+
+        u = Q.pop_back_val();
+    }
+
+    assert (pivotIdx == n);
+    assert (groupIdx == (n + m));
+    assert (currentKernel == desiredKernels);
+
+    END_SCOPED_REGION
+
+    const auto N = desiredKernels + desiredStreamSets;
+
+    Graph G(N);
+
+    // Since we want the streamsets of the "pivot" kernels to be shared amonst the groups,
+    // we begin by assigning some streamsets to them before building the kernel groups.
+
+    auto remainingStreamSets = desiredStreamSets - desiredKernels;
+
+    const auto expectedAdditionalStreamSetPerKernel =
+        ((double)remainingStreamSets * 0.45) / ((double)(desiredKernels));
+
+    auto currentStreamSet = desiredKernels;
+
+    std::vector<unsigned> kernels;
+
+    auto makeKernelStreamSets = [&](
+            const unsigned firstKernel, const unsigned lastKernel,
+            unsigned & firstStreamSet, unsigned & lastStreamSet) {
+
+        const auto numOfKernelsOnThisLevel = lastKernel - firstKernel;
+
+        #ifndef NDEBUG
+        for (auto i = firstKernel; i < lastKernel; ++i) {
+            assert (out_degree(i, G) == 0);
+        }
+        #endif
+
+        // we want every kernel to have at least one streamset output
+        // but allow some to have more than one
+        const auto mean = ((double)(numOfKernelsOnThisLevel)) * expectedAdditionalStreamSetPerKernel;
+        const auto stddev = mean * 0.25;
+        std::normal_distribution<double> dist(mean, stddev);
+        assert ((N - currentStreamSet) >= numOfKernelsOnThisLevel);
+        const auto k = std::min<unsigned>(std::round(std::abs(dist(rng))), remainingStreamSets);
+        const auto numOfStreamSets = numOfKernelsOnThisLevel + k;
+
+        firstStreamSet = currentStreamSet;
+        currentStreamSet += numOfStreamSets;
+        lastStreamSet = currentStreamSet;
+
+        // determine the producers
+        assert (kernels.empty());
+        kernels.resize(numOfStreamSets);
+        std::iota(kernels.begin(), kernels.begin() + numOfKernelsOnThisLevel, firstKernel);
+        std::uniform_int_distribution<unsigned> random_producer(firstKernel, lastKernel - 1);
+        for (auto i = numOfKernelsOnThisLevel; i < numOfStreamSets; ++i) {
+            kernels[i] = random_producer(rng);
+        }
+        std::shuffle(kernels.begin(), kernels.end(), rng);
+        for (unsigned i = 0; i < numOfStreamSets; ++i) {
+            const auto producer = kernels[i];
+            assert (producer < desiredKernels);
+            const auto streamSet = firstStreamSet + i;
+            assert (streamSet < N);
+            add_edge(producer, streamSet, G);
+        }
+        kernels.clear();
+
+    };
+
+    for (const auto v : make_iterator_range(vertices(S))) {
+        if (LLVM_LIKELY(out_degree(v, S) != 0)) {
+            PivotGroup & K = S[v];
+            makeKernelStreamSets(K.FirstKernel, K.LastKernel, K.FirstStreamSet, K.LastStreamSet);
+        }
+    }
+
+    // Each edge represents a kernel group; iterate through them and stitch the
+    // random program graph together.
+
+    std::vector<KernelRange> kernelsOnLevel;
+
+    for (const auto e : make_iterator_range(edges(S))) {
+
+        const KernelRange & E = S[e];
+        assert (E.FirstKernel < E.LastKernel);
+        assert (E.LastKernel <= desiredKernels);
+
+        const auto numOfKernelsWithinCurrentGroup = E.LastKernel - E.FirstKernel;
+
+        assert (kernelsOnLevel.empty());
+
+        // determine which kernels are on what levels
+
+        const auto sqrtDesiredKernels = std::sqrt(numOfKernelsWithinCurrentGroup);
+        kernelsOnLevel.reserve((unsigned)std::ceil(sqrtDesiredKernels) + 2);
+
+        const auto mean = (sqrtDesiredKernels - 1.0);
+        const auto stddev = mean * 0.25;
+        std::normal_distribution<double> dist(mean, stddev);
+
+        auto nextKernel = E.FirstKernel;
+
+        for (;;) {
+            const unsigned k = std::round(std::abs(dist(rng)));
+            const unsigned startOfNextLevel = nextKernel + k + 1;
+            assert (startOfNextLevel > nextKernel);
+            if (startOfNextLevel >= E.LastKernel) {
+                break;
+            }
+            kernelsOnLevel.emplace_back(nextKernel, startOfNextLevel);
+            nextKernel = startOfNextLevel;
+        }
+        kernelsOnLevel.emplace_back(nextKernel, E.LastKernel);
+        // our very last level will contain the pivot streamsets
+        // joining this group to the rest of the graph.
+        const PivotGroup & O = S[target(e, S)];
+        kernelsOnLevel.emplace_back(O.FirstKernel, O.LastKernel);
+
+        const auto levels = kernelsOnLevel.size() - 1;
+
+        auto addStreamSetConsumers = [&](const unsigned firstStreamSet, const unsigned lastStreamSet, const unsigned nextLevel) {
+
+            assert (firstStreamSet < lastStreamSet);
+            assert (firstStreamSet >= desiredKernels);
+            assert (lastStreamSet <= N);
+
+            const auto numOfStreamSets = lastStreamSet - firstStreamSet;
+
+            // now add some consumers
+            const KernelRange & K = kernelsOnLevel[nextLevel];
+            const auto nextLevelStart = K.FirstKernel;
+            const auto nextLevelEnd = K.LastKernel;
+            assert (nextLevelStart < nextLevelEnd);
+            assert (nextLevelEnd <= desiredKernels);
+
+            BEGIN_SCOPED_REGION
+
+            // we want to ensure that every streamset has a consumer and every
+            // kernel on the next level is a consumer of at least one of the
+            // streamsets produced on this level.
+
+            const auto numOfKernelsOnNextLevel = nextLevelEnd - nextLevelStart;
+
+            const auto m = std::max(numOfKernelsOnNextLevel, numOfStreamSets);
+            assert (kernels.empty());
+            kernels.resize(m);
+            std::iota(kernels.begin(), kernels.begin() + numOfKernelsOnNextLevel, nextLevelStart);
+            std::uniform_int_distribution<unsigned> random_consumer(nextLevelStart, nextLevelEnd - 1);
+            for (auto i = numOfKernelsOnNextLevel; i < numOfStreamSets; ++i) {
+                kernels[i] = random_consumer(rng);
+            }
+            std::shuffle(kernels.begin(), kernels.end(), rng);
+            for (unsigned i = 0; i < m; ++i) {
+                const auto streamSet = firstStreamSet + (i % numOfStreamSets);
+                assert (streamSet < N);
+                const auto consumer = kernels[i];
+                assert (consumer < desiredKernels);
+                assert (parent(streamSet, G) < consumer);
+                add_edge(streamSet, consumer, G);
+            }
+            kernels.clear();
+
+            END_SCOPED_REGION
+
+            // Now with a low probability, try to add a few more streamset relationships
+            // to kernels that are a short distance away.
+            for (auto streamSet = firstStreamSet; streamSet < lastStreamSet; ++streamSet) {
+                std::geometric_distribution<unsigned> dist(0.75);
+                const auto numOfConsumers = dist(rng);
+                for (unsigned j = 0; j < numOfConsumers; ++j) {
+                    // what level is the consumer on?
+                    std::geometric_distribution<unsigned> dist(0.3);
+                    const auto k = dist(rng);
+                    const auto consumerLevel = std::min<unsigned>(nextLevel + k, levels);
+
+                    const KernelRange & K = kernelsOnLevel[consumerLevel];
+                    const auto startOfSelectedLevel = K.FirstKernel;
+                    const auto endOfSelectedLevel = K.LastKernel;
+                    // select the consumer
+                    std::uniform_int_distribution<unsigned> random_consumer(startOfSelectedLevel, endOfSelectedLevel - 1);
+                    assert (streamSet < N);
+                    const auto consumer = random_consumer(rng);
+                    assert (consumer < desiredKernels);
+                    assert (parent(streamSet, G) < consumer);
+                    add_edge(streamSet, consumer, G);
+                }
+            }
+        };
+
+        const PivotGroup & I = S[source(e, S)];
+        addStreamSetConsumers(I.FirstStreamSet, I.LastStreamSet, 0);
+
+        for (unsigned level = 0; level < levels; ++level) {
+            const KernelRange & K = kernelsOnLevel[level];
+            unsigned firstStreamSet, lastStreamSet;
+            makeKernelStreamSets(K.FirstKernel, K.LastKernel, firstStreamSet, lastStreamSet);
+            addStreamSetConsumers(firstStreamSet, lastStreamSet, level + 1);
+        }
+
+
+        kernelsOnLevel.clear();
+
+    }
+
+    assert (currentStreamSet >= desiredKernels);
+
+    // evenly distribute the remaining streamsets within the graph
+    for (; currentStreamSet < N; ++currentStreamSet) {
+        std::uniform_int_distribution<unsigned> random_producer(0, desiredKernels - 2);
+        const auto producer = random_producer(rng);
+        add_edge(producer, currentStreamSet, G);
+        std::poisson_distribution<unsigned> prior(1);
+        const auto numOfConsumers = prior(rng) + 1U;
+        assert ((producer + 1U) < desiredKernels);
+        std::uniform_int_distribution<unsigned> random_consumer(producer + 1, desiredKernels - 1);
+        for (unsigned j = 0; j < numOfConsumers; ++j) {
+            const auto consumer = random_consumer(rng);
+            assert (producer < consumer);
+            assert (consumer < desiredKernels);
+            add_edge(currentStreamSet, consumer, G);
+        }
+    }
+
+    // transform G into a relationship graph
+
+    const auto numOfBindings = num_edges(G);
+
+    LastKernel = FirstKernel + desiredKernels - 1U;
+    PipelineOutput = LastKernel + 1U;
+    FirstStreamSet = PipelineOutput + 1U;
+    LastStreamSet = FirstStreamSet + desiredStreamSets - 1U;
+    FirstBinding = LastStreamSet + 1U;
+    LastBinding = FirstBinding + numOfBindings - 1U;
+
+    ProgramGraph R(LastBinding + 1U);
+
+    R[PipelineInput] = RelationshipNode(mPipelineKernel);
+    R[PipelineOutput] = RelationshipNode(mPipelineKernel);
+
+    class DummyKernel final : public Kernel {
+    public:
+        DummyKernel(BuilderRef b, const bool terminating)
+        : Kernel(b, Kernel::TypeId::SegmentOriented, "",
+                 Bindings{}, Bindings{}, Bindings{}, Bindings{}, InternalScalars{}) {
+            if (terminating) {
+                addAttribute(CanTerminateEarly());
+            }
+        }
+    protected:
+        void generateKernelMethod(BuilderRef) override {
+            assert (!"attempting to compile a dummy kernel?");
+        }
+    };
+
+    // TODO: this is fragile; fix it if we keep this function after testing.
+    auto & driver = reinterpret_cast<BaseDriver &>(b->getDriver());
+
+    for (const auto v : make_iterator_range(vertices(S))) {
+        PivotGroup & K = S[v];
+        for (auto i = K.FirstKernel; i != K.LastKernel; ++i) {
+            Kernel * const dk = new DummyKernel(b, true);
+            mInternalKernels.emplace_back(dk);
+            assert (R[FirstKernel + i].Type == RelationshipNode::IsNil);
+            R[FirstKernel + i] = RelationshipNode(dk);
+        }
+    }
+
+    for (const auto e : make_iterator_range(edges(S))) {
+        KernelRange & K = S[e];
+        for (auto i = K.FirstKernel; i != K.LastKernel; ++i) {
+            Kernel * const dk = new DummyKernel(b, false);
+            mInternalKernels.emplace_back(dk);
+            assert (R[FirstKernel + i].Type == RelationshipNode::IsNil);
+            R[FirstKernel + i] = RelationshipNode(dk);
+        }
+    }
+
+    auto nextBindingNode = FirstBinding;
+
+    const auto firstStreamSetInG = desiredKernels;
+
+    for (unsigned i = 0; i != desiredStreamSets; ++i) {
+        std::geometric_distribution<unsigned> fieldWidthDist(0.2);
+        const auto fieldWidth = (1U << fieldWidthDist(rng));
+        std::poisson_distribution<unsigned> streamSetDist(4);
+        const auto numOfStreamSets = std::max(streamSetDist(rng), 1U);
+        StreamSet * const streamSet = driver.CreateStreamSet(numOfStreamSets, fieldWidth);
+        assert (R[FirstStreamSet + i].Type == RelationshipNode::IsNil);
+        R[FirstStreamSet + i] = RelationshipNode(streamSet);
+
+        auto createBindingNode = [&]() {
+            // std::geometric_distribution<unsigned> rateDist(0.6);
+            Binding * const binding = new Binding("f", streamSet, FixedRate(1U)); // rateDist(rng) +
+            mInternalBindings.emplace_back(binding);
+            const auto bindingNode = nextBindingNode++;
+            assert (bindingNode <= LastBinding);
+            assert (R[bindingNode].Type == RelationshipNode::IsNil);
+            R[bindingNode] = RelationshipNode(binding);
+            return bindingNode;
+        };
+
+        BEGIN_SCOPED_REGION
+
+        const auto producer = parent(firstStreamSetInG + i, G);
+        assert (producer < desiredKernels);
+        const auto u = FirstKernel + producer;
+        const auto v = createBindingNode();
+        const unsigned portNum = out_degree(u, R);
+        add_edge(u, v, RelationshipType{PortType::Output, portNum}, R);
+        add_edge(v, FirstStreamSet + i, RelationshipType{PortType::Output, portNum}, R);
+
+        END_SCOPED_REGION
+
+        for (const auto output : make_iterator_range(out_edges(firstStreamSetInG + i, G))) {
+            const auto consumer = target(output, G);
+            assert (consumer < desiredKernels);
+            const auto u = createBindingNode();
+            const auto v = FirstKernel + consumer;
+            const unsigned portNum = in_degree(v, R);
+            add_edge(FirstStreamSet + i, u, RelationshipType{PortType::Input, portNum}, R);
+            add_edge(u, v, RelationshipType{PortType::Input, portNum}, R);
+        }
+
+    }
+
+    assert (nextBindingNode == LastBinding + 1U);
+
+    Relationships = std::move(R);
+}
+#endif
+
+
+
 
 } // end of namespace
 

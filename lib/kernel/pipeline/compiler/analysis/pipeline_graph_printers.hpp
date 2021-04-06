@@ -1,7 +1,7 @@
 #ifndef PIPELINE_GRAPH_PRINTER_HPP
 #define PIPELINE_GRAPH_PRINTER_HPP
 
-#include "relationship_analysis.hpp"
+#include "pipeline_analysis.hpp"
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/graph/strong_components.hpp>
 

@@ -42,6 +42,8 @@ using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
 
+using Vertex = unsigned;
+
 struct RelationshipNode {
 
     enum RelationshipNodeType : unsigned {
@@ -170,6 +172,18 @@ struct ProgramGraph : public RelationshipGraph {
     const RelationshipGraph & Graph() const {
         return static_cast<const RelationshipGraph &>(*this);
     }
+
+    ProgramGraph() noexcept = default;
+
+    ProgramGraph(size_t n) noexcept : RelationshipGraph(n) { }
+
+    ProgramGraph(ProgramGraph && G) noexcept
+    : RelationshipGraph(std::move(G.Graph()))
+    , mMap(std::move(G.mMap)) {
+
+    }
+
+    ProgramGraph & operator=(ProgramGraph && G) noexcept = default;
 
 private:
 
@@ -403,13 +417,11 @@ struct PartitionData {
     OrderingDAWG            Orderings;
     Rational                ExpectedRepetitions{0};
 
-    size_t                  RequiredMemory = 0;
-
 };
 
 using LinkedPartitionGraph = adjacency_matrix<undirectedS>;
 
-using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned, LinkedPartitionGraph>;
+using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned>; // , LinkedPartitionGraph
 
 using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
 

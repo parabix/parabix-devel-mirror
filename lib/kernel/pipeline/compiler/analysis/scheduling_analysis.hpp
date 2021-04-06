@@ -6,20 +6,26 @@
 
 #include <chrono>
 #include <llvm/Support/Format.h>
+#include <fstream>
+#include <iostream>
 
 namespace kernel {
 
 #ifdef EXPERIMENTAL_SCHEDULING
 
-#define INITIAL_TOPOLOGICAL_POPULATION_SIZE (30)
+#define INITIAL_TOPOLOGICAL_POPULATION_SIZE (10)
 
-#define MAX_POPULATION_SIZE (30)
+constexpr unsigned MAX_PARTITION_POPULATION_SIZE = 100;
 
-#define MAX_EVOLUTIONARY_ROUNDS (30)
+#define MAX_EVOLUTIONARY_ROUNDS (0)
 
 #define MUTATION_RATE (0.20)
 
-#define MAX_CUT_ACO_ROUNDS (50)
+constexpr unsigned MAX_PROGRAM_POPULATION_SIZE = 100;
+
+constexpr static unsigned PARITION_SCHEDULING_GA_ROUNDS = 1000;
+
+constexpr static unsigned PROGRAM_SCHEDULING_GA_ROUNDS = 1000;
 
 #define BIPARTITE_GRAPH_UNPLACED (0U)
 
@@ -27,45 +33,83 @@ namespace kernel {
 
 #define BIPARTITE_GRAPH_RIGHT_HAND (2U)
 
-#define INITIAL_SCHEDULING_POPULATION_ATTEMPTS (20)
+#define INITIAL_SCHEDULING_POPULATION_ATTEMPTS (100)
 
-#define INITIAL_SCHEDULING_POPULATION_SIZE (10)
+#define INITIAL_SCHEDULING_POPULATION_SIZE (100)
 
-// #define ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
+#define SCHEDULING_FITNESS_COST_ACO_ROUNDS (200)
 
-#define SCHEDULING_FITNESS_COST_ACO_RHO (0.1)
+//constexpr static unsigned MAX_CUT_HS_ROUNDS = 100;
+//constexpr static unsigned MAX_CUT_HS_INITIAL_CANDIDATES = 100;
+//constexpr static double MAX_CUT_HS_CONSIDERATION_RATE = 0.997;
+//constexpr static unsigned MAX_CUT_HS_POPULATION_SIZE = 100;
+constexpr static unsigned MAX_CUT_MAX_NUM_OF_CONNECTED_COMPONENTS = 7;
 
-#define SCHEDULING_FITNESS_COST_ACO_ROUNDS (100)
+constexpr static double HAMILTONIAN_PATH_INVERSE_K = 1.0 / 50.0;
 
-#define HAMILTONIAN_PATH_STRATEGY (1)
+constexpr static unsigned HAMILTONIAN_PATH_NUM_OF_ANTS = 5;
 
-#define HAMILTONIAN_PATH_DEFAULT_WEIGHT (1.0)
+static_assert((SCHEDULING_FITNESS_COST_ACO_ROUNDS % HAMILTONIAN_PATH_NUM_OF_ANTS) == 0, "rounds must be divisible by # of ants");
 
-#define HAMILTONIAN_PATH_PARTITION_EXIT_WEIGHT (0.001)
+constexpr static double HAMILTONIAN_PATH_EPSILON_WEIGHT = 0.1;
 
-#define HAMILTONIAN_PATH_MINIMUM_WEIGHT (0.001)
+constexpr static double HAMILTONIAN_PATH_DELTA_WEIGHT = 100.0;
+
+constexpr static double HAMILTONIAN_PATH_ACO_TAU_INITIAL_VALUE = 5.0;
+
+constexpr static double HAMILTONIAN_PATH_ACO_TAU_MIN = HAMILTONIAN_PATH_EPSILON_WEIGHT;
+
+constexpr static double HAMILTONIAN_PATH_ACO_TAU_MAX = HAMILTONIAN_PATH_DELTA_WEIGHT;
+
+static size_t fitness_hs_time = 0;
+static size_t fitness_time = 0;
+static size_t repair_time = 0;
+static size_t total_ga_time = 0;
+
+namespace {
+
+static void executeHarmonySearchTest(const size_t seed);
+static void executeHarmonySearchByCSV(std::string fileName, const size_t seed);
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowWithinPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P) {
+void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P, random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses) {
 
     // Once we analyze the dataflow within the partitions, P contains DAWG that is either
     // edgeless if any permutation of its kernels is valid or contains all of its optimal
     // orderings for the kernels within each partition.
 
-    analyzeDataflowWithinPartitions(P);
+//    executeHarmonySearchTest(std::random_device()());
+
+//    executeHarmonySearchByCSV("./testcases.csv", std::random_device()());
+
+//    exit(-1);
+
+
+//    errs() << "analyzeDataflowWithinPartitions\n";
+
+    analyzeDataflowWithinPartitions(P, rng);
 
     // The graph itself has edges indicating a dependency between the partitions, annotated by the kernels
     // that are a producer of one of the streamsets that traverses the partitions. Ideally we'll use the
     // trie to score each of the possible orderings based on how close a kernel is to its cross-partition
     // consumers but first we need to determine the order of our partitions.
 
+//    errs() << "analyzeDataflowBetweenPartitions\n";
+
     const auto D = analyzeDataflowBetweenPartitions(P);
+
+ //   errs() << "makeInterPartitionSchedulingGraph\n";
 
     auto S = makeInterPartitionSchedulingGraph(P, D);
 
-    const auto C = scheduleProgramGraph(P, S, D);
+//    errs() << "scheduleProgramGraph\n";
+
+    const auto C = scheduleProgramGraph(P, S, D, rng, maxCutRoundsFactor, maxCutPasses);
+
+//    errs() << "addSchedulingConstraints\n";
 
     addSchedulingConstraints(P, C);
 
@@ -196,19 +240,612 @@ unsigned postorder_minimize(OrderingDAWG & O) {
 
 }
 
+using MemIntervalGraph = adjacency_list<vecS, vecS, undirectedS>;
+
+using WeightMap = flat_map<MemIntervalGraph::edge_descriptor, double>;
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief MaxCutHarmonySearch
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct MaxCutHarmonySearch : public BitStringBasedHarmonySearch {
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief initGA
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool initialize(Population & initialPopulation) final {
+        std::uniform_int_distribution<unsigned> zeroOrOneInt(0, 1);
+        Candidate C(candidateLength);
+        #ifndef NDEBUG
+        std::vector<bool> sanity(candidateLength);
+        #endif
+        unsigned inserted = 0;
+        for (unsigned i = 0; i < 100; ++i) {
+
+            #ifndef NDEBUG
+            for (unsigned j = 0; j < candidateLength; ++j) {
+                C.set(j, (j & 1) == 0);
+            }
+            #endif
+            for (unsigned j = 0; j < candidateLength; ++j) {
+                const auto b = zeroOrOneInt(rng);
+                C.set(j, b);
+                assert (C.test(j) == b);
+                #ifndef NDEBUG
+                sanity[j] = b;
+                C.set(j, !b);
+                assert (C.test(j) != b);
+                C.set(j, b);
+                assert (C.test(j) == b);
+                #endif
+            }
+            #ifndef NDEBUG
+            for (unsigned j = 0; j < candidateLength; ++j) {
+                assert (C.test(j) == sanity[j]);
+            }
+            #endif
+            if (insertCandidate(C, initialPopulation)) {
+                if (++inserted == maxCandidates) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief fitness
+     ** ------------------------------------------------------------------------------------------------------------- */
+    double fitness(const Candidate & candidate) final {
+        double weight = 0;
+        unsigned numOfComponents = 0;
+        unvisited.set(0, candidateLength - 1);
+        auto i = unvisited.find_first();
+        for (;;) {
+            assert ((unsigned)i < candidateLength);
+            assert (unvisited.test(i));
+            assert (stack.empty());
+            unvisited.reset(i);
+            auto u = toVertexIndex[i];
+            assert (out_degree(u, I) > 0);
+            ++numOfComponents;
+            for (;;) {
+                const auto uval = candidate.test(u);
+                for (const auto e : make_iterator_range(out_edges(u, I))) {
+                    const auto v = target(e, I);
+                    if (unvisited.test(v) && uval != candidate.test(v)) {
+                        unvisited.reset(v);
+                        const auto f = maxCutWeights.find(e);
+                        assert (f != maxCutWeights.end());
+                        weight += f->second;
+                        stack.push_back(v);
+                    }
+                }
+                if (stack.empty()) {
+                    break;
+                }
+                u = stack.back();
+                stack.pop_back();
+            }
+            i = unvisited.find_next(i);
+            if (i == -1) {
+                break;
+            }
+        }
+
+        if (numOfComponents > maxNumOfComponents) {
+            weight = std::pow(weight, 1.0 / ((double)(numOfComponents - maxNumOfComponents)));
+        }
+
+        return weight;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief constructor
+     ** ------------------------------------------------------------------------------------------------------------- */
+    MaxCutHarmonySearch(const MemIntervalGraph & I,
+                        const WeightMap & maxCutWeights,
+                        const unsigned numOfRounds,
+                        const unsigned populationSize,
+                        const double fixedConsiderationRate,
+                        const size_t seed)
+    : BitStringBasedHarmonySearch(numOfNonIsolatedVertices(I), numOfRounds, populationSize, fixedConsiderationRate, seed)
+    , I(I)
+    , maxCutWeights(maxCutWeights)
+    , toVertexIndex(candidateLength)
+    , toBitIndex(num_vertices(I))
+    , unvisited(num_vertices(I))
+    , maxNumOfComponents(MAX_CUT_MAX_NUM_OF_CONNECTED_COMPONENTS) {
+        const auto n = num_vertices(I);
+        for (unsigned i = 0, j = 0; i < n; ++i) {
+            if (out_degree(i, I) > 0) {
+                toVertexIndex[j] = i;
+                toBitIndex[i] = j;
+                ++j;
+            }
+        }
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief constructor
+     ** ------------------------------------------------------------------------------------------------------------- */
+    MaxCutHarmonySearch(const MemIntervalGraph & I,
+                        const WeightMap & maxCutWeights,
+                        const unsigned numOfRounds,
+                        const unsigned populationSize,
+                        const HMCRType type,
+                        const double minHMCR,
+                        const double maxHMCR,
+                        const double angularFrequency,
+                        const size_t seed)
+    : BitStringBasedHarmonySearch(numOfNonIsolatedVertices(I), numOfRounds, populationSize, type, minHMCR, maxHMCR, angularFrequency, seed)
+    , I(I)
+    , maxCutWeights(maxCutWeights)
+    , toVertexIndex(candidateLength)
+    , toBitIndex(num_vertices(I))
+    , unvisited(num_vertices(I))
+    , maxNumOfComponents(MAX_CUT_MAX_NUM_OF_CONNECTED_COMPONENTS) {
+        const auto n = num_vertices(I);
+        for (unsigned i = 0, j = 0; i < n; ++i) {
+            if (out_degree(i, I) > 0) {
+                toVertexIndex[j] = i;
+                toBitIndex[i] = j;
+                ++j;
+            }
+        }
+    }
+
+private:
+
+    static size_t numOfNonIsolatedVertices(const MemIntervalGraph & I) {
+        const auto n = num_vertices(I);
+        size_t m = 0;
+        for (unsigned i = 0; i < n; ++i) {
+            if (out_degree(i, I) > 0) {
+                ++m;
+            }
+        }
+        return m;
+    }
+
+protected:
+
+    const MemIntervalGraph & I;
+    const WeightMap & maxCutWeights;
+
+    std::vector<unsigned> toVertexIndex;
+    std::vector<unsigned> toBitIndex;
+
+    BitVector unvisited;
+    SmallVector<Vertex, 16> stack;
+    const unsigned maxNumOfComponents;
+};
+
+static void executeHarmonySearchTest(const size_t seed) {
+
+    random_engine rng0(seed);
+
+    const auto MAX_SIZE = 100UL;
+
+    std::vector<size_t> weight(MAX_SIZE);
+
+    std::vector<unsigned> placement(MAX_SIZE);
+
+    std::vector<unsigned> stack;
+
+    WeightMap maxCutWeights;
+
+    maxCutWeights.reserve(MAX_SIZE * MAX_SIZE / 2);
+
+    constexpr unsigned GRAPH_SIZES = 5;
+
+    std::vector<unsigned> GRAPH_SIZE;
+    GRAPH_SIZE.reserve(GRAPH_SIZES);
+    for (unsigned k = 10; k <= 100; k+= 10) {
+         GRAPH_SIZE.push_back(k);
+    }
+
+    constexpr unsigned NUM_POP_SIZE = 1;
+
+    const unsigned POP_SIZE[NUM_POP_SIZE] = { 10 };
+
+    constexpr unsigned NUM_HMCR_RATES = 1;
+
+    const double HMCR_RATE[NUM_HMCR_RATES] = { 0.9 };
+
+    std::shuffle(GRAPH_SIZE.begin(), GRAPH_SIZE.end(), rng0);
+
+    for (unsigned round = 0; round < 10; ++round) {
+
+        for (unsigned i = 0; i < GRAPH_SIZES; ++i) {
+
+            const auto n = GRAPH_SIZE[i];
+
+            for (unsigned k = 0; k < NUM_POP_SIZE; ++k) {
+
+                auto generateAndTestGraph = [&](const double edgeDensity) {
+
+
+                    const auto graphSeed = rng0();
+                    random_engine rng(graphSeed);
+
+
+                    const auto m = std::max<unsigned>(std::ceil(edgeDensity * (double)((n * (n - 1) + 1) / 2)), 3);
+
+redo_graph_generation:
+
+                    MemIntervalGraph I(n);
+
+                    std::uniform_int_distribution<size_t> vertDist(0, n - 1);
+
+                    for (unsigned e = 0; e < m; ) {
+
+                        auto i = vertDist(rng);
+                        auto j = vertDist(rng);
+
+                        if (i != j) {
+                            if (j < i) {
+                                std::swap(i, j);
+                            }
+                            if (edge(i, j, I).second) {
+                                continue;
+                            }
+                            add_edge(i, j, I);
+                            ++e;
+                        }
+                    }
+
+                    std::fill_n(placement.begin(), n, BIPARTITE_GRAPH_UNPLACED);
+
+                    assert (stack.empty());
+
+                    for (unsigned i = 0; i < n; ++i) {
+                        if (placement[i] == BIPARTITE_GRAPH_UNPLACED) {
+                            placement[i] = BIPARTITE_GRAPH_LEFT_HAND;
+                            auto u = i;
+                            for (;;) {
+                                assert (placement[u] != BIPARTITE_GRAPH_UNPLACED);
+                                const auto newPlacement = (placement[u] ^ (BIPARTITE_GRAPH_LEFT_HAND | BIPARTITE_GRAPH_RIGHT_HAND));
+                                for (const auto e : make_iterator_range(out_edges(i, I))) {
+                                    const auto v = target(e, I);
+                                    if (placement[v] == BIPARTITE_GRAPH_UNPLACED) {
+                                        placement[v] = newPlacement;
+                                        stack.push_back(v);
+                                    } else if (placement[v] != newPlacement) {
+                                        stack.clear();
+                                        goto not_bipartite;
+                                    }
+                                }
+                                if (stack.empty()) {
+                                    break;
+                                }
+                                u = stack.back();
+                                stack.pop_back();
+                            }
+                        }
+                    }
+
+                    goto redo_graph_generation;
+
+    not_bipartite:
+
+                    std::uniform_int_distribution<size_t> weightDist(4, 64);
+
+                    for (unsigned i = 0; i < n; ++i) {
+                        weight[i] = weightDist(rng) * 1024;
+                    }
+
+                    assert (maxCutWeights.empty());
+
+                    for (const auto e : make_iterator_range(edges(I))) {
+                        const auto u = source(e, I);
+                        const auto v = target(e, I);
+                        const size_t Wu = weight[u]; assert (Wu > 0);
+                        const size_t Wv = weight[v]; assert (Wv > 0);
+                        maxCutWeights.emplace(e, std::sqrt((double)(Wu * Wu + Wv * Wv)));
+                    }
+
+
+                    for (unsigned k = 0; k < NUM_POP_SIZE; ++k) {
+
+
+                        for (unsigned j = 0; j < NUM_HMCR_RATES; ++j) {
+
+                            for (unsigned i = 0; i < 10; ++i) {
+
+                                const auto testSeed = rng0();
+
+                                MaxCutHarmonySearch HS(I, maxCutWeights, 1000000, POP_SIZE[k], HMCR_RATE[j], testSeed);
+
+                                errs() << graphSeed << ',' << n
+                                       << ',' << format("%.2f", edgeDensity) << ',' << m
+                                       << ',' << format("%.3f", HMCR_RATE[j])
+                                       << ',' << POP_SIZE[k]
+                                       << ',' << testSeed;
+
+                                HS.runHarmonySearch();
+
+                                errs() << '\n';
+
+                            }
+
+
+                        }
+
+    //                    for (unsigned i = 0; i < 10; ++i) {
+
+    //                        const auto testSeed = rng0();
+
+    //                        MaxCutHarmonySearch HS(I, maxCutWeights, 100000, POP_SIZE[k], HMCRType::COS, 0.0, testSeed);
+
+    //                        errs() << graphSeed << ',' << n
+    //                               << ',' << format("%.2f", edgeDensity) << ',' << m
+    //                               << ',' << "COS" // format("%.3f", 0.997)
+    //                               << ',' << POP_SIZE[k]
+    //                               << ',' << testSeed;
+
+    //                        HS.runHarmonySearch();
+
+    //                        errs() << '\n';
+    //                    }
+
+                    }
+
+
+                    maxCutWeights.clear();
+
+                };
+
+                generateAndTestGraph(0.05);
+                generateAndTestGraph(0.10);
+                generateAndTestGraph(0.20);
+                generateAndTestGraph(0.30);
+                generateAndTestGraph(0.40);
+                generateAndTestGraph(0.50);
+                generateAndTestGraph(0.75);
+                generateAndTestGraph(1.00);
+
+            }
+
+        }
+    }
+
+
+
+
+
+
+};
+
+static void executeHarmonySearchByCSV(const std::string fileName, const size_t rngSeed) {
+
+    random_engine rng0(rngSeed);
+
+    const auto MAX_SIZE = 100UL;
+
+
+
+    constexpr unsigned ROUNDS_PER_PASS = 2;
+
+    constexpr unsigned NUM_OF_PASSES = 1;
+
+    constexpr double PI =     3.1415926535897932384626433832795028841971693993751058209749445923;
+
+    constexpr double PI_x_2 = 6.2831853071795864769252867665590057683943387987502116419498891846;
+
+    std::vector<size_t> weight(MAX_SIZE);
+
+    std::vector<unsigned> placement(MAX_SIZE);
+
+    std::vector<unsigned> stack;
+
+    WeightMap maxCutWeights;
+
+    maxCutWeights.reserve(MAX_SIZE * MAX_SIZE / 2);
+
+//    constexpr unsigned NUM_POP_SIZE = 1;
+
+//    const unsigned POP_SIZE[NUM_POP_SIZE] = { 10 };
+
+//    constexpr unsigned NUM_HMCR_RATES = 1;
+
+//    const double C[NUM_HMCR_RATES] = { 0.900 };
+
+    auto generateAndTestGraph = [&](const unsigned n, const unsigned m, const size_t graphSeed) {
+
+        random_engine rng(graphSeed);
+
+        MemIntervalGraph I(n);
+
+        std::uniform_int_distribution<size_t> vertDist(0, n - 1);
+
+        for (unsigned e = 0; e < m; ) {
+
+            auto i = vertDist(rng);
+            auto j = vertDist(rng);
+
+            if (i != j) {
+                if (j < i) {
+                    std::swap(i, j);
+                }
+                if (edge(i, j, I).second) {
+                    continue;
+                }
+                add_edge(i, j, I);
+                ++e;
+            }
+        }
+
+        std::uniform_int_distribution<size_t> weightDist(4, 64);
+
+        for (unsigned i = 0; i < n; ++i) {
+            weight[i] = weightDist(rng) * 1024;
+        }
+
+        assert (maxCutWeights.empty());
+
+        for (const auto e : make_iterator_range(edges(I))) {
+            const auto u = source(e, I);
+            const auto v = target(e, I);
+            const size_t Wu = weight[u]; assert (Wu > 0);
+            const size_t Wv = weight[v]; assert (Wv > 0);
+            maxCutWeights.emplace(e, std::sqrt((double)(Wu * Wu + Wv * Wv)));
+        }
+
+
+        const double ed = (double)(2 * m) / (double)(n * (n - 1));
+        double edgeDensity = 0.0;
+        if (ed < 0.1) {
+            edgeDensity = 0.05;
+        } else if (ed < 0.2) {
+            edgeDensity = 0.10;
+        } else if (ed < 0.3) {
+            edgeDensity = 0.20;
+        } else if (ed < 0.4) {
+            edgeDensity = 0.30;
+        } else if (ed < 0.5) {
+            edgeDensity = 0.40;
+        } else if (ed < 0.75) {
+            edgeDensity = 0.50;
+        } else if (ed < 0.99) {
+            edgeDensity = 0.75;
+        } else {
+            edgeDensity = 1.00;
+        }
+
+        auto poly4 = [](const size_t x, const double a, const double b, const double c, const double d, const double e) {
+            const double A = a * (double)std::pow(x, 4);
+            const double B = b * (double)std::pow(x, 3);
+            const double C = c * (double)std::pow(x, 2);
+            const double D = d * (double)x;
+            return A + B + C + D + e;
+        };
+
+        const double gamma = ((double)m) / ((double)(n * (n - 1)));
+        const double beta = poly4(gamma, 260.3499, -208.0714, 21.0946, 6.8772, 2.0361);
+        const double alpha = poly4(gamma, 233.0784, -151.8367, 36.1286, -3.7582, 0.1529);
+        const auto prediction = alpha * std::pow(n, beta) + 142.9282;
+
+//        const auto prediction = 0.08415 * ((double)(n * n))
+//                + 4.3378 * ((double)n) - 0.15291 * ((double)m) - 54.15170;
+
+        const auto maxRounds = (unsigned)std::ceil(std::max(prediction, 25.0) * 2.0) + 1000;
+
+        auto runCosTest = [&](HMCRType type, const double minHMCR, const double maxHMCR, const double period) {
+
+            double angularFreq = 0.0;
+            if (type == HMCRType::Cos) {
+                angularFreq = PI_x_2 / period;
+            } else if (type == HMCRType::AbsCos) {
+                angularFreq = PI / period;
+            }
+
+            for (unsigned i = 0; i < ROUNDS_PER_PASS; ++i) {
+
+                const auto testSeed = rng0();
+
+                MaxCutHarmonySearch HS(I, maxCutWeights, maxRounds, 10, type, minHMCR, maxHMCR, angularFreq, testSeed);
+
+                errs() << graphSeed << ',' << n
+                       << ',' << format("%.2f", edgeDensity) << ',' << m;
+                if (type == HMCRType::Cos) {
+                    errs() << ',' << "COSX";
+                } else if (type == HMCRType::AbsCos) {
+                    errs() << ',' << "COS";
+                }
+                errs() << ',' << format("%.1f", minHMCR)
+                       << ',' << format("%.1f", maxHMCR)
+                       << ',' << format("%.0f", period)
+                       << ',' << 10
+                       << ',' << testSeed;
+
+                HS.runHarmonySearch();
+
+                errs() << '\n';
+            }
+        };
+
+        auto runCosTestGroup = [&](HMCRType type, const double period) {
+//            runCosTest(type, 0.0, 0.9, period);
+//            runCosTest(type, 0.5, 0.9, period);
+//            runCosTest(type, 0.7, 0.9, period);
+//            runCosTest(type, 0.8, 0.9, period);
+//            runCosTest(type, 0.0, 1.0, period);
+//            runCosTest(type, 0.5, 1.0, period);
+//            runCosTest(type, 0.7, 1.0, period);
+//            runCosTest(type, 0.8, 1.0, period);
+            runCosTest(type, 0.9, 1.0, period);
+        };
+
+        for (unsigned period = 2; period <= 10; period += 2) {
+            runCosTestGroup(HMCRType::Cos, period);
+            runCosTestGroup(HMCRType::AbsCos, period);
+        }
+        for (unsigned period = 20; period <= 100; period += 10) {
+            runCosTestGroup(HMCRType::Cos, period);
+            runCosTestGroup(HMCRType::AbsCos, period);
+        }
+
+        for (unsigned period = 125; period <= 200; period += 25) {
+            runCosTestGroup(HMCRType::Cos, period);
+            runCosTestGroup(HMCRType::AbsCos, period);
+        }
+
+        maxCutWeights.clear();
+
+    };
+
+    std::ifstream file(fileName);
+    if (!file || file.eof()) return;
+
+    std::string input;
+
+    std::getline(file, input, '\n');
+
+
+    std::vector<std::array<long long, 3>> tests;
+
+    while (!file.eof()) {
+
+
+
+        std::getline(file, input, ',');
+        const auto nodeCount = std::atoll(input.c_str());
+
+        std::getline(file, input, ',');
+        const auto edgeCount = std::atoll(input.c_str());
+
+        std::getline(file, input, '\n');
+        const auto graphSeed = std::atoll(input.c_str());
+
+        if (nodeCount < 1 || edgeCount < 1) {
+            continue;
+        }
+
+        tests.emplace_back(std::array<long long, 3>{nodeCount, edgeCount, graphSeed});
+
+    }
+
+    file.close();
+
+    std::shuffle(tests.begin(), tests.end(), rng0);
+
+    for (unsigned i = 0; i < NUM_OF_PASSES; ++i) {
+        for (const auto & test : tests) {
+            generateAndTestGraph(std::get<0>(test), std::get<1>(test), std::get<2>(test));
+        }
+    }
+
+
+};
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief MemoryAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
 class MemoryAnalysis {
 
-    struct Trail {
-        double Weight;
-        double Pheromone;
-    };
+    using Candidate = OrderingBasedEvolutionaryAlgorithm::Candidate;
 
-    using IntervalGraph = adjacency_list<vecS, vecS, undirectedS, no_property, Trail>;
-
-    using IntervalEdge = typename IntervalGraph::edge_descriptor;
+    using IntervalEdge = typename MemIntervalGraph::edge_descriptor;
 
     enum class Orientation {
         Forwards = 0
@@ -265,9 +902,13 @@ public:
         // Each node value in the interval graph marks the position of the candidate schedule
         // that produced the streamset.
 
-        IntervalGraph I(numOfStreamSets);
+        MemIntervalGraph I(numOfStreamSets);
 
         std::fill_n(live.begin(), numOfStreamSets, 0);
+
+        const auto firstStreamSet = (2 * numOfKernels);
+
+        std::fill_n(weight.begin(), firstStreamSet, 0);
 
         BEGIN_SCOPED_REGION
 
@@ -283,7 +924,7 @@ public:
                 // assert (node.Size > 0);
                 assert (streamSetId < numOfStreamSets);
                 const auto i = streamSetId++;
-                component[i] = position;
+                ordinal[i] = position;
                 for (unsigned j = 0; j != i; ++j) {
                     if (live[j] != 0) {
                         add_edge(j, i, I);
@@ -291,6 +932,9 @@ public:
                     }
                 }
                 live[i] = out_degree(streamSet, S);
+                // initialize the streamset weight in the graph
+                const auto W = ceiling(S[streamSet].Size);
+                weight[firstStreamSet + i] = W;
             }
             ++position;
         }
@@ -300,14 +944,26 @@ public:
 
         END_SCOPED_REGION
 
+        Depth = 0;
+
+        return calculateChomaticNumber(candidate, weight, I);
+    }
+
+private:
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief calculateChomaticNumber
+     ** ------------------------------------------------------------------------------------------------------------- */
+    size_t calculateChomaticNumber(const Candidate & candidate, std::vector<size_t> & weight, MemIntervalGraph & I) {
+
         const auto l = (2 * numOfKernels) + numOfStreamSets;
 
         TransitiveGraph G(l);
 
-        std::fill_n(weight.begin(), l, 0);
-
         unsigned streamSetId = 0;
         unsigned priorProducerRank = 0;
+
+        ++Depth;
 
         for (const auto kernel : candidate) {
             for (const auto output : make_iterator_range(out_edges(kernel, S))) {
@@ -319,34 +975,34 @@ public:
                 const auto i = streamSetId++;
 
                 // Each node value in I marks the schedule position.
-                const auto producerRank = component[i];
+                const auto producerRank = ordinal[i];
                 assert (priorProducerRank <= producerRank);
                 priorProducerRank = producerRank;
 
                 auto consumerRank = producerRank;
                 for (const auto e : make_iterator_range(out_edges(i, I))) {
                     const auto j = target(e, I);
-                    const auto rank = component[j];
+                    const auto rank = ordinal[j];
                     consumerRank = std::max(consumerRank, rank);
                 }
 
                 const auto lifespan = consumerRank - producerRank;
 
-                const auto W = ceiling(S[streamSet].Size);
+                const auto j = (2 * numOfKernels) + i;
+
+                const auto W = weight[j];
 
                 if (LLVM_LIKELY(lifespan <= 1 || W == 0)) {
-                    const auto j = (2 * producerRank) | lifespan;
-                    assert (j < (2 * numOfKernels));
-                    weight[j] += W;
+                    const auto k = (2 * producerRank) | lifespan;
+                    assert (k < (2 * numOfKernels));
+                    weight[k] += W;
+                    weight[j] = 0;
 
                     // If the lifespan of this streamset is at most one, we can place it into the
                     // comparability graph and do not need to reason about it within the forest.
                     clear_vertex(i, I);
 
                 } else {
-
-                    const auto j = (2 * numOfKernels) + i;
-                    weight[j] = W;
 
                     // NOTE: we mark the direction of the edges between the "forest" and comparability
                     // graph nodes as Unknown since we do not know their orientation until we've built
@@ -386,9 +1042,9 @@ public:
 
         size_t worstCaseUnderapproximation = 0;
 
-redo_bipartite_check_after_max_cut:
-
         assert (placement.size() >= numOfStreamSets);
+
+redo_placement_after_max_cut:
 
         for (unsigned i = 0; i < numOfStreamSets; ++i) {
             placement[i] = (out_degree(i, I) == 0) ? BIPARTITE_GRAPH_LEFT_HAND : BIPARTITE_GRAPH_UNPLACED;
@@ -427,8 +1083,9 @@ redo_bipartite_check_after_max_cut:
                     } else if (placement[v] != OTHER_HAND) {
                         stack.clear();
                         assert ("second bipartite check failed?" && (worstCaseUnderapproximation == 0));
-                        worstCaseUnderapproximation = compute_max_cut(I);
-                        goto redo_bipartite_check_after_max_cut;
+                        // compute_max_cut will transform I into a bipartite graph
+                        worstCaseUnderapproximation = compute_max_cut(candidate, weight, I);
+                        goto redo_placement_after_max_cut;
                     }
                 }
                 if (stack.empty()) {
@@ -483,26 +1140,110 @@ is_bipartite_graph:
         auto chromaticNumber = std::numeric_limits<size_t>::max();
 
         // Based on the assumption N is relatively small, we can use a single counter
-        // from 0 to pow(2,N) - 1 to represent our current premutation. If N > 6,
+        // from 0 to pow(2,N) - 1 to represent our current premutation. If N > 10,
         // we'll need another method to converge on a solution.
 
         assert (N <= 10);
 
         for (unsigned i = 0; i < (1U << N); ++i) {
-            const auto weight = calculate_orientation_clique_weight(i, G);
-            chromaticNumber = std::min<size_t>(chromaticNumber, weight);
+            const auto X = calculate_orientation_clique_weight(i, weight, G);
+            chromaticNumber = std::min<size_t>(chromaticNumber, X);
         }
 
-        const auto result = chromaticNumber + worstCaseUnderapproximation;
-        return result;
+        assert (chromaticNumber < std::numeric_limits<size_t>::max());
+
+        return chromaticNumber + worstCaseUnderapproximation;
     }
 
-private:
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief compute_max_cut
+     ** ------------------------------------------------------------------------------------------------------------- */
+    size_t compute_max_cut(const Candidate & candidate, const std::vector<size_t> & weight, MemIntervalGraph & I) {
+
+        // If G_I is not a bipartite graph, intuitively, we want to keep as many
+        // interval relationships adjacent to heavy nodes as possible. So we're going
+        // to apply a weighted max-cut to it to transform G_I into one by discarding
+        // any "uncut" edges.
+
+
+
+        const auto start = std::chrono::high_resolution_clock::now();
+
+        const auto numOfEdges = num_edges(I);
+        assert (numOfEdges > 0);
+//        const double N = (numOfStreamSets * (numOfStreamSets - 1));
+//        const double edgeRatio = ((double)(numOfEdges * 2)) / ((double)N);
+//        assert (edgeRatio < 1.0);
+//        const unsigned numOfRounds = std::ceil(84.4908 * std::exp(-2.874866 * edgeRatio));
+//        assert (numOfRounds < 100);
+
+        const auto predictionOf95PercentCut = 0.07930 * ((double)(numOfStreamSets * numOfStreamSets))
+            + 7.63712 * ((double)numOfStreamSets) - 0.19735 * ((double)numOfEdges) - 80.59364;
+
+        const unsigned numOfRounds = std::ceil(std::max(predictionOf95PercentCut, 40.0) * maxCutRoundsFactor);
+
+        const auto firstStreamSet = (2 * numOfKernels);
+
+        WeightMap maxCutWeights;
+
+        maxCutWeights.reserve(numOfEdges);
+
+        for (const auto e : make_iterator_range(edges(I))) {
+            const auto u = source(e, I);
+            const auto v = target(e, I);
+            const size_t Wu = weight[firstStreamSet + u]; assert (Wu > 0);
+            const size_t Wv = weight[firstStreamSet + v]; assert (Wv > 0);
+            maxCutWeights.emplace(e, std::sqrt((double)(Wu * Wu + Wv * Wv)));
+        }
+
+        constexpr double ANG_FREQ_PERIOD_20 = 0.3141592653589793238462643383279502884197169399375105820974944592;
+
+        auto bestScore = std::numeric_limits<MaxCutHarmonySearch::FitnessValueType>::lowest();
+
+        MaxCutHarmonySearch::Candidate assignment(0);
+        for (unsigned r = 0; r < maxCutPasses; ++r) {
+            std::uniform_int_distribution<uintmax_t> distribution(0, std::numeric_limits<uintmax_t>::max());
+            const auto seed = distribution(rng);
+            MaxCutHarmonySearch HS(I, maxCutWeights, numOfRounds, 10, HMCRType::Cos, 0.8, 1.0, ANG_FREQ_PERIOD_20, seed);
+            HS.runHarmonySearch();
+            const auto score = HS.getBestFitnessValue();
+            if (bestScore < score) {
+                assignment = HS.getResult();
+                bestScore = score;
+            }
+        }
+
+        assert (bestScore > std::numeric_limits<MaxCutHarmonySearch::FitnessValueType>::lowest());
+
+        MemIntervalGraph residualGraph(numOfStreamSets);
+
+        std::vector<size_t> residualWeights(2 * numOfKernels + numOfStreamSets, 0);
+
+        remove_edge_if([&](const MemIntervalGraph::edge_descriptor e){
+            const auto u = source(e, I);
+            const auto v = target(e, I);
+            if (assignment.test(u) != assignment.test(v)) {
+                return false;
+            } else {
+                add_edge(u, v, residualGraph);
+                residualWeights[firstStreamSet + u] = weight[firstStreamSet + u];
+                residualWeights[firstStreamSet + v] = weight[firstStreamSet + v];
+                return true;
+            }
+        }, I);
+
+        const auto end = std::chrono::high_resolution_clock::now();
+        fitness_hs_time += (end - start).count();
+
+        return calculateChomaticNumber(candidate, residualWeights, residualGraph);
+
+    }
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief calculate_orientation_clique_weight
      ** ------------------------------------------------------------------------------------------------------------- */
-    unsigned calculate_orientation_clique_weight(const std::bitset<64> permutation, const TransitiveGraph & G) {
+    unsigned calculate_orientation_clique_weight(const std::bitset<64> permutation,
+                                                 const std::vector<size_t> & weight, const TransitiveGraph & G) {
 
         // Ideally, we want to construct a topological ordering of our vertices then
         // recursively add the sum of the heaviest path into each vertex with the
@@ -582,385 +1323,27 @@ private:
         return maxWeight;
     };
 
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief compute_max_cut
-     ** ------------------------------------------------------------------------------------------------------------- */
-    size_t compute_max_cut(IntervalGraph & I) {
-
-        // If G_I is not a bipartite graph, intuitively, we want to keep as many
-        // interval relationships adjacent to heavy nodes as possible. So we're going
-        // to apply a weighted max-cut to it to transform G_I into one by discarding
-        // any "uncut" edges.
-
-        constexpr double T_Init = 1.0;
-        constexpr double T_Min = 0.001;
-
-        constexpr double MAX_CUT_RHO = 0.005;
-        constexpr double MAX_CUT_BETA = 1.0;
-
-        // The following algorithm was originally based on the paper "An ant colony
-        // algorithm for solving Max-cut problems" (2008). However, solutions found
-        // by that approach typically resulted in many connected components (CCs).
-        // Since the run-time of the interval colouring is O(2^(N + 1)), where N is
-        // the number of CCs, general max-cut algorithms had a catastrophic impact
-        // on the useability of the comparability graph approach.
-
-        // To preserve the actual number of CCs, the algorithm was rewritten to use
-        // Prims's spanning tree algorithm to define each cut set. The greedy local
-        // search phase was also discarded.
-
-        // Through empirical analysis, I modified the pheromone calculation function
-        // to more quickly converge on a "good enough" solution but kept the same
-        // +/- flavour of the paper's original deposit function.
-
-        // NOTE: I'm currently applying the Pythagorean theorem to the endpoint
-        // weights to make the edge weight; hopefully this will prioritize placing
-        // pairs of medium to heavy nodes into differing sets over a heavy and light
-        // (or two light nodes.) Proof of this can be shown below:
-
-        // Given the formula:
-
-        //     (x/m)^2 + (y/n)^2 < (x/(m-1))^2 + (y/(n+1))^2
-
-        // All solutions to this that require x and y to be positive requires that
-        // n is negative. Since (y/n) refers to the size of a non-negative buffer
-        // allocation, this proves the statement by contradiction.
-
-        for (const auto e : make_iterator_range(edges(I))) {
-            const auto u = source(e, I);
-            const auto v = target(e, I);
-            const size_t Wu = weight[u + (2 * numOfKernels)];
-            const size_t Wv = weight[v + (2 * numOfKernels)];
-            const auto weight = std::log10(std::pow(std::sqrt(Wu * Wu + Wv * Wv), MAX_CUT_BETA));
-
-            Trail & M = I[e];
-            M.Weight = weight;
-            assert (M.Weight > 0.0);
-            M.Pheromone = T_Init;
-        }
-
-        const auto numOfComponents = collect_connected_components(I);
-
-        compute_spanning_tree_to_determine_placement(I, numOfComponents);
-
-        std::vector<unsigned> solution(placement);
-
-        auto bestWeight = calculate_cut_weight(I);
-
-        for (const auto e : make_iterator_range(edges(I))) {
-            const auto u = source(e, I);
-            const auto v = target(e, I);
-            if (placement[u] != placement[v]) {
-                Trail & M = I[e];
-                M.Pheromone += 1.0;
-            }
-        }
-
-        for (unsigned r = 0; r < MAX_CUT_ACO_ROUNDS; ++r) {
-
-            compute_spanning_tree_to_determine_placement(I, numOfComponents);
-
-            // check effect of this change
-            const auto currentWeight = calculate_cut_weight(I);
-
-            // update the pheromone matrix
-            double deposit = 0.0;
-            if (currentWeight > bestWeight) {
-                const auto r = std::sqrt(currentWeight - bestWeight);
-                deposit = r / (0.2 + r);
-            } else if (currentWeight < bestWeight) {
-                const auto r = std::sqrt(bestWeight - currentWeight);
-                deposit = -r / (0.2 + r);
-            }
-
-            for (const auto e : make_iterator_range(edges(I))) {
-                Trail & M = I[e];
-                M.Pheromone *= (1.0 - MAX_CUT_RHO);
-                const auto u = source(e, I);
-                const auto v = target(e, I);
-                if (placement[u] != placement[v]) {
-                    M.Pheromone += deposit;
-                }
-                M.Pheromone = std::max(M.Pheromone, T_Min);
-            }
-
-            if (bestWeight < currentWeight) {
-                bestWeight = currentWeight;
-                solution.swap(placement);
-            }
-
-        }
-
-        IntervalGraph B(numOfStreamSets);
-
-        remove_edge_if([&](const IntervalGraph::edge_descriptor e){
-            const auto u = source(e, I);
-            const auto v = target(e, I);
-            if (solution[u] == solution[v]) {
-                return true;
-            } else {
-                add_edge(u, v, B);
-                return false;
-            }
-        }, I);
-
-        // For every node we place in which we have deleted an edge to transform
-        // G_I into a bipartite graph, our colouring could be at most wrong by the
-        // the total colours needed to colour the graph G_I' constructed from its
-        // deleted edges. G_I is an interval graph but G_I' is not necessarily one
-        // since we're generating it by removing edges not vertices. However,
-        // LexBFS may still return a good ordering for a greedy colouring.
-
-        // TODO: either prove the vertex index ordering of G_I is a reverse PEO
-        // or implement LexBFS here. I suspect it is a reverse PEO since we can
-        // orient any edges of a clique from left to right.
-
-        I.swap(B);
-
-        // Note: B here is originally I due to the prior swap
-        return greedy_colouring(B);
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief determine_component
-     ** ------------------------------------------------------------------------------------------------------------- */
-    unsigned collect_connected_components(const IntervalGraph & I) {
-
-        assert (num_edges(I) > 0);
-
-        std::fill_n(placement.begin(), numOfStreamSets, 0);
-
-        std::fill_n(accum.begin(), numOfStreamSets, 0);
-
-        unsigned k = 1;
-        unsigned pos = 0;
-
-        accum[0] = 0;
-
-        for (unsigned i = 0; i < numOfStreamSets; ++i) {
-            assert (stack.empty());
-            if (placement[i] == 0 && out_degree(i, I) > 0) {
-                auto u = i;
-                for (;;) {
-                    component[pos++] = u;
-                    for (const auto e : make_iterator_range(out_edges(u, I))) {
-                        const auto v = target(e, I);
-                        if (placement[v] == 0) {
-                            placement[v] = k;
-                            stack.push_back(v);
-                        }
-                        assert (placement[v] == k);
-                    }
-                    if (stack.empty()) {
-                        break;
-                    }
-                    u = stack.back();
-                    stack.pop_back();
-                }
-                accum[k++] = pos; // store the first position of the next component
-            }
-        }
-        assert (k > 1);
-        return k - 1;
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief compute_spanning_tree_to_determine_placement
-     *
-     * Uses a modified version of Prim's algorithm to find a maximal spanning forest; makes edge inclusion choices
-     * using weights an ant colony heuristic.
-     ** ------------------------------------------------------------------------------------------------------------- */
-    void compute_spanning_tree_to_determine_placement(const IntervalGraph & I, const unsigned k) {
-
-        SmallVector<unsigned, 4> roots(k);
-        for (unsigned i = 0; i < k; ++i) {
-            assert (accum[i + 1] > accum[i]);
-            const auto m = accum[i + 1] - accum[i];
-            std::uniform_int_distribution<unsigned> initial(0, m - 1);
-            const auto j = initial(rng) + accum[i];
-            assert (j < numOfStreamSets);
-            roots[i] = component[j];
-        }
-
-        std::fill_n(placement.begin(), numOfStreamSets, BIPARTITE_GRAPH_UNPLACED);
-
-        BitVector in_tree(numOfStreamSets);
-        for (const auto root : roots) {
-            placement[root] = BIPARTITE_GRAPH_LEFT_HAND;
-            in_tree.set(root);
-        }
-
-        SmallVector<IntervalEdge, 8> selected;
-        SmallVector<double, 8> probability;
-
-        for (;;) {
-
-            #ifndef NDEBUG
-            auto remaining = in_tree.count();
-            #endif
-
-            assert (probability.empty() && selected.empty());
-
-            double sum = 0.0;
-            for (const auto u : in_tree.set_bits()) {
-                assert (placement[u] != BIPARTITE_GRAPH_UNPLACED);
-                bool all_adjacencies_added = true;
-                for (const auto e : make_iterator_range(out_edges(u, I))) {
-                    const auto v = target(e, I);
-                    assert (v != u);
-                    if (placement[v] == BIPARTITE_GRAPH_UNPLACED) {
-                        all_adjacencies_added = false;
-                        const Trail & M = I[e];
-                        assert (M.Pheromone > 0);
-                        const auto w = std::pow(M.Pheromone, 2.0) * M.Weight;
-                        selected.push_back(e);
-                        probability.push_back(w);
-                        sum += w;
-                    }
-                }
-                if (all_adjacencies_added) {
-                    in_tree.reset(u);
-                }
-                #ifndef NDEBUG
-                --remaining;
-                #endif
-            }
-
-            assert ("failed to visit every incomplete node?" && remaining == 0);
-
-            if (selected.empty()) {
-                break;
-            }
-
-            assert (sum > 0.0);
-
-            std::uniform_real_distribution<double> distribution(0.0, sum);
-            const auto c = distribution(rng);
-
-            double d = std::numeric_limits<double>::epsilon();
-            const auto m = probability.size();
-            bool found = false;
-            for (unsigned i = 0; i < m; ++i) {
-                d += probability[i];
-                if (d >= c) {
-                    const auto e = selected[i];
-                    const auto u = source(e, I);
-                    const auto v = target(e, I);
-                    assert (placement[u] != BIPARTITE_GRAPH_UNPLACED && placement[v] == BIPARTITE_GRAPH_UNPLACED);
-                    assert (!in_tree.test(v));
-                    in_tree.set(v);
-                    placement[v] = placement[u] ^ (BIPARTITE_GRAPH_LEFT_HAND | BIPARTITE_GRAPH_RIGHT_HAND);
-                    found = true;
-                    break;
-                }
-            }
-            assert (found);
-            probability.clear();
-            selected.clear();
-        }
-
-        #ifndef NDEBUG
-        for (unsigned i = 0; i < numOfStreamSets; ++i) {
-            assert ((out_degree(i, I) == 0) || (placement[i] != BIPARTITE_GRAPH_UNPLACED));
-        }
-        #endif
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief calculate_cut_weight
-     ** ------------------------------------------------------------------------------------------------------------- */
-    double calculate_cut_weight(const IntervalGraph & I) const {
-        double weight = 0;
-        for (const auto e : make_iterator_range(edges(I))) {
-            const auto u = source(e, I);
-            const auto v = target(e, I);
-            if (placement[u] != placement[v]) {
-                weight += I[e].Weight;
-            }
-        }
-        return weight;
-    };
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief greedy_colouring
-     ** ------------------------------------------------------------------------------------------------------------- */
-    size_t greedy_colouring(const IntervalGraph & I) {
-
-        using Interval = std::pair<unsigned, unsigned>;
-
-        using ColourLine = flat_set<Interval>;
-
-        std::vector<unsigned> remaining(numOfStreamSets, 0);
-
-        std::vector<Interval> GC_Intervals(numOfStreamSets);
-
-        ColourLine GC_CL;
-
-        unsigned max_colours = 0;
-        for (unsigned i = 0; i != numOfStreamSets; ++i) {
-            const auto w = weight[i + (2 * numOfKernels)];
-
-            if (w == 0) {
-                remaining[i] = -1U;
-                assert (degree(i, I) == 0);
-            } else {
-                remaining[i] = out_degree(i, I);
-                unsigned first = 0;
-                for (const auto & interval : GC_CL) {
-                    const auto last = interval.first;
-                    assert (first <= last);
-                    if ((first + w) < last) {
-                        break;
-                    }
-                    first = interval.second;
-                }
-                const auto last = first + w;
-                assert (first <= last);
-                if (last > max_colours) {
-                    max_colours = last;
-                }
-
-                GC_Intervals[i] = std::make_pair(first, last);
-
-                GC_CL.emplace(first, last);
-
-                for (const auto e : make_iterator_range(out_edges(i, I))) {
-                    const auto j = target(e, I);
-                    if (j < i) {
-                        assert (remaining[j] > 0 && remaining[j] < -1U);
-                        remaining[j]--;
-                    }
-                }
-
-                for (unsigned j = 0; j <= i; ++j) {
-                    if (remaining[j] == 0) {
-                        const auto f = GC_CL.find(GC_Intervals[j]);
-                        assert (f != GC_CL.end());
-                        GC_CL.erase(f);
-                        remaining[j] = -1U;
-
-                    }
-                }
-            }
-        }
-        return max_colours;
-    };
-
 public:
 
-    MemoryAnalysis(const SchedulingGraph & S, const unsigned numOfKernels)
+    MemoryAnalysis(const SchedulingGraph & S, const unsigned numOfKernels, random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
     : S(S)
     , numOfKernels(numOfKernels)
     , numOfStreamSets(num_vertices(S) - numOfKernels)
-    , rng(std::random_device()())
-    , live(2 * numOfKernels + numOfStreamSets)
+    , maxCutRoundsFactor(maxCutRoundsFactor)
+    , maxCutPasses(maxCutPasses)
+    , rng(rng)
     , weight(2 * numOfKernels + numOfStreamSets)
+    , ordinal(numOfStreamSets)
+    , live(2 * numOfKernels + numOfStreamSets)
     , component(numOfStreamSets)
     , placement(numOfStreamSets)
     , accum(2 * numOfKernels + numOfStreamSets) {
 
     }
+
+public:
+
+    unsigned Depth;
 
 protected:
 
@@ -969,14 +1352,21 @@ protected:
     const unsigned numOfKernels;
     const unsigned numOfStreamSets;
 
-    random_engine rng;
+    const double maxCutRoundsFactor;
+    const unsigned maxCutPasses;
+
+    random_engine & rng;
 
 private:
 
-    std::vector<unsigned> live;
     std::vector<size_t>   weight;
+    std::vector<unsigned> ordinal;
+
+
+    std::vector<unsigned> live;    
     std::vector<unsigned> component;
     std::vector<unsigned> placement;
+
     std::vector<Vertex>   stack;
     std::vector<size_t>   accum;
 
@@ -986,6 +1376,8 @@ private:
  * @brief SchedulingAnalysisWorker
  ** ------------------------------------------------------------------------------------------------------------- */
 struct SchedulingAnalysisWorker {
+
+    using Candidate = OrderingBasedEvolutionaryAlgorithm::Candidate;
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
@@ -1003,11 +1395,12 @@ protected:
 
     SchedulingAnalysisWorker(const SchedulingGraph & S,
                        const unsigned numOfKernels,
-                       const unsigned candidateLength)
+                       const unsigned candidateLength,
+                       random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
     : numOfKernels(numOfKernels)
     , candidateLength(candidateLength)
-    , analyzer(S, numOfKernels)
-    , rng(std::random_device()()) {
+    , rng(rng)
+    , analyzer(S, numOfKernels, rng, maxCutRoundsFactor, maxCutPasses) {
 
     }
 
@@ -1015,10 +1408,9 @@ public:
 
     const unsigned numOfKernels;
     const unsigned candidateLength;
-
+    random_engine & rng;
     MemoryAnalysis analyzer;
 
-    random_engine rng;
 
 };
 
@@ -1026,6 +1418,8 @@ public:
  * @brief PartitionSchedulingAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
 struct PartitionSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
+
+    using Candidate = OrderingBasedEvolutionaryAlgorithm::Candidate;
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
@@ -1066,8 +1460,8 @@ public:
      * @brief constructor
      ** ------------------------------------------------------------------------------------------------------------- */
     PartitionSchedulingAnalysisWorker(const SchedulingGraph & S, const PartitionDependencyGraph & D,
-                                      const unsigned numOfKernels)
-    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels)
+                                      const unsigned numOfKernels, random_engine & rng)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels, rng, 1, 1)
     , D(D)
     , replacement(numOfKernels)
     , remaining(numOfKernels) {
@@ -1087,7 +1481,7 @@ private:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief PartitionSchedulingAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
-struct PartitionSchedulingAnalysis final : public EvolutionaryAlgorithm {
+struct PartitionSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgorithm {
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
@@ -1100,7 +1494,8 @@ struct PartitionSchedulingAnalysis final : public EvolutionaryAlgorithm {
         // solution space.
 
         return enumerateUpToNTopologicalOrderings(D, INITIAL_TOPOLOGICAL_POPULATION_SIZE, [&](const Candidate & L) {
-            insertCandidate(L, initialPopulation);
+            FitnessValueType fitness;
+            insertCandidate(L, initialPopulation, fitness);
         });
 
     }
@@ -1123,10 +1518,10 @@ struct PartitionSchedulingAnalysis final : public EvolutionaryAlgorithm {
      * @brief constructor
      ** ------------------------------------------------------------------------------------------------------------- */
     PartitionSchedulingAnalysis(const SchedulingGraph & S, const PartitionDependencyGraph & D,
-                                const unsigned numOfKernels)
-    : EvolutionaryAlgorithm(numOfKernels, MAX_EVOLUTIONARY_ROUNDS, MAX_POPULATION_SIZE, MUTATION_RATE)
+                                const unsigned numOfKernels, random_engine & rng)
+    : OrderingBasedEvolutionaryAlgorithm(numOfKernels, PARITION_SCHEDULING_GA_ROUNDS, MAX_PARTITION_POPULATION_SIZE, MUTATION_RATE, rng)
     , D(D)
-    , worker(S, D, numOfKernels) {
+    , worker(S, D, numOfKernels, rng) {
 
     }
 
@@ -1143,17 +1538,11 @@ private:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowWithinPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const {
+void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P, random_engine & rng) const {
 
     /// --------------------------------------------
     /// Construct our partition schedules
     /// --------------------------------------------
-
-    const auto cfg = Z3_mk_config();
-    Z3_set_param_value(cfg, "model", "true");
-    Z3_set_param_value(cfg, "proof", "false");
-    const auto ctx = Z3_mk_context(cfg);
-    Z3_del_config(cfg);
 
     for (unsigned currentPartitionId = 1; currentPartitionId < PartitionCount; ++currentPartitionId) {
 
@@ -1181,118 +1570,6 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const
         constexpr auto firstKernel = 1U;
         const auto fakeOutput = numOfKernels + 1U;
 
-        BEGIN_SCOPED_REGION
-
-        /// ------------------------------------------------------------------------
-        /// Determine how many "invocations" are required by each kernel so that we
-        /// can correctly scale the streamset sizes based on the dataflow rates
-        /// ------------------------------------------------------------------------
-
-        const auto solver = Z3_mk_solver(ctx);
-        Z3_solver_inc_ref(ctx, solver);
-
-        const auto intType = Z3_mk_int_sort(ctx);
-
-        auto constant_real = [&](const Rational value) {
-            return Z3_mk_real(ctx, value.numerator(), value.denominator());
-        };
-
-        auto multiply =[&](Z3_ast X, Z3_ast Y) {
-            assert (X);
-            assert (Y);
-            Z3_ast args[2] = { X, Y };
-            return Z3_mk_mul(ctx, 2, args);
-        };
-
-        auto assert_equals =[&](Z3_ast X, Z3_ast Y) {
-            assert (X);
-            assert (Y);
-            const auto Z = Z3_mk_eq(ctx, X, Y);
-            Z3_solver_assert(ctx, solver, Z);
-        };
-
-        const auto n = num_vertices(S);
-
-        std::vector<Z3_ast> VarList(n, nullptr);
-
-        const auto ONE = Z3_mk_int(ctx, 1, intType);
-
-        VarList[fakeInput] = ONE;
-
-        for (unsigned u = firstKernel; u < fakeOutput; ++u) {
-            assert (S[u].Type == SchedulingNode::IsKernel);
-            auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
-            auto c1 = Z3_mk_ge(ctx, v, ONE);
-            Z3_solver_assert(ctx, solver, c1);
-            VarList[u] = v;
-        }
-
-        for (auto i = fakeInput; i < fakeOutput; ++i) {
-            for (const auto e : make_iterator_range(out_edges(i, S))) {
-                const auto streamSet = target(e, S);
-                const auto fixedRateVal = constant_real(S[e]);
-                const auto producedRate = multiply(VarList[i], fixedRateVal);
-                VarList[streamSet] = producedRate;
-            }
-        }
-
-        for (auto i = firstKernel; i < fakeOutput; ++i) {
-            assert (S[i].Type == SchedulingNode::IsKernel);
-            for (const auto e : make_iterator_range(in_edges(i, S))) {
-                const auto streamSet = source(e, S);
-                const auto producedRate = VarList[streamSet];
-                const auto fixedRateVal = constant_real(S[e]);
-                const auto consumedRate = multiply(VarList[i], fixedRateVal);
-                assert_equals(producedRate, consumedRate);
-            }
-        }
-
-        if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-            report_fatal_error("Z3 failed to find a solution to partition SDF graph");
-        }
-
-        const auto model = Z3_solver_get_model(ctx, solver);
-        Z3_model_inc_ref(ctx, model);
-
-        for (auto i = firstKernel; i < fakeOutput; ++i) {
-            assert(VarList[i]);
-            Z3_ast value;
-            if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, VarList[i], Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-                report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
-            }
-            __int64 num, denom;
-            if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-            }
-            assert (num > 0);
-
-            // scale each streamSet node size field by the replication vector
-            const Rational replicationFactor{num, denom};
-            auto & Su = S[i];
-            assert (Su.Type == SchedulingNode::IsKernel);
-            Su.Size = replicationFactor;
-        }
-
-        Z3_model_dec_ref(ctx, model);
-        Z3_solver_dec_ref(ctx, solver);
-
-        currentPartition.Repetitions.resize(numOfKernels);
-
-        for (auto i = firstKernel; i < fakeOutput; ++i) {
-            const auto & replicationFactor = S[i].Size;
-            for (const auto e : make_iterator_range(out_edges(i, S))) {
-                const auto v = target(e, S);
-                assert (i != v);
-                auto & Sv = S[v];
-                assert (Sv.Type == SchedulingNode::IsStreamSet);
-                const auto & itemsPerStride = S[e];
-                Sv.Size *= (itemsPerStride * replicationFactor);
-            }
-            currentPartition.Repetitions[i - firstKernel] = replicationFactor;
-        }
-
-        END_SCOPED_REGION
-
         // We want to generate a subgraph of S consisting of only the kernel nodes
         // but whose edges initially represent the transitive closure of S. Once we
         // generate this graph, we remove the edges associated with the streamsets.
@@ -1306,10 +1583,12 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const
         // Now we begin the genetic algorithm phase; our overall goal is to find
         // a schedule that permits a minimum memory schedule.
 
-        PartitionSchedulingAnalysis SA(S, D, numOfKernels + 2U);
+        PartitionSchedulingAnalysis SA(S, D, numOfKernels + 2U, rng);
 
-        OrderingDAWG H(1);
-        currentPartition.RequiredMemory = SA.runGA(H);
+        SA.runGA();
+
+        auto H = SA.getResult();
+
         const auto t = postorder_minimize(H);
 
         // We make a fake input and output vertex in each partition graph to enable
@@ -1336,8 +1615,6 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P) const
         currentPartition.Orderings = H;
     }
 
-    Z3_reset_memory();
-    Z3_del_context(ctx);
 }
 
 
@@ -1411,7 +1688,7 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
         const RelationshipNode & node = Relationships[u];
         assert (node.Type == RelationshipNode::IsKernel);
 
-        const auto strideSize = node.Kernel->getStride();
+        const auto strideSize = currentPartition.Repetitions[i - 1U] * node.Kernel->getStride();
 
         for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
             const auto binding = source(e, Relationships);
@@ -1432,7 +1709,7 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
                 // as the producing/consuming strideRate match, the equation will
                 // work. Since the lower bound of PopCounts is 0, we always use the
                 // upper bound.
-                Rational itemsPerStride{rate.getUpperBound() * strideSize};
+                const auto itemsPerStride = rate.getUpperBound() * strideSize;
                 add_edge(j, i, itemsPerStride, G);
             }
         }
@@ -1457,8 +1734,7 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
                 SN.Size = bytesPerItem;
 
                 const ProcessingRate & rate = b.getRate();
-                Rational itemsPerStride{rate.getUpperBound() * strideSize};
-
+                const auto itemsPerStride = rate.getUpperBound() * strideSize;
                 add_edge(i, j, itemsPerStride, G);
             }
         }
@@ -1549,6 +1825,14 @@ PartitionDependencyGraph PipelineAnalysis::makePartitionDependencyGraph(const un
     return G;
 }
 
+
+enum class ProgramScheduleType {
+    RandomWalk
+    , FirstTopologicalOrdering
+    , NearestTopologicalOrdering
+};
+
+
 namespace { // anonymous namespace
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1560,24 +1844,124 @@ struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
      * @brief repair
      ** ------------------------------------------------------------------------------------------------------------- */
     void repair(Candidate & candidate) override {
-        #ifndef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
-        nearest_valid_schedule(candidate);
-        #endif
+        const auto start = std::chrono::high_resolution_clock::now();
+        if (mode == ProgramScheduleType::FirstTopologicalOrdering) {
+            first_valid_schedule(candidate);
+        } else if (mode == ProgramScheduleType::NearestTopologicalOrdering) {
+            nearest_valid_schedule(candidate);
+        }
+        const auto end = std::chrono::high_resolution_clock::now();
+        repair_time += (end - start).count();
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief fitness
      ** ------------------------------------------------------------------------------------------------------------- */
     size_t fitness(const Candidate & candidate) override {
-        #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
+        const auto start = std::chrono::high_resolution_clock::now();
         auto result = std::numeric_limits<size_t>::max();
-        if (is_valid_hamiltonian_path(candidate)) {
+        if (mode != ProgramScheduleType::RandomWalk || is_valid_hamiltonian_path(candidate)) {
             result = analyzer.analyze(candidate);
         }
-        #else
-        const auto result = analyzer.analyze(candidate);
-        #endif
+        const auto end = std::chrono::high_resolution_clock::now();
+        fitness_time += (end - start).count();
+        FitnessDepth.push_back(analyzer.Depth);
         return result;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief is_valid_hamiltonian_path
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool is_valid_hamiltonian_path(const Candidate & candidate) const {
+        assert (candidate.size() == numOfKernels);
+        std::function<bool(Vertex, unsigned)> recursive_verify = [&](Vertex u, unsigned index) {
+            for (const auto l : O[u]) {
+                if (candidate[index] != l) {
+                    return false;
+                }
+                ++index;
+            }
+            for (const auto e : make_iterator_range(out_edges(u, O))) {
+                const auto v = target(e, O);
+                if (recursive_verify(v, index)) {
+                    return true;
+                }
+            }
+            return (index == numOfKernels);
+        };
+        return recursive_verify(0, 0);
+    };
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief first_valid_schedule
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void first_valid_schedule(Candidate & candidate) {
+
+        assert (candidate.size() == numOfKernels);
+        BitVector unselected(numOfKernels, true);
+
+        Vertex root = 0;
+
+        Candidate replacement;
+        replacement.reserve(numOfKernels);
+
+        SmallVector<Vertex, 4> path;
+
+        for (;;) {
+            const auto i = unselected.find_first();
+            assert (i != -1);
+            const auto label = candidate[i];
+
+            std::function<bool(Vertex, unsigned)> iterative_bfs = [&](const Vertex u, unsigned depth) {
+                if (depth == 1) {
+                    for (const auto l : O[u]) {
+                        if (l == label) {
+                            goto write_path;
+                        }
+                    }
+                } else {
+                    for (const auto e : make_iterator_range(out_edges(u, O))) {
+                        const auto v = target(e, O);
+                        if (iterative_bfs(v, depth - 1)) {
+                            goto write_path;
+                        }
+                    }
+                }
+                return false;
+                // -----------------------------------
+write_path:     path.push_back(u);
+                return true;
+            };
+
+            assert (path.empty());
+
+            for (unsigned depth = 1;;++depth) {
+                if (iterative_bfs(root, depth)) {
+                    for (const auto v : reverse(path)) {
+                        for (const auto l : O[v]) {
+                            if (LLVM_LIKELY(unselected.test(l))) {
+                                replacement.push_back(l);
+                                unselected.reset(i);
+                            }
+                        }
+                    }
+                    root = path.front();
+                    break;
+                }
+            }
+
+            if (unselected.empty()) {
+                break;
+            }
+
+            path.clear();
+        }
+
+        assert (is_valid_hamiltonian_path(replacement));
+
+        assert (replacement.size() == numOfKernels);
+        candidate.swap(replacement);
+
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -1595,14 +1979,10 @@ struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
             index[j] = i;
         }
 
-        auto missing_element_cost = [&](const size_t k) -> double {
-            if (k == 0) return 0;
-            return ((double)(9 * k)) / ((double)numOfKernels) + 1.0;
-        };
+        const double normalizing_factor = (numOfKernels * (numOfKernels - 1)) + 1;
 
-        auto tau_distance = [&](const unsigned m) {
+        auto inversion_cost = [&](const unsigned m) {
 
-            // normalized kendal tau distance algorithm [0,1]
             for (unsigned i = 0; i < m; ++i) {
                 const auto k = toEval[i];
                 assert (k < numOfKernels);
@@ -1641,32 +2021,35 @@ struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
             };
 
             inversion_count(0, m - 1);
-            const auto max = ((m * (m - 1)) / 2);
-            assert (inversions <= max);
-            return ((double)inversions) / ((double)max);
+
+            return (((double)(2 * inversions)) / normalizing_factor) + (numOfKernels - m);
         };
 
 restart_process:
 
-        double bestInversions = missing_element_cost(numOfKernels);
+        double bestInversionCost = numOfKernels;
 
-        unsigned converged = 0;
+        std::array<double, HAMILTONIAN_PATH_NUM_OF_ANTS> pathCost;
 
         for (auto & e : trail) {
-            Trail & t = e.second;
-            t.Pheromone = HAMILTONIAN_PATH_DEFAULT_WEIGHT;
-            t.Permanence = 0.0;
+            e.second = HAMILTONIAN_PATH_ACO_TAU_INITIAL_VALUE;
         }
 
         replacement.clear();
 
-        for (unsigned r = 0; r < SCHEDULING_FITNESS_COST_ACO_ROUNDS; ++r) {
+        size_t r = 0;
+
+        for (;r < SCHEDULING_FITNESS_COST_ACO_ROUNDS;++r) {
 
             visited.reset();
 
             Vertex u = 0;
 
-            path.clear();
+            const auto pathIdx = (r % HAMILTONIAN_PATH_NUM_OF_ANTS);
+
+            auto & P = path[pathIdx];
+
+            P.clear();
 
             for (;;) {
 
@@ -1676,7 +2059,7 @@ restart_process:
 
                 visited.set(u);
 
-                path.push_back(u);
+                P.push_back(u);
 
                 targets.clear();
 
@@ -1685,8 +2068,9 @@ restart_process:
                     if (visited.test(v)) continue;
                     const auto f = trail.find(std::make_pair(u, v));
                     assert (f != trail.end());
-                    const Trail & t = f->second;
-                    targets.emplace_back(v, t.Pheromone);
+                    const auto a = f->second;
+                    const auto value = O[e] * a * a * a;
+                    targets.emplace_back(v, value);
                 }
 
                 const auto k = targets.size();
@@ -1724,7 +2108,7 @@ restart_process:
 
             // extract the sequence of kernel ids from the path
             toEval.clear();
-            for (const auto i : path) {
+            for (const auto i : P) {
                 const auto & A = O[i];
                 toEval.insert(toEval.end(), A.begin(), A.end());
             }
@@ -1732,80 +2116,159 @@ restart_process:
 
             assert (m <= numOfKernels);
 
-            // Count how many inversions occured in this path but since we may not
-            // have acutally constructed a hamiltonian path, initialize the cost to
-            // penalize such solutions.
+            pathCost[pathIdx] = inversion_cost(m);
 
-            const auto inversions = tau_distance(m) + missing_element_cost(numOfKernels - m); // [0,10)
+            if (pathIdx == (HAMILTONIAN_PATH_NUM_OF_ANTS - 1)) {
 
-            const auto l = path.size();
+                auto updatePath = [&](const Candidate & path, const double inversionCost) {
 
-            double deposit = 0.0;
+                    const auto l = path.size();
 
-            if (inversions > bestInversions) {
-                const auto d = inversions - bestInversions; // [0,10)
-                const auto c = std::log(d + 1);
-                deposit = c / (1.0 + c);
+                    if (inversionCost > bestInversionCost) {
 
-                for (unsigned i = 1; i < l; ++i) {
-                    const auto e = std::make_pair(path[i - 1], path[i]); // [0,10)
-                    const auto f = trail.find(e);
-                    assert (f != trail.end());
-                    Trail & t = f->second;
-                    const auto scale = 1.0 - (0.90 * std::sqrt(t.Permanence));
-                    const auto d = deposit * scale;
-                    t.Pheromone = std::max(t.Pheromone - d, HAMILTONIAN_PATH_MINIMUM_WEIGHT);
+                        const auto d = inversionCost - bestInversionCost;
+                        const auto deposit = d / (HAMILTONIAN_PATH_INVERSE_K + d);
+
+                        for (unsigned i = 1; i < l; ++i) {
+                            const auto e = std::make_pair(path[i - 1], path[i]);
+                            const auto f = trail.find(e);
+                            assert (f != trail.end());
+                            double & t = f->second;
+                            t = std::max(t - deposit, HAMILTONIAN_PATH_ACO_TAU_MIN);
+                        }
+
+                    } else if (inversionCost < bestInversionCost) {
+                        const auto d = bestInversionCost - inversionCost;
+                        const auto deposit = d / (HAMILTONIAN_PATH_INVERSE_K + d);
+
+                        for (unsigned i = 1; i < l; ++i) {
+                            const auto e = std::make_pair(path[i - 1], path[i]);
+                            const auto f = trail.find(e);
+                            assert (f != trail.end());
+                            double & t = f->second;
+                            t = std::min(t + deposit, HAMILTONIAN_PATH_ACO_TAU_MAX);
+                        }
+
+                    }
+
+                };
+
+                auto highestInversionCost = std::numeric_limits<double>::min();
+                auto highestInversion = 0U;
+                auto lowestInversionCost = std::numeric_limits<double>::max();
+                auto lowestInversion = 0U;
+
+                for (unsigned i = 0; i < HAMILTONIAN_PATH_NUM_OF_ANTS; ++i) {
+                    if (highestInversionCost < pathCost[i]) {
+                        highestInversionCost = pathCost[i];
+                        highestInversion = i;
+                    }
+                    if (lowestInversionCost > pathCost[i]) {
+                        lowestInversionCost = pathCost[i];
+                        lowestInversion = i;
+                    }
                 }
 
+                updatePath(path[highestInversion], highestInversionCost);
+                updatePath(path[lowestInversion], lowestInversionCost);
 
-            } else if (inversions < bestInversions) {
-                const auto d = bestInversions - inversions;
-                deposit = std::sqrt(d) / (1.0 + std::log(d + 1));
-                for (unsigned i = 1; i < l; ++i) {
-                    const auto e = std::make_pair(path[i - 1], path[i]); // [0,10)
-                    const auto f = trail.find(e);
-                    assert (f != trail.end());
-                    Trail & t = f->second;
-                    t.Permanence = std::min(t.Permanence + 0.1, 1.0);
-                    t.Pheromone += d;
+                if (bestInversionCost > lowestInversionCost) {
+                    bestInversionCost = lowestInversionCost;
 
+                    // reconstruct the repaired ordering
+                    toEval.clear();
+                    for (const auto i : path[lowestInversion]) {
+                        const auto & A = O[i];
+                        toEval.insert(toEval.end(), A.begin(), A.end());
+                    }
+                    const auto m = toEval.size();
+                    assert (m <= numOfKernels);
+                    // Store our path if its the best one
+                    if (LLVM_LIKELY(m == numOfKernels)) {
+                        replacement.swap(toEval);
+                    }
                 }
 
-                // Store our path if its the best one
-                if (m == numOfKernels) {
-                    replacement.swap(toEval);
-                }
-                bestInversions = inversions;
-
-                converged = 0;
-
-            } else { // if (inversions == bestInversions) {
-                ++converged;
-            }
-
-            path.clear();
-
-            if (converged == 3) {
-                break;
             }
 
         }
 
         // If we converged to a solution but failed to find a valid hamiltonian path,
         // just restart the process. We're guaranteed to find one eventually.
-        if (replacement.empty()) {
-
-//            errs() << "!!! RESTART !!!\n";
-
+        if (LLVM_UNLIKELY(replacement.empty())) {
+            assert (bestInversionCost >= 1.0);
             goto restart_process;
         }
 
-//        errs() << "!!! CONVERGED !!!\n";
-
+        assert (bestInversionCost < 1.0);
         assert (replacement.size() == numOfKernels);
+        assert (is_valid_hamiltonian_path(replacement));
 
         candidate.swap(replacement);
 
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief makeRandomCandidate
+     ** ------------------------------------------------------------------------------------------------------------- */
+    Candidate makeRandomCandidate() {
+        Candidate candidate;
+        candidate.reserve(candidateLength);
+
+        for (;;) {
+            Vertex u = 0;
+            visited.reset();
+
+            for (;;) {
+
+                assert (u < visited.size());
+
+                visited.set(u);
+
+                for (const auto l : O[u]) {
+                    candidate.push_back(l);
+                }
+
+                if (out_degree(u, O) == 0) {
+                    break;
+                }
+
+                double sum = 0.0;
+                for (const auto e : make_iterator_range(out_edges(u, O))) {
+                    if (!visited.test(target(e, O))) {
+                        const auto value = O[e];
+                        assert (value > 0.0);
+                        sum += value;
+                    }
+                }
+                if (LLVM_UNLIKELY(sum == 0.0)) {
+                    break;
+                }
+
+                std::uniform_real_distribution<double> distribution(0.0, sum);
+                const auto c = distribution(rng);
+
+                bool found = false;
+                double d = std::numeric_limits<double>::epsilon();
+                for (const auto e : make_iterator_range(out_edges(u, O))) {
+                    if (!visited.test(target(e, O))) {
+                        d += O[e];
+                        if (d >= c) {
+                            u = target(e, O); // set our next target
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                assert (found);
+            }
+            if (candidate.size() == candidateLength) {
+                break;
+            }
+            candidate.clear();
+        }
+        assert (is_valid_hamiltonian_path(candidate));
+        return candidate;
     }
 
 public:
@@ -1815,16 +2278,24 @@ public:
      ** ------------------------------------------------------------------------------------------------------------- */
     ProgramSchedulingAnalysisWorker(const SchedulingGraph & S,
                                     const PartitionOrderingGraph & O,
+                                    const ProgramScheduleType mode,
                                     const unsigned numOfKernels,
-                                    const unsigned maxPathLength)
-    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels)
+                                    const unsigned maxPathLength,
+                                    random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels, rng, maxCutRoundsFactor, maxCutPasses)
     , O(O)
+    , mode(mode)
     , visited(num_vertices(O))
     , index(numOfKernels)
     , tau_aux(numOfKernels)
     , tau_offset(numOfKernels) {
 
-        path.reserve(maxPathLength);
+        assert (num_vertices(O) > 0);
+
+        for (unsigned i = 0; i < HAMILTONIAN_PATH_NUM_OF_ANTS; ++i) {
+            path[i].reserve(maxPathLength);
+        }
+
         replacement.reserve(numOfKernels);
         toEval.reserve(numOfKernels);
         trail.reserve(num_edges(O));
@@ -1832,63 +2303,69 @@ public:
         for (const auto e : make_iterator_range(edges(O))) {
             const unsigned u = source(e, O);
             const unsigned v = target(e, O);
-            trail.emplace(std::make_pair(u, v), Trail{});
+            trail.emplace(std::make_pair(u, v), HAMILTONIAN_PATH_ACO_TAU_INITIAL_VALUE);
         }
 
+        FitnessDepth.reserve(10000);
+
     }
+
+public:
+
+    std::vector<unsigned> FitnessDepth;
 
 private:
 
     const PartitionOrderingGraph & O;
 
+    const ProgramScheduleType mode;
+
     BitVector visited;
     std::vector<std::pair<Vertex, double>> targets;
 
-    struct Trail {
-        double Pheromone = 0.0;
-        double Permanence = 0.0;
-    };
-
-    flat_map<std::pair<Vertex, Vertex>, Trail> trail;
+    flat_map<std::pair<Vertex, Vertex>, double> trail;
     std::vector<unsigned> index;
-    Candidate path;
-    Candidate replacement;
+    std::array<Candidate, HAMILTONIAN_PATH_NUM_OF_ANTS> path;
     Candidate toEval;
+
+    Candidate bestPath;
+    Candidate worstPath;
+
+    Candidate replacement;
 
     std::vector<unsigned> tau_aux;
     std::vector<unsigned> tau_offset;
-
 
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ProgramSchedulingAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
-struct ProgramSchedulingAnalysis final : public EvolutionaryAlgorithm {
+struct ProgramSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgorithm {
+
+    static_assert(INITIAL_SCHEDULING_POPULATION_ATTEMPTS >= INITIAL_SCHEDULING_POPULATION_SIZE,
+        "cannot have fewer attemps than population size");
+
+    static_assert(INITIAL_SCHEDULING_POPULATION_SIZE <= MAX_PROGRAM_POPULATION_SIZE,
+        "cannot have a larger initial population size than generational population size");
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
     bool initGA(Population & initialPopulation) override {
-        bool r = true;
-        Candidate candidate(candidateLength);
-        std::iota(candidate.begin(), candidate.end(), 0);
         for (unsigned i = 0; i < INITIAL_SCHEDULING_POPULATION_ATTEMPTS; ++i) {
-            std::shuffle(candidate.begin(), candidate.end(), rng);            
-            #ifdef ALLOW_ILLEGAL_PROGRAM_SCHEDULES_IN_EA_SET
-            worker.nearest_valid_schedule(candidate);
-            #else
-            repairCandidate(candidate);
-            #endif
-            if (insertCandidate(candidate, initialPopulation)) {
+            FitnessValueType fitness;
+            if (insertCandidate(worker.makeRandomCandidate(), initialPopulation, fitness)) {
                 if (initialPopulation.size() >= INITIAL_SCHEDULING_POPULATION_SIZE) {
-                    r = false;
+                    //return false;
+                    #warning EXITING AFTER INIT GA!
                     break;
                 }
             }
         }
-        return r;
+        return true;
     }
+
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
      ** ------------------------------------------------------------------------------------------------------------- */
@@ -1903,23 +2380,40 @@ struct ProgramSchedulingAnalysis final : public EvolutionaryAlgorithm {
         return worker.fitness(candidate);
     }
 
+    void report() {
+        size_t sum = 0;
+        for (auto depth : worker.FitnessDepth) {
+            sum += depth;
+        }
+        const double avg = ((double)sum) / ((double)worker.FitnessDepth.size());
+
+        double var = 0.0;
+        for (auto depth : worker.FitnessDepth) {
+            const double d = (double)depth - avg;
+            var += (d * d);
+        }
+
+        // mean, stddev, count
+        errs() << format("%.5f", avg) << "," << format("%.5f", std::sqrt(var)) << "," << worker.FitnessDepth.size();
+    }
+
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief constructor
      ** ------------------------------------------------------------------------------------------------------------- */
     ProgramSchedulingAnalysis(const SchedulingGraph & S,
                               const PartitionOrderingGraph & O,
+                              const ProgramScheduleType mode,
                               const unsigned numOfKernels,
-                              const unsigned maxPathLength)
-    : EvolutionaryAlgorithm(numOfKernels, MAX_EVOLUTIONARY_ROUNDS, MAX_POPULATION_SIZE, MUTATION_RATE)
-    , worker(S, O, numOfKernels, maxPathLength) {
+                              const unsigned maxPathLength,
+                              random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
+    : OrderingBasedEvolutionaryAlgorithm(numOfKernels, PROGRAM_SCHEDULING_GA_ROUNDS, MAX_PROGRAM_POPULATION_SIZE, 0.5, rng)
+    , worker(S, O, mode, numOfKernels, maxPathLength, rng, maxCutRoundsFactor, maxCutPasses) {
 
     }
 
 private:
 
-
     ProgramSchedulingAnalysisWorker worker;
-
 
 };
 
@@ -2067,144 +2561,9 @@ PartitionDataflowGraph PipelineAnalysis::analyzeDataflowBetweenPartitions(Partit
 
 #endif
 
-    const auto cfg = Z3_mk_config();
-    Z3_set_param_value(cfg, "model", "true");
-    Z3_set_param_value(cfg, "proof", "false");
-    const auto ctx = Z3_mk_context(cfg);
-    Z3_del_config(cfg);
-
-    const auto intType = Z3_mk_int_sort(ctx);
-
-    auto constant = [&](const Rational value) {
-        return Z3_mk_real(ctx, value.numerator(), value.denominator());
-    };
-
-    std::vector<Rational> expectedStrides(activePartitions);
-
-    std::vector<Z3_ast> assumptions;
-
-    std::vector<Z3_ast> VarList(activePartitions);
-
-    const auto solver = Z3_mk_optimize(ctx);
-    Z3_optimize_inc_ref(ctx, solver);
-
-    auto multiply =[&](Z3_ast X, Z3_ast Y) {
-        Z3_ast args[2] = { X, Y };
-        return Z3_mk_mul(ctx, 2, args);
-    };
-
-    auto hard_assert = [&](Z3_ast c) {
-        Z3_optimize_assert(ctx, solver, c);
-    };
-
-    auto soft_assert = [&](Z3_ast c) {
-        Z3_optimize_assert_soft(ctx, solver, c, "1", nullptr);
-    };
-
-    auto check = [&]() {
-        #if Z3_VERSION_INTEGER > 40500
-        return Z3_optimize_check(ctx, solver, 0, nullptr);
-        #else
-        return Z3_optimize_check(ctx, solver);
-        #endif
-    };
-
-
-    const auto ONE = Z3_mk_int(ctx, 1, intType);
-
-    for (unsigned i = 0; i < activePartitions; ++i) {
-        auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
-        hard_assert(Z3_mk_ge(ctx, v, ONE));
-//        if (in_degree(i, G) == 0) {
-//            Z3_optimize_minimize(ctx, solver, v);
-//        } else {
-//            Z3_optimize_maximize(ctx, solver, v);
-//        }
-        VarList[i] = v;
-    }
-
-    const auto firstStreamSet = activePartitions;
-
-    #warning incorporate length equality assertions
-
-    for (unsigned streamSet = firstStreamSet; streamSet < n; ++streamSet) {
-        const auto output = in_edge(streamSet, G);
-        const auto & expectedOutput = G[output].Expected;
-        // unknown output rate
-        if (expectedOutput.numerator() == 0) {
-            continue;
-        }
-        const auto outputRate = constant(expectedOutput);
-        const auto producer = source(output, G);
-        assert (producer < activePartitions);
-
-        const auto outputRateVar = multiply(VarList[producer], outputRate);
-
-        Z3_optimize_push(ctx, solver);
-
-        for (const auto input : make_iterator_range(out_edges(streamSet, G))) {
-            const auto & expectedInput = G[input].Expected;
-            // non-greedy input rate
-            if (LLVM_LIKELY(expectedInput.numerator() != 0)) {
-                const auto inputRate = constant(expectedInput);
-                const auto consumer = target(input, G);
-                assert (consumer < activePartitions);
-                const auto inputRateVar = multiply(VarList[consumer], inputRate);
-                hard_assert(Z3_mk_eq(ctx, outputRateVar, inputRateVar));
-            }
-        }
-
-        if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
-
-            Z3_optimize_pop(ctx, solver);
-
-            for (const auto input : make_iterator_range(out_edges(streamSet, G))) {
-                const auto & expectedInput = G[input].Expected;
-                // non-greedy input rate
-                if (LLVM_LIKELY(expectedInput.numerator() != 0)) {
-                    const auto inputRate = constant(G[input].Expected);
-                    const auto consumer = target(input, G);
-                    assert (consumer < activePartitions);
-                    const auto inputRateVar = multiply(VarList[consumer], inputRate);
-                    soft_assert(Z3_mk_eq(ctx, outputRateVar, inputRateVar));
-                }
-            }
-
-            if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
-                report_fatal_error("Z3 failed to find a solution to partition scheduling solution");
-            }
-
-        }
-
-    }
-
-    const auto model = Z3_optimize_get_model(ctx, solver);
-    Z3_model_inc_ref(ctx, model);
-    for (unsigned i = 0; i < activePartitions; ++i) {
-
-        Z3_ast const stridesPerSegmentVar = VarList[i];
-        Z3_ast value;
-        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
-        }
-
-        __int64 num, denom;
-        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-        }
-        assert (num > 0);
-
-        expectedStrides[i] = Rational{num, denom};
-    }
-    Z3_model_dec_ref(ctx, model);
-    Z3_optimize_dec_ref(ctx, solver);
-
-    Z3_del_context(ctx);
-    Z3_reset_memory();
-
     for (unsigned partitionId = 1; partitionId < PartitionCount; ++partitionId) {
         PartitionData & N = P[partitionId];
-        N.ExpectedRepetitions = expectedStrides[partitionId - 1];
+        N.ExpectedRepetitions = Rational{1};
 
 //        errs() << "PARTITION " << partitionId << " := " <<
 //                  N.ExpectedRepetitions.numerator() << "/" << N.ExpectedRepetitions.denominator() << "\n";
@@ -2235,7 +2594,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
     // the kernel nodes that have cross-partition I/O and return it to the user.
 
     using BV = dynamic_bitset<>;
-    using PathGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+    using PathGraph = adjacency_list<hash_setS, vecS, bidirectionalS, no_property, double>;
 
     const auto activePartitions = (PartitionCount - 1);
 
@@ -2251,10 +2610,12 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 
     BV M(l);
 
+    // AVX-512: 08 api problem?
+
     for (unsigned i = 0; i < activePartitions; ++i) {
 
         if (in_degree(i, D) == 0) {
-            add_edge(0, i + 1U, H);
+            add_edge(0, i + 1U, HAMILTONIAN_PATH_EPSILON_WEIGHT, H);
         } else {
             for (const auto e : make_iterator_range(in_edges(i, D))) {
                 const PartitionDataflowEdge & E = D[e];
@@ -2263,7 +2624,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
         }
 
         if (out_degree(i, D) == 0) {
-            add_edge(i + 1U, activePartitions + 1U, H);
+            add_edge(i + 1U, activePartitions + 1U, HAMILTONIAN_PATH_EPSILON_WEIGHT, H);
         } else {
             assert (M.none());
             for (const auto e : make_iterator_range(out_edges(i, D))) {
@@ -2281,7 +2642,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
             }
             assert (M.any());
             for (auto j = M.find_first(); j != BV::npos; j = M.find_next(j)) {
-                add_edge(i + 1U, j + 1U, H);
+                add_edge(i + 1U, j + 1U, HAMILTONIAN_PATH_EPSILON_WEIGHT, H);
             }
             M.reset();
         }
@@ -2292,7 +2653,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
     BEGIN_SCOPED_REGION
     const reverse_traversal ordering{l};
     assert (is_valid_topological_sorting(ordering, H));
-    transitive_closure_dag(ordering, H);
+    transitive_closure_dag(ordering, H, HAMILTONIAN_PATH_EPSILON_WEIGHT);
     transitive_reduction_dag(ordering, H);
     END_SCOPED_REGION
 
@@ -2412,7 +2773,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
     }
 
     for (const auto & e : toAdd) {
-        add_edge(e.first, e.second, H);
+        add_edge(e.first, e.second, HAMILTONIAN_PATH_DELTA_WEIGHT, H);
     }
 
     END_SCOPED_REGION
@@ -2430,7 +2791,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
             const auto j = target(e, H);
             const auto outgoing = (j * 2) - 1;
             assert (outgoing < numOfPartitionNodes);
-            add_edge(partitionOut, outgoing, G);
+            add_edge(partitionOut, outgoing, H[e], G);
         }
     }
 
@@ -2498,18 +2859,18 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
         for (const auto u : make_iterator_range(vertices(H))) {
             if (in_degree(u, H) == 0) {
                 for (const auto e : make_iterator_range(out_edges(u, H))) {
-                    add_edge(partitionIn, get(e), G);
+                    add_edge(partitionIn, get(e), HAMILTONIAN_PATH_DELTA_WEIGHT, G);
                 }
             } else if (out_degree(u, H) == 0) {
                 for (const auto e : make_iterator_range(in_edges(u, H))) {
-                    add_edge(get(e), partitionOut, G);
+                    add_edge(get(e), partitionOut, HAMILTONIAN_PATH_EPSILON_WEIGHT, G);
                 }
             } else {
                 for (const auto e : make_iterator_range(in_edges(u, H))) {
                     const auto v = get(e);
                     for (const auto f : make_iterator_range(out_edges(u, H))) {
                         const auto w = get(f);
-                        add_edge(v, w, G);
+                        add_edge(v, w, HAMILTONIAN_PATH_DELTA_WEIGHT, G);
                     }
                 }
             }
@@ -2626,8 +2987,10 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
         assert (u < m);
         const auto v = index[target(e, G)];
         assert (v < m);
-        add_edge(u, v, compressedGraph);
+        add_edge(u, v, G[e], compressedGraph);
     }
+
+//    printOrderingGraph(compressedGraph, errs(), "O");
 
     return PartitionOrdering{std::move(compressedGraph), numOfKernelSets, std::move(kernels)};
 }
@@ -2638,7 +3001,8 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
         const PartitionGraph & P,
         const PartitionOrdering & partitionOrdering,
-        const PartitionDataflowGraph & D) const {
+        const PartitionDataflowGraph & D,
+        random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses) const {
 
     auto & O = partitionOrdering.Graph;
     auto & kernels = partitionOrdering.Kernels;
@@ -2704,25 +3068,48 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
         }
     }
 
-    ProgramSchedulingAnalysis SA(S, O, numOfFrontierKernels, maxPathLength);
+    // ProgramScheduleType::NearestTopologicalOrdering
 
-    // ProgramSchedulingAnalysis SA(S, O, kernelSets, streamSetNodes, pathLength);
+    fitness_hs_time = 0;
+    fitness_time = 0;
+    repair_time = 0;
+    total_ga_time = 0;
 
-    OrderingDAWG schedule(1);
+    const auto start = std::chrono::high_resolution_clock::now();
 
-    SA.runGA(schedule);
+    ProgramSchedulingAnalysis SA(S, O, ProgramScheduleType::RandomWalk, numOfFrontierKernels, maxPathLength, rng, maxCutRoundsFactor, maxCutPasses);
 
-//    errs () << "init_time: " << init_time << "\n"
-//               "fitness_time: " << fitness_time << "\n"
-//               "repair_time: " << repair_time << "\n"
-//               "evolutionary_time: " << evolutionary_time << "\n";
+    SA.runGA();
 
-//    printDAWG(schedule, errs(), "S");
+    const auto end = std::chrono::high_resolution_clock::now();
+    total_ga_time += (end - start).count();
+
+
+    errs() << "," << numOfFrontierKernels << "," << numOfStreamSets
+           << "," << total_ga_time << "," << fitness_time << "," << fitness_hs_time << ",";
+
+//    errs() << "REPAIR TIME:     " << repair_time << "\n"
+//              "FITNESS TIME:    " << fitness_time << "\n"
+//              "FITNESS HS TIME: " << fitness_hs_time << "\n"
+//              "TOTAL GA TIME:   " << total_ga_time << "\n";
+
+    SA.report();
+
+    errs() << "," << SA.getBestFitnessValue() << "\n";
+
+//    errs() << "HS UNIQUE INSERTIONS: " << HS_UniqueInsertions << " of " << HS_InsertionAttempts << "\n";
+
+    std::vector<unsigned> program;
+
+    return program;
+
+
+    const auto schedule = SA.getResult();
 
     // TODO: if we have multiple memory optimal schedules, look for the one that
     // keeps calls to the same kernel closer
 
-    std::vector<unsigned> program;
+   // std::vector<unsigned> program;
 
     program.reserve(kernels.size());
 
@@ -2748,6 +3135,7 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     assert (program.size() >= (kernels.size() - 2));
 
+
     return program;
 }
 
@@ -2762,7 +3150,7 @@ void PipelineAnalysis::addSchedulingConstraints(const PartitionGraph & P,
     // to simplify the logic, we initially create a partial program list then fill it
     // in by selecting a partition schedule that matches the selected program.
 
-    Candidate subgraph;
+    std::vector<unsigned> subgraph;
 
     std::vector<unsigned> path;
     // underflow sentinal node

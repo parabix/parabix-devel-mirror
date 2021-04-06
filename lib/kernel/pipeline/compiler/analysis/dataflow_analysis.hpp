@@ -5,6 +5,232 @@
 
 namespace kernel {
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeExpectedDataFlowRates
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
+
+    const auto numOfPartitions = num_vertices(P);
+
+    Partition kernels;
+
+    for (unsigned partition = 0; partition < numOfPartitions; ++partition) {
+        PartitionData & N = P[partition];
+        const auto & K = N.Kernels;
+        kernels.insert(kernels.end(), K.begin(), K.end());
+        N.Repetitions.resize(K.size());
+    }
+
+    const auto numOfKernels = kernels.size();
+
+    std::sort(kernels.begin(), kernels.end());
+
+    Partition streamSets;
+
+    for (const auto u : kernels) {
+        const RelationshipNode & node = Relationships[u];
+        assert (node.Type == RelationshipNode::IsKernel);
+        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
+            const auto binding = target(e, Relationships);
+            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+                const auto f = first_out_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = target(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                streamSets.push_back(streamSet);
+            }
+        }
+    }
+
+    const auto numOfStreamSets = streamSets.size();
+
+    std::sort(streamSets.begin(), streamSets.end());
+
+    std::vector<Z3_ast> expReps(numOfKernels);
+
+    const auto cfg = Z3_mk_config();
+    Z3_set_param_value(cfg, "model", "true");
+    Z3_set_param_value(cfg, "proof", "false");
+
+    const auto ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
+    const auto solver = Z3_mk_optimize(ctx);
+    Z3_optimize_inc_ref(ctx, solver);
+
+    auto hard_assert = [&](Z3_ast c) {
+        Z3_optimize_assert(ctx, solver, c);
+    };
+
+    auto soft_assert = [&](Z3_ast c) {
+        Z3_optimize_assert_soft(ctx, solver, c, "1", nullptr);
+    };
+
+    auto check = [&]() -> Z3_lbool {
+        #if Z3_VERSION_INTEGER > 40500
+        return Z3_optimize_check(ctx, solver, 0, nullptr);
+        #else
+        return Z3_optimize_check(ctx, solver);
+        #endif
+    };
+
+    const auto realType = Z3_mk_int_sort(ctx);
+
+    auto constant_real = [&](const Rational value) {
+        return Z3_mk_real(ctx, value.numerator(), value.denominator());
+    };
+
+    auto multiply =[&](Z3_ast X, Z3_ast Y) {
+        assert (X);
+        assert (Y);
+        Z3_ast args[2] = { X, Y };
+        return Z3_mk_mul(ctx, 2, args);
+    };
+
+    auto abs_sub =[&](Z3_ast X, Z3_ast Y) {
+        Z3_ast args_1[2] = { X, Y };
+        const auto a = Z3_mk_sub(ctx, 2, args_1);
+        Z3_ast args_2[2] = { Y, X };
+        const auto b = Z3_mk_sub(ctx, 2, args_2);
+        const auto c = Z3_mk_le(ctx, X, Y);
+        return Z3_mk_ite(ctx, c, b, a);
+    };
+
+    const auto ONE = Z3_mk_int(ctx, 1, realType);
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        auto v = Z3_mk_fresh_const(ctx, nullptr, realType);
+        hard_assert(Z3_mk_ge(ctx, v, ONE));
+        expReps[i] = v;
+    }
+
+    for (unsigned i = 0; i < numOfStreamSets; ++i) {
+
+        const auto streamSet = streamSets[i];
+
+        const auto f = first_in_edge(streamSet, Relationships);
+        assert (Relationships[f].Reason != ReasonType::Reference);
+
+        const auto binding = source(f, Relationships);
+        const RelationshipNode & output = Relationships[binding];
+        assert (output.Type == RelationshipNode::IsBinding);
+
+        const Binding & outputBinding = output.Binding;
+        const ProcessingRate & rate = outputBinding.getRate();
+        // ignore unknown output rates; we cannot reason about them here.
+        if (LLVM_LIKELY(rate.isUnknown())) {
+            continue;
+        }
+
+        const auto g = first_in_edge(binding, Relationships);
+        assert (Relationships[g].Reason != ReasonType::Reference);
+        const unsigned producer = source(g, Relationships);
+
+        const auto producerPartitionId = PartitionIds.find(producer)->second;
+        assert (producerPartitionId > 0);
+
+        const RelationshipNode & node = Relationships[producer];
+        assert (node.Type == RelationshipNode::IsKernel);
+        const auto h = std::lower_bound(kernels.begin(), kernels.end(), producer);
+        assert (h != kernels.end() && *h == producer);
+        const auto producerId = std::distance(kernels.begin(), h);
+
+        const auto strideSize = node.Kernel->getStride();
+        const auto sum = rate.getLowerBound() + rate.getUpperBound();
+        const auto expectedOutput = sum * Rational{strideSize, 2};
+
+        const Z3_ast expOutRate = multiply(expReps[producerId], constant_real(expectedOutput));
+
+        for (const auto e : make_iterator_range(out_edges(streamSet, Relationships))) {
+            const auto binding = target(e, Relationships);
+            const RelationshipNode & input = Relationships[binding];
+            if (LLVM_LIKELY(input.Type == RelationshipNode::IsBinding)) {
+                const auto f = first_out_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const unsigned consumer = target(f, Relationships);
+
+                const Binding & inputBinding = input.Binding;
+                const ProcessingRate & rate = inputBinding.getRate();
+
+                const auto consumerPartitionId = PartitionIds.find(consumer)->second;
+                assert (producerPartitionId <= consumerPartitionId);
+
+                const RelationshipNode & node = Relationships[consumer];
+                assert (node.Type == RelationshipNode::IsKernel);
+
+                const auto h = std::lower_bound(kernels.begin(), kernels.end(), consumer);
+                assert (h != kernels.end() && *h == consumer);
+                const auto consumerId = std::distance(kernels.begin(), h);
+
+                if (LLVM_UNLIKELY(rate.isGreedy())) {
+                    soft_assert(Z3_mk_eq(ctx, expReps[consumerId], ONE));
+                } else {
+
+                    const auto strideSize = node.Kernel->getStride();
+                    const auto sum = rate.getLowerBound() + rate.getUpperBound();
+                    const auto expectedInput = sum * Rational{strideSize, 2};
+
+                    const Z3_ast expInRate = multiply(expReps[consumerId], constant_real(expectedInput));
+
+                    if (producerPartitionId == consumerPartitionId) {
+                        hard_assert(Z3_mk_eq(ctx, expOutRate, expInRate));
+                    } else {
+                        hard_assert(Z3_mk_ge(ctx, expOutRate, expInRate));
+                        soft_assert(Z3_mk_eq(ctx, expOutRate, expInRate));
+                        //Z3_optimize_minimize(ctx, solver, abs_sub(expOutRate, expInRate));
+                    }
+                }
+
+            }
+        }
+    }
+
+    if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
+        report_fatal_error("Z3 failed to find a solution to partition scheduling solution");
+    }
+
+    const auto model = Z3_optimize_get_model(ctx, solver);
+    Z3_model_inc_ref(ctx, model);
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+
+        Z3_ast value;
+        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, expReps[i], Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+        }
+
+        __int64 num, denom;
+        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+        }
+        assert (num > 0);
+
+        const auto kernelId = kernels[i];
+        const auto f = PartitionIds.find(kernelId);
+        assert (f != PartitionIds.end());
+        const auto partitionId = f->second;
+        assert (partitionId < numOfPartitions);
+
+        auto & Pi = P[partitionId];
+
+        const auto & K = Pi.Kernels;
+        assert (Pi.Repetitions.size() == K.size());
+
+        const auto h = std::find(K.begin(), K.end(), kernelId);
+        assert (h != K.end() && *h == kernelId);
+        const auto index = std::distance(K.begin(), h);
+
+        Pi.Repetitions[index] = Rational{num, denom};
+    }
+    Z3_model_dec_ref(ctx, model);
+
+    Z3_optimize_dec_ref(ctx, solver);
+    Z3_del_context(ctx);
+    Z3_reset_memory();
+
+}
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyHardPartitionConstraints
  ** ------------------------------------------------------------------------------------------------------------- */

@@ -35,7 +35,7 @@ using IntervalGraph = adjacency_list<hash_setS, vecS, undirectedS>;
 
 using Interval = std::pair<unsigned, unsigned>;
 
-struct BufferLayoutOptimizer final : public EvolutionaryAlgorithm {
+struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
 
     using ColourLine = flat_set<Interval>;
 
@@ -142,7 +142,8 @@ struct BufferLayoutOptimizer final : public EvolutionaryAlgorithm {
             // given our candidate, do a first-fit allocation to determine the actual
             // memory layout.
 
-            if (insertCandidate(candidate, initialPopulation)) {
+            FitnessValueType fitness;
+            if (insertCandidate(candidate, initialPopulation, fitness)) {
                 if (initialPopulation.size() >= BUFFER_LAYOUT_INITIAL_CANDIDATES) {
                     return false;
                 }
@@ -254,8 +255,9 @@ struct BufferLayoutOptimizer final : public EvolutionaryAlgorithm {
                          , IntervalGraph && I
                          , std::vector<Pack> && allocations
                          , std::vector<size_t> && weight
-                         , std::vector<int> && remaining )
-    : EvolutionaryAlgorithm (numOfLocalStreamSets, BUFFER_LAYOUT_MAX_POPULATION_SIZE, BUFFER_LAYOUT_MAX_EVOLUTIONARY_ROUNDS, BUFFER_LAYOUT_MUTATION_RATE)
+                         , std::vector<int> && remaining
+                         , random_engine & rng)
+    : OrderingBasedEvolutionaryAlgorithm (numOfLocalStreamSets, BUFFER_LAYOUT_MAX_POPULATION_SIZE, BUFFER_LAYOUT_MAX_EVOLUTIONARY_ROUNDS, BUFFER_LAYOUT_MUTATION_RATE, rng)
     , firstKernel(firstKernel)
     , lastKernel(lastKernel)
     , I(std::move(I))
@@ -301,7 +303,7 @@ private:
  * Compile time memory optimization" (1999) to generate some initial layout candidates then attempts
  * to refine them.
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
+void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) {
 
     // Construct the weighted interval graph for our local streamsets
 
@@ -319,10 +321,6 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
 
     unsigned numOfLocalStreamSets = 0;
-
-    Population P1;
-
-    P1.reserve(BUFFER_LAYOUT_MAX_POPULATION_SIZE);
 
     BEGIN_SCOPED_REGION
 
@@ -444,11 +442,13 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
 
 
     BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
-                             std::move(I), std::move(allocations), std::move(weight), std::move(remaining));
+                             std::move(I), std::move(allocations), std::move(weight), std::move(remaining), rng);
 
-    OrderingDAWG O(1);
+    BA.runGA();
 
-    RequiredThreadLocalStreamSetMemory = BA.runGA(O);
+    RequiredThreadLocalStreamSetMemory = BA.getBestFitnessValue();
+
+    auto O = BA.getResult();
 
     // TODO: apart from total memory, when would one layout be better than another?
     // Can we quantify it based on the buffer graph order? Currently, we just take
@@ -473,6 +473,8 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b) {
     }
 
     assert (l == numOfLocalStreamSets);
+
+    assert (RequiredThreadLocalStreamSetMemory > 0);
 
 }
 

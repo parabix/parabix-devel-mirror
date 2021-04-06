@@ -87,7 +87,8 @@ bool is_valid_topological_sorting(const Sorting & S, const Graph & G) {
 #endif
 
 template <typename Sorting, typename Graph>
-void transitive_closure_dag(const Sorting & ordering, Graph & G) {
+void transitive_closure_dag(const Sorting & ordering, Graph & G,
+                            typename Graph::edge_property_type edge_property_value = {}) {
     // Simple transitive closure for DAGs
     for (unsigned u : ordering) {
         for (const auto e : make_iterator_range(in_edges(u, G))) {
@@ -95,8 +96,7 @@ void transitive_closure_dag(const Sorting & ordering, Graph & G) {
             for (const auto f : make_iterator_range(out_edges(u, G))) {
                 const auto t = target(f, G);
                 if (edge(s, t, G).second) continue;
-                typename Graph::edge_property_type p{};
-                add_edge(s, t, p, G);
+                add_edge(s, t, edge_property_value, G);
             }
         }
     }

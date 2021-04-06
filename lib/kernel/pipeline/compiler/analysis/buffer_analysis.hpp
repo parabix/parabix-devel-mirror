@@ -389,10 +389,12 @@ void PipelineAnalysis::generateInitialBufferGraph() {
 
 }
 
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyBufferLocality
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::identifyBufferLocality(const LinkedPartitionGraph & L) {
+void PipelineAnalysis::identifyBufferLocality() { //const LinkedPartitionGraph & L)
 
     for (const auto input : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(input, mBufferGraph);

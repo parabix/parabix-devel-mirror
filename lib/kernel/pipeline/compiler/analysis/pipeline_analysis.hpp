@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <queue>
-#include <random>
 #include <z3.h>
 #include <util/maxsat.hpp>
 #include <assert.h>
@@ -16,6 +15,8 @@
 #include <kernel/core/relationship.h>
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
+
+#include <llvm/Support/Format.h>
 
 #define EXPERIMENTAL_SCHEDULING
 
@@ -29,6 +30,14 @@ public:
 
         PipelineAnalysis P(pipelineKernel);
 
+        const auto seed = std::random_device{}();
+
+        random_engine rng(seed);
+
+        const auto graphSeed = 2081280305; //rng(); // 2081280305, 2081280305
+
+//        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
+
         P.generateInitialPipelineGraph(b);
 
         // Initially, we gather information about our partition to determine what kernels
@@ -36,27 +45,56 @@ public:
 
         auto partitionGraph = P.identifyKernelPartitions();
 
+        const auto partitionCount = num_vertices(partitionGraph);
+
         // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
         // the same sequence. This will help us to partition the graph later and is useful to determine
         // whether we can bypass a region without testing every kernel.
 
-        P.schedulePartitionedProgram(partitionGraph);
+        P.computeExpectedDataFlowRates(partitionGraph);
+
+        for (double maxCutRoundsFactor = 1.0; maxCutRoundsFactor <= 3.0; maxCutRoundsFactor += 0.5) {
+            for (unsigned maxCutPasses = 1; maxCutPasses <= 5; ++maxCutPasses) {
+
+                for (int i = 0; i < 10; ++i) {
+
+                    const auto testSeed = 2081280305; //rng();
+
+                    random_engine test_rng(testSeed);
+
+                    errs() << graphSeed << "," << partitionCount << "," << testSeed << "," << llvm::format("%.1f", maxCutRoundsFactor) << "," << maxCutPasses;
+
+                    P.schedulePartitionedProgram(partitionGraph, test_rng, maxCutRoundsFactor, maxCutPasses);
+
+
+                    exit(-1);
+                }
+
+            }
+        }
+
+
+
+
+
+
+exit(-1);
 
         // Construct the Stream and Scalar graphs
-        const auto linkedPartitions = P.transcribeRelationshipGraph(partitionGraph);
+        P.transcribeRelationshipGraph();
 
         // P.printRelationshipGraph(P.mStreamGraph, errs(), "Streams");
         // P.printRelationshipGraph(P.mScalarGraph, errs(), "Scalars");
 
         P.generateInitialBufferGraph();
 
-        P.identifyBufferLocality(linkedPartitions);
+        P.identifyBufferLocality(); // linkedPartitions
 
         P.computeDataFlowRates();
 
         P.determineBufferSize(b);
 
-        P.determineBufferLayout(b);
+        P.determineBufferLayout(b, rng);
 
         P.identifyTerminationChecks();
         P.determinePartitionJumpIndices();
@@ -105,6 +143,12 @@ private:
 
     void generateInitialPipelineGraph(BuilderRef b);
 
+    #ifdef ENABLE_GRAPH_TESTING_FUNCTIONS
+    void generateRandomPipelineGraph(BuilderRef b, const uint64_t seed,
+                                     const unsigned desiredKernels, const unsigned desiredStreamSets,
+                                     const unsigned desiredPartitions);
+    #endif
+
     using KernelVertexVec = SmallVector<ProgramGraph::Vertex, 64>;
 
     void addRegionSelectorKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, ProgramGraph & G);
@@ -117,7 +161,7 @@ private:
 
     void identifyPipelineInputs();
 
-    LinkedPartitionGraph transcribeRelationshipGraph(const PartitionGraph & partitionGraph);
+    void transcribeRelationshipGraph();
 
     void gatherInfo() {        
         MaxNumOfInputPorts = in_degree(PipelineOutput, mBufferGraph);
@@ -127,6 +171,9 @@ private:
             MaxNumOfOutputPorts = std::max<unsigned>(MaxNumOfOutputPorts, out_degree(i, mBufferGraph));
         }
     }
+
+    static void addKernelRelationshipsInReferenceOrdering(const unsigned kernel, const RelationshipGraph & G,
+                                                          std::function<void(PortType, unsigned, unsigned)> insertionFunction);
 
     // partitioning analysis
 
@@ -138,9 +185,9 @@ private:
 
     // scheduling analysis
 
-    void schedulePartitionedProgram(PartitionGraph & P);
+    void schedulePartitionedProgram(PartitionGraph & P, random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses);
 
-    void analyzeDataflowWithinPartitions(PartitionGraph & P) const;
+    void analyzeDataflowWithinPartitions(PartitionGraph & P, random_engine & rng) const;
 
     SchedulingGraph makeIntraPartitionSchedulingGraph(const PartitionGraph & P, const unsigned currentPartitionId) const;
 
@@ -150,7 +197,8 @@ private:
 
     PartitionOrdering makeInterPartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const;
 
-    std::vector<unsigned> scheduleProgramGraph(const PartitionGraph & P, const PartitionOrdering & O, const PartitionDataflowGraph & D) const;
+    std::vector<unsigned> scheduleProgramGraph(const PartitionGraph & P, const PartitionOrdering & O, const PartitionDataflowGraph & D, random_engine & rng,
+                                               const double maxCutRoundsFactor, const unsigned maxCutPasses) const;
 
     void addSchedulingConstraints(const PartitionGraph & P, const std::vector<unsigned> & program);
 
@@ -161,10 +209,10 @@ private:
 
     void determineBufferSize(BuilderRef b);
 
-    void determineBufferLayout(BuilderRef b);
+    void determineBufferLayout(BuilderRef b, random_engine & rng);
 
     void identifyLinearBuffers();
-    void identifyBufferLocality(const LinkedPartitionGraph & L);
+    void identifyBufferLocality(); //const LinkedPartitionGraph & L
     void identifyLocalPortIds();
     // void identifyDirectUpdatesToStateObjects();
 
@@ -173,6 +221,8 @@ private:
     void makeConsumerGraph();
 
     // dataflow analysis functions
+
+    void computeExpectedDataFlowRates(PartitionGraph & P);
 
     void computeDataFlowRates();
 
