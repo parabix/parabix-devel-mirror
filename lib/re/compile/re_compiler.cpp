@@ -204,7 +204,7 @@ inline Marker RE_Compiler::compileName(Name * const name, PabloBuilder & pb) {
         return Marker(f->second, offset);
     }
     if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-        errs() << "compiling definition of name: " << nameString << ": " <<Printer_RE::PrintRE(name->getDefinition()) << "\n";
+        //errs() << "compiling definition of name: " << nameString << ": " <<Printer_RE::PrintRE(name->getDefinition()) << "\n";
         m = compile(name->getDefinition(), pb);
         mCompiledName->add(name, m);
         return m;

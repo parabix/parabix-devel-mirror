@@ -424,7 +424,7 @@ struct PropertyExternalizer : public RE_Transformer {
             if (val_str == "" ) externName = makeName(id, Name::Type::ZeroWidth);
             else externName = makeName(id, val_str, Name::Type::ZeroWidth);
         }
-        externName->setDefinition(exp);
+        externName->setDefinition(exp->getResolvedRE());
         return externName;
     }
 };
