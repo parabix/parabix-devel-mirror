@@ -36,9 +36,9 @@ public:
 
         const auto graphSeed = 2081280305; //rng(); // 2081280305, 2081280305
 
-//        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
+        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
 
-        P.generateInitialPipelineGraph(b);
+//        P.generateInitialPipelineGraph(b);
 
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
@@ -66,8 +66,6 @@ public:
 
                     P.schedulePartitionedProgram(partitionGraph, test_rng, maxCutRoundsFactor, maxCutPasses);
 
-
-                    exit(-1);
                 }
 
             }

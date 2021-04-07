@@ -127,7 +127,9 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
         assert (Relationships[g].Reason != ReasonType::Reference);
         const unsigned producer = source(g, Relationships);
 
-        const auto producerPartitionId = PartitionIds.find(producer)->second;
+        const auto p = PartitionIds.find(producer);
+        assert (p != PartitionIds.end());
+        const auto producerPartitionId = p->second;
         assert (producerPartitionId > 0);
 
         const RelationshipNode & node = Relationships[producer];
@@ -153,7 +155,9 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
                 const Binding & inputBinding = input.Binding;
                 const ProcessingRate & rate = inputBinding.getRate();
 
-                const auto consumerPartitionId = PartitionIds.find(consumer)->second;
+                const auto c = PartitionIds.find(consumer);
+                assert (c != PartitionIds.end());
+                const auto consumerPartitionId = c->second;
                 assert (producerPartitionId <= consumerPartitionId);
 
                 const RelationshipNode & node = Relationships[consumer];

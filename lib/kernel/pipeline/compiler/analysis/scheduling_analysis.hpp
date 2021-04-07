@@ -66,6 +66,10 @@ static size_t fitness_time = 0;
 static size_t repair_time = 0;
 static size_t total_ga_time = 0;
 
+static size_t total_intra_dataflow_analysis_time = 0;
+static size_t total_inter_dataflow_analysis_time = 0;
+static size_t total_inter_dataflow_scheduling_time = 0;
+
 namespace {
 
 static void executeHarmonySearchTest(const size_t seed);
@@ -90,6 +94,7 @@ void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P, random_eng
 
 //    errs() << "analyzeDataflowWithinPartitions\n";
 
+    const auto t0 = std::chrono::high_resolution_clock::now();
     analyzeDataflowWithinPartitions(P, rng);
 
     // The graph itself has edges indicating a dependency between the partitions, annotated by the kernels
@@ -99,15 +104,26 @@ void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P, random_eng
 
 //    errs() << "analyzeDataflowBetweenPartitions\n";
 
+    const auto t1 = std::chrono::high_resolution_clock::now();
     const auto D = analyzeDataflowBetweenPartitions(P);
+
 
  //   errs() << "makeInterPartitionSchedulingGraph\n";
 
+    const auto t2 = std::chrono::high_resolution_clock::now();
     auto S = makeInterPartitionSchedulingGraph(P, D);
 
 //    errs() << "scheduleProgramGraph\n";
 
+    const auto t3 = std::chrono::high_resolution_clock::now();
+
+
+    total_intra_dataflow_analysis_time = (t1 - t0).count();
+    total_inter_dataflow_analysis_time = (t2 - t1).count();
+    total_inter_dataflow_scheduling_time = (t3 - t2).count();
+
     const auto C = scheduleProgramGraph(P, S, D, rng, maxCutRoundsFactor, maxCutPasses);
+
 
 //    errs() << "addSchedulingConstraints\n";
 
@@ -3082,10 +3098,10 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
     SA.runGA();
 
     const auto end = std::chrono::high_resolution_clock::now();
-    total_ga_time += (end - start).count();
-
+    total_ga_time = (end - start).count();
 
     errs() << "," << numOfFrontierKernels << "," << numOfStreamSets
+           << ',' << total_intra_dataflow_analysis_time << ',' << total_inter_dataflow_analysis_time << ',' << total_inter_dataflow_scheduling_time
            << "," << total_ga_time << "," << fitness_time << "," << fitness_hs_time << ",";
 
 //    errs() << "REPAIR TIME:     " << repair_time << "\n"
