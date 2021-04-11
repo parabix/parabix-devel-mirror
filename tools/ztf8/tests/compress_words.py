@@ -17,9 +17,9 @@ class Compressor:
         # sub-divide length prefix further into num of words in the phrase of particular length
         # [192, 200, 208, 216, 232]
         # experimental prefix range :
-        # lengthGroup 5-8 : 5(C8,CC), 6(C9, CD), 7(CA,CE), 8(CB,CF)
-        # lengthGroup 9-16: 9(D0,D8), 10(D1,D9), 11(D2,DA), 12(D3,DB), 13(D4,DC), 14(D5,DD), 15(D6,DE), 16(D7,DF)
-        # lengthGroup 17-32: 17,25(F8), 18,26(F9), 18,27(FA), 19,28(FB), 20,29(FC), 21,30(FD), 22,31(FE), 23,32(FF)
+        # lengthGroup 5-8 : 5(D0,D4,D8,DC), 6(D1,D5,D9,DD), 7(D2,D6,DA,DE), 8(D3,D7,DB,DF)
+        # lengthGroup 9-16: 9(E0,E8), 10(E1,E9), 11(E2,EA), 12(E3,EB), 13(E4,EC), 14(E5,ED), 15(E6,EE), 16(E7,EF)
+        # lengthGroup 17-32: 17(F0), 18(F1), 19(F2), 20(F3), 21(F4), 22(F5), 23(F6), 24(F7), 25(F8), 26(F9), 27(FA), 28(FB), 29(FC), 30(FD), 31(FE), 32(FF)
         self.prefixList = [192, 200, 208, 224, 240]
         self.compressed = bytearray(b'')
         # TODO: perform bit mixing with all of the previous bytes for a phrase.
@@ -536,7 +536,7 @@ class Compressor:
             pfxBase += pfx
         elif lgth <= 32:
             pfxBase = self.prefixList[4]
-            pfx = (lgth-17) % 15
+            pfx = (lgth-17)
             pfxBase += pfx
         return pfxBase
 
