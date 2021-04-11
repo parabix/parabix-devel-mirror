@@ -593,8 +593,12 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
 void kernel::WordBoundaryLogic(const std::unique_ptr<ProgramBuilder> & P, UTF8_Transformer * t,
                                   StreamSet * Source, StreamSet * U8index, StreamSet * wordBoundary_stream) {
     
+    re::RE * wordProp = re::makePropertyExpression(PropertyExpression::Kind::Codepoint, "word");
+    wordProp = UCD::linkProperties(wordProp);
+    wordProp = UCD::resolveProperties(wordProp);
+    wordProp = UCD::standardizeProperties(wordProp);
     re::Name * word = re::makeName("word", re::Name::Type::UnicodeProperty);
-    re::resolveUnicodeNames(word);
+    word->setDefinition(wordProp);
     StreamSet * WordStream = P->CreateStreamSet(1);
     P->CreateKernelCall<UnicodePropertyKernelBuilder>(word, Source, WordStream);
     P->CreateKernelCall<BoundaryKernel>(WordStream, U8index, wordBoundary_stream);
