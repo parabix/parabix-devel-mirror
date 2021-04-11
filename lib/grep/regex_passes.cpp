@@ -41,11 +41,9 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     r = removeUnneededCaptures(r);
     r = resolveEscapeNames(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
-    r = UCD::linkProperties(r);
-    r = UCD::resolveProperties(r, grep::lineNumGrep);
+    r = UCD::linkAndResolve(r, grep::lineNumGrep);
     r = UCD::inlineSimpleProperties(r);
     //r = resolveBoundaryProperties(r);
-    r = UCD::standardizeProperties(r);
     r = UCD::externalizeProperties(r);
     //r = grep::resolveUnicodeNames(r); // use full name resolution
     validateNamesDefined(r);

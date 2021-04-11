@@ -14,7 +14,7 @@
 #include <re/transforms/to_utf8.h>
 #include <re/ucd/ucd_compiler.hpp>
 #include <re/unicode/boundaries.h>
-#include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_zeroes.h>
@@ -41,14 +41,14 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     re::RE_Compiler re_compiler(getEntryScope(), &cc::UTF8);
     re_compiler.addAlphabet(&cc::UTF8, basis);
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
+    GCB = UCD::linkAndResolve(GCB);
+    GCB = UCD::externalizeProperties(GCB);
     std::set<re::Name *> externals;
     re::gatherNames(GCB, externals);
     UCD::UCDCompiler::NameMap nameMap;
     for (auto & name : externals) {
         nameMap.emplace(name, nullptr);
     }
-    // GCB rule shouldn't have any regex names so using re::resolveUnicodeNames is good enough.
-    GCB = resolveUnicodeNames(GCB);
     unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     PabloAST * u8index = pb.createExtract(getInputStreamVar("u8index"), pb.getInteger(0));
     re_compiler.addPrecompiled("UTF8_index", re::RE_Compiler::Marker(u8index));

@@ -11,7 +11,6 @@
 #include <re/adt/re_name.h>
 #include <re/parse/parser.h>
 #include <re/compile/re_compiler.h>
-#include <re/unicode/re_name_resolve.h>
 #include <re/unicode/boundaries.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>
@@ -27,123 +26,6 @@ namespace UCD {
     
 void UnicodePropertyExpressionError(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
-}
-
-bool resolvePropertyDefinition(Name * const property) {
-    if (property->hasNamespace()) {
-        auto prop = canonicalize_value_name(property->getNamespace());
-        auto propCode = getPropertyCode(prop);
-        if (propCode == UCD::Undefined) {
-            UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
-        }
-        if (isa<BinaryPropertyObject>(getPropertyObject(propCode))){
-            auto valit = Binary_ns::aliases_only_map.find(property->getName());
-            if (valit != Binary_ns::aliases_only_map.end()) {
-                if (valit->second == Binary_ns::N) {
-                    Name * binprop = makeName(getPropertyEnumName(propCode), Name::Type::UnicodeProperty);
-                    property->setDefinition(makeDiff(makeAny(), binprop));
-                    return true;
-                }
-            }
-        }
-    } else {
-        const std::string value = property->getName();
-        // Try special cases of Unicode TR #18
-        if ((value == "any") || (value == ".")) {
-            property->setDefinition(makeCC(0, 0x10FFFF));
-            return true;
-        } else if (value == "ascii") {
-            property->setDefinition(makeName("blk", "ascii", Name::Type::UnicodeProperty));
-            return true;
-        } else if (value == "assigned") {
-            Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
-            property->setDefinition(makeDiff(makeAny(), unassigned));
-            return true;
-        } else if (value == "\\b{g}") {
-            RE * gcb = generateGraphemeClusterBoundaryRule();
-            property->setDefinition(resolveUnicodeNames(gcb));
-            return true;
-        } else if (value == "\\b") {
-            RE * wb = makeBoundaryAssertion(makeName("word", Name::Type::UnicodeProperty));
-            property->setDefinition(resolveUnicodeNames(wb));
-            return true;
-        } else if (value == "^s") {  // "start anchor (^) in single-line mode"
-            property->setDefinition(makeNegativeLookBehindAssertion(makeCC(0, 0x10FFFF)));
-            return true;
-        } else if (value == "$s") { // "end anchor ($) in single-line mode"
-            property->setDefinition(makeNegativeLookAheadAssertion(makeCC(0, 0x10FFFF)));
-            return true;
-        }
-    }
-    return false;
-}
-
-UnicodeSet resolveUnicodeSet(Name * const name) {
-    if (name->getType() == Name::Type::UnicodeProperty) {
-        std::string prop = name->getNamespace();
-        std::string value = name->getName();
-        if (prop.length() > 0) {
-            prop = canonicalize_value_name(prop);
-            auto propCode = getPropertyCode(prop);
-            if (propCode == UCD::Undefined) {
-                UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
-            }
-            auto propObj = getPropertyObject(propCode);
-            if ((value.length() > 0) && (value[0] == '/')) {
-                assert(false && "UCD::resolveUnicodeSet(re::Name *) does not support regex name resolution, use grep::resolveUnicodeSet(re::Name *) instead");
-                llvm::report_fatal_error("");
-            }
-            if ((value.length() > 0) && (value[0] == '@')) {
-                // resolve a @property@ or @identity@ expression.
-                std::string otherProp = canonicalize_value_name(value.substr(1));
-                if (otherProp == "identity") {
-                    return propObj->GetReflexiveSet();
-                }
-                auto propCode2 = getPropertyCode(otherProp);
-                if (propCode2 == UCD::Undefined) {
-                    UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
-                }
-                auto propObj2 = getPropertyObject(propCode2);
-                if (isa<BinaryPropertyObject>(propObj) && isa<BinaryPropertyObject>(propObj2)) {
-                    return ~(cast<BinaryPropertyObject>(propObj)->GetCodepointSet(UCD::Binary_ns::Y) ^
-                             cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y));
-                }
-                else {
-                    UnicodePropertyExpressionError("unsupported");
-                }
-            }
-            else {
-                return propObj->GetCodepointSet(value);
-            }
-        }
-        else {
-            // No namespace (property) name.   Try as a general category.
-            std::string canon = canonicalize_value_name(value);
-            const auto & gcobj = cast<EnumeratedPropertyObject>(getPropertyObject(gc));
-            int valcode = gcobj->GetPropertyValueEnumCode(canon);
-            if (valcode >= 0) {
-                return gcobj->GetCodepointSet(valcode);
-            }
-            const auto & scObj = cast<EnumeratedPropertyObject>(getPropertyObject(sc));
-            valcode = scObj->GetPropertyValueEnumCode(canon);
-            if (valcode >= 0) {
-                return scObj->GetCodepointSet(valcode);
-            }
-            // Try as a binary property.
-            
-            auto propCode = getPropertyCode(canon);
-            if (propCode != UCD::Undefined) {
-                auto propObj = getPropertyObject(propCode);
-                if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(propObj)) {
-                    return p->GetCodepointSet(Binary_ns::Y);
-                }
-                else {
-                    UnicodePropertyExpressionError("Error: property " + getPropertyFullName(propCode) + " specified without a value");
-                }
-            }
-        }
-    }
-    UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
 }
 
 struct PropertyResolver : public RE_Transformer {
@@ -432,5 +314,12 @@ struct PropertyExternalizer : public RE_Transformer {
 RE * externalizeProperties(RE * r) {
     return PropertyExternalizer().transformRE(r);
 }
+
+RE * linkAndResolve(RE * r, GrepLinesFunctionType grep) {
+    RE * linked = linkProperties(r);
+    RE * std = standardizeProperties(linked);
+    return resolveProperties(std, grep);
+}
+
 
 }

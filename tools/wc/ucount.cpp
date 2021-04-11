@@ -10,7 +10,7 @@
 #include <re/cc/cc_compiler_target.h>
 #include <re/adt/adt.h>
 #include <re/parse/parser.h>
-#include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <re/cc/cc_kernel.h>
 #include <re/ucd/ucd_compiler.hpp>
 #include <kernel/core/kernel_builder.h>
@@ -127,7 +127,8 @@ int main(int argc, char *argv[]) {
 
     UCountFunctionType uCountFunctionPtr = nullptr;
     re::RE * CC_re = re::RE_Parser::parse(CC_expr);
-    resolveUnicodeNames(CC_re);
+    CC_re = UCD::linkAndResolve(CC_re);
+    CC_re = UCD::externalizeProperties(CC_re);
     if (re::Name * UCD_property_name = dyn_cast<re::Name>(CC_re)) {
         uCountFunctionPtr = pipelineGen(pxDriver, UCD_property_name);
     } else if (re::CC * CC_ast = dyn_cast<re::CC>(CC_re)) {
