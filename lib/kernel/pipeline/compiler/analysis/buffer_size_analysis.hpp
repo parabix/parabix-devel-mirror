@@ -6,21 +6,148 @@
 
 namespace kernel {
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief determineBufferSize
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::determineBufferSize(BuilderRef b) {
+
+    const auto blockWidth = b->getBitBlockWidth();
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+
+        BufferNode & bn = mBufferGraph[streamSet];
+        const auto producerOutput = in_edge(streamSet, mBufferGraph);
+        const BufferPort & producerRate = mBufferGraph[producerOutput];
+
+        bool cannotBePlacedIntoThreadLocalMemory = false;
+        bool mustBeGloballyShared = false;
+
+        // Does this stream cross a partition boundary?
+        const auto producer = source(producerOutput, mBufferGraph);
+        if (producer == PipelineInput) {
+            mustBeGloballyShared = true;
+        }
+
+        if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
+
+            // TODO: If we have an open system, then the input rate to this pipeline cannot
+            // be bounded a priori. During initialization, we could pass a "suggestion"
+            // argument to indicate what the outer pipeline believes its I/O rates will be.
+
+
+            // If this buffer is externally used, we cannot analyze the dataflow rate of
+            // external consumers. Default to dynamic for such buffers.
+
+            // Similarly if any internal consumer has a deferred rate, we cannot analyze
+            // any consumption rates.
+
+//            nonLocal |= bn.isExternal() || producerRate.IsDeferred;
+
+            const Binding & output = producerRate.Binding;
+
+            auto maxDelay = producerRate.Delay;
+            auto maxLookAhead = producerRate.LookAhead;
+            auto maxLookBehind = producerRate.LookBehind;
+
+            auto bMin = floor(producerRate.Minimum * MinimumNumOfStrides[producer]);
+            auto bMax = ceiling(producerRate.Maximum * MaximumNumOfStrides[producer]);
+
+            assert (producerRate.Maximum >= producerRate.Minimum);
+
+            if (producerRate.Minimum < producerRate.Maximum) {
+                cannotBePlacedIntoThreadLocalMemory = true;
+            }
+
+            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+
+                const BufferPort & consumerRate = mBufferGraph[e];
+
+                const auto consumer = target(e, mBufferGraph);
+
+                const auto cMin = floor(consumerRate.Minimum * MinimumNumOfStrides[consumer]);
+                const auto cMax = ceiling(consumerRate.Maximum * MaximumNumOfStrides[consumer]);
+
+                assert (cMax >= cMin);
+
+                // Could we consume less data than we produce?
+                if (consumerRate.Minimum < consumerRate.Maximum) {
+                    mustBeGloballyShared = true;
+                }
+
+                assert (consumerRate.Maximum >= consumerRate.Minimum);
+
+                bMin = std::min(bMin, cMin);
+                bMax = std::max(bMax, cMax);
+
+//                // Get output overflow size
+                auto lookAhead = consumerRate.LookAhead;
+                if (consumerRate.Minimum < consumerRate.Maximum) {
+                    lookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
+                }
+
+                maxDelay = std::max(maxDelay, consumerRate.Delay);
+                maxLookAhead = std::max(maxLookAhead, lookAhead);
+                maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
+            }
+
+            // calculate overflow (copyback) and fascimile (copyforward) space
+            bn.LookAhead = maxLookAhead;
+            bn.LookBehind = maxLookBehind;
+
+            const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
+            const auto overflow1 = std::max(overflow0, bMax);
+            const auto overflowSize = round_up_to(overflow1, blockWidth) / blockWidth;
+
+            const auto underflow0 = std::max(bn.LookBehind, maxDelay);
+            const auto underflowSize = round_up_to(underflow0, blockWidth) / blockWidth;
+            const auto required = (bMax * 2) - bMin;
+
+            const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
+            const auto reqSize2 = 2 * (overflowSize + underflowSize);
+            auto requiredSize = std::max(reqSize1, reqSize2);
+
+            // if this buffer is "stateful", we cannot make it *thread* local
+            if (maxLookBehind || maxDelay || bn.CopyBack || maxLookAhead) {
+                cannotBePlacedIntoThreadLocalMemory = true;
+            }
+
+            bn.OverflowCapacity = overflowSize;
+            bn.UnderflowCapacity = underflowSize;
+            bn.RequiredCapacity = requiredSize;
+
+        }
+
+        if (cannotBePlacedIntoThreadLocalMemory || mustBeGloballyShared) {
+            if (mustBeGloballyShared) {
+                bn.Locality = BufferLocality::GloballyShared;
+            } else if (bn.Locality == BufferLocality::ThreadLocal) {
+                bn.Locality = BufferLocality::PartitionLocal;
+            }
+        }
+
+    }
+
+
+
+}
+
 #ifdef PERMIT_BUFFER_MEMORY_REUSE
 
 // TODO: nested pipeline kernels could report how much internal memory they require
 // and reason about that here (and in the scheduling phase)
 
-#define BUFFER_LAYOUT_INITIAL_CANDIDATES (20)
-#define BUFFER_LAYOUT_INITIAL_CANDIDATE_ATTEMPTS (100)
-
-#define BUFFER_LAYOUT_MAX_POPULATION_SIZE (30)
-
-#define BUFFER_LAYOUT_MAX_EVOLUTIONARY_ROUNDS (30)
-
-#define BUFFER_LAYOUT_MUTATION_RATE (0.20)
-
 namespace { // anonymous namespace
+
+constexpr static unsigned BUFFER_LAYOUT_INITIAL_CANDIDATES = 20;
+
+constexpr static unsigned BUFFER_LAYOUT_INITIAL_CANDIDATE_ATTEMPTS = 100;
+
+constexpr static unsigned BUFFER_SIZE_POPULATION_SIZE = 30;
+
+constexpr static unsigned BUFFER_SIZE_GA_ROUNDS = 30;
+
+constexpr static unsigned BUFFER_SIZE_GA_STALLS = 10;
+
 
 struct Pack {
     size_t   S = 0;
@@ -35,7 +162,11 @@ using IntervalGraph = adjacency_list<hash_setS, vecS, undirectedS>;
 
 using Interval = std::pair<unsigned, unsigned>;
 
-struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
+static size_t bs_init_time = 0;
+static size_t bs_fitness_time = 0;
+static size_t bs_fitness_calls = 0;
+
+struct BufferLayoutOptimizer final : public PermutationBasedEvolutionaryAlgorithm{
 
     using ColourLine = flat_set<Interval>;
 
@@ -46,6 +177,8 @@ struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
 
         assert (candidates.empty());
         assert (initialPopulation.empty());
+
+        const auto t0 = std::chrono::high_resolution_clock::now();
 
         Candidate candidate;
         candidate.reserve(candidateLength);
@@ -142,8 +275,7 @@ struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
             // given our candidate, do a first-fit allocation to determine the actual
             // memory layout.
 
-            FitnessValueType fitness;
-            if (insertCandidate(candidate, initialPopulation, fitness)) {
+            if (insertCandidate(candidate, initialPopulation)) {
                 if (initialPopulation.size() >= BUFFER_LAYOUT_INITIAL_CANDIDATES) {
                     return false;
                 }
@@ -152,6 +284,10 @@ struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
             H.clear();
             candidate.clear();
         }
+
+        const auto t1 = std::chrono::high_resolution_clock::now();
+
+        bs_init_time += (t1 - t0).count();
 
         return true;
     }
@@ -165,6 +301,8 @@ struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
      * @brief fitness
      ** ------------------------------------------------------------------------------------------------------------- */
     size_t fitness(const Candidate & candidate) override {
+
+        const auto t0 = std::chrono::high_resolution_clock::now();
 
         assert (candidate.size() == candidateLength);
 
@@ -226,6 +364,12 @@ struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
                 }
             }
         }
+
+        const auto t1 = std::chrono::high_resolution_clock::now();
+
+        bs_fitness_time += (t1 - t0).count();
+        ++bs_fitness_calls;
+
         return max_colours;
     }
 
@@ -257,7 +401,7 @@ struct BufferLayoutOptimizer final : public OrderingBasedEvolutionaryAlgorithm{
                          , std::vector<size_t> && weight
                          , std::vector<int> && remaining
                          , random_engine & rng)
-    : OrderingBasedEvolutionaryAlgorithm (numOfLocalStreamSets, BUFFER_LAYOUT_MAX_POPULATION_SIZE, BUFFER_LAYOUT_MAX_EVOLUTIONARY_ROUNDS, BUFFER_LAYOUT_MUTATION_RATE, rng)
+    : PermutationBasedEvolutionaryAlgorithm (numOfLocalStreamSets, BUFFER_SIZE_GA_ROUNDS, BUFFER_SIZE_GA_STALLS, BUFFER_SIZE_POPULATION_SIZE, rng)
     , firstKernel(firstKernel)
     , lastKernel(lastKernel)
     , I(std::move(I))
@@ -306,6 +450,8 @@ private:
 void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) {
 
     // Construct the weighted interval graph for our local streamsets
+
+    const auto t0 = std::chrono::high_resolution_clock::now();
 
     const auto n = LastStreamSet - FirstStreamSet + 1U;
 
@@ -444,11 +590,17 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
                              std::move(I), std::move(allocations), std::move(weight), std::move(remaining), rng);
 
-    BA.runGA();
+    BA.runGA(true);
 
     RequiredThreadLocalStreamSetMemory = BA.getBestFitnessValue();
 
     auto O = BA.getResult();
+
+    const auto t1 = std::chrono::high_resolution_clock::now();
+
+    const auto bs_total_ga_time = (t1 - t0).count();
+
+    errs() << "\n" << bs_total_ga_time << "," << bs_init_time << "," << bs_fitness_time << "," << bs_fitness_calls << "\n";
 
     // TODO: apart from total memory, when would one layout be better than another?
     // Can we quantify it based on the buffer graph order? Currently, we just take
@@ -475,6 +627,8 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     assert (l == numOfLocalStreamSets);
 
     assert (RequiredThreadLocalStreamSetMemory > 0);
+
+
 
 }
 

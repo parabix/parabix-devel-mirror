@@ -338,8 +338,12 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             print_rational(ExpectedNumOfStrides[kernel]);
             if (MinimumNumOfStrides.size() > 0) {
                 out << " ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
-                             print_rational(MaximumNumOfStrides[kernel]) << "]\\n";
+                             print_rational(MaximumNumOfStrides[kernel]) << "]";
             }
+            out << "\\n";
+        }
+        if (kernelObj->canSetTerminateSignal()) {
+            out << "<CanTerminateEarly>\\n";
         }
 
         out << "\" shape=rect,style=rounded,peripheries=" << borders;
@@ -426,7 +430,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                 break;
             default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
         }
-        out << " {G" << pd.GlobalPortId << ",L" << pd.LocalPortId << '}';
+        // out << " {G" << pd.GlobalPortId << ",L" << pd.LocalPortId << '}';
         if (pd.IsPrincipal) {
             out << " [P]";
         }

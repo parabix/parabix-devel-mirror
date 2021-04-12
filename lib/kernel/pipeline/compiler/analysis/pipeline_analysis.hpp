@@ -34,14 +34,18 @@ public:
 
         random_engine rng(seed);
 
-        const auto graphSeed = 2081280305; //rng(); // 2081280305, 2081280305
+//        const auto graphSeed = 2081280305; //rng(); // 2081280305, 2081280305
 
-        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
+//        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
 
-//        P.generateInitialPipelineGraph(b);
+        P.generateInitialPipelineGraph(b);
+
+        P.printRelationshipGraph(P.Relationships, errs(), "R");
 
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
+
+        errs() << "identifyKernelPartitions\n";
 
         auto partitionGraph = P.identifyKernelPartitions();
 
@@ -51,48 +55,63 @@ public:
         // the same sequence. This will help us to partition the graph later and is useful to determine
         // whether we can bypass a region without testing every kernel.
 
+        errs() << "computeExpectedDataFlowRates\n";
+
         P.computeExpectedDataFlowRates(partitionGraph);
 
-        for (double maxCutRoundsFactor = 1.0; maxCutRoundsFactor <= 3.0; maxCutRoundsFactor += 0.5) {
-            for (unsigned maxCutPasses = 1; maxCutPasses <= 5; ++maxCutPasses) {
+//        for (double maxCutRoundsFactor = 1.0; maxCutRoundsFactor <= 3.0; maxCutRoundsFactor += 0.5) {
+//            for (unsigned maxCutPasses = 1; maxCutPasses <= 5; ++maxCutPasses) {
 
-                for (int i = 0; i < 10; ++i) {
+//                for (int i = 0; i < 10; ++i) {
 
-                    const auto testSeed = 2081280305; //rng();
+//                    const auto testSeed = 2081280305; //rng();
 
-                    random_engine test_rng(testSeed);
+//                    random_engine test_rng(testSeed);
 
-                    errs() << graphSeed << "," << partitionCount << "," << testSeed << "," << llvm::format("%.1f", maxCutRoundsFactor) << "," << maxCutPasses;
+//                    errs() << graphSeed << "," << partitionCount << "," << testSeed << "," << llvm::format("%.1f", maxCutRoundsFactor) << "," << maxCutPasses;
 
-                    P.schedulePartitionedProgram(partitionGraph, test_rng, maxCutRoundsFactor, maxCutPasses);
+//                    P.schedulePartitionedProgram(partitionGraph, test_rng, maxCutRoundsFactor, maxCutPasses);
 
-                }
+//                }
 
-            }
-        }
-
-
+//            }
+//        }
 
 
+        errs() << "schedulePartitionedProgram\n";
 
+        P.schedulePartitionedProgram(partitionGraph, rng, 1.0, 1);
 
-exit(-1);
 
         // Construct the Stream and Scalar graphs
-        P.transcribeRelationshipGraph();
+        P.transcribeRelationshipGraph(partitionGraph);
 
         // P.printRelationshipGraph(P.mStreamGraph, errs(), "Streams");
         // P.printRelationshipGraph(P.mScalarGraph, errs(), "Scalars");
 
+        errs() << "generateInitialBufferGraph\n";
+
         P.generateInitialBufferGraph();
 
-        P.identifyBufferLocality(); // linkedPartitions
+        P.printBufferGraph(errs());
+
+        errs() << "computeDataFlowRates\n";
 
         P.computeDataFlowRates();
 
+        errs() << "determineBufferSize\n";
+
         P.determineBufferSize(b);
 
+        errs() << "determineBufferLayout\n";
+
         P.determineBufferLayout(b, rng);
+
+        errs() << "identifyBufferLocality\n";
+
+        P.identifyBufferLocality(); // linkedPartitions
+
+        errs() << "identifyTerminationChecks\n";
 
         P.identifyTerminationChecks();
         P.determinePartitionJumpIndices();
@@ -119,6 +138,8 @@ exit(-1);
         #ifdef PRINT_BUFFER_GRAPH
         P.printBufferGraph(errs());
         #endif
+
+        exit(-1);
 
         return P;
     }
@@ -159,7 +180,7 @@ private:
 
     void identifyPipelineInputs();
 
-    void transcribeRelationshipGraph();
+    void transcribeRelationshipGraph(const PartitionGraph & partitionGraph);
 
     void gatherInfo() {        
         MaxNumOfInputPorts = in_degree(PipelineOutput, mBufferGraph);

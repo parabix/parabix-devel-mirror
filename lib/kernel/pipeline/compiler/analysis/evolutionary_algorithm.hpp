@@ -21,7 +21,7 @@ namespace kernel {
  * to call with only one function. Instead both the "initGA" and "repair" functions are implemented within
  * the actual scheduling functions.
  ** ------------------------------------------------------------------------------------------------------------- */
-class OrderingBasedEvolutionaryAlgorithm {
+class PermutationBasedEvolutionaryAlgorithm {
 public:
 
     using Candidate = std::vector<Vertex>;
@@ -73,13 +73,6 @@ public:
     };
 
     /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief initGAWithDefaultPopulation
-     ** ------------------------------------------------------------------------------------------------------------- */
-    bool initGAWithDefaultPopulation() {
-        return initGA(population);
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
     virtual bool initGA(Population & initialPopulation) = 0;
@@ -87,15 +80,11 @@ public:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief runGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    const OrderingBasedEvolutionaryAlgorithm & runGA(const bool print = false) {
+    const PermutationBasedEvolutionaryAlgorithm & runGA(const bool print = false) {
 
         population.reserve(maxCandidates);
 
         const auto enumeratedAll = initGA(population);
-
-        if (print) {
-            printDataPoint();
-        }
 
         if (LLVM_UNLIKELY(enumeratedAll)) {
             goto enumerated_entire_search_space;
@@ -121,44 +110,31 @@ public:
         unsigned averageStallCount = 0;
         unsigned bestStallCount = 0;
 
-        auto priorAverageFitness = worstFitnessValue;
+        double priorAverageFitness = worstFitnessValue;
         auto priorBestFitness = worstFitnessValue;
+
+        FitnessValueType bestFitness = worstFitnessValue;
+
+        std::vector<double> weights;
+
+        flat_set<unsigned> chosen;
+        chosen.reserve(maxCandidates);
 
         for (unsigned g = 0; g < maxGenerations; ++g) {
 
             const auto populationSize = population.size();
+            assert (populationSize > 1 && populationSize <= maxCandidates);
 
-            assert (populationSize > 1);
-
-//            std::uniform_int_distribution<unsigned> upToN(0, populationSize - 1);
-
-//            auto tournament_select = [&]() -> const Candidate & {
-//                const auto & A = population[upToN(rng)];
-//                const auto & B = population[upToN(rng)];
-//                if (A->second < B->second) {
-//                    return A->first;
-//                } else {
-//                    return B->first;
-//                }
-//            };
-
-            const double currentMutationRate = (double)(g + 1) / (double)(maxGenerations);
+            const auto c = maxStallGenerations - std::max(averageStallCount, bestStallCount);
+            const auto d = std::min(maxGenerations - g, c);
+            assert (d >= 1);
+            const double currentMutationRate = (double)(d) / (double)(maxStallGenerations) + 0.03;
+            // const double currentMutationRate = (double)(g + 1) / (double)(maxGenerations);
             const double currentCrossoverRate = 1.0 - currentMutationRate;
-
-            redo_generation:
 
             // CROSSOVER:
 
-            assert (nextGeneration.empty());
-
-            FitnessValueType sumOfGenerationalFitness = 0.0;
-            FitnessValueType bestGenerationalFitness = worstFitnessValue;
-            unsigned generationCount = 0;
-
             for (unsigned i = 1; i < populationSize; ++i) {
-
-//                const Candidate & A = tournament_select();
-//                const Candidate & B = tournament_select();
 
                 for (unsigned j = 0; j < i; ++j) {
                     if (zeroToOneReal(rng) <= currentCrossoverRate) {
@@ -204,13 +180,7 @@ public:
                             }
 
                             repairCandidate(C);
-                            FitnessValueType fitness;
-                            insertCandidate(C, nextGeneration, fitness);
-                            sumOfGenerationalFitness += fitness;
-                            ++generationCount;
-                            if (FitnessValueEvaluator::eval(fitness, bestGenerationalFitness)) {
-                                bestGenerationalFitness = fitness;
-                            }
+                            insertCandidate(C, population);
                         };
 
                         crossover(A, B, true);
@@ -236,45 +206,53 @@ public:
                     std::shuffle(C.begin() + a, C.begin() + b, rng);
 
                     repairCandidate(C);
-                    FitnessValueType fitness;
-                    insertCandidate(C, nextGeneration, fitness);
-                    sumOfGenerationalFitness += fitness;
-                    ++generationCount;
-                    if (FitnessValueEvaluator::eval(fitness, bestGenerationalFitness)) {
-                        bestGenerationalFitness = fitness;
-                    }
+                    insertCandidate(C, population);
                 }
             }
 
-            // SELECTION:
+            const auto n = population.size();
 
-            for (const auto & I : nextGeneration) {
-                assert (population.size() <= maxCandidates);
-                if (population.size() == maxCandidates) {
-                    if (I->second <= population.front()->second) {
-                        std::pop_heap(population.begin(), population.end(), FitnessComparator{});
-                        population.pop_back();
-                    } else {
-                        // New item exceeds the weight of the heaviest candiate
-                        // in the population.
-                        continue;
-                    }
+            FitnessValueType sumOfGenerationalFitness = 0.0;
+            auto minFitness = maxFitVal;
+            auto maxFitness = minFitVal;
+
+            for (const auto & I : population) {
+                const auto fitness = I->second;
+                sumOfGenerationalFitness += fitness;
+                if (minFitness > fitness) {
+                    minFitness = fitness;
                 }
-                population.emplace_back(I);
-                std::push_heap(population.begin(), population.end(), FitnessComparator{});
+                if (maxFitness < fitness) {
+                    maxFitness = fitness;
+                }
+            }
+
+            const double averageGenerationFitness = ((double)sumOfGenerationalFitness) / ((double)n);
+
+            auto bestGenerationalFitness = maxFitness;
+            if (FitnessValueEvaluator::eval(minFitness, maxFitness)) {
+                bestGenerationalFitness = minFitness;
             }
 
             if (print) {
-                printDataPoint();
+//                if (FitnessValueEvaluator::eval(bestGenerationalFitness, bestFitness)) {
+//                    bestFitness = bestGenerationalFitness;
+//                    errs() << ',' << g << ',' << bestGenerationalFitness;
+//                }
+                errs() << ',' << n << ',' << minFitness << ',' << bestGenerationalFitness << ',' << maxFitness;
             }
 
-            if (LLVM_UNLIKELY(generationCount == 0)) {
-                goto redo_generation;
+
+
+            if (LLVM_UNLIKELY(n == populationSize)) {
+                if (++averageStallCount == maxStallGenerations) {
+                    break;
+                }
+                if (++bestStallCount == maxStallGenerations) {
+                    break;
+                }
+                continue;
             }
-
-            const auto averageGenerationFitness = (sumOfGenerationalFitness + generationCount / 2) / generationCount;
-
-            nextGeneration.clear();
 
             if (std::abs<FitnessValueType>(averageGenerationFitness - priorAverageFitness) <= averageStallThreshold) {
                 if (++averageStallCount == maxStallGenerations) {
@@ -284,7 +262,8 @@ public:
                 averageStallCount = 0;
             }
             assert (averageStallCount < maxStallGenerations);
-            priorAverageFitness = averageGenerationFitness;
+
+
 
             if (std::abs<FitnessValueType>(bestGenerationalFitness - priorBestFitness) <= averageStallThreshold) {
                 if (++bestStallCount == maxStallGenerations) {
@@ -294,6 +273,85 @@ public:
                 bestStallCount = 0;
             }
             assert (bestStallCount < maxStallGenerations);
+
+            // BOLTZMANN SELECTION:
+
+            if (n > maxCandidates) {
+
+                assert (nextGeneration.empty());
+
+                if (LLVM_UNLIKELY(minFitness == maxFitness)) {
+                    std::shuffle(population.begin(), population.end(), rng);
+                    for (unsigned i = 0; i < maxCandidates; ++i) {
+                        nextGeneration.emplace_back(population[i]);
+                    }
+                } else {
+
+                    // Calculate the variance for the annealing factor
+
+                    double sumDiffOfSquares = 0.0;
+                    for (unsigned i = 0; i < n; ++i) {
+                        const auto w = population[i]->second;
+                        const auto d = w - averageGenerationFitness;
+                        sumDiffOfSquares += d * d;
+                    }
+
+//                    constexpr double beta = 4.0;
+
+                    double beta;
+                    if (LLVM_LIKELY(sumDiffOfSquares == 0)) {
+                        beta = 4.0;
+                    } else {
+                        beta = std::sqrt(n / sumDiffOfSquares);
+                    }
+
+                    if (weights.size() < n) {
+                        weights.resize(n);
+                    }
+
+                    chosen.clear();
+                    auto sumX = 0.0;
+                    unsigned fittestIndividual = 0;
+                    const double r = beta / (double)(maxFitness - minFitness);
+                    for (unsigned i = 0; i < n; ++i) {
+                        const auto w = population[i]->second;
+                        if (w == bestGenerationalFitness) {
+                            fittestIndividual = i;
+                        }
+                        const double x = std::exp((double)(w - minFitness) * r);
+                        const auto y = std::max(x, std::numeric_limits<double>::min());
+                        sumX += y;
+                        weights[i] = sumX;
+                    }
+                    // ELITISM: always keep the fittest candidate for the next generation
+                    chosen.insert(fittestIndividual);
+                    std::uniform_real_distribution<double> selector(0, sumX);
+                    while (chosen.size() < maxCandidates) {
+                        const auto d = selector(rng);
+                        assert (d < sumX);
+                        const auto f = std::upper_bound(weights.begin(), weights.end(), d);
+                        assert (f != weights.end());
+                        const auto j = std::distance(weights.begin(), f);
+                        chosen.insert(j);
+                    }
+                    for (unsigned i : chosen) {
+                        nextGeneration.emplace_back(population[i]);
+                    }
+                }
+
+                population.swap(nextGeneration);
+                nextGeneration.clear();
+            }
+
+            if (print) {
+//                if (FitnessValueEvaluator::eval(bestGenerationalFitness, bestFitness)) {
+//                    bestFitness = bestGenerationalFitness;
+//                    errs() << ',' << g << ',' << bestGenerationalFitness;
+//                }
+                errs() << ',' << n << minFitness << ',' << bestGenerationalFitness << ',' << maxFitness;
+            }
+
+            priorAverageFitness = averageGenerationFitness;
             priorBestFitness = bestGenerationalFitness;
         }
 
@@ -301,28 +359,9 @@ public:
 
 enumerated_entire_search_space:
 
-        std::sort_heap(population.begin(), population.end(), FitnessComparator{});
+        std::sort(population.begin(), population.end(), FitnessComparator{});
 
         return *this;
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief printDataPoint
-     ** ------------------------------------------------------------------------------------------------------------- */
-    virtual void printDataPoint() {
-//        FitnessValueType min = std::numeric_limits<FitnessValueType>::max();
-//        FitnessValueType invalid = 0;
-
-//        for (const auto & I : population) {
-//            const auto v = I->second;
-//            if (v == std::numeric_limits<FitnessValueType>::max()) {
-//                invalid++;
-//            } else if (v < min)  {
-//                min = v;
-//            }
-//        }
-
-//        outs() << ',' << min << ',' << invalid << ',' << candidates.size();
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -357,19 +396,15 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief insertCandidate
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool insertCandidate(const Candidate & candidate, Population & population, FitnessValueType & fitnessValue) {
+    bool insertCandidate(const Candidate & candidate, Population & population) {
         const auto f = candidates.emplace(candidate, 0);
         if (LLVM_LIKELY(f.second)) {
             const auto value = fitness(f.first->first);
-            fitnessValue = value;
             f.first->second = value;
-            population.emplace_back(f.first);
-            std::push_heap(population.begin(), population.end(), FitnessComparator{});
-            return true;
-        } else {
-            fitnessValue = f.first->second;
         }
-        return false;
+        assert (f.first != candidates.end());
+        population.emplace_back(f.first);
+        return f.second;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -412,20 +447,19 @@ in_trie:    ++i;
 
 protected:
 
-    OrderingBasedEvolutionaryAlgorithm(const unsigned candidateLength
+    PermutationBasedEvolutionaryAlgorithm(const unsigned candidateLength
                           , const unsigned maxRounds
+                          , const unsigned maxStallRounds
                           , const unsigned maxCandidates
-                          , const double mutationRate
                           , random_engine & rng)
     : candidateLength(candidateLength)
     , maxGenerations(maxRounds)
     , maxCandidates(maxCandidates)
-    , mutationRate(mutationRate)
     , averageStallThreshold(3)
     , maxStallThreshold(3)
-    , maxStallGenerations(50)
+    , maxStallGenerations(maxStallRounds)
     , rng(rng) {
-        assert (0.0 <= mutationRate && mutationRate <= 1.0);
+        population.reserve(maxCandidates * 3);
     }
 
 protected:
@@ -433,7 +467,6 @@ protected:
     const unsigned candidateLength;
     const unsigned maxGenerations;
     const unsigned maxCandidates;
-    const double mutationRate;
 
     const FitnessValueType averageStallThreshold;
     const FitnessValueType maxStallThreshold;

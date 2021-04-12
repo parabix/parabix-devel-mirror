@@ -23,9 +23,13 @@ constexpr unsigned MAX_PARTITION_POPULATION_SIZE = 100;
 
 constexpr unsigned MAX_PROGRAM_POPULATION_SIZE = 100;
 
-constexpr static unsigned PARITION_SCHEDULING_GA_ROUNDS = 1000;
+constexpr static unsigned PARITION_SCHEDULING_GA_ROUNDS = 100;
 
-constexpr static unsigned PROGRAM_SCHEDULING_GA_ROUNDS = 1000;
+constexpr static unsigned PARITION_SCHEDULING_GA_STALLS = 20;
+
+constexpr static unsigned PROGRAM_SCHEDULING_GA_ROUNDS = 100;
+
+constexpr static unsigned PROGRAM_SCHEDULING_GA_STALLS = 20;
 
 #define BIPARTITE_GRAPH_UNPLACED (0U)
 
@@ -435,6 +439,8 @@ protected:
     SmallVector<Vertex, 16> stack;
     const unsigned maxNumOfComponents;
 };
+
+#if 0
 
 static void executeHarmonySearchTest(const size_t seed) {
 
@@ -854,12 +860,14 @@ static void executeHarmonySearchByCSV(const std::string fileName, const size_t r
 
 };
 
+#endif
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief MemoryAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
 class MemoryAnalysis {
 
-    using Candidate = OrderingBasedEvolutionaryAlgorithm::Candidate;
+    using Candidate = PermutationBasedEvolutionaryAlgorithm::Candidate;
 
     using IntervalEdge = typename MemIntervalGraph::edge_descriptor;
 
@@ -1196,7 +1204,7 @@ is_bipartite_graph:
         const auto predictionOf95PercentCut = 0.07930 * ((double)(numOfStreamSets * numOfStreamSets))
             + 7.63712 * ((double)numOfStreamSets) - 0.19735 * ((double)numOfEdges) - 80.59364;
 
-        const unsigned numOfRounds = std::ceil(std::max(predictionOf95PercentCut, 40.0) * maxCutRoundsFactor);
+        const unsigned numOfRounds = std::ceil(std::max(predictionOf95PercentCut, 10.0) * maxCutRoundsFactor);
 
         const auto firstStreamSet = (2 * numOfKernels);
 
@@ -1393,7 +1401,7 @@ private:
  ** ------------------------------------------------------------------------------------------------------------- */
 struct SchedulingAnalysisWorker {
 
-    using Candidate = OrderingBasedEvolutionaryAlgorithm::Candidate;
+    using Candidate = PermutationBasedEvolutionaryAlgorithm::Candidate;
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
@@ -1435,7 +1443,7 @@ public:
  ** ------------------------------------------------------------------------------------------------------------- */
 struct PartitionSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
 
-    using Candidate = OrderingBasedEvolutionaryAlgorithm::Candidate;
+    using Candidate = PermutationBasedEvolutionaryAlgorithm::Candidate;
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
@@ -1497,7 +1505,7 @@ private:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief PartitionSchedulingAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
-struct PartitionSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgorithm {
+struct PartitionSchedulingAnalysis final : public PermutationBasedEvolutionaryAlgorithm {
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
@@ -1510,8 +1518,7 @@ struct PartitionSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgor
         // solution space.
 
         return enumerateUpToNTopologicalOrderings(D, INITIAL_TOPOLOGICAL_POPULATION_SIZE, [&](const Candidate & L) {
-            FitnessValueType fitness;
-            insertCandidate(L, initialPopulation, fitness);
+            insertCandidate(L, initialPopulation);
         });
 
     }
@@ -1535,7 +1542,7 @@ struct PartitionSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgor
      ** ------------------------------------------------------------------------------------------------------------- */
     PartitionSchedulingAnalysis(const SchedulingGraph & S, const PartitionDependencyGraph & D,
                                 const unsigned numOfKernels, random_engine & rng)
-    : OrderingBasedEvolutionaryAlgorithm(numOfKernels, PARITION_SCHEDULING_GA_ROUNDS, MAX_PARTITION_POPULATION_SIZE, MUTATION_RATE, rng)
+    : PermutationBasedEvolutionaryAlgorithm(numOfKernels, PARITION_SCHEDULING_GA_ROUNDS, PARITION_SCHEDULING_GA_STALLS, MAX_PARTITION_POPULATION_SIZE, rng)
     , D(D)
     , worker(S, D, numOfKernels, rng) {
 
@@ -1577,13 +1584,13 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P, rando
 
         PartitionData & currentPartition = P[currentPartitionId];
 
-        const auto & kernels = currentPartition.Kernels;
-        const auto numOfKernels = kernels.size();
-
         auto S = makeIntraPartitionSchedulingGraph(P, currentPartitionId);
 
         constexpr auto fakeInput = 0U;
         constexpr auto firstKernel = 1U;
+
+        const auto & kernels = currentPartition.Kernels;
+        const auto numOfKernels = kernels.size();
         const auto fakeOutput = numOfKernels + 1U;
 
         // We want to generate a subgraph of S consisting of only the kernel nodes
@@ -1856,6 +1863,8 @@ namespace { // anonymous namespace
  ** ------------------------------------------------------------------------------------------------------------- */
 struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
 
+    using TargetVector = std::vector<std::pair<Vertex, double>>;
+
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief repair
      ** ------------------------------------------------------------------------------------------------------------- */
@@ -2079,6 +2088,8 @@ restart_process:
 
                 targets.clear();
 
+                double sum = 0.0;
+
                 for (const auto e : make_iterator_range(out_edges(u, O))) {
                     const auto v = target(e, O);
                     if (visited.test(v)) continue;
@@ -2086,40 +2097,30 @@ restart_process:
                     assert (f != trail.end());
                     const auto a = f->second;
                     const auto value = O[e] * a * a * a;
-                    targets.emplace_back(v, value);
-                }
-
-                const auto k = targets.size();
-
-                if (k <= 1) {
-                    if (LLVM_UNLIKELY(k == 0)) {
-                        break;
-                    } else {
-                        u = targets.front().first;
-                        continue;
-                    }
-                }
-
-                double sum = 0.0;
-
-                for (const auto & t : targets) {
-                    sum += t.second;
+                    sum += value;
+                    targets.emplace_back(v, sum);
                 }
 
                 std::uniform_real_distribution<double> distribution(0.0, sum);
                 const auto c = distribution(rng);
+                assert (c < sum);
 
-                bool found = false;
-                double d = std::numeric_limits<double>::epsilon();
-                for (const auto & t : targets) {
-                    d += t.second;
-                    if (d >= c) {
-                        u = t.first; // set our next target
-                        found = true;
-                        break;
+                static struct _TargetComparator {
+                    using T = TargetVector::value_type;
+                    bool operator() (const T & a, const T & b) {
+                        return a.second < b.second;
                     }
-                }
-                assert (found);
+                    bool operator() (const T::second_type a, const T & b) {
+                        return a < b.second;
+                    }
+                    bool operator() (const T & a, const T::second_type b) {
+                        return a.second < b;
+                    }
+                } comp;
+
+                const auto f = std::upper_bound(targets.begin(), targets.end(), c, comp);
+                assert (f != targets.end());
+                u = f->first; // set our next target
             }
 
             // extract the sequence of kernel ids from the path
@@ -2337,7 +2338,7 @@ private:
     const ProgramScheduleType mode;
 
     BitVector visited;
-    std::vector<std::pair<Vertex, double>> targets;
+    TargetVector targets;
 
     flat_map<std::pair<Vertex, Vertex>, double> trail;
     std::vector<unsigned> index;
@@ -2357,7 +2358,7 @@ private:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ProgramSchedulingAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
-struct ProgramSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgorithm {
+struct ProgramSchedulingAnalysis final : public PermutationBasedEvolutionaryAlgorithm {
 
     static_assert(INITIAL_SCHEDULING_POPULATION_ATTEMPTS >= INITIAL_SCHEDULING_POPULATION_SIZE,
         "cannot have fewer attemps than population size");
@@ -2370,12 +2371,9 @@ struct ProgramSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgorit
      ** ------------------------------------------------------------------------------------------------------------- */
     bool initGA(Population & initialPopulation) override {
         for (unsigned i = 0; i < INITIAL_SCHEDULING_POPULATION_ATTEMPTS; ++i) {
-            FitnessValueType fitness;
-            if (insertCandidate(worker.makeRandomCandidate(), initialPopulation, fitness)) {
+            if (insertCandidate(worker.makeRandomCandidate(), initialPopulation)) {
                 if (initialPopulation.size() >= INITIAL_SCHEDULING_POPULATION_SIZE) {
-                    //return false;
-                    #warning EXITING AFTER INIT GA!
-                    break;
+                    return false;
                 }
             }
         }
@@ -2422,7 +2420,7 @@ struct ProgramSchedulingAnalysis final : public OrderingBasedEvolutionaryAlgorit
                               const unsigned numOfKernels,
                               const unsigned maxPathLength,
                               random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
-    : OrderingBasedEvolutionaryAlgorithm(numOfKernels, PROGRAM_SCHEDULING_GA_ROUNDS, MAX_PROGRAM_POPULATION_SIZE, 0.5, rng)
+    : PermutationBasedEvolutionaryAlgorithm(numOfKernels, PROGRAM_SCHEDULING_GA_ROUNDS, PROGRAM_SCHEDULING_GA_STALLS, MAX_PROGRAM_POPULATION_SIZE, rng)
     , worker(S, O, mode, numOfKernels, maxPathLength, rng, maxCutRoundsFactor, maxCutPasses) {
 
     }
@@ -3100,24 +3098,20 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
     const auto end = std::chrono::high_resolution_clock::now();
     total_ga_time = (end - start).count();
 
-    errs() << "," << numOfFrontierKernels << "," << numOfStreamSets
-           << ',' << total_intra_dataflow_analysis_time << ',' << total_inter_dataflow_analysis_time << ',' << total_inter_dataflow_scheduling_time
-           << "," << total_ga_time << "," << fitness_time << "," << fitness_hs_time << ",";
+//    errs() << "," << numOfFrontierKernels << "," << numOfStreamSets
+//           << ',' << total_intra_dataflow_analysis_time << ',' << total_inter_dataflow_analysis_time << ',' << total_inter_dataflow_scheduling_time
+//           << "," << total_ga_time << "," << fitness_time << "," << fitness_hs_time << ",";
 
-//    errs() << "REPAIR TIME:     " << repair_time << "\n"
-//              "FITNESS TIME:    " << fitness_time << "\n"
-//              "FITNESS HS TIME: " << fitness_hs_time << "\n"
-//              "TOTAL GA TIME:   " << total_ga_time << "\n";
+////    errs() << "REPAIR TIME:     " << repair_time << "\n"
+////              "FITNESS TIME:    " << fitness_time << "\n"
+////              "FITNESS HS TIME: " << fitness_hs_time << "\n"
+////              "TOTAL GA TIME:   " << total_ga_time << "\n";
 
-    SA.report();
+//    SA.report();
 
-    errs() << "," << SA.getBestFitnessValue() << "\n";
+//    errs() << "," << SA.getBestFitnessValue() << "\n";
 
 //    errs() << "HS UNIQUE INSERTIONS: " << HS_UniqueInsertions << " of " << HS_InsertionAttempts << "\n";
-
-    std::vector<unsigned> program;
-
-    return program;
 
 
     const auto schedule = SA.getResult();
@@ -3125,7 +3119,7 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
     // TODO: if we have multiple memory optimal schedules, look for the one that
     // keeps calls to the same kernel closer
 
-   // std::vector<unsigned> program;
+    std::vector<unsigned> program;
 
     program.reserve(kernels.size());
 
