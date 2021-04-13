@@ -142,7 +142,9 @@ class Compressor:
             else:
                 numWords -= 1
             curIdx += 1
-        return phrase, singleByteSyms
+        if numWords == 0:
+            return phrase, singleByteSyms
+        return None, -1
 
     def phraseOfFourWords(self, words, numWords, wordsLen):
         index = 0

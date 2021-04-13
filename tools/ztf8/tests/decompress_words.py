@@ -8,15 +8,19 @@ import compress_words
 class Decompressor:
     def __init__(self):
         self.hashTable = {}
-        self.codewordHashTableList = [{}, {}, {}, {}, {}]
+        self.finalCodewordHashTableList = [{}, {}, {}, {}, {}]
         self.prefixList = [192, 200, 208, 224, 240]
         self.bitmix = [[4, 1, 7, 2, 0, 6, 5, 3], [1, 2, 4, 5, 0, 3, 6, 7], [
             0, 5, 4, 6, 2, 3, 7, 1], [7, 1, 6, 4, 3, 0, 5, 2], [3, 2, 5, 4, 7, 6, 0, 1]]
         self.hashVals = {}
         self.decompressed = bytearray(b'')
         self.word_list = []
-        self.codeWordStartPos = [{}, {}, {}, {}, {}]
-        self.phraseToCWTableList = [{}, {}, {}, {}, {}]
+        self.nonFinalCodewordHashTableList = [{}, {}, {}, {}, {}]
+        self.fourWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
+        self.threeWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
+        self.twoWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
+        self.oneWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
+        self.plaintext = bytearray(b'')
 
     def Name(self):
         return 'text'
@@ -24,13 +28,33 @@ class Decompressor:
     def Decompress(self, textBytes):
         # extract all the plaintext symbols in the compressed text to create the hashTable
         # which is used in decoding the encoded symbols
+        for numPhrases in range(1, 5):
+            textBytes = self.phraseDecompression(textBytes, numPhrases)
+        # flush out the hashtables containing phrases with numPhrases words after every iteration
+        #self.finalCodewordHashTableList = [{}, {}, {}, {}, {}]
+        #self.nonFinalCodewordHashTableList = [{}, {}, {}, {}, {}]
+        self.decompressed = textBytes
+        for h in self.finalCodewordHashTableList:
+            print(len(h))
+        # print(''.join(self.word_list), 'self.word_list')
+        # if plaintext:
+        #    self.decompressed += plaintext
+        #print(self.decompressed, 'self.decompressed')
+        return self.decompressed
+
+    def phraseDecompression(self, textBytes, numWords):
+        #print(textBytes, 'textBytes')
+        decompressed = bytearray(b'')
         index = 0
         length = len(textBytes)
+        prevPlaintextSeg = bytearray(b'')
+        plaintext = bytearray(b'')
+        plaintextWithCodeWords = bytearray(b'')
         while index < len(textBytes):
             if textBytes[index] < 192:
-                plaintext = bytearray(b'')
                 while index < len(textBytes) and textBytes[index] < 192:
                     plaintext.append(textBytes[index])
+                    plaintextWithCodeWords.append(textBytes[index])
                     index += 1
             else:
                 # TODO: gather all the codewords and plaintext separately; for codewords with same prefix, run the phrase
@@ -44,6 +68,8 @@ class Decompressor:
                     if textBytes[index+1] >= 128:
                         plaintext.append(textBytes[index])
                         plaintext.append(textBytes[index+1])
+                        plaintextWithCodeWords.append(textBytes[index])
+                        plaintextWithCodeWords.append(textBytes[index+1])
                     else:
                         codeWord.append(textBytes[index])
                         codeWord.append(textBytes[index+1])
@@ -55,6 +81,9 @@ class Decompressor:
                         plaintext.append(textBytes[index])
                         plaintext.append(textBytes[index+1])
                         plaintext.append(textBytes[index+2])
+                        plaintextWithCodeWords.append(textBytes[index])
+                        plaintextWithCodeWords.append(textBytes[index+1])
+                        plaintextWithCodeWords.append(textBytes[index+2])
                     else:
                         codeWord.append(textBytes[index])
                         codeWord.append(textBytes[index+1])
@@ -68,6 +97,10 @@ class Decompressor:
                         plaintext.append(textBytes[index+1])
                         plaintext.append(textBytes[index+2])
                         plaintext.append(textBytes[index+3])
+                        plaintextWithCodeWords.append(textBytes[index])
+                        plaintextWithCodeWords.append(textBytes[index+1])
+                        plaintextWithCodeWords.append(textBytes[index+2])
+                        plaintextWithCodeWords.append(textBytes[index+3])
                     else:
                         codeWord.append(textBytes[index])
                         codeWord.append(textBytes[index+1])
@@ -85,41 +118,60 @@ class Decompressor:
                     cwIdx = index
                     index += 4
                 if codeWord:
-                    self.decompressed += plaintext
+                    #print(codeWord, 'codeWord')
                     cwLen, hashTablePos = self._codeWordLenRange(cwPfx)
-                    phraseExpand = bytearray(b'')
-                    for idx in range(cwLen):
-                        phraseExpand.append(62)
-                    self.decompressed += phraseExpand
-                    # collect all the start positions of same codewords which correspond to the same decompressed phrase
-                    if self.codeWordStartPos[hashTablePos].get(str(codeWord), None):
-                        self.codeWordStartPos[hashTablePos][str(
-                            codeWord)].append(cwIdx)
+                    phrase = self.finalCodewordHashTableList[hashTablePos].get(
+                        str(codeWord))
+                    if phrase:
+                        #print(phrase, 'phrase found in finalCodewordHashTableList')
+                        plaintext += bytearray(phrase.encode())
+                        plaintextWithCodeWords += bytearray(phrase.encode())
                     else:
-                        self.codeWordStartPos[hashTablePos][str(codeWord)] = [
-                            cwIdx]
-                    self.idPhrases(self._Segment(plaintext), 4)
-                    plaintext = bytearray(b'')
-
-        # for phraseSict in self.phraseToCWTableList:
-            # for cw in phraseSict.items():
-                #print(cw, 'phraseeeee')
-        # for cwDict in self.codeWordStartPos:
-            # for cw in cwDict.items():
-                #print(cw, 'cw')
-                # for pos in
-                # print(self.hashTable, 'hashTable')
-        # for h in self.codeWordStartPos:
-        #    for i in h.items():
-        #        print(i)
-        # for h in self.codewordHashTableList:
-            # print(len(h))
-            # for i in h.items():
-            #    print(i)
-        # print(''.join(self.word_list), 'self.word_list')
+                        nFound = False
+                        for nWords in range(4, 0, -1):
+                            phrase1 = self.queryPhraseHashTable(
+                                nWords, codeWord, hashTablePos)
+                            if phrase1:
+                                self.finalCodewordHashTableList[hashTablePos][str(
+                                    codeWord)] = phrase1
+                                #print(
+                                #    phrase1, 'phrase found in queryPhraseHashTable List')
+                                plaintext += bytearray(phrase1.encode())
+                                plaintextWithCodeWords += bytearray(
+                                    phrase1.encode())
+                                nFound = True
+                                break
+                        if not nFound:
+                            words = self._Segment(prevPlaintextSeg+plaintext)
+                            phrase2Final = None
+                            for nWords in range(4, 0, -1):
+                                phrase2 = self.idPhrases(
+                                    words, nWords, codeWord)
+                                if phrase2:
+                                    if not nFound:
+                                        phrase2Final = phrase2
+                                        nFound = True
+                                        plaintext += bytearray(phrase2.encode())
+                                        plaintextWithCodeWords += bytearray(
+                                            phrase2.encode())
+                                        self.finalCodewordHashTableList[hashTablePos][str(
+                                            codeWord)] = phrase2
+                            if not phrase2Final:
+                                plaintextWithCodeWords += codeWord
+                            decompressed += plaintextWithCodeWords
+                            prevPlaintextSeg = plaintext
+                            plaintext = bytearray(b'')
+                            plaintextWithCodeWords = bytearray(b'')
         if plaintext:
-            self.decompressed += plaintext
-        return self.decompressed
+            decompressed += plaintext
+        return decompressed
+
+    def findNumWords(self, phrase1):
+        words = len(phrase1)
+        for ph in phrase1:
+            if ph == ' ' or ph == '\n':
+                words -= 1
+        return words
 
     def getHashTablePos(self, wLen):
         hashTablePos = -1
@@ -135,35 +187,86 @@ class Decompressor:
             hashTablePos = 4
         return hashTablePos
 
-    def idPhrases(self, words, numWordsInPhrase):
-        # print(words, 'words')
+    def idPhrases(self, words, numWordsInPhrase, curCodeWord):
+        if not words:
+            return
+        #print(words, 'words')
+        foundPhrase = None
+        foundPhraseFinal = None
+        nFound = False
         wordsLen = len(words)
         index = 0
         while index < wordsLen:
             # remove this check?
             if index+(numWordsInPhrase-1) < wordsLen:
-                phrase, singleByteSyms = compress_words.Compressor().getPhrase(
+                curPhrase, singleByteSyms = compress_words.Compressor().getPhrase(
                     words, index, numWordsInPhrase, wordsLen)
             else:
                 # for w in words[index::]:
                 #    self.decompressed += bytearray(w, 'utf-8')
                 break
-            if len(phrase) > 32:
+            if curPhrase is None:
+                break
+            if len(curPhrase) < 3 or len(curPhrase) > 32:
                 index += 1
             else:
-                #print(phrase, 'phrase')
-                wLen = len(phrase)
+                #print(curPhrase, 'curPhrase')
+                wLen = len(curPhrase)
                 hashTablePos = self.getHashTablePos(wLen)
-                hashVal = self.phraseToCWTableList[hashTablePos].get(
-                    phrase, None)
-                if hashVal is None:
-                    codeWord = self._HashCode(
-                        phrase, singleByteSyms+numWordsInPhrase)
-                    self.phraseToCWTableList[hashTablePos][phrase] = codeWord
-                    if str(codeWord) in self.codeWordStartPos[hashTablePos] and str(codeWord) not in self.codewordHashTableList[hashTablePos]:
-                        self.codewordHashTableList[hashTablePos][str(
-                            codeWord)] = phrase
+                encodeWord, codeword = self._HashCode(
+                    curPhrase, singleByteSyms+numWordsInPhrase)
+                foundPhrase = self.addPhraseToHashTable(
+                    numWordsInPhrase, encodeWord, hashTablePos, curPhrase, curCodeWord)
+                if foundPhrase and not nFound:
+                    foundPhraseFinal = foundPhrase
+                    nFound = True
                 index += 1
+        return foundPhraseFinal
+
+    def queryPhraseHashTable(self, numWordsInPhrase, encodeWord, hashTablePos):
+        findPhrase = None
+        if numWordsInPhrase == 4:
+            findPhrase = self.fourWordsPhraseHashTableList[hashTablePos].get(
+                str(encodeWord))
+        elif numWordsInPhrase == 3:
+            findPhrase = self.threeWordsPhraseHashTableList[hashTablePos].get(
+                str(encodeWord))
+        elif numWordsInPhrase == 2:
+            findPhrase = self.twoWordsPhraseHashTableList[hashTablePos].get(
+                str(encodeWord))
+        elif numWordsInPhrase == 1:
+            findPhrase = self.oneWordsPhraseHashTableList[hashTablePos].get(
+                str(encodeWord))
+        return findPhrase
+
+    def addPhraseToHashTable(self, numWordsInPhrase, encodeWord, hashTablePos, curPhrase, curCodeWord):
+        #print(curPhrase, '->', encodeWord)
+        findPhrase = None
+        if numWordsInPhrase == 4:
+            if curCodeWord == encodeWord:
+                findPhrase = curPhrase
+            if str(encodeWord) not in self.fourWordsPhraseHashTableList[hashTablePos]:
+                self.fourWordsPhraseHashTableList[hashTablePos][str(
+                    encodeWord)] = curPhrase
+        elif numWordsInPhrase == 3:
+            if curCodeWord == encodeWord:
+                findPhrase = curPhrase
+            if str(encodeWord) not in self.threeWordsPhraseHashTableList[hashTablePos]:
+                self.threeWordsPhraseHashTableList[hashTablePos][str(
+                    encodeWord)] = curPhrase
+        elif numWordsInPhrase == 2:
+            if curCodeWord == encodeWord:
+                findPhrase = curPhrase
+            if str(encodeWord) not in self.twoWordsPhraseHashTableList[hashTablePos]:
+                self.twoWordsPhraseHashTableList[hashTablePos][str(
+                    encodeWord)] = curPhrase
+        elif numWordsInPhrase == 1:
+            if curCodeWord == encodeWord:
+                findPhrase = curPhrase
+            if str(encodeWord) not in self.oneWordsPhraseHashTableList[hashTablePos]:
+                self.oneWordsPhraseHashTableList[hashTablePos][str(
+                    encodeWord)] = curPhrase
+        return findPhrase
 
     def _findHash(self, codeWord, numBytes, hashTablePos):
         # print(''.join(self.word_list), 'self.word_list')
@@ -175,17 +278,18 @@ class Decompressor:
             symIdx += 1
             if 3 <= len(phrase) <= 32:
                 # print(phrase, 'check phrase')
-                if codeWord == self._HashCode(phrase, singleByteSyms+numWords):
-                    # print(phrase, 'found phrase')
-                    self.codewordHashTableList[hashTablePos][str(
-                        codeWord)] = phrase
-                    # unnecessary?
-                    self.word_list.extend(
-                        self._Segment(bytearray(phrase, 'utf-8')))
-                    #print(phrase, 'found phrase')
-                    self.decompressed += bytearray(phrase, 'utf-8')
-                    #print(self.decompressed, 'self.decompressed 3')
-                    return True
+                encodeWord, codeWord = self._HashCode(
+                    phrase, singleByteSyms+numWords)
+                # print(phrase, 'found phrase')
+                self.codewordHashTableList[hashTablePos][str(
+                    codeWord)] = phrase
+                # unnecessary?
+                self.word_list.extend(
+                    self._Segment(bytearray(phrase, 'utf-8')))
+                #print(phrase, 'found phrase')
+                self.decompressed += bytearray(phrase, 'utf-8')
+                #print(self.decompressed, 'self.decompressed 3')
+                return True
         return False
 
     def _codeWordLenRange(self, prefix):
@@ -213,6 +317,7 @@ class Decompressor:
         return lenRange, hashTablePos
 
     def _Segment(self, plaintext):
+        #print(plaintext, 'plaintext')
         word_list = []
         for word in uniseg.wordbreak.words(plaintext.decode('utf-8')):
             word_list.append(word)
@@ -254,7 +359,7 @@ class Decompressor:
         codeWordHex = str(hex(encodedPrefix)[2:]) + finalSuffix
         codeword = str(wordLen)+codeWordHex
         # print(encodedWord, 'encodedWord')
-        return encodedWord
+        return encodedWord, codeword
 
     def getSubPrefix(self, lastNbits, rangeStart, subLen, phraseLen):
         return (phraseLen - rangeStart) + (subLen * lastNbits)

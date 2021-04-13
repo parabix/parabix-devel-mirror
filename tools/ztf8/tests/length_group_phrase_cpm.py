@@ -45,8 +45,8 @@ class LGPhraseCompressor:
                 # first compress the segment for all the possible 4 word phrases.
                 # Once done, only then move ahead with compressing 3 word phrases which could not be
                 # compressed as 4 word phrases and continue till 1 word phrase/ plaintext retains.
-                compressed = self.idPhraseCompress(numWords, words)
-                # print(compressed, 'compressed')
+                self.cmp = self.idPhraseCompress(numWords, words)
+                #print(self.cmp, 'compressed')
                 # Now, if we give words to compress as phrase of 3 words, we first check the hashtable for a 4 word phrase to be present.
                 # If present, we know that it's already compressed as a 4 word phrase and skip those 4 words.
                 # Else, we take first 3 words of the phrase and make an entry in the phrase table. Repeat the same for every phrase of 4 words.
@@ -54,7 +54,8 @@ class LGPhraseCompressor:
                 # Repeat the same by reducing the number of words in phrases till 1.
                 for phraseLen in range(numWords-1, 0, -1):
                     self.cmp = self.idSubPhraseCompress(
-                        phraseLen, compressed)
+                        phraseLen, self.cmp)
+                    #print(self.cmp, 'self.cmp')
                 self.compressed += self.cmp
 
         print(self.wordsLen, 'words length')
@@ -70,22 +71,30 @@ class LGPhraseCompressor:
             #    print(i)
         print("lengthwisePhraseList table size")
         for h in self.lengthwisePhraseList:
-            print(len(h))
-        #print("All hashVals")
-        # for h in self.allHashVals.items():
-        #    print(h)
+            # print(len(h))
+            #print("All hashVals")
+            # for h in self.allHashVals.items():
+            #    print(h)
+            #print(self.compressed, 'self.compressed')
         return self.compressed
 
     def idPhraseCompress(self, phraseLen, words):
+        compress = bytearray(b'')
+        if not words:
+            return compress
+        #print(words, 'words')
         wordsLen = len(words)
         index = 0
-        compress = bytearray(b'')
         while index < wordsLen:
             # remove this check?
             if index+(phraseLen-1) < wordsLen:
                 phrase, singleByteSyms = compress_words.Compressor().getPhrase(
                     words, index, phraseLen, wordsLen)
             else:
+                for w in words[index::]:
+                    compress += bytearray(w, 'utf-8')
+                break
+            if phrase is None:
                 for w in words[index::]:
                     compress += bytearray(w, 'utf-8')
                 break
@@ -108,9 +117,10 @@ class LGPhraseCompressor:
                     compress += bytearray(phrase, 'utf-8')
                     index += (singleByteSyms + phraseLen)
                 elif 3 <= wLen <= 32:
+                    #print(phrase, '-->phrase')
                     encodedWord = self.checkPhraseFreq(
                         wLen, hashTablePos, phrase, phraseLen+singleByteSyms, None, index)
-                    if encodedWord is not None:
+                    if encodedWord:
                         if self.printPlainText:
                             compress += bytearray(phrase, 'utf-8')
                         if self.printWordCodeword:
@@ -127,7 +137,7 @@ class LGPhraseCompressor:
         return compress
 
     def idSubPhraseCompress(self, phraseLen, compressed):
-        # print(compressed, 'compressed')
+        #print(compressed, 'compressed')
         index = 0
         subCompressed = bytearray(b'')
         # add error check to confirm any valid UTF-8 sequences are not ignored
