@@ -404,10 +404,6 @@ using OwningVector = std::vector<std::unique_ptr<T>>;
 
 using Partition = std::vector<unsigned>;
 
-using CoarsePartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, Partition, unsigned>;
-
-using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
-
 using OrderingDAWG = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 struct PartitionData {
@@ -421,7 +417,9 @@ struct PartitionData {
 
 using LinkedPartitionGraph = adjacency_matrix<undirectedS>;
 
-using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, unsigned>; // , LinkedPartitionGraph
+using StreamSetId = unsigned;
+
+using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, StreamSetId>;
 
 using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
 

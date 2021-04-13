@@ -74,12 +74,6 @@ static size_t total_intra_dataflow_analysis_time = 0;
 static size_t total_inter_dataflow_analysis_time = 0;
 static size_t total_inter_dataflow_scheduling_time = 0;
 
-namespace {
-
-static void executeHarmonySearchTest(const size_t seed);
-static void executeHarmonySearchByCSV(std::string fileName, const size_t seed);
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowWithinPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -440,428 +434,6 @@ protected:
     const unsigned maxNumOfComponents;
 };
 
-#if 0
-
-static void executeHarmonySearchTest(const size_t seed) {
-
-    random_engine rng0(seed);
-
-    const auto MAX_SIZE = 100UL;
-
-    std::vector<size_t> weight(MAX_SIZE);
-
-    std::vector<unsigned> placement(MAX_SIZE);
-
-    std::vector<unsigned> stack;
-
-    WeightMap maxCutWeights;
-
-    maxCutWeights.reserve(MAX_SIZE * MAX_SIZE / 2);
-
-    constexpr unsigned GRAPH_SIZES = 5;
-
-    std::vector<unsigned> GRAPH_SIZE;
-    GRAPH_SIZE.reserve(GRAPH_SIZES);
-    for (unsigned k = 10; k <= 100; k+= 10) {
-         GRAPH_SIZE.push_back(k);
-    }
-
-    constexpr unsigned NUM_POP_SIZE = 1;
-
-    const unsigned POP_SIZE[NUM_POP_SIZE] = { 10 };
-
-    constexpr unsigned NUM_HMCR_RATES = 1;
-
-    const double HMCR_RATE[NUM_HMCR_RATES] = { 0.9 };
-
-    std::shuffle(GRAPH_SIZE.begin(), GRAPH_SIZE.end(), rng0);
-
-    for (unsigned round = 0; round < 10; ++round) {
-
-        for (unsigned i = 0; i < GRAPH_SIZES; ++i) {
-
-            const auto n = GRAPH_SIZE[i];
-
-            for (unsigned k = 0; k < NUM_POP_SIZE; ++k) {
-
-                auto generateAndTestGraph = [&](const double edgeDensity) {
-
-
-                    const auto graphSeed = rng0();
-                    random_engine rng(graphSeed);
-
-
-                    const auto m = std::max<unsigned>(std::ceil(edgeDensity * (double)((n * (n - 1) + 1) / 2)), 3);
-
-redo_graph_generation:
-
-                    MemIntervalGraph I(n);
-
-                    std::uniform_int_distribution<size_t> vertDist(0, n - 1);
-
-                    for (unsigned e = 0; e < m; ) {
-
-                        auto i = vertDist(rng);
-                        auto j = vertDist(rng);
-
-                        if (i != j) {
-                            if (j < i) {
-                                std::swap(i, j);
-                            }
-                            if (edge(i, j, I).second) {
-                                continue;
-                            }
-                            add_edge(i, j, I);
-                            ++e;
-                        }
-                    }
-
-                    std::fill_n(placement.begin(), n, BIPARTITE_GRAPH_UNPLACED);
-
-                    assert (stack.empty());
-
-                    for (unsigned i = 0; i < n; ++i) {
-                        if (placement[i] == BIPARTITE_GRAPH_UNPLACED) {
-                            placement[i] = BIPARTITE_GRAPH_LEFT_HAND;
-                            auto u = i;
-                            for (;;) {
-                                assert (placement[u] != BIPARTITE_GRAPH_UNPLACED);
-                                const auto newPlacement = (placement[u] ^ (BIPARTITE_GRAPH_LEFT_HAND | BIPARTITE_GRAPH_RIGHT_HAND));
-                                for (const auto e : make_iterator_range(out_edges(i, I))) {
-                                    const auto v = target(e, I);
-                                    if (placement[v] == BIPARTITE_GRAPH_UNPLACED) {
-                                        placement[v] = newPlacement;
-                                        stack.push_back(v);
-                                    } else if (placement[v] != newPlacement) {
-                                        stack.clear();
-                                        goto not_bipartite;
-                                    }
-                                }
-                                if (stack.empty()) {
-                                    break;
-                                }
-                                u = stack.back();
-                                stack.pop_back();
-                            }
-                        }
-                    }
-
-                    goto redo_graph_generation;
-
-    not_bipartite:
-
-                    std::uniform_int_distribution<size_t> weightDist(4, 64);
-
-                    for (unsigned i = 0; i < n; ++i) {
-                        weight[i] = weightDist(rng) * 1024;
-                    }
-
-                    assert (maxCutWeights.empty());
-
-                    for (const auto e : make_iterator_range(edges(I))) {
-                        const auto u = source(e, I);
-                        const auto v = target(e, I);
-                        const size_t Wu = weight[u]; assert (Wu > 0);
-                        const size_t Wv = weight[v]; assert (Wv > 0);
-                        maxCutWeights.emplace(e, std::sqrt((double)(Wu * Wu + Wv * Wv)));
-                    }
-
-
-                    for (unsigned k = 0; k < NUM_POP_SIZE; ++k) {
-
-
-                        for (unsigned j = 0; j < NUM_HMCR_RATES; ++j) {
-
-                            for (unsigned i = 0; i < 10; ++i) {
-
-                                const auto testSeed = rng0();
-
-                                MaxCutHarmonySearch HS(I, maxCutWeights, 1000000, POP_SIZE[k], HMCR_RATE[j], testSeed);
-
-                                errs() << graphSeed << ',' << n
-                                       << ',' << format("%.2f", edgeDensity) << ',' << m
-                                       << ',' << format("%.3f", HMCR_RATE[j])
-                                       << ',' << POP_SIZE[k]
-                                       << ',' << testSeed;
-
-                                HS.runHarmonySearch();
-
-                                errs() << '\n';
-
-                            }
-
-
-                        }
-
-    //                    for (unsigned i = 0; i < 10; ++i) {
-
-    //                        const auto testSeed = rng0();
-
-    //                        MaxCutHarmonySearch HS(I, maxCutWeights, 100000, POP_SIZE[k], HMCRType::COS, 0.0, testSeed);
-
-    //                        errs() << graphSeed << ',' << n
-    //                               << ',' << format("%.2f", edgeDensity) << ',' << m
-    //                               << ',' << "COS" // format("%.3f", 0.997)
-    //                               << ',' << POP_SIZE[k]
-    //                               << ',' << testSeed;
-
-    //                        HS.runHarmonySearch();
-
-    //                        errs() << '\n';
-    //                    }
-
-                    }
-
-
-                    maxCutWeights.clear();
-
-                };
-
-                generateAndTestGraph(0.05);
-                generateAndTestGraph(0.10);
-                generateAndTestGraph(0.20);
-                generateAndTestGraph(0.30);
-                generateAndTestGraph(0.40);
-                generateAndTestGraph(0.50);
-                generateAndTestGraph(0.75);
-                generateAndTestGraph(1.00);
-
-            }
-
-        }
-    }
-
-
-
-
-
-
-};
-
-static void executeHarmonySearchByCSV(const std::string fileName, const size_t rngSeed) {
-
-    random_engine rng0(rngSeed);
-
-    const auto MAX_SIZE = 100UL;
-
-
-
-    constexpr unsigned ROUNDS_PER_PASS = 2;
-
-    constexpr unsigned NUM_OF_PASSES = 1;
-
-    constexpr double PI =     3.1415926535897932384626433832795028841971693993751058209749445923;
-
-    constexpr double PI_x_2 = 6.2831853071795864769252867665590057683943387987502116419498891846;
-
-    std::vector<size_t> weight(MAX_SIZE);
-
-    std::vector<unsigned> placement(MAX_SIZE);
-
-    std::vector<unsigned> stack;
-
-    WeightMap maxCutWeights;
-
-    maxCutWeights.reserve(MAX_SIZE * MAX_SIZE / 2);
-
-//    constexpr unsigned NUM_POP_SIZE = 1;
-
-//    const unsigned POP_SIZE[NUM_POP_SIZE] = { 10 };
-
-//    constexpr unsigned NUM_HMCR_RATES = 1;
-
-//    const double C[NUM_HMCR_RATES] = { 0.900 };
-
-    auto generateAndTestGraph = [&](const unsigned n, const unsigned m, const size_t graphSeed) {
-
-        random_engine rng(graphSeed);
-
-        MemIntervalGraph I(n);
-
-        std::uniform_int_distribution<size_t> vertDist(0, n - 1);
-
-        for (unsigned e = 0; e < m; ) {
-
-            auto i = vertDist(rng);
-            auto j = vertDist(rng);
-
-            if (i != j) {
-                if (j < i) {
-                    std::swap(i, j);
-                }
-                if (edge(i, j, I).second) {
-                    continue;
-                }
-                add_edge(i, j, I);
-                ++e;
-            }
-        }
-
-        std::uniform_int_distribution<size_t> weightDist(4, 64);
-
-        for (unsigned i = 0; i < n; ++i) {
-            weight[i] = weightDist(rng) * 1024;
-        }
-
-        assert (maxCutWeights.empty());
-
-        for (const auto e : make_iterator_range(edges(I))) {
-            const auto u = source(e, I);
-            const auto v = target(e, I);
-            const size_t Wu = weight[u]; assert (Wu > 0);
-            const size_t Wv = weight[v]; assert (Wv > 0);
-            maxCutWeights.emplace(e, std::sqrt((double)(Wu * Wu + Wv * Wv)));
-        }
-
-
-        const double ed = (double)(2 * m) / (double)(n * (n - 1));
-        double edgeDensity = 0.0;
-        if (ed < 0.1) {
-            edgeDensity = 0.05;
-        } else if (ed < 0.2) {
-            edgeDensity = 0.10;
-        } else if (ed < 0.3) {
-            edgeDensity = 0.20;
-        } else if (ed < 0.4) {
-            edgeDensity = 0.30;
-        } else if (ed < 0.5) {
-            edgeDensity = 0.40;
-        } else if (ed < 0.75) {
-            edgeDensity = 0.50;
-        } else if (ed < 0.99) {
-            edgeDensity = 0.75;
-        } else {
-            edgeDensity = 1.00;
-        }
-
-        auto poly4 = [](const size_t x, const double a, const double b, const double c, const double d, const double e) {
-            const double A = a * (double)std::pow(x, 4);
-            const double B = b * (double)std::pow(x, 3);
-            const double C = c * (double)std::pow(x, 2);
-            const double D = d * (double)x;
-            return A + B + C + D + e;
-        };
-
-        const double gamma = ((double)m) / ((double)(n * (n - 1)));
-        const double beta = poly4(gamma, 260.3499, -208.0714, 21.0946, 6.8772, 2.0361);
-        const double alpha = poly4(gamma, 233.0784, -151.8367, 36.1286, -3.7582, 0.1529);
-        const auto prediction = alpha * std::pow(n, beta) + 142.9282;
-
-//        const auto prediction = 0.08415 * ((double)(n * n))
-//                + 4.3378 * ((double)n) - 0.15291 * ((double)m) - 54.15170;
-
-        const auto maxRounds = (unsigned)std::ceil(std::max(prediction, 25.0) * 2.0) + 1000;
-
-        auto runCosTest = [&](HMCRType type, const double minHMCR, const double maxHMCR, const double period) {
-
-            double angularFreq = 0.0;
-            if (type == HMCRType::Cos) {
-                angularFreq = PI_x_2 / period;
-            } else if (type == HMCRType::AbsCos) {
-                angularFreq = PI / period;
-            }
-
-            for (unsigned i = 0; i < ROUNDS_PER_PASS; ++i) {
-
-                const auto testSeed = rng0();
-
-                MaxCutHarmonySearch HS(I, maxCutWeights, maxRounds, 10, type, minHMCR, maxHMCR, angularFreq, testSeed);
-
-                errs() << graphSeed << ',' << n
-                       << ',' << format("%.2f", edgeDensity) << ',' << m;
-                if (type == HMCRType::Cos) {
-                    errs() << ',' << "COSX";
-                } else if (type == HMCRType::AbsCos) {
-                    errs() << ',' << "COS";
-                }
-                errs() << ',' << format("%.1f", minHMCR)
-                       << ',' << format("%.1f", maxHMCR)
-                       << ',' << format("%.0f", period)
-                       << ',' << 10
-                       << ',' << testSeed;
-
-                HS.runHarmonySearch();
-
-                errs() << '\n';
-            }
-        };
-
-        auto runCosTestGroup = [&](HMCRType type, const double period) {
-//            runCosTest(type, 0.0, 0.9, period);
-//            runCosTest(type, 0.5, 0.9, period);
-//            runCosTest(type, 0.7, 0.9, period);
-//            runCosTest(type, 0.8, 0.9, period);
-//            runCosTest(type, 0.0, 1.0, period);
-//            runCosTest(type, 0.5, 1.0, period);
-//            runCosTest(type, 0.7, 1.0, period);
-//            runCosTest(type, 0.8, 1.0, period);
-            runCosTest(type, 0.9, 1.0, period);
-        };
-
-        for (unsigned period = 2; period <= 10; period += 2) {
-            runCosTestGroup(HMCRType::Cos, period);
-            runCosTestGroup(HMCRType::AbsCos, period);
-        }
-        for (unsigned period = 20; period <= 100; period += 10) {
-            runCosTestGroup(HMCRType::Cos, period);
-            runCosTestGroup(HMCRType::AbsCos, period);
-        }
-
-        for (unsigned period = 125; period <= 200; period += 25) {
-            runCosTestGroup(HMCRType::Cos, period);
-            runCosTestGroup(HMCRType::AbsCos, period);
-        }
-
-        maxCutWeights.clear();
-
-    };
-
-    std::ifstream file(fileName);
-    if (!file || file.eof()) return;
-
-    std::string input;
-
-    std::getline(file, input, '\n');
-
-
-    std::vector<std::array<long long, 3>> tests;
-
-    while (!file.eof()) {
-
-
-
-        std::getline(file, input, ',');
-        const auto nodeCount = std::atoll(input.c_str());
-
-        std::getline(file, input, ',');
-        const auto edgeCount = std::atoll(input.c_str());
-
-        std::getline(file, input, '\n');
-        const auto graphSeed = std::atoll(input.c_str());
-
-        if (nodeCount < 1 || edgeCount < 1) {
-            continue;
-        }
-
-        tests.emplace_back(std::array<long long, 3>{nodeCount, edgeCount, graphSeed});
-
-    }
-
-    file.close();
-
-    std::shuffle(tests.begin(), tests.end(), rng0);
-
-    for (unsigned i = 0; i < NUM_OF_PASSES; ++i) {
-        for (const auto & test : tests) {
-            generateAndTestGraph(std::get<0>(test), std::get<1>(test), std::get<2>(test));
-        }
-    }
-
-
-};
-
-#endif
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief MemoryAnalysis
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -958,6 +530,7 @@ public:
                 live[i] = out_degree(streamSet, S);
                 // initialize the streamset weight in the graph
                 const auto W = ceiling(S[streamSet].Size);
+                assert (W > 0);
                 weight[firstStreamSet + i] = W;
             }
             ++position;
@@ -1195,11 +768,6 @@ is_bipartite_graph:
 
         const auto numOfEdges = num_edges(I);
         assert (numOfEdges > 0);
-//        const double N = (numOfStreamSets * (numOfStreamSets - 1));
-//        const double edgeRatio = ((double)(numOfEdges * 2)) / ((double)N);
-//        assert (edgeRatio < 1.0);
-//        const unsigned numOfRounds = std::ceil(84.4908 * std::exp(-2.874866 * edgeRatio));
-//        assert (numOfRounds < 100);
 
         const auto predictionOf95PercentCut = 0.07930 * ((double)(numOfStreamSets * numOfStreamSets))
             + 7.63712 * ((double)numOfStreamSets) - 0.19735 * ((double)numOfEdges) - 80.59364;
@@ -1584,7 +1152,7 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P, rando
 
         PartitionData & currentPartition = P[currentPartitionId];
 
-        auto S = makeIntraPartitionSchedulingGraph(P, currentPartitionId);
+        const auto S = makeIntraPartitionSchedulingGraph(P, currentPartitionId);
 
         constexpr auto fakeInput = 0U;
         constexpr auto firstKernel = 1U;
@@ -1657,6 +1225,7 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
     for (const auto u : kernels) {
         const RelationshipNode & node = Relationships[u];
         assert (node.Type == RelationshipNode::IsKernel);
+        assert (PartitionIds.at(u) == currentPartitionId);
         for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
             const auto binding = source(e, Relationships);
             if (Relationships[binding].Type == RelationshipNode::IsBinding) {
@@ -1683,7 +1252,11 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
 
     const auto numOfStreamSets = streamSets.size();
 
-    const auto firstStreamSet = numOfKernels + 2;
+    constexpr auto fakeInput = 0U;
+
+    const auto fakeOutput = numOfKernels + 1U;
+
+    const auto firstStreamSet = fakeOutput + 1U;
 
     auto getStreamSetIndex = [&](const unsigned streamSet) {
         const auto g = streamSets.find(streamSet);
@@ -1695,9 +1268,7 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
 
     SchedulingGraph G(n);
 
-    constexpr auto fakeInput = 0U;
-
-    for (auto i = fakeInput; i < firstStreamSet; ++i) {
+    for (auto i = fakeInput; i <= fakeOutput; ++i) {
         SchedulingNode & N = G[i];
         N.Type = SchedulingNode::IsKernel;
     }
@@ -1706,12 +1277,12 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
         N.Type = SchedulingNode::IsStreamSet;
     }
 
-    for (unsigned i = 1U; i <= numOfKernels; ++i) {
+    for (auto i = fakeInput + 1; i < fakeOutput; ++i) {
         const auto u = kernels[i - 1U];
         const RelationshipNode & node = Relationships[u];
         assert (node.Type == RelationshipNode::IsKernel);
-
         const auto strideSize = currentPartition.Repetitions[i - 1U] * node.Kernel->getStride();
+        assert (strideSize > 0);
 
         for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
             const auto binding = source(e, Relationships);
@@ -1726,14 +1297,18 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
                 const RelationshipNode & rn = Relationships[binding];
                 const Binding & b = rn.Binding;
                 const ProcessingRate & rate = b.getRate();
-
-                // If we have a PopCount producer/consumer in the same partition,
-                // they're both perform an identical number of strides. So long
-                // as the producing/consuming strideRate match, the equation will
-                // work. Since the lower bound of PopCounts is 0, we always use the
-                // upper bound.
-                const auto itemsPerStride = rate.getUpperBound() * strideSize;
-                add_edge(j, i, itemsPerStride, G);
+                if (rate.isGreedy()) {
+                    const auto f = first_in_edge(j, G);
+                    add_edge(j, i, G[f], G);
+                } else {
+                    // If we have a PopCount producer/consumer in the same partition,
+                    // they're both perform an identical number of strides. So long
+                    // as the producing/consuming strideRate match, the equation will
+                    // work. Since the lower bound of PopCounts is 0, we always use the
+                    // upper bound.
+                    const auto itemsPerStride = rate.getUpperBound() * strideSize;
+                    add_edge(j, i, itemsPerStride, G);
+                }
             }
         }
 
@@ -1750,8 +1325,8 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
 
                 const RelationshipNode & rn = Relationships[binding];
                 const Binding & b = rn.Binding;
-
                 const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), 8};
+                assert (bytesPerItem > Rational{0});
 
                 SchedulingNode & SN = G[j];
                 SN.Size = bytesPerItem;
@@ -1763,26 +1338,42 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
         }
     }
 
+
+
     // add fake input arcs
-    flat_set<Vertex> externalStreamSets;
+    flat_set<unsigned> externalStreamSets;
     for (const auto e : make_iterator_range(in_edges(currentPartitionId, P))) {
         externalStreamSets.insert(P[e]);
     }
 
-
     for (const auto streamSet : externalStreamSets) {
+
         const auto j = getStreamSetIndex(streamSet);
 
-        assert (out_degree(j, G) > 0);
+        const auto f = first_in_edge(streamSet, Relationships);
+        assert (Relationships[f].Reason != ReasonType::Reference);
+        const auto binding = source(f, Relationships);
+        assert (Relationships[binding].Type == RelationshipNode::IsBinding);
+
+        const RelationshipNode & rn = Relationships[binding];
+        const Binding & b = rn.Binding;
+        // prioritize inter-partition input consumption by doubling the conceptual buffer size
+        const Rational bytesPerItem{b.getFieldWidth() * b.getNumElements(), (8 / 2)};
+
+        SchedulingNode & SN = G[j];
+        SN.Size = bytesPerItem;
 
         SchedulingGraph::out_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = out_edges(j, G);
-        auto rate = G[*ei];
+        auto itemsPerStride = G[*ei];
         while (++ei != ei_end) {
-            rate = lcm(rate, G[*ei]);
+            const auto & r = G[*ei];
+            if (r > itemsPerStride) {
+                itemsPerStride = r;
+            }
         }
 
-        add_edge(fakeInput, j, rate, G);
+        add_edge(fakeInput, j, itemsPerStride, G);
     }
 
     // add fake output arcs
@@ -1791,13 +1382,73 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
         externalStreamSets.insert(P[e]);
     }
 
-    const auto fakeOutput = numOfKernels + 1U;
-
     for (const auto streamSet : externalStreamSets) {
         const auto j = getStreamSetIndex(streamSet);
-        const auto f = first_in_edge(j, G);
-        add_edge(j, fakeOutput, G[f], G);
+        SchedulingGraph::in_edge_iterator ei, ei_end;
+        std::tie(ei, ei_end) = in_edges(j, G);
+        auto itemsPerStride = G[*ei];
+        while (++ei != ei_end) {
+            const auto & r = G[*ei];
+            if (r > itemsPerStride) {
+                itemsPerStride = r;
+            }
+        }
+        // defer inter-partition output production by doubling the conceptual buffer size
+        SchedulingNode & SN = G[j];
+        SN.Size *= 2;
+
+        add_edge(j, fakeOutput, itemsPerStride, G);
     }
+
+#if 0
+    auto & out = errs();
+
+    out << "digraph \"G\" {\n";
+    for (auto v : make_iterator_range(vertices(G))) {
+        out << "v" << v << " [label=\"" << v << ". ";
+        const SchedulingNode & N = G[v];
+        if (N.Type == SchedulingNode::IsKernel) {
+            if (v > fakeInput && v < fakeOutput) {
+                const auto u = kernels[v - 1U];
+                const RelationshipNode & node = Relationships[u];
+                assert (node.Type == RelationshipNode::IsKernel);
+                out << node.Kernel->getName();
+            } else {
+                out << "K";
+            }
+        } else {
+            assert (v >= firstStreamSet);
+            const auto k = v - firstStreamSet;
+            assert (k < streamSets.size());
+            const auto i = streamSets.begin() + k;
+            out << "S" << *i << " : ";
+            const auto & R = N.Size;
+            out << R.numerator() << "/" << R.denominator();
+        }
+        out << "\"];\n";
+    }
+    for (auto e : make_iterator_range(edges(G))) {
+        const auto s = source(e, G);
+        const auto t = target(e, G);
+        out << "v" << s << " -> v" << t << " [label=\"";
+        const auto & R = G[e];
+        out << R.numerator() << "/" << R.denominator();
+        out << "\"];\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+#endif
+
+    #ifndef NDEBUG
+    for (auto i = firstStreamSet; i < n; ++i) {
+        assert (degree(i, G) != 0);
+        assert (G[i].Size > Rational{0});
+    }
+    for (const auto e : make_iterator_range(edges(G))) {
+        assert (G[e] > Rational{0});
+    }
+    #endif
 
     return G;
 }

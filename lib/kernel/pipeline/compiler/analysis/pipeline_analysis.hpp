@@ -40,7 +40,7 @@ public:
 
         P.generateInitialPipelineGraph(b);
 
-        P.printRelationshipGraph(P.Relationships, errs(), "R");
+      //  P.printRelationshipGraph(P.Relationships, errs(), "R");
 
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
@@ -93,7 +93,9 @@ public:
 
         P.generateInitialBufferGraph();
 
-        P.printBufferGraph(errs());
+        errs() << "generateInitialBufferGraph\n";
+
+        P.computeInterPartitionSymbolicRates();
 
         errs() << "computeDataFlowRates\n";
 
@@ -243,11 +245,11 @@ private:
 
     void computeExpectedDataFlowRates(PartitionGraph & P);
 
+    void computeInterPartitionSymbolicRates();
+
     void computeDataFlowRates();
 
-    PartitionConstraintGraph identifyHardPartitionConstraints() const;
 
-    LengthConstraintGraph identifyLengthEqualityAssertions(BufferGraph & G) const;
 
     // zero extension analysis function
 

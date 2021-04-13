@@ -41,10 +41,6 @@ void PipelineAnalysis::determineBufferSize(BuilderRef b) {
             // Similarly if any internal consumer has a deferred rate, we cannot analyze
             // any consumption rates.
 
-//            nonLocal |= bn.isExternal() || producerRate.IsDeferred;
-
-            const Binding & output = producerRate.Binding;
-
             auto maxDelay = producerRate.Delay;
             auto maxLookAhead = producerRate.LookAhead;
             auto maxLookBehind = producerRate.LookBehind;
@@ -503,12 +499,13 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
                 #else
                 const auto typeSize = DL.getTypeAllocSize(type).getFixedSize();
                 #endif
+                assert (typeSize > 0);
 
                 assert (bn.UnderflowCapacity == 0);
 
                 const auto c = bn.RequiredCapacity + bn.OverflowCapacity;
+                assert (c > 0);
                 const auto w = round_up_to(c * typeSize, alignment);
-
                 assert (w > 0);
 
                 mapping[i] = numOfLocalStreamSets;

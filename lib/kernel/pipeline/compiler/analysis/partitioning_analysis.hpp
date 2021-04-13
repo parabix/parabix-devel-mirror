@@ -7,6 +7,8 @@
 
 namespace kernel {
 
+// #define PRINT_PARTITION_COMBINATIONS
+
 void PipelineAnalysis::addKernelRelationshipsInReferenceOrdering(const unsigned kernel, const RelationshipGraph & G,
                                                                  std::function<void(PortType, unsigned, unsigned)> insertionFunction) {
 
@@ -270,6 +272,35 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     // so that we can construct our initial set of partitions. The goal here is to act
     // as a first pass to simplify the problem before using Z3.
 
+    auto hasInputRateChangeAttribute = [](const Binding & b) {
+        for (const Attribute & attr : b.getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::Delayed:
+                case AttrId::BlockSize:
+                case AttrId::LookAhead:
+                    return true;
+                default: break;
+            }
+        }
+        return false;
+    };
+
+    auto hasOutputRateChangeAttribute = [](const Binding & b) {
+        for (const Attribute & attr : b.getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::Delayed:
+                case AttrId::Deferred:
+                case AttrId::BlockSize:
+                    // A deferred output rate is closer to an bounded rate than a
+                    // countable rate but a deferred input rate simply means the
+                    // buffer must be dynamic.
+                    return true;
+                default: break;
+            }
+        }
+        return false;
+    };
+
     for (unsigned i = 0; i < m; ++i) {
         BitSet & V = G[i];
         V.resize(n);
@@ -304,18 +335,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                     const ProcessingRate & rate = b.getRate();
 
                     // Check the attributes to see whether any impose a partition change
-                    auto hasInputRateChangeAttribute = [](const Binding & b) {
-                        for (const Attribute & attr : b.getAttributes()) {
-                            switch (attr.getKind()) {
-                                case AttrId::Delayed:
-                                case AttrId::BlockSize:
-                                case AttrId::LookAhead:
-                                    return true;
-                                default: break;
-                            }
-                        }
-                        return false;
-                    };
                     if (rate.getKind() != RateId::Fixed || hasInputRateChangeAttribute(b)) {
                         V.set(nextRateId++);
                         break;
@@ -334,22 +353,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 const ProcessingRate & rate = b.getRate();
 
                 // Check the attributes to see whether any impose a partition change
-                auto hasOutputRateChangeAttribute = [](const Binding & b) {
-                    for (const Attribute & attr : b.getAttributes()) {
-                        switch (attr.getKind()) {
-                            case AttrId::Delayed:
-                            case AttrId::Deferred:
-                            case AttrId::BlockSize:
-                                // A deferred output rate is closer to an bounded rate than a
-                                // countable rate but a deferred input rate simply means the
-                                // buffer must be dynamic.
-                                return true;
-                            default: break;
-                        }
-                    }
-                    return false;
-                };
-
                 if (LLVM_UNLIKELY(rate.getKind() != RateId::Fixed || hasOutputRateChangeAttribute(b))) {
                     BitSet & R = G[target(e, G)];
                     R.set(nextRateId++);
@@ -367,7 +370,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     std::vector<unsigned> partitionIds(m);
 
-    auto writePartitionIds = [&]() {
+    auto convertUniqueNodeBitSetsToUniquePartitionIds = [&]() {
         PartitionMap partitionSets;
         unsigned nextPartitionId = 1;
         for (unsigned i = 0; i < m; ++i) {
@@ -393,7 +396,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         return nextPartitionId;
     };
 
-    auto synchronousPartitionCount = writePartitionIds();
+    auto synchronousPartitionCount = convertUniqueNodeBitSetsToUniquePartitionIds();
 
     assert (synchronousPartitionCount > 0);
 
@@ -657,8 +660,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             }
         }
 
-        transitive_reduction_dag(H);
-
         PartitionFusionGraph P(synchronousPartitionCount);
 
         for (unsigned i = 0; i < synchronousPartitionCount; ++i) {
@@ -667,29 +668,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             }
         }
 
-//        out << "digraph \"P\" {\n";
-//        for (unsigned partitionId = 0; partitionId < synchronousPartitionCount; ++partitionId) {
-//            out << "v" << partitionId << " [label=\"P" << partitionId << "\n";
-//            for (unsigned i = 0; i < m; ++i) {
-//                if (partitionIds[i] == partitionId) {
-//                    const auto u = sequence[i];
-//                    const RelationshipNode & node = Relationships[u];
-//                    if (node.Type == RelationshipNode::IsKernel) {
-//                        out << u << ". " << node.Kernel->getName() << "\n";
-//                    }
-//                }
-//            }
-//            out << "\"];\n";
-//        }
-//        for (auto e : make_iterator_range(edges(P))) {
-//            const auto s = source(e, P);
-//            const auto t = target(e, P);
-//            out << "v" << s << " -> v" << t << ";\n";
-//        }
-
-//        out << "}\n\n";
-//        out.flush();
-
+        transitive_reduction_dag(H);
 
         for (unsigned i = 0; i < synchronousPartitionCount; ++i) {
             const auto var = Z3_mk_fresh_const(ctx, nullptr, intType);
@@ -730,9 +709,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                     }
 
                     const auto e = edge(prodPartId, consPartId, P);
-                    if (!e.second) {
-                        continue;
-                    }
+                    assert ("no matching edge in fusion constraint graph?" && e.second);
 
                     FusionConstaints & fusionConstraints = P[e.first];
 
@@ -935,7 +912,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         std::iota(fusedPartitionIds.begin(), fusedPartitionIds.end(), 0);
         std::vector<unsigned> rank(synchronousPartitionCount, 0);
 
+        #ifdef PRINT_PARTITION_COMBINATIONS
         adjacency_list<hash_setS, vecS, undirectedS> L(synchronousPartitionCount);
+        #endif
 
         std::function<unsigned(unsigned)> find = [&](unsigned x) {
             if (fusedPartitionIds[x] != x) {
@@ -946,11 +925,12 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         auto union_find = [&](unsigned x, unsigned y) {
 
+            #ifdef PRINT_PARTITION_COMBINATIONS
             add_edge(x, y, L);
+            #endif
 
             x = find(x);
             y = find(y);
-
 
             if (rank[x] > rank[y]) {
                 fusedPartitionIds[y] = x;
@@ -963,71 +943,87 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         };
 
-        auto in_same_connected_component = [&](unsigned x, unsigned y) {
-            return find(x) == find(y);
-        };
-
-//        errs() << "------------------------------\n";
-//        errs() << "CLAUSES:\n";
-
-//        errs() << Z3_solver_to_string(ctx, solver) << "\n";
-
-//        errs() << "\n";
-
         std::vector<Z3_ast> list;
 
-        flat_set<Z3_app> vars;
+        std::vector<Z3_app> vars;
+        std::vector<Z3_app> tmp;
+
+        BitVector universalSet(synchronousPartitionCount);
 
         bool fusedAny = false;
 
-        for (const auto e : make_iterator_range(edges(P))) {
+        auto make_universal_clause = [&](const Z3_ast constraint) {
+            assert (vars.empty() && tmp.empty());
+            for (const auto i : universalSet.set_bits()) {
+                const auto & V = P[i].Vars;
+                std::merge(vars.begin(), vars.end(), V.begin(), V.end(), std::back_inserter(tmp));
+                vars.swap(tmp);
+                tmp.clear();
+            }
+            assert (std::is_sorted(vars.begin(), vars.end()));
+            universalSet.reset();
+            const auto end = std::unique(vars.begin(), vars.end());
+            const auto k = std::distance(vars.begin(), end);
+            assert (k > 0);
+            const auto forall = Z3_mk_forall_const(ctx, 0, k, vars.data(), 0, nullptr, constraint);
+            vars.clear();
+            return forall;
+        };
 
-            const auto s = source(e, P);
-            const auto t = target(e, P);
+        for (const auto e : make_iterator_range(edges(H))) {
 
-            if (in_same_connected_component(s, t)) {
+            const auto s = source(e, H);
+            const auto t = target(e, H);
+
+            const auto x = find(s);
+            const auto y = find(t);
+
+            if (x == y) {
                 continue;
             }
 
-            const auto & A = P[s];
             const auto & B = P[t];
 
             Z3_solver_push(ctx, solver);
-            assert (list.empty());
 
-            for (const FusionConstraint & c : P[e]) {
-                Z3_ast e;
-                if (std::get<0>(c) == EQ) {
-                    e = Z3_mk_eq(ctx, std::get<1>(c), std::get<2>(c));
-                } else {
-                    e = Z3_mk_ge(ctx, std::get<1>(c), std::get<2>(c));
+            assert (vars.empty());
+            assert (list.empty());
+            assert (universalSet.none());
+
+            for (const auto f : make_iterator_range(edges(P))) {
+                if (target(f, P) == t && find(source(f, P)) == x) {
+                    universalSet.set(source(f, P));
+                    for (const FusionConstraint & c : P[f]) {
+                        Z3_ast e;
+                        if (std::get<0>(c) == EQ) {
+                            e = Z3_mk_eq(ctx, std::get<1>(c), std::get<2>(c));
+                        } else {
+                            e = Z3_mk_ge(ctx, std::get<1>(c), std::get<2>(c));
+                        }
+                        list.push_back(e);
+                    }
                 }
-                list.push_back(e);
             }
+            assert (universalSet.test(s));
             assert (list.size() > 0);
             const auto constraints = Z3_mk_and(ctx, list.size(), list.data());
             list.clear();
+            const auto & Co = B.Vars;
+            const auto exists = Z3_mk_exists_const(ctx, 0, Co.size(), &*Co.begin(), 0, nullptr, constraints);
 
-            assert (vars.empty());
-            vars.insert(B.Vars.begin(), B.Vars.end());
-            const auto exists = Z3_mk_exists_const(ctx, 0, vars.size(), &*vars.begin(), 0, nullptr, constraints);
-            vars.clear();
+            hard_assert(make_universal_clause(exists));
 
-            const auto & Pr = A.Vars;
-            const auto forall = Z3_mk_forall_const(ctx, 0, Pr.size(), &*Pr.begin(), 0, nullptr, exists);
-
-            hard_assert(forall);
-
-//            errs() << "------------------------------\n";
-//            errs() << "PRED:\n";
-
-//            errs() << Z3_solver_to_string(ctx, solver) << "\n";
-
-            // errs() << Z3_ast_to_string(ctx, forall) << "\n";
+            #ifdef PRINT_PARTITION_COMBINATIONS
+            errs() << "-----------------------------------\n";
+            errs() << "PRED: " << s << " -> " << t << "\n";
+            errs() << Z3_solver_to_string(ctx, solver) << "\n";
+            #endif
 
             const auto r = Z3_solver_check(ctx, solver);
 
-//            errs() << " r=" << r << "\n";
+            #ifdef PRINT_PARTITION_COMBINATIONS
+            errs() << "r=" << r << "\n";
+            #endif
 
             if (LLVM_UNLIKELY(r == Z3_L_TRUE)) {
                 union_find(s, t);
@@ -1036,18 +1032,20 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 Z3_solver_pop(ctx, solver, 1);
             }
 
-
         }
 
 
+        const auto realType = Z3_mk_real_sort(ctx);
+
+        const auto ZERO = Z3_mk_real(ctx, 0, 1);
+
+        BitVector sourceSet(synchronousPartitionCount);
 
         for (unsigned i = 0; i < synchronousPartitionCount; ++i) {
 
-            if (out_degree(i, P) > 1) {
-                graph_traits<PartitionFusionGraph>::out_edge_iterator begin, end;
-                std::tie(begin, end) = out_edges(i, P);
-
-                auto & Pr = P[i].Vars;
+            if (out_degree(i, H) > 1) {
+                graph_traits<DependencyGraph>::out_edge_iterator begin, end;
+                std::tie(begin, end) = out_edges(i, H);
 
                 for (auto ei = begin; ei != end; ++ei) {
                     for (auto ej = ei; ++ej != end; ) {
@@ -1055,53 +1053,77 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                         const auto a = target(*ei, P);
                         const auto b = target(*ej, P);
 
-                        if (in_same_connected_component(a, b)) {
+                        const auto x = find(a);
+                        const auto y = find(b);
+
+                        if (x == y) {
                             continue;
                         }
 
+                        assert (sourceSet.none());
+
+                        for (const auto f : make_iterator_range(in_edges(a, P))) {
+                            sourceSet.set(find(source(f, P)));
+                        }
+                        for (const auto f : make_iterator_range(in_edges(b, P))) {
+                            sourceSet.set(find(source(f, P)));
+                        }
+
+                        assert (sourceSet.test(find(i)));
+
                         Z3_solver_push(ctx, solver);
 
-//                        const auto ratio = Z3_mk_fresh_const(ctx, nullptr, realType);
-//                        hard_assert(Z3_mk_ge(ctx, ratio, rONE));
+                        assert (vars.empty());
+                        assert (list.empty());
+                        assert (universalSet.none());
+                        for (const auto f : make_iterator_range(edges(P))) {
+                            const auto t = target(f, P);
+                            if ((t == a || t == b) && sourceSet.test(find(source(f, P)))) {
+                                universalSet.set(source(f, P));
+                                for (const FusionConstraint & c : P[f]) {
+                                    list.push_back(Z3_mk_ge(ctx, std::get<1>(c), std::get<2>(c)));
+                                }
+                            }
+                        }
+                        sourceSet.reset();
+
+                        assert (universalSet.test(find(i)));
+                        assert (list.size() > 0);
+                        const auto constraints = Z3_mk_and(ctx, list.size(), list.data());
+                        list.clear();
 
                         const auto & A = P[a];
                         const auto & B = P[b];
+
+                        // Since these are siblings in a transitive reduction of the program graph,
+                        // they by definition have no relationships in which we can ensure they can
+                        // be stride linked. The following ensures some form of relationship exists.
+                        const auto ratio = Z3_mk_fresh_const(ctx, nullptr, realType);
+                        hard_assert(Z3_mk_gt(ctx, ratio, ZERO));
+                        hard_assert(Z3_mk_eq(ctx, A.StrideVar, multiply(ratio, B.StrideVar)));
+
                         assert (vars.empty());
-                        vars.insert(A.Vars.begin(), A.Vars.end());
-                        vars.insert(B.Vars.begin(), B.Vars.end());
-//                        vars.insert((Z3_app)ratio);
-
-                        assert (list.empty());
-
-                        auto add_constraints = [&](const PartitionFusionGraph::edge_descriptor & e) {
-                            assert (P[e].size() > 0);
-                            for (const FusionConstraint & c : P[e]) {
-                                list.push_back(Z3_mk_ge(ctx, std::get<1>(c), std::get<2>(c)));
-                            }
-                        };
-
-                        add_constraints(*ei);
-                        add_constraints(*ej);
-                        list.push_back(Z3_mk_eq(ctx, A.StrideVar, B.StrideVar));
-                        const auto constraints = Z3_mk_and(ctx, list.size(), list.data());
-                        list.clear();
-                        const auto exists = Z3_mk_exists_const(ctx, 0, vars.size(), &*vars.begin(), 0, nullptr, constraints);
-                        const auto forall = Z3_mk_forall_const(ctx, 0, Pr.size(), &*Pr.begin(), 0, nullptr, exists);
-
+                        std::merge(A.Vars.begin(), A.Vars.end(), B.Vars.begin(), B.Vars.end(), std::back_inserter(vars));
+                        const auto end = std::unique(vars.begin(), vars.end());
+                        const auto k = std::distance(vars.begin(), end);
+                        assert (k > 0);
+                        const auto exists = Z3_mk_exists_const(ctx, 0, k, vars.data(), 0, nullptr, constraints);
                         vars.clear();
 
-                        hard_assert(forall);
+                        hard_assert(make_universal_clause(exists));
 
-//                        errs() << "------------------------------\n";
-//                        errs() << "SIBLINGS:\n";
-
-//                        errs() << Z3_solver_to_string(ctx, solver) << "\n";
-
-                        // errs() << Z3_ast_to_string(ctx, forall) << "\n";
+                        #ifdef PRINT_PARTITION_COMBINATIONS
+                        errs() << "-----------------------------------\n";
+                        errs() << "SIBS: " << i << " -> " << a << ", "
+                                           << i << " -> " << b << "\n";
+                        errs() << Z3_solver_to_string(ctx, solver) << "\n";
+                        #endif
 
                         const auto r = Z3_solver_check(ctx, solver);
 
-//                        errs() << " r=" << r << "\n";
+                        #ifdef PRINT_PARTITION_COMBINATIONS
+                        errs() << "r=" << r << "\n";
+                        #endif
 
                         if (LLVM_UNLIKELY(r == Z3_L_TRUE)) {
                             union_find(a, b);
@@ -1123,29 +1145,30 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         // Z3_finalize_memory();
 
-//        out << "graph \"L\" {\n";
-//        for (unsigned partitionId = 0; partitionId < synchronousPartitionCount; ++partitionId) {
-//            out << "v" << partitionId << " [label=\"P" << partitionId << "\n";
-//            for (unsigned i = 0; i < m; ++i) {
-//                if (partitionIds[i] == partitionId) {
-//                    const auto u = sequence[i];
-//                    const RelationshipNode & node = Relationships[u];
-//                    if (node.Type == RelationshipNode::IsKernel) {
-//                        out << u << ". " << node.Kernel->getName() << "\n";
-//                    }
-//                }
-//            }
-//            out << "\"];\n";
-//        }
-//        for (auto e : make_iterator_range(edges(L))) {
-//            const auto s = source(e, L);
-//            const auto t = target(e, L);
-//            out << "v" << s << " -- v" << t << ";\n";
-//        }
-
-//        out << "}\n\n";
-//        out.flush();
-
+        #ifdef PRINT_PARTITION_COMBINATIONS
+        auto & out = errs();
+        out << "graph \"L\" {\n";
+        for (unsigned partitionId = 0; partitionId < synchronousPartitionCount; ++partitionId) {
+            out << "v" << partitionId << " [label=\"P" << partitionId << "\n";
+            for (unsigned i = 0; i < m; ++i) {
+                if (partitionIds[i] == partitionId) {
+                    const auto u = sequence[i];
+                    const RelationshipNode & node = Relationships[u];
+                    if (node.Type == RelationshipNode::IsKernel) {
+                        out << u << ". " << node.Kernel->getName() << "\n";
+                    }
+                }
+            }
+            out << "\"];\n";
+        }
+        for (auto e : make_iterator_range(edges(L))) {
+            const auto s = source(e, L);
+            const auto t = target(e, L);
+            out << "v" << s << " -- v" << t << ";\n";
+        }
+        out << "}\n\n";
+        out.flush();
+        #endif
 
 
         if (fusedAny) {
@@ -1171,6 +1194,15 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     while (fuseStrideLinkedPartitions());
 
+    // TODO: test every Fixed-rate partition to determine whether its worthwhile keeping
+    // them in the same partition. For example, suppose kernel A has a Fixed(7) output rate
+    // that is consumed by kernel B with a Fixed(8) input rate. To keep A and B in the same
+    // partition, they would have to execute a multiple of 56 strides per segment. If these
+    // items represent single bytes, this would be beneficial but could slow down the
+    // pipeline if they represent 1K chunks.
+
+    Z3_finalize_memory();
+
     // Stage 4: finalize the partition structure
 
     // Based on the (fused) partition ids, repeat the process used to generate the initial
@@ -1186,7 +1218,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         V.reset();
     }
 
-    for (unsigned i = 0, nextRateId = 0; i < m; ++i) {
+    for (unsigned i = 0, nextRateId = synchronousPartitionCount; i < m; ++i) {
 
         BitSet & V = G[i];
 
@@ -1199,6 +1231,13 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         const RelationshipNode & node = Relationships[u];
 
         if (node.Type == RelationshipNode::IsKernel) {
+
+            const auto p = partitionIds[i];
+            if (p > 0) {
+                V.set(p - 1);
+            } else {
+                assert (node.Kernel == mPipelineKernel);
+            }
 
             bool demarcateOutputs = false;
 
@@ -1223,8 +1262,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 }
             }
 
-            assert (V.any() || node.Kernel == mPipelineKernel);
-
             if (LLVM_UNLIKELY(demarcateOutputs)) {
                 const auto demarcationId = nextRateId++;
                 for (const auto e : make_iterator_range(out_edges(i, G))) {
@@ -1233,48 +1270,15 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 }
             }
 
-        } else {
-
-            const auto j = parent(i, G);
-            const auto producer = sequence[j];
-            assert (Relationships[producer].Type == RelationshipNode::IsKernel);
-            const auto prodPartId = partitionIds[j];
-            for (const auto e : make_iterator_range(out_edges(i, G))) {
-                const auto k = target(e, G);
-                const auto consumer = sequence[k];
-                assert (Relationships[consumer].Type == RelationshipNode::IsKernel);
-                const auto consPartId = partitionIds[k];
-                if (prodPartId != consPartId) {
-                    unsigned rateId = 0;
-                    auto f = interPartitionMap.find(std::make_pair(prodPartId, consPartId));
-                    if (f == interPartitionMap.end()) {
-                        rateId = nextRateId++;
-                        interPartitionMap.emplace(std::make_pair(prodPartId, consPartId), rateId);
-                    } else {
-                        rateId = f->second;
-                    }
-                    BitSet & R = G[k];
-                    R.set(rateId);
-                }
-            }
         }
 
         for (const auto e : make_iterator_range(out_edges(i, G))) {
             BitSet & R = G[target(e, G)];
             R |= V;
         }
-
     }
 
-    // TODO: now test every Fixed-rate partition to determine whether its worthwhile keeping
-    // them in the same partition. For example, suppose kernel A has a Fixed(7) output rate
-    // that is consumed by kernel B with a Fixed(8) input rate. To keep A and B in the same
-    // partition, they would have to execute a multiple of 56 strides per segment. If these
-    // items represent single bytes, this would be beneficial but could slow down the
-    // pipeline if they represent 1K chunks.
-
-
-    const auto partitionCount = writePartitionIds();
+    const auto partitionCount = convertUniqueNodeBitSetsToUniquePartitionIds();
 
     using RenumberingGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
@@ -1345,18 +1349,47 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     }
     #endif
 
+    flat_set<std::pair<unsigned, unsigned>> duplicateFilter;
+
     for (unsigned i = 1; i < partitionCount; ++i) {
         assert (P[i].Kernels.size() > 0);
         const auto j = renumbered[i];
         assert (j > 0);
+        assert (duplicateFilter.empty());
         for (const auto e : make_iterator_range(out_edges(i, T))) {
             const auto k = renumbered[target(e, T)];
             assert (k > j);
             const auto streamSet = T[e];
             assert (streamSet < num_vertices(Relationships));
-            add_edge(j, k, streamSet, P);
+            assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+            if (duplicateFilter.emplace(k, streamSet).second) {
+                add_edge(j, k, streamSet, P);
+            }
         }
+        duplicateFilter.clear();
     }
+
+#if 0
+    auto & out = errs();
+    out << "digraph \"P\" {\n";
+    for (auto v : make_iterator_range(vertices(P))) {
+        out << "v" << v << " [shape=record,label=\"PARTITION " << v << ":";
+        for (const auto u : P[v].Kernels) {
+            std::string s = Relationships[u].Kernel->getName().str();
+            boost::replace_all(s, "<", "\\<");
+            boost::replace_all(s, ">", "\\>");
+            out << "\\n" << u << ". " << s;
+        }
+        out << "\"];\n";
+    }
+    for (auto e : make_iterator_range(edges(P))) {
+        const auto s = source(e, P);
+        const auto t = target(e, P);
+        out << "v" << s << " -> v" << t << " [label=\"" << P[e] << "\"];\n";
+    }
+    out << "}\n\n";
+    out.flush();
+#endif
 
     PartitionCount = partitionCount;
 

@@ -289,6 +289,8 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (bn.MaxAdd) {
             out << "|+" << bn.MaxAdd;
         }
+
+
         out << "}}\"];\n";
 
     };
@@ -431,6 +433,9 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
         }
         // out << " {G" << pd.GlobalPortId << ",L" << pd.LocalPortId << '}';
+
+
+
         if (pd.IsPrincipal) {
             out << " [P]";
         }
@@ -454,7 +459,9 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (pd.LookAhead) {
             out << " [LA:" << pd.LookAhead << ']';
         }
-
+        if (pd.Delay) {
+            out << " [Delay:" << pd.Delay << ']';
+        }
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
         out << "\\n" << name << "\"";
