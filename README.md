@@ -38,6 +38,11 @@ To build Parabix, you need a development environment that meets a few requiremen
 
 In the configuration above, all compiled tools will then be found on `/path/to/parabix-devel/build/bin`
 
+### Build Parabix as a lib
+
+To build Parabix as a single lib, run the following command:
+- `cmake -DCMAKE_BUILD_TYPE=Release -DARTIFACT_MODE=Single -NO_TOOLS=ON ..`
+
 ### Papers
 
 [Bitwise Data Parallelism with LLVM: The ICgrep Case Study](https://link.springer.com/chapter/10.1007%2F978-3-319-27122-4_26). Robert D. Cameron, Nigel Medforth, Dan Lin, Dale Denis, William N. Sumner. ICA3PP (2) 2015: 373-387
