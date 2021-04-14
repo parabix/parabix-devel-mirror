@@ -41,7 +41,7 @@ In the configuration above, all compiled tools will then be found on `/path/to/p
 ### Build Parabix as a lib
 
 To build Parabix as a single lib, run the following command:
-- `cmake -DCMAKE_BUILD_TYPE=Release -DARTIFACT_MODE=Single -NO_TOOLS=ON ..`
+- `cmake -DCMAKE_BUILD_TYPE=Release -DARTIFACT_MODE=Single -GENERATE_TOOLS=OFF ..`
 
 ### Papers
 

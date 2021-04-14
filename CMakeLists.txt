@@ -23,7 +23,7 @@ enable_testing()
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 option(LLVM_PATH "LLVM root directory")
-option(NO_TOOLS "Disable generation of tools" OFF)
+option(GENERATE_TOOLS "Controls whether or not it generate tools" ON)
 
 # Build Artifact Configuration
 set(ARTIFACT_MODE "Multiple" CACHE STRING "Build framework into a single artifact (Single) or multiple artifacts (Multiple)")
@@ -325,7 +325,7 @@ add_subdirectory(lib/kernel/unicode)
 add_subdirectory(lib/kernel/util)
 
 # Executables
-if (NOT NO_TOOLS)
+if (GENERATE_TOOLS)
     add_subdirectory(tools/base64)
     add_subdirectory(tools/editd)
     add_subdirectory(tools/icgrep)
