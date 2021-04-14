@@ -13,11 +13,12 @@ import compress_words
 import decompress_words
 import edelta_compression
 import edelta_decompression
-
+import length_group_phrase_cpm
 # --------------------------------------------------------------------
 
 CmpAlgorithmList = [
-    compress_words.Compressor(),
+    # compress_words.Compressor(),
+    length_group_phrase_cpm.LGPhraseCompressor(),
     # edelta_compression.Compressor(),
 ]
 
@@ -44,6 +45,7 @@ if __name__ == '__main__':
 
     # Create a file to hold the generated encoded data.
     outputFilename = 'output'
+    decompressFileName = 'original'
     printPlainText = False
     printWordCodeword = False
 
@@ -61,22 +63,27 @@ if __name__ == '__main__':
     if options.decompress:
         for algorithm in DecmpAlgorithmList:
             decompressedData = algorithm.Decompress(text)
-            print(decompressedData.decode('utf-8'))
+            # print(decompressedData.decode('utf-8'))
+        output_file = open(decompressFileName, "wb")
+        output_file.write(decompressedData.decode('utf-8'))
+        output_file.close()
     else:
         # segment the input as per unicode text segmentation rules
         word_list = []
         boundary_positions = []
-        #word_list = nltk.word_tokenize(text)
-        #print(word_list, 'word_list')
+        # word_list = nltk.word_tokenize(text)
+        # print(word_list, 'word_list')
         # a vector representing the positions of word boundaries - future use?
         # for index in uniseg.wordbreak.word_boundaries(text):
         #    boundary_positions.append(index)
         for algorithm in CmpAlgorithmList:
-            compressedData = algorithm.CompressPhrase(
+            # compressedData = algorithm.CompressPhrase(
+            #    fileName, 4, printPlainText, printWordCodeword)
+            compressedData = algorithm.LengthGroupPhraseCompression(
                 fileName, 4, printPlainText, printWordCodeword)
         # write compressed data to output.z file
         output_file = open(outputFilename+"."+algorithm.name+".z", "wb")
         output_file.write(compressedData)
         output_file.close()
-        #print(compressedData, 'compressedData')
-        #print(compressedData.decode('utf-8', 'ignore'))
+        # print(compressedData, 'compressedData')
+        # print(compressedData.decode('utf-8', 'ignore'))
