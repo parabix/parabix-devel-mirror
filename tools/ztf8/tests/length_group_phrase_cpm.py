@@ -21,6 +21,7 @@ class LGPhraseCompressor:
         self.bitmix = [[4, 1, 7, 2, 0, 6, 5, 3], [1, 2, 4, 5, 0, 3, 6, 7], [
             0, 5, 4, 6, 2, 3, 7, 1], [7, 1, 6, 4, 3, 0, 5, 2], [3, 2, 5, 4, 7, 6, 0, 1]]
         self.allHashVals = {}
+        self.compressedPhraseStartIdx = {}
         self.noSuffixCollisions = [0, 0, 0, 0, 0]
         self.printPlainText = False
         self.printWordCodeword = False
@@ -67,15 +68,15 @@ class LGPhraseCompressor:
         print("freqPhraseToCodewordHashTableList table size")
         for h in self.freqPhraseToCodewordHashTableList:
             print(len(h))
-            # for i in h.items():
-            #    print(i)
+        #    for i in h.items():
+        #        print(i)
         print("lengthwisePhraseList table size")
         for h in self.lengthwisePhraseList:
-            # print(len(h))
-            #print("All hashVals")
-            # for h in self.allHashVals.items():
-            #    print(h)
-            #print(self.compressed, 'self.compressed')
+            print(len(h))
+        #print("All hashVals")
+        # for h in self.allHashVals.items():
+        #    print(h)
+        #print(self.compressed, 'self.compressed')
         return self.compressed
 
     def idPhraseCompress(self, phraseLen, words):
@@ -268,15 +269,22 @@ class LGPhraseCompressor:
                 if phrase == word:
                     # print(encodedWord, '<--word-->', word)
                     # check if the word identified is in the overlapping range of its last occurrence
-                    phraseSeenAtIdx = self.lengthwisePhraseList[hashTablePos].get(
+                    phraseSeenAtIdx, isCompressed = self.lengthwisePhraseList[hashTablePos].get(
                         word, None)
-                    if phraseSeenAtIdx and startIdx < phraseSeenAtIdx+numSymsInPhrase:
-                        # print(phraseSeenAtIdx, 'phraseSeenAtIdx')
+                    #print(word, '->', phraseSeenAtIdx, 'phraseSeenAtIdx')
+                    # do not compress a phrase whose plaintext sub-phrase has already been compressed
+                    for cmpIdx in range(phraseSeenAtIdx+1, phraseSeenAtIdx+wLen+1):
+                        if self.compressedPhraseStartIdx.get(cmpIdx):
+                            return None
+                    if (phraseSeenAtIdx and startIdx < phraseSeenAtIdx+numSymsInPhrase) or isCompressed:
                         # print(startIdx, 'startIdx')
                         # print(wLen, ' wLen->', word, 'overlapping word')
                         return None
                     self.freqPhraseToCodewordHashTableList[hashTablePos][word] = [
                         encodedWord, startIdx]
+                    self.compressedPhraseStartIdx[startIdx] = wLen
+                    self.lengthwisePhraseList[hashTablePos][word] = [
+                        startIdx, 1]
                     # phrases.append(word)
                     #self.allHashVals[codeword] = [phrase]
                     return encodedWord
@@ -287,8 +295,9 @@ class LGPhraseCompressor:
                 else:
                     phrases.append(word)
                     self.allHashVals[codeword] = phrases
-                    self.lengthwisePhraseList[hashTablePos][word] = startIdx
+                    self.lengthwisePhraseList[hashTablePos][word] = [
+                        startIdx, 0]  # [startIdx,notCompressed]
         else:
             self.allHashVals[codeword] = [word]
-            self.lengthwisePhraseList[hashTablePos][word] = startIdx
+            self.lengthwisePhraseList[hashTablePos][word] = [startIdx, 0]
         return None
