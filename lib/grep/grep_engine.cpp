@@ -711,6 +711,10 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     }
 }
 
+bool EmitMatch::hasAnyMatches() {
+    return mLineCount > 0;
+}
+
 void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) *mResultStr << "\n";
 }
@@ -1023,7 +1027,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
             accum.mResultStr->clear();
             accum.mResultStr->str("");
         }
-        if (accum.mLineCount > 0) grepMatchFound = true;
+        grepMatchFound = accum.hasAnyMatches();
         return accum.mLineCount;
     } else {
         //llvm::errs() << "filenames.size() = " << fileNames.size() << "\n";
@@ -1093,7 +1097,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
             f(accum.mBatchBuffer, current_start_position, &accum, mMaxCount);
         }
         alloc.deallocate(accum.mBatchBuffer, 0);
-        if (accum.mLineCount > 0) grepMatchFound = true;
+        grepMatchFound = accum.hasAnyMatches();
         return accum.mLineCount;
     }
 }

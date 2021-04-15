@@ -218,6 +218,7 @@ public:
     unsigned getFileCount() override;
     size_t getFileStartPos(unsigned fileNo) override;
     void setBatchLineNumber(unsigned fileNo, size_t batchLine) override;
+    bool hasAnyMatches();
 protected:
     bool mShowFileNames;
     bool mShowLineNumbers;
