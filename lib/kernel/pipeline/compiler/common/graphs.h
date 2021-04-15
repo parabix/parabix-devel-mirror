@@ -44,6 +44,8 @@ using InitArgTypes = KernelCompiler::InitArgTypes;
 
 using Vertex = unsigned;
 
+using StreamSetId = unsigned;
+
 struct RelationshipNode {
 
     enum RelationshipNodeType : unsigned {
@@ -344,8 +346,6 @@ struct BufferPort {
 
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferPort>;
 
-using BufferVertexSet = SmallFlatSet<BufferGraph::vertex_descriptor, 32>;
-
 struct ConsumerNode {
     mutable Value * Consumed = nullptr;
     mutable PHINode * PhiNode = nullptr;
@@ -415,10 +415,6 @@ struct PartitionData {
 
 };
 
-using LinkedPartitionGraph = adjacency_matrix<undirectedS>;
-
-using StreamSetId = unsigned;
-
 using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, StreamSetId>;
 
 using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
@@ -477,18 +473,6 @@ struct SchedulingNode {
 using SchedulingGraph = adjacency_list<vecS, vecS, bidirectionalS, SchedulingNode, Rational>;
 
 using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
-
-struct IOCheckEdge {
-    unsigned        Kernel = 0;
-    StreamSetPort   Port;
-
-    IOCheckEdge() = default;
-    IOCheckEdge(unsigned kernel, StreamSetPort port) : Kernel(kernel), Port(port) { }
-};
-
-using IOCheckGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, IOCheckEdge>;
-
-using LengthConstraintGraph = adjacency_list<vecS, vecS, undirectedS>;
 
 }
 

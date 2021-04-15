@@ -59,29 +59,9 @@ public:
 
         P.computeExpectedDataFlowRates(partitionGraph);
 
-//        for (double maxCutRoundsFactor = 1.0; maxCutRoundsFactor <= 3.0; maxCutRoundsFactor += 0.5) {
-//            for (unsigned maxCutPasses = 1; maxCutPasses <= 5; ++maxCutPasses) {
-
-//                for (int i = 0; i < 10; ++i) {
-
-//                    const auto testSeed = 2081280305; //rng();
-
-//                    random_engine test_rng(testSeed);
-
-//                    errs() << graphSeed << "," << partitionCount << "," << testSeed << "," << llvm::format("%.1f", maxCutRoundsFactor) << "," << maxCutPasses;
-
-//                    P.schedulePartitionedProgram(partitionGraph, test_rng, maxCutRoundsFactor, maxCutPasses);
-
-//                }
-
-//            }
-//        }
-
-
         errs() << "schedulePartitionedProgram\n";
 
         P.schedulePartitionedProgram(partitionGraph, rng, 1.0, 1);
-
 
         // Construct the Stream and Scalar graphs
         P.transcribeRelationshipGraph(partitionGraph);
@@ -93,13 +73,13 @@ public:
 
         P.generateInitialBufferGraph();
 
-        errs() << "generateInitialBufferGraph\n";
+        errs() << "computeNumOfStridesInterval\n";
 
-        P.computeInterPartitionSymbolicRates();
+        P.computeNumOfStridesInterval();
 
-        errs() << "computeDataFlowRates\n";
+        errs() << "computeInterPartitionSymbolicRates\n";
 
-        P.computeDataFlowRates();
+        P.identifyInterPartitionSymbolicRates();
 
         errs() << "determineBufferSize\n";
 
@@ -140,8 +120,6 @@ public:
         #ifdef PRINT_BUFFER_GRAPH
         P.printBufferGraph(errs());
         #endif
-
-        exit(-1);
 
         return P;
     }
@@ -245,11 +223,9 @@ private:
 
     void computeExpectedDataFlowRates(PartitionGraph & P);
 
-    void computeInterPartitionSymbolicRates();
+    void computeNumOfStridesInterval();
 
-    void computeDataFlowRates();
-
-
+    void identifyInterPartitionSymbolicRates();
 
     // zero extension analysis function
 

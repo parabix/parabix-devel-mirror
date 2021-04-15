@@ -199,14 +199,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     std::vector<unsigned> mapping(n, -1U);
 
-//    // We're not guaranteed that our equal-length streamsets are in
-//    // the penultimate relationship graph.
-//    flat_map<const StreamSet *, unsigned> lengthAssertedStreamSet;
-//    for (const LengthAssertion & a : mLengthAssertions) {
-//        lengthAssertedStreamSet.emplace(a[0], -1U);
-//        lengthAssertedStreamSet.emplace(a[1], -1U);
-//    }
-
     BEGIN_SCOPED_REGION
 
     std::vector<unsigned> ordering;
@@ -227,10 +219,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 BEGIN_SCOPED_REGION
                 const Relationship * const ss = Relationships[u].Relationship;
                 if (LLVM_LIKELY(isa<StreamSet>(ss))) {
-//                    const auto f = lengthAssertedStreamSet.find(cast<StreamSet>(ss));
-//                    if (LLVM_UNLIKELY(f != lengthAssertedStreamSet.end())) {
-//                        f->second = sequence.size();
-//                    }
                     mapping[u] = sequence.size();
                     sequence.push_back(u);
                 }
@@ -272,35 +260,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     // so that we can construct our initial set of partitions. The goal here is to act
     // as a first pass to simplify the problem before using Z3.
 
-    auto hasInputRateChangeAttribute = [](const Binding & b) {
-        for (const Attribute & attr : b.getAttributes()) {
-            switch (attr.getKind()) {
-                case AttrId::Delayed:
-                case AttrId::BlockSize:
-                case AttrId::LookAhead:
-                    return true;
-                default: break;
-            }
-        }
-        return false;
-    };
-
-    auto hasOutputRateChangeAttribute = [](const Binding & b) {
-        for (const Attribute & attr : b.getAttributes()) {
-            switch (attr.getKind()) {
-                case AttrId::Delayed:
-                case AttrId::Deferred:
-                case AttrId::BlockSize:
-                    // A deferred output rate is closer to an bounded rate than a
-                    // countable rate but a deferred input rate simply means the
-                    // buffer must be dynamic.
-                    return true;
-                default: break;
-            }
-        }
-        return false;
-    };
-
     for (unsigned i = 0; i < m; ++i) {
         BitSet & V = G[i];
         V.resize(n);
@@ -334,6 +293,19 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                     const Binding & b = rn.Binding;
                     const ProcessingRate & rate = b.getRate();
 
+                    auto hasInputRateChangeAttribute = [](const Binding & b) {
+                        for (const Attribute & attr : b.getAttributes()) {
+                            switch (attr.getKind()) {
+                                case AttrId::Delayed:
+                                case AttrId::BlockSize:
+                                case AttrId::LookAhead:
+                                    return true;
+                                default: break;
+                            }
+                        }
+                        return false;
+                    };
+
                     // Check the attributes to see whether any impose a partition change
                     if (rate.getKind() != RateId::Fixed || hasInputRateChangeAttribute(b)) {
                         V.set(nextRateId++);
@@ -351,6 +323,22 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 assert (rn.Type == RelationshipNode::IsBinding);
                 const Binding & b = rn.Binding;
                 const ProcessingRate & rate = b.getRate();
+
+                auto hasOutputRateChangeAttribute = [](const Binding & b) {
+                    for (const Attribute & attr : b.getAttributes()) {
+                        switch (attr.getKind()) {
+                            case AttrId::Delayed:
+                            case AttrId::Deferred:
+                            case AttrId::BlockSize:
+                                // A deferred output rate is closer to an bounded rate than a
+                                // countable rate but a deferred input rate simply means the
+                                // buffer must be dynamic.
+                                return true;
+                            default: break;
+                        }
+                    }
+                    return false;
+                };
 
                 // Check the attributes to see whether any impose a partition change
                 if (LLVM_UNLIKELY(rate.getKind() != RateId::Fixed || hasOutputRateChangeAttribute(b))) {
@@ -630,10 +618,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             }
         };
 
-        flat_map<unsigned, IORateVar> IORateVarMap;
-
-        IORateVarMap.reserve(num_edges(G));
-
         const auto ONE = Z3_mk_int(ctx, 1, intType);
 
         DependencyGraph H(synchronousPartitionCount);
@@ -679,6 +663,10 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         }
 
         flat_map<unsigned, Z3_ast> symbolicPopCountRateVar;
+
+        flat_map<unsigned, IORateVar> IORateVarMap;
+
+        IORateVarMap.reserve(num_edges(G));
 
         flat_map<const StreamSet *, Z3_ast> streamSetVar;
 
@@ -766,7 +754,10 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 const auto strideSize = node.Kernel->getStride() * numOfStridesMultiplier[kernel];
                                 const auto lb = rate.getLowerBound() * strideSize;
                                 const auto ub = rate.getUpperBound() * strideSize;
-                                var = makeBoundedVar(V, lb, ub);
+                                var = Z3_mk_fresh_const(ctx, nullptr, intType);
+                                V.addVar(ctx, var);
+                                hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, floor(lb), intType)));
+                                hard_assert(Z3_mk_le(ctx, var, Z3_mk_int(ctx, ceiling(ub), intType)));
                                 expr = var;
                                 END_SCOPED_REGION
                                 break;
@@ -785,8 +776,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 V.addVar(ctx, var);
 
                                 Z3_ast args[3] = { var, V.StrideVar, constant_real(numOfStridesMultiplier[kernel]) };
-
-                                expr = Z3_mk_mul(ctx, 3, args);
+                                expr = Z3_mk_mul(ctx, 3, args);                                
                                 END_SCOPED_REGION
                                 break;
                             case RateId::Relative:
@@ -801,6 +791,14 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 if (rate.getLowerBound() != Rational{1}) {
                                     expr = multiply(expr, constant_real(rate.getLowerBound()) );
                                 }
+                                END_SCOPED_REGION
+                                break;
+                            case RateId::Unknown:
+                                BEGIN_SCOPED_REGION
+                                var = Z3_mk_fresh_const(ctx, nullptr, intType);
+                                V.addVar(ctx, var);
+                                hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, floor(rate.getLowerBound()), intType)));
+                                expr = var;
                                 END_SCOPED_REGION
                                 break;
                             default:
@@ -1192,7 +1190,12 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         return fusedAny;
     };
 
-    while (fuseStrideLinkedPartitions());
+    while (fuseStrideLinkedPartitions()); // fuse until fix-point
+
+
+    // TODO: when only lookahead relationships are preventing us from fusing two partitions,
+    // we could "slow down" the one with the smaller lookahead (where a partition without
+    // lookahead can be considered to have one of 0)
 
     // TODO: test every Fixed-rate partition to determine whether its worthwhile keeping
     // them in the same partition. For example, suppose kernel A has a Fixed(7) output rate
@@ -1200,6 +1203,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     // partition, they would have to execute a multiple of 56 strides per segment. If these
     // items represent single bytes, this would be beneficial but could slow down the
     // pipeline if they represent 1K chunks.
+
+    // TODO: split disconnected components within a partition into separate partitions?
+    // Try scheduling first to see if an optimal schedule would sequence them in order anyway?
 
     Z3_finalize_memory();
 
@@ -1549,9 +1555,7 @@ void PipelineAnalysis::makePartitionJumpTree() {
     for (auto i = 0U; i < (PartitionCount - 1); ++i) {        
         add_edge(i, mPartitionJumpIndex[i], mPartitionJumpTree);
     }
-//    for (auto i = 1U; i < (PartitionCount - 1); ++i) {
-//        add_edge(i, (i + 1U), mPartitionJumpTree);
-//    }
+    printGraph(mPartitionJumpTree, errs(), "J");
 }
 
 } // end of namespace kernel

@@ -587,7 +587,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
                              std::move(I), std::move(allocations), std::move(weight), std::move(remaining), rng);
 
-    BA.runGA(true);
+    BA.runGA(false);
 
     RequiredThreadLocalStreamSetMemory = BA.getBestFitnessValue();
 
@@ -597,7 +597,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
     const auto bs_total_ga_time = (t1 - t0).count();
 
-    errs() << "\n" << bs_total_ga_time << "," << bs_init_time << "," << bs_fitness_time << "," << bs_fitness_calls << "\n";
+  //  errs() << "\n" << bs_total_ga_time << "," << bs_init_time << "," << bs_fitness_time << "," << bs_fitness_calls << "\n";
 
     // TODO: apart from total memory, when would one layout be better than another?
     // Can we quantify it based on the buffer graph order? Currently, we just take

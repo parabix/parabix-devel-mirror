@@ -444,7 +444,6 @@ RelationshipGraph::edge_descriptor PipelineCommonGraphFunctions::getReferenceEdg
  * @brief getReferenceBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCommonGraphFunctions::getReferenceBufferVertex(const size_t kernel, const StreamSetPort inputPort) const {
-    assert (inputPort.Type == PortType::Input);
     return parent(source(getReferenceEdge(kernel, inputPort), mStreamGraphRef), mStreamGraphRef);
 }
 
