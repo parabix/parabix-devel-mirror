@@ -42,6 +42,26 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b, Value * con
         const Binding & input = br.Binding;
         Value * const fullyProcessed = truncateBlockSize(b, input, processed, terminated);
         mFullyProcessedItemCount[port] = fullyProcessed;
+        if (CheckAssertions) {
+            const auto streamSet = source(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+
+            if (bn.Locality == BufferLocality::ThreadLocal) {
+                Value * const produced = mLocallyAvailableItems[streamSet]; assert (produced);
+                // NOTE: static linear buffers are assumed to be threadlocal.
+                Value * const fullyConsumed = b->CreateICmpEQ(produced, processed);
+                Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
+                Value * const fatalError = b->CreateICmpEQ(mTerminatedAtLoopExitPhi, fatal);
+                Value * const valid = b->CreateOr(fullyConsumed, fatalError);
+                Constant * const bindingName = b->GetString(input.getName());
+
+                b->CreateAssert(valid,
+                                "%s.%s: local available item count (%" PRId64 ") does not match "
+                                "its processed item count (%" PRId64 ")",
+                                mCurrentKernelName, bindingName,
+                                produced, processed);
+            }
+        }
     }
 }
 
@@ -49,13 +69,18 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b, Value * con
  * @brief computeFullyProducedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b, Value * const terminated) {
-
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort port{PortType::Output, i};
-        Value * produced = mUpdatedProducedPhi[port];
-        Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, terminated);
-        mFullyProducedItemCount[port]->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & br = mBufferGraph[e];
+        const auto port = br.Port;
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        Value * produced = nullptr;
+        if (LLVM_UNLIKELY(bn.OutputItemCountId != streamSet)) {
+            produced = mLocallyAvailableItems[bn.OutputItemCountId];
+        } else {
+            produced = computeFullyProducedItemCount(b, mKernelId, port, mUpdatedProducedPhi[port], terminated);
+        }
+        mFullyProducedItemCount[port]->addIncoming(produced, mKernelLoopExitPhiCatch);
     }
 }
 

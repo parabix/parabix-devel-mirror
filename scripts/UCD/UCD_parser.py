@@ -17,7 +17,7 @@ def setVersionfromReadMe_txt():
     lines = f.readlines()
     for t in lines:
         m = version_regexp.match(t)
-        if m: 
+        if m:
             UCD_config.version = m.group(1)
             print("Version %s" % m.group(1))
 
@@ -38,11 +38,14 @@ UCD_skip = re.compile("^#.*$|^\s*$")
 UCD_property_section_regexp = re.compile("^#\s*([-A-Za-z_0-9]+)\s*Properties\s*$")
 UCD_property_alias_regexp = re.compile("^([-A-Za-z_0-9]+)\s*;\s*([-A-Za-z_0-9]+)([^#]*)")
 
-# Section 2.3.3 of UAX $44 
+# Section 2.3.3 of UAX $44
 Obsolete_Properties = ["na1", "Gr_Link", "Hyphen", "isc", "XO_NFC", "XO_NFD", "XO_NFKC", "XO_NFKD" ,"FC_NFKC"]
 Emoji_Properties = ["Emoji", "Emoji_Presentation", "Emoji_Modifier", "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic"]
 # Compatibility properties from Unicode TR 18
 Compatibility_Properties = ["alnum", "xdigit", "blank", "print", "word", "graph"]
+# Grapheme Cluster Break and Word Boundary properties
+Boundary_Properties = ["g", "w"]
+Overridden_Properties = ["uc", "lc", "tc", "cf"]
 
 def parse_PropertyAlias_txt():
     property_object_map = {}
@@ -64,11 +67,12 @@ def parse_PropertyAlias_txt():
             property_object_map[property_code] = BinaryPropertyObject()
         elif property_kind == "Enumerated":
             property_object_map[property_code] = EnumeratedPropertyObject()
-        elif property_kind == "Catalog":   # Age, Block, Script 
+        elif property_kind == "Catalog":   # Age, Block, Script
             property_object_map[property_code] = EnumeratedPropertyObject()
         elif property_kind == "String":
-            if property_code in ["uc", "lc", "tc", "cf"]:
-                property_object_map[property_code] = StringOverridePropertyObject("s" + property_code)
+            if property_code in Overridden_Properties:
+                overridden_code = "s" + property_code
+                property_object_map[property_code] = StringOverridePropertyObject(overridden_code)
             else:
                 property_object_map[property_code] = StringPropertyObject()
         elif property_kind == "Numeric":
@@ -94,13 +98,22 @@ def parse_PropertyAlias_txt():
         property_object_map[prop_code] = BinaryPropertyObject()
         property_object_map[prop_code].setID(prop_code, p)
         property_object_map[prop_code].setAliases([])
+    for p in Boundary_Properties:
+        prop_code = canonicalize(p)
+        property_enum_name_list.append(prop_code)
+        property_object_map[prop_code] = BoundaryPropertyObject()
+        property_object_map[prop_code].setID(prop_code, p)
+        property_object_map[prop_code].setAliases([])
+    for p in Overridden_Properties:
+        property_object_map[p].setBaseObject(property_object_map['s' + p])
+
     return (property_enum_name_list, property_object_map)
 
 
 #
 #  Property Default Value Specifications
 #
-#  THe UCD uses special comment lines ("@missing specifications") to declare default 
+#  THe UCD uses special comment lines ("@missing specifications") to declare default
 #  values for properties.   Examples showing the two common formats are:
 #  (1)  Blocks.txt                    # @missing: 0000..10FFFF; No_Block
 #  (2)  PropertyValueAliases.txt      # @missing: 0000..10FFFF; Case_Folding; <code point>
@@ -119,7 +132,7 @@ def parse_PropertyAlias_txt():
 #  NaN           The default value for numeric property is the NaN (not a number) value.
 #
 
-#  Given a line known to contain such a @missing specification, 
+#  Given a line known to contain such a @missing specification,
 #  parse_missing_spec(data_line) returns a (cp_lo, cp_hi, fields) triple.
 #  Generally, cp_lo = 0 and cp_hi = 0x10FFFF
 #  The list of fields contains one or two entries: an optional
@@ -146,12 +159,12 @@ def parse_missing_spec(data_line):
 #  Missing specifications and other types of UCD data records often produce
 #  a list of one or two fields which indicate a property and a value.
 #
-#  parse_property_and_value(fields, property_lookup_map) checks that 
+#  parse_property_and_value(fields, property_lookup_map) checks that
 #  first of the given fields is indeed a property identifier identified
-#  in the given lookup map, and returns a pair consisting of the 
+#  in the given lookup map, and returns a pair consisting of the
 #  unique property code for the property, plus a corresponding value
 #  (or None, if only one field was given).
-#  
+#
 def parse_property_and_value(fields, property_lookup_map):
     if len(fields) > 2: raise Exception("Too many fields")
     if len(fields) == 0: raise Exception("Expecting at least 1 field")
@@ -226,7 +239,7 @@ def initializePropertyValues(property_object_map, property_lookup_map):
 #  UCD Property File Format 3:  codepoint/range -> data record maps
 #  Many files have data records consisting of a codepoint or codepoint range
 #  followed by fields separated by semicolons.
-# 
+#
 
 UCD_point_regexp = re.compile("^([0-9A-F]{4,6})([^0-9A-F.#][^#]*)(?:#|$)")
 UCD_range_regexp = re.compile("^([0-9A-F]{4,6})[.][.]([0-9A-F]{4,6})([^#]*)(?:#|$)")
@@ -253,10 +266,10 @@ def parse_data_record(data_line):
         cp_hi = int(m.group(2), 16)
         field_data = m.group(3)
     field_data = field_data.lstrip().rstrip()
-    if field_data == '': 
+    if field_data == '':
         fields = []
     else:
-        if field_data[0] != ';': 
+        if field_data[0] != ';':
             raise Exception("Field data syntax: " + field_data)
         fields = field_data[1:].split(';')
     fields = [f.lstrip().rstrip() for f in fields]
@@ -290,7 +303,7 @@ def parse_multisection_property_data(pfile, property_object_map, property_lookup
 
 
 #
-#   Some UCD files are defined for a single property.   
+#   Some UCD files are defined for a single property.
 #   parse_property_data deals with such a file, given the property
 #   object to populate and the file root.
 #
@@ -335,7 +348,7 @@ def parse_multicolumn_property_data(pfile, property_object_map, property_lookup_
                 if fields[i] != '' and prop_code_list[i] in property_object_map:
                     property_object_map[prop_code_list[i]].addDataRecord(cp_lo, cp_hi, fields[i])
     for p in prop_code_list:
-        if prop_code_list[i] in property_object_map: 
+        if prop_code_list[i] in property_object_map:
             property_object_map[p].finalizeProperty()
 
 UnicodeData_txt_regexp = re.compile("^([0-9A-F]{4,6});([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);(.*)$")
@@ -345,11 +358,11 @@ NameRange_regexp = re.compile("<([^,]*), (First|Last)>")
 
 #  Parse a decomposition mapping field in one of two forms:
 #  (a) compatibility mappings:  "<" decomp_type:[A-Za-z]* ">" {codepoint}
-#  (b) canonical mappings:  {codepoint}  
+#  (b) canonical mappings:  {codepoint}
 compatibility_regexp = re.compile("^<([^>]*)>\s*([0-9A-F ]*)$")
 def parse_decomposition(s):
     m = compatibility_regexp.match(s)
-    if m: 
+    if m:
         decomp_type = m.group(1)
         mapping = m.group(2)
     else:
@@ -377,7 +390,7 @@ def parse_UnicodeData_txt(property_object_map):
         if rangeMatch:
             rangeName = rangeMatch.group(1)
             if rangeMatch.group(2) == 'First': name_range_starts[rangeName] = cp
-            if rangeMatch.group(2) == 'Last': 
+            if rangeMatch.group(2) == 'Last':
                 if not rangeName in name_range_starts: raise Exception("UnicodeData range end encountered without prior range start: %s" % t)
                 range_records.append((name_range_starts[rangeName], cp, rangeName, gc))
         if not NonName_regexp.match(name):
@@ -433,9 +446,9 @@ def parse_SpecialCasing_txt(property_object_map):
 
 
 # CaseFolding.txt has four types of fold entries:
-# S, C, F, T:  Simple, Common, Full and Turkic.  
+# S, C, F, T:  Simple, Common, Full and Turkic.
 # The SimpleCaseFold property is the set of mappings S+C,
-# The FullCaseFold property is the set F+C 
+# The FullCaseFold property is the set F+C
 # There may be multiple entries per codepoint
 
 def parse_CaseFolding_txt(property_object_map):
@@ -446,15 +459,20 @@ def parse_CaseFolding_txt(property_object_map):
         if UCD_skip.match(t): continue  # skip comment and blank lines
         (cp, cp_hi, fields) = parse_data_record(t)
         (fold_type, fold_val) = (fields[0], fields[1])
-        if not fold_type in fold_map: fold_map[fold_type] = {} 
+        if not fold_type in fold_map: fold_map[fold_type] = {}
         if fold_type == 'S' or fold_type == 'C':
             # fold value is guaranteed to be a single codepoint
             property_object_map['scf'].addDataRecord(cp, cp, fold_val)
-        else:
-            if fold_type == 'F':
-                property_object_map['cf'].addDataRecord(cp, cp, fold_val)
         fold_map[fold_type][cp] = fold_val
     property_object_map['scf'].finalizeProperty()
+    for t in lines:
+        if UCD_skip.match(t): continue  # skip comment and blank lines
+        (cp, cp_hi, fields) = parse_data_record(t)
+        (fold_type, fold_val) = (fields[0], fields[1])
+        if not fold_type in fold_map: fold_map[fold_type] = {}
+        if fold_type == 'F':
+            property_object_map['cf'].addDataRecord(cp, cp, fold_val)
+        fold_map[fold_type][cp] = fold_val
     property_object_map['cf'].finalizeProperty()
     return fold_map
 

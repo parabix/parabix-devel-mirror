@@ -7,7 +7,7 @@
 
 namespace kernel {
 
-// #define PRINT_PARTITION_COMBINATIONS
+#define PRINT_PARTITION_COMBINATIONS
 
 void PipelineAnalysis::addKernelRelationshipsInReferenceOrdering(const unsigned kernel, const RelationshipGraph & G,
                                                                  std::function<void(PortType, unsigned, unsigned)> insertionFunction) {
@@ -509,7 +509,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, repetitions[i], Z3_L_TRUE, &value) != Z3_L_TRUE)) {
                     report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
                 }
-                __int64 num, denom;
+                Z3_int64 num, denom;
                 if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
                     report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
                 }
@@ -652,6 +652,33 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             }
         }
 
+        #ifdef PRINT_PARTITION_COMBINATIONS
+        BEGIN_SCOPED_REGION
+        auto & out = errs();
+        out << "graph \"P\" {\n";
+        for (unsigned partitionId = 0; partitionId < synchronousPartitionCount; ++partitionId) {
+            out << "v" << partitionId << " [label=\"P" << partitionId << "\n";
+            for (unsigned i = 0; i < m; ++i) {
+                if (partitionIds[i] == partitionId) {
+                    const auto u = sequence[i];
+                    const RelationshipNode & node = Relationships[u];
+                    if (node.Type == RelationshipNode::IsKernel) {
+                        out << u << ". " << node.Kernel->getName() << "\n";
+                    }
+                }
+            }
+            out << "\"];\n";
+        }
+        for (auto e : make_iterator_range(edges(P))) {
+            const auto s = source(e, P);
+            const auto t = target(e, P);
+            out << "v" << s << " -> v" << t << ";\n";
+        }
+        out << "}\n\n";
+        out.flush();
+        END_SCOPED_REGION
+        #endif
+
         transitive_reduction_dag(H);
 
         for (unsigned i = 0; i < synchronousPartitionCount; ++i) {
@@ -700,14 +727,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                     assert ("no matching edge in fusion constraint graph?" && e.second);
 
                     FusionConstaints & fusionConstraints = P[e.first];
-
-                    auto makeBoundedVar = [&](PartitionVariables & V, const Rational & lb, const Rational & ub) {
-                        const auto var = Z3_mk_fresh_const(ctx, nullptr, intType);
-                        V.addVar(ctx, var);
-                        hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, floor(lb), intType)));
-                        hard_assert(Z3_mk_le(ctx, var, Z3_mk_int(ctx, ceiling(ub), intType)));
-                        return var;
-                    };
 
                     auto calculateBaseSymbolicRateVar = [&](const BindingVertex bindingVertex, const ProcessingRate & rate, const unsigned kernel, const unsigned partId)  {
                         const RelationshipNode & node = Relationships[sequence[kernel]];
@@ -827,6 +846,14 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                     BEGIN_SCOPED_REGION
                                     Z3_ast args[2] = { outRateExpr, Z3_mk_int(ctx, attr.amount(), intType) };
                                     outRateExpr = Z3_mk_sub(ctx, 2, args);
+
+//                                    PartitionVariables & V = P[consPartId];
+//                                    const auto delayedRateVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+//                                    V.addVar(ctx, delayedRateVar);
+//                                    hard_assert(Z3_mk_ge(ctx, delayedRateVar, min));
+//                                    hard_assert(Z3_mk_le(ctx, delayedRateVar, outRateExpr));
+//                                    outRateExpr = delayedRateVar;
+
                                     END_SCOPED_REGION
                                     break;
                                 case AttrId::Deferred:
@@ -868,6 +895,14 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 BEGIN_SCOPED_REGION
                                 Z3_ast args[2] = { inRateExpr, Z3_mk_int(ctx, attr.amount(), intType) };
                                 inRateExpr = Z3_mk_sub(ctx, 2, args);
+
+//                                PartitionVariables & V = P[consPartId];
+//                                const auto delayedRateVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+//                                V.addVar(ctx, delayedRateVar);
+//                                hard_assert(Z3_mk_ge(ctx, delayedRateVar, min));
+//                                hard_assert(Z3_mk_le(ctx, delayedRateVar, inRateExpr));
+//                                inRateExpr = delayedRateVar;
+
                                 END_SCOPED_REGION
                                 break;
                             case AttrId::BlockSize:
@@ -908,7 +943,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         std::vector<unsigned> fusedPartitionIds(synchronousPartitionCount);
         std::iota(fusedPartitionIds.begin(), fusedPartitionIds.end(), 0);
-        std::vector<unsigned> rank(synchronousPartitionCount, 0);
+//        std::vector<unsigned> rank(synchronousPartitionCount, 0);
 
         #ifdef PRINT_PARTITION_COMBINATIONS
         adjacency_list<hash_setS, vecS, undirectedS> L(synchronousPartitionCount);
@@ -930,13 +965,13 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             x = find(x);
             y = find(y);
 
-            if (rank[x] > rank[y]) {
+            if (fusedPartitionIds[x] > fusedPartitionIds[y]) {
                 fusedPartitionIds[y] = x;
             } else {
                 fusedPartitionIds[x] = y;
-                if (rank[x] == rank[y]) {
-                    rank[y]++;
-                }
+//                if (rank[x] == rank[y]) {
+//                    rank[y]++;
+//                }
             }
 
         };
@@ -1032,7 +1067,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         }
 
-
+#if 0
         const auto realType = Z3_mk_real_sort(ctx);
 
         const auto ZERO = Z3_mk_real(ctx, 0, 1);
@@ -1045,16 +1080,18 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 graph_traits<DependencyGraph>::out_edge_iterator begin, end;
                 std::tie(begin, end) = out_edges(i, H);
 
+                const auto root = find(i);
+
                 for (auto ei = begin; ei != end; ++ei) {
                     for (auto ej = ei; ++ej != end; ) {
 
-                        const auto a = target(*ei, P);
-                        const auto b = target(*ej, P);
+                        const auto a = target(*ei, H);
+                        const auto b = target(*ej, H);
 
                         const auto x = find(a);
                         const auto y = find(b);
 
-                        if (x == y) {
+                        if (x == y || x == root || y == root) {
                             continue;
                         }
 
@@ -1085,7 +1122,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                         }
                         sourceSet.reset();
 
-                        assert (universalSet.test(find(i)));
+                        assert (universalSet.test(i));
                         assert (list.size() > 0);
                         const auto constraints = Z3_mk_and(ctx, list.size(), list.data());
                         list.clear();
@@ -1129,13 +1166,11 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                         } else {
                             Z3_solver_pop(ctx, solver, 1);
                         }
-
-
                     }
                 }
             }
         }
-
+#endif
         Z3_tactic_dec_ref (ctx, tQE);
         Z3_tactic_dec_ref (ctx, tSMT);
         Z3_solver_dec_ref(ctx, solver);
@@ -1195,7 +1230,18 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     // TODO: when only lookahead relationships are preventing us from fusing two partitions,
     // we could "slow down" the one with the smaller lookahead (where a partition without
-    // lookahead can be considered to have one of 0)
+    // lookahead can be considered to have one of 0). Note: we can only do this if the
+    // input with the lookahead is an input to the partition and we ensure that a kernel
+    // with the greatest lookahead parameter is a partition root.
+
+    // TODO: if the only consumers of all outputs of a kernel are in the same partition,
+    // and the partition is not the one the kernel resides in, can we prove whether its
+    // safe to move that kernel? we would need to develop a cost model for the I/O transfer.
+    // There are numerous cases in which the PopCount kernels could be moved to reduce
+    // the total dynamic memory cost. The difficulty, however, is if PopCount kernel becomes
+    // the new partition root it may actually be ahead of the data stream for the PartialSum
+    // rate refers to, which would break any stride rate equivalence within the partition.
+    // We ought to be able to use it for PartialSum output rates.
 
     // TODO: test every Fixed-rate partition to determine whether its worthwhile keeping
     // them in the same partition. For example, suppose kernel A has a Fixed(7) output rate
@@ -1204,12 +1250,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     // items represent single bytes, this would be beneficial but could slow down the
     // pipeline if they represent 1K chunks.
 
-    // TODO: split disconnected components within a partition into separate partitions?
-    // Try scheduling first to see if an optimal schedule would sequence them in order anyway?
-
     Z3_finalize_memory();
 
-    // Stage 4: finalize the partition structure
+    // Stage 5: finalize the partition structure
 
     // Based on the (fused) partition ids, repeat the process used to generate the initial
     // synchronous components but also factor in early termination and any other kernel
@@ -1286,9 +1329,14 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     const auto partitionCount = convertUniqueNodeBitSetsToUniquePartitionIds();
 
+    // TODO: split disconnected components within a partition into separate partitions?
+    // Try scheduling first to see if an optimal schedule would sequence them in order anyway?
+
+
+
     using RenumberingGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
-    // Stage 5: renumber the partition ids
+    // Stage 6: renumber the partition ids
 
     // To simplify processing later, renumber the partitions such that the partition id
     // of any predecessor of a kernel K is <= the partition id of K.
@@ -1317,6 +1365,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 }
             }
         }
+
     }
 
     std::vector<unsigned> renumberingSeq;
@@ -1335,6 +1384,8 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     }
 
     assert (renumbered[0] == 0);
+
+
 
     PartitionGraph P(partitionCount);
 

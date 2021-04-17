@@ -4,20 +4,17 @@ stages:
 
 build_llvm9:
   stage: build
-  image: luizperes/parabix:llvm-9
   script:
     - mkdir build && cd build
-    - cmake -DCMAKE_BUILD_TYPE=Release -DBOOST_INCLUDEDIR=/home/boost_1_68_0 ..
+    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm9 -DCMAKE_BUILD_TYPE=Release ..
     - make -j4
 
 .test-default: &test-default
   stage: test
-  image: luizperes/parabix:llvm-9
-  before_script:
-    - apt-get -y update && apt-get install -y python python3
   script:
     - mkdir -p build && cd build
-    - cmake -DCMAKE_BUILD_TYPE=Release -DBOOST_INCLUDEDIR=/home/boost_1_68_0 ..
+    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
+    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm9 -DCMAKE_BUILD_TYPE=Release ..
     - make -j4 check && make kernel-tests
 
 test_llvm9:
@@ -30,12 +27,7 @@ merge_request_llvm9:
     - if: '$CI_MERGE_REQUEST_IID'
 
 .test-avx512-default: &test-avx512-default
-  stage: test
-  script:
-    - mkdir -p build && cd build
-    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
-    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm9 -DCMAKE_BUILD_TYPE=Release ..
-    - make -j4 check && make kernel-tests
+  <<: *test-default
   tags:
     - avx512
 

@@ -331,6 +331,11 @@ struct FixedUTF8Validator : public RE_Validator {
         RE * defn = name->getDefinition();
         return (defn != nullptr) && validate(defn);
     }
+
+    bool validatePropertyExpression(const PropertyExpression * pe) override {
+        RE * defn = pe->getResolvedRE();
+        return (defn != nullptr) && validate(defn);
+    }
 };
 
 bool validateFixedUTF8(const RE * r) {

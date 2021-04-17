@@ -89,8 +89,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     identifyLocalPortIds(mKernelId);
     checkForPartitionEntry(b);    
 
-    assert ("non-partition-root kernel can terminate early?" && (!mKernelCanTerminateEarly || mIsPartitionRoot));
-
     const auto kernelRequiresSynchronization = RequiresSynchronization[mKernelId];
 
     if (kernelRequiresSynchronization) {
@@ -98,7 +96,20 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         mIsBounded = isBounded();
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
         const auto nonSourceKernel = in_degree(mKernelId, mBufferGraph) > 0;
+
         mMayLoopToEntry = nonSourceKernel && (mMayHaveNonLinearIO || mHasExplicitFinalPartialStride || ExternallySynchronized);
+        if (mMayLoopToEntry) {
+            for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+                const BufferPort & bp = mBufferGraph[e];
+                const Binding & binding = bp.Binding;
+                // any kernel with a greedy input rate must complete its work in a single invocation.
+                if (binding.getRate().isGreedy()) {
+                    mMayLoopToEntry = false;
+                    break;
+                }
+            }
+        }
+
         #ifdef CHECK_EVERY_IO_PORT
         mCheckIO = nonSourceKernel;
         #else
@@ -243,7 +254,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// KERNEL EXPLICIT TERMINATION CHECK
     /// -------------------------------------------------------------------------------------
 
-    if (mIsPartitionRoot && mKernelCanTerminateEarly) {
+    if (mKernelCanTerminateEarly) {
 
         Value * const aborted = b->CreateIsNotNull(mTerminatedExplicitly);
         BasicBlock * const explicitTermination =
@@ -363,7 +374,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         if (mIsPartitionRoot) {
             const auto factor = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
             mNumOfPartitionStrides = b->CreateMulRational(mTotalNumOfStridesAtExitPhi, factor);
-            mNumOfPartitionStrides = b->CreateAdd(mNumOfPartitionStrides, mPartialPartitionStridesAtLoopExitPhi);
+            // mNumOfPartitionStrides = b->CreateAdd(mNumOfPartitionStrides, mPartialPartitionStridesAtLoopExitPhi);
             #ifdef PRINT_DEBUG_MESSAGES
             debugPrint(b, "* " + prefix + ".partitionStridesAdded = %" PRIu64, mPartialPartitionStridesAtLoopExitPhi);
             debugPrint(b, "* " + prefix + ".partitionStridesOnExit = %" PRIu64, mNumOfPartitionStrides);
@@ -433,11 +444,11 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
     ConstantInt * const i1_TRUE = b->getTrue();
 
-    Value * loopAgain = nullptr;
-
     if (LLVM_LIKELY(mMayLoopToEntry)) {
 
-        loopAgain = hasMoreInput(b);
+        Value * const loopAgain = hasMoreInput(b);
+
+        b->CallPrintInt("loopAgain", loopAgain);
 
         BasicBlock * const entryBlock = b->GetInsertBlock();
 

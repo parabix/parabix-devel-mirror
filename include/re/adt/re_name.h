@@ -25,6 +25,7 @@ public:
         Unicode
         , UnicodeProperty
         , ZeroWidth
+        , PropertyValue
         , Unknown
     };
     std::string getNamespace() const;
@@ -228,5 +229,55 @@ inline RE * makeReference(std::string name, RE * capture){
     return Reference::Create(name, capture);
 }
 
+class PropertyExpression : public RE {
+public:
+    enum class Kind {Codepoint, Boundary};
+    enum class Operator {Eq, NEq, Less, LEq, Greater, GEq};
+
+    PropertyExpression::Kind getKind() const { return mKind;}
+    std::string getPropertyIdentifier() const { return mIdentifier;}
+    PropertyExpression::Operator getOperator() const { return mOperator;}
+    std::string getValueString() const { return mValue;}
+    int getPropertyCode() const { return mPropertyCode;}
+    RE * getResolvedRE() const { return mResolvedRE;}
+
+    static PropertyExpression * Create(PropertyExpression::Kind k,
+                                       std::string id,
+                                       PropertyExpression::Operator op = PropertyExpression::Operator::Eq,
+                                       std::string val = "") {
+        return new PropertyExpression(k, id, op, val);
+    }
+    RE_SUBTYPE(PropertyExpression)
+
+    void setPropertyIdentifier(std::string id) {mIdentifier = id;}
+    void setOperator(PropertyExpression::Operator op) {mOperator = op;}
+    void setValueString(std::string v) {mValue = v;}
+    void setPropertyCode(int code) {mPropertyCode = code;}
+    void setResolvedRE(RE * re) {mResolvedRE = re;}
+
+private:
+    PropertyExpression(Kind k, std::string id, PropertyExpression::Operator op, std::string v):
+       RE(ClassTypeId::PropertyExpression),
+       mKind(k), mIdentifier(id), mOperator(op), mValue(v), mPropertyCode(-1) {}
+    PropertyExpression::Kind mKind;
+    std::string mIdentifier;
+    PropertyExpression::Operator mOperator;
+    std::string mValue;
+    int mPropertyCode;
+    RE * mResolvedRE;
+};
+
+
+inline PropertyExpression * makePropertyExpression(PropertyExpression::Kind k, std::string ident, PropertyExpression::Operator op = PropertyExpression::Operator::Eq, std::string v = "") {
+    return PropertyExpression::Create(k, ident, op, v);
+}
+
+inline PropertyExpression * makePropertyExpression(std::string ident, std::string v = "", PropertyExpression::Operator op = PropertyExpression::Operator::Eq) {
+    return PropertyExpression::Create(PropertyExpression::Kind::Codepoint, ident, op, v);
+}
+
+inline PropertyExpression * makeBoundaryExpression(std::string ident, std::string v = "", PropertyExpression::Operator op = PropertyExpression::Operator::Eq) {
+    return PropertyExpression::Create(PropertyExpression::Kind::Boundary, ident, op, v);
+}
 }
 #endif // RE_NAME_H

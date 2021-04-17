@@ -33,6 +33,13 @@ public:
         }
         return true;
     }
+    bool validatePropertyExpression(const PropertyExpression * p) override {
+        if ((p->getKind() == PropertyExpression::Kind::Boundary) && (p->getPropertyIdentifier() == "g")) {
+            if (mAnySeen) return false;
+            mGCBseen = true;
+        }
+        return true;
+    }
 private:
     bool mAnySeen;
     bool mGCBseen;
@@ -70,6 +77,12 @@ RE * firstSym(RE * re) {
             return firstSym(name->getDefinition());
         } else {
             UndefinedNameError(name);
+        }
+    } else if (PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        if (LLVM_LIKELY(pe->getResolvedRE() != nullptr)) {
+            return firstSym(pe->getResolvedRE());
+        } else {
+            llvm::report_fatal_error("firstSym: unresolved property expression");
         }
     } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
         return re;
@@ -110,6 +123,12 @@ RE * finalSym(RE * re) {
             return finalSym(name->getDefinition());
         } else {
             UndefinedNameError(name);
+        }
+    } else if (PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        if (LLVM_LIKELY(pe->getResolvedRE() != nullptr)) {
+            return finalSym(pe->getResolvedRE());
+        } else {
+            llvm::report_fatal_error("firstSym: unresolved property expression");
         }
     } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
         return re;
@@ -278,6 +297,16 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     } else if (Name * n = dyn_cast<Name>(re)) {
         RE * def = n->getDefinition();
         ContextMatchCursor submatch = ctxt_match(def, kind, cursor);
+        if (submatch.rslt == def) {
+            return ContextMatchCursor{submatch.ctxt, re};
+        }
+        return submatch;
+    } else if (PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        RE * def = pe->getResolvedRE();
+        ContextMatchCursor submatch = ctxt_match(def, kind, cursor);
+        if (submatch.rslt == def) {
+            return ContextMatchCursor{submatch.ctxt, re};
+        }
         return submatch;
     } else if (Capture * c = dyn_cast<Capture>(re)) {
         RE * def = c->getCapturedRE();

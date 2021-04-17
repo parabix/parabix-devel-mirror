@@ -449,7 +449,8 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const BufferPor
     assert (inputPort.Type == PortType::Input);
 
     Value * const strideLength = getInputStrideLength(b, port);
-    Value * const required = addLookahead(b, port, strideLength); assert (required);
+    Value * const segmentLength = b->CreateMulRational(strideLength, MinimumNumOfStrides[mKernelId]);
+    Value * const required = addLookahead(b, port, segmentLength); assert (required);
     const auto prefix = makeBufferName(mKernelId, inputPort);
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + "_requiredInput (%" PRIu64 ") = %" PRIu64, b->getSize(streamSet), required);
@@ -595,10 +596,21 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
 
     ConstantInt * const i1_TRUE = b->getTrue();
     Value * notAtSegmentLimit = i1_TRUE;
+
+    b->CallPrintInt("mKernelIsPenultimate", mKernelIsPenultimate);
+
     if (mMaximumNumOfStrides) {
         assert (mUpdatedNumOfStrides);
+
+        b->CallPrintInt("mUpdatedNumOfStrides", mUpdatedNumOfStrides);
+        b->CallPrintInt("mMaximumNumOfStrides", mMaximumNumOfStrides);
+
         notAtSegmentLimit = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
+
+        b->CallPrintInt("notAtSegmentLimit", notAtSegmentLimit);
     }
+
+
     if (mIsPartitionRoot) {
 
         BasicBlock * const lastTestExit = b->CreateBasicBlock("", mKernelLoopExit);

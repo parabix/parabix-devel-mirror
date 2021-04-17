@@ -18,6 +18,7 @@ def union_of_all(uset_list):
 class PropertyObject():
     def __init__(self):
         self.default_value = None
+        self.aliases = []
     def setID(self, prop_code, long_name):
         self.property_code = prop_code
         self.full_name = long_name
@@ -74,7 +75,7 @@ class EnumeratedPropertyObject(PropertyObject):
         self.value_map[value_enum] = empty_uset()
 
     def setDefaultValue(self, default):
-        if not default in self.property_value_lookup_map: 
+        if not default in self.property_value_lookup_map:
             raise Exception("Erroneous default value %s for property %s" % (default, self.full_name))
         dflt = self.property_value_lookup_map[default]
         if not dflt in self.name_list_order: self.name_list_order = [dflt] + self.name_list_order
@@ -82,14 +83,14 @@ class EnumeratedPropertyObject(PropertyObject):
 
     def finalizeProperty(self):
         explicitly_defined_cps = empty_uset()
-        for k in self.value_map.keys(): 
+        for k in self.value_map.keys():
             explicitly_defined_cps = uset_union(explicitly_defined_cps, self.value_map[k])
         need_default_value = uset_complement(explicitly_defined_cps)
         dflt = self.default_value
         if not dflt == None:
             if dflt in self.value_map:
                 self.value_map[dflt] = uset_union(self.value_map[dflt], need_default_value)
-            else: 
+            else:
                 self.value_map[dflt] = need_default_value
         self.independent_prop_values = len(self.name_list_order)
         for v in self.property_value_list:
@@ -111,7 +112,7 @@ class EnumeratedPropertyObject(PropertyObject):
 
     def addDataRecord(self, cp_lo, cp_hi, v):
         canon = canonicalize(v)
-        if not canon in self.property_value_lookup_map: 
+        if not canon in self.property_value_lookup_map:
             raise Exception("Unknown enumeration value for %s: %s" % (self.full_name, v))
         enum_code = self.property_value_lookup_map[canon]
         self.value_map[enum_code] = uset_union(self.value_map[enum_code], range_uset(cp_lo, cp_hi))
@@ -123,7 +124,7 @@ class BinaryPropertyObject(PropertyObject):
         self.empty_regexp = re.compile("\s+")
         self.property_value_full_name_map = {"N" : "No", "Y" : "Yes"}
         self.name_list_order = ['N', 'Y']
-        self.property_value_lookup_map = {"n" : "N", "N" : "N", "no" : "N", "f" : "N", "false" : "N", 
+        self.property_value_lookup_map = {"n" : "N", "N" : "N", "no" : "N", "f" : "N", "false" : "N",
         "y" : "Y", "Y" : "Y", "yes" : "Y", "t" : "Y", "true" : "Y"}
         self.default_value = "N"
         self.value_map = {"N" : empty_uset(), "Y" : empty_uset()}
@@ -133,15 +134,15 @@ class BinaryPropertyObject(PropertyObject):
     def addDataRecord(self, cp_lo, cp_hi, v):
         if v==None or v in self.property_value_lookup_map[v] == 'Y':
             self.value_map['Y'] = uset_union(self.value_map['Y'], range_uset(cp_lo, cp_hi))
-        else: 
+        else:
             self.value_map['Y'] = uset_difference(self.value_map['Y'], range_uset(cp_lo, cp_hi))
 
     def setDefaultValue(self, default):
         dflt = canonicalize(default)
-        if not dflt in self.property_value_lookup_map: 
+        if not dflt in self.property_value_lookup_map:
             raise Exception("Erroneous default value %s for property %s" % (default, self.full_name))
         dflt = self.property_value_lookup_map[dflt]
-        if dflt != "N": 
+        if dflt != "N":
             raise Exception("Binary properties must have default value No")
 
     def fromUnicodeSet(self, theUset):
@@ -187,10 +188,10 @@ class ExtensionPropertyObject(PropertyObject):
         base_items = base_item_list.split()
         for e in base_items:
             self.value_map[e] = uset_union(self.value_map[e], newset)
-    
+
     def finalizeProperty(self):
         explicitly_defined_cps = empty_uset()
-        for k in self.value_map.keys(): 
+        for k in self.value_map.keys():
             explicitly_defined_cps = uset_union(explicitly_defined_cps, self.value_map[k])
         # set <script> default
         for k in self.base_property.value_map.keys():
@@ -207,8 +208,8 @@ class StringPropertyObject(PropertyObject):
         self.cp_value_map = {}
         self.null_str_set = empty_uset()
         self.reflexive_set = empty_uset()
-        
-    def getPropertyKind(self): 
+
+    def getPropertyKind(self):
         return "String"
 
     def addDataRecord(self, cp_lo, cp_hi, stringValue):
@@ -237,14 +238,23 @@ class StringPropertyObject(PropertyObject):
         else:
             self.null_str_set = uset_union(self.null_str_set, uset_complement(uset_union(explicitly_defined_cps, self.reflexive_set)))
 
+    def getStringValue(self, cp):
+        if (cp in self.cp_value_map): return self.cp_value_map[cp]
+        if self.default_value == "<code point>": return chr(cp)
+        return ""
+
+
 class StringOverridePropertyObject(PropertyObject):
     def __init__(self, overridden_code):
         PropertyObject.__init__(self)
         self.cp_value_map = {}
         self.overridden_code = overridden_code
         self.overridden_set = empty_uset()
-        
-    def getPropertyKind(self): 
+
+    def setBaseObject(self, base_object):
+        self.base_object = base_object
+
+    def getPropertyKind(self):
         return "StringOverride"
 
     def addDataRecord(self, cp_lo, cp_hi, stringValue):
@@ -253,15 +263,24 @@ class StringOverridePropertyObject(PropertyObject):
             for cp in [int(x, 16) for x in stringValue.split(' ')]:
                 s += chr(cp)
             stringValue = s
-        else: 
+        else:
             raise Exception("Expecting codepoint string, but got " + stringValue)
-        for cp in range(cp_lo, cp_hi+1): self.cp_value_map[cp] = stringValue
+        for cp in range(cp_lo, cp_hi+1):
+            if stringValue != self.base_object.getStringValue(cp):
+                self.cp_value_map[cp] = stringValue
 
     def finalizeProperty(self):
         explicitly_defined_cps = empty_uset()
         for cp in self.cp_value_map.keys():
             explicitly_defined_cps = uset_union(explicitly_defined_cps, singleton_uset(cp))
         self.overridden_set = explicitly_defined_cps
+
+class BoundaryPropertyObject(PropertyObject):
+    def __init__(self):
+        PropertyObject.__init__(self)
+
+    def getPropertyKind(self): return "Boundary"
+
 
 class ObsoletePropertyObject(PropertyObject):
     def __init__(self):

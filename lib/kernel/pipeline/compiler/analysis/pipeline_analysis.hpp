@@ -20,6 +20,8 @@
 
 #define EXPERIMENTAL_SCHEDULING
 
+#include <boost/graph/connected_components.hpp>
+
 namespace kernel {
 
 struct PipelineAnalysis : public PipelineCommonGraphFunctions {
@@ -37,6 +39,8 @@ public:
 //        const auto graphSeed = 2081280305; //rng(); // 2081280305, 2081280305
 
 //        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
+
+        errs() << "generateInitialPipelineGraph\n";
 
         P.generateInitialPipelineGraph(b);
 
@@ -72,6 +76,8 @@ public:
         errs() << "generateInitialBufferGraph\n";
 
         P.generateInitialBufferGraph();
+
+        P.identifyOutputNodeIds();
 
         errs() << "computeNumOfStridesInterval\n";
 
@@ -211,8 +217,11 @@ private:
     void determineBufferLayout(BuilderRef b, random_engine & rng);
 
     void identifyLinearBuffers();
-    void identifyBufferLocality(); //const LinkedPartitionGraph & L
+    void identifyBufferLocality();
     void identifyLocalPortIds();
+
+    void identifyOutputNodeIds();
+
     // void identifyDirectUpdatesToStateObjects();
 
     // consumer analysis functions

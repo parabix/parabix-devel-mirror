@@ -248,7 +248,6 @@ void setTaskThreads(unsigned taskThreads) {
     unsigned coresPerTask = 2;  // assumption
 #endif
     SegmentThreads = std::min(coresPerTask, SegmentThreads);
-    //llvm::errs() << "Task threads: " << taskThreads << ", segment threads: " << SegmentThreads << "\n";
 }
 
 }

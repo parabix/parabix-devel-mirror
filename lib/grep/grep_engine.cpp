@@ -18,9 +18,7 @@
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Casting.h>
-#include <grep/grep_name_resolve.h>
 #include <grep/regex_passes.h>
-#include <grep/resolve_properties.h>
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/core/idisa_target.h>
@@ -363,6 +361,8 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
+        } else if (SplitTransposition) {
+            Staged_S2P(P, ByteStream, BasisBits);
         } else {
             P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }
@@ -829,8 +829,11 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
 
         StreamSet * FilteredBasis = E->CreateStreamSet(8, 1);
-        E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
-
+        if (SplitTransposition) {
+            Staged_S2P(E, Filtered, FilteredBasis);
+        } else {
+            E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
+        }
         // Baais bit streams expanded with 0 bits for each string to be inserted.
         StreamSet * ExpandedBasis = E->CreateStreamSet(8);
         SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
@@ -851,6 +854,9 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
 
         StreamSet * ColorizedCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
         E->CreateKernelCall<MatchCoordinatesKernel>(ColorizedBreaks, ColorizedBreaks, ColorizedCoords, 1);
+
+        // TODO: source coords >= colorized coords until the final stride?
+        // E->AssertEqualLength(SourceCoords, ColorizedCoords);
 
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
         Kernel * const matchK = E->CreateKernelCall<ColorizedReporter>(ColorizedBytes, SourceCoords, ColorizedCoords, callbackObject);
@@ -950,10 +956,10 @@ bool canMMap(const std::string & fileName) {
 uint64_t GrepEngine::doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) {
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, GrepCallBackObject *, size_t maxCount);
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-    GrepCallBackObject handler;
     uint64_t resultTotal = 0;
 
     for (auto fileName : fileNames) {
+        GrepCallBackObject handler;
         bool useMMap = mPreferMMap && canMMap(fileName);
         int32_t fileDescriptor = openFile(fileName, strm);
         if (fileDescriptor == -1) return 0;
@@ -1060,10 +1066,12 @@ uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, s
             ssize_t bytes_read = read(fileDescriptor[i], current_base, fileSize[i]);
             close(fileDescriptor[i]);
             if (bytes_read <= 0) continue; // No data or error reading the file; skip.
-            if (mBinaryFilesMode == argv::WithoutMatch) {
+            if ((mBinaryFilesMode == argv::WithoutMatch) || (mBinaryFilesMode == argv::Binary)) {
                 auto null_byte_ptr = memchr(current_base, char (0), bytes_read);
-                if (null_byte_ptr != nullptr) {
-                    continue;  // Binary file; skip.
+                if (null_byte_ptr != nullptr) { // Binary file;
+                    // Silently skip in the WithoutMatch mode
+                    if (mBinaryFilesMode == argv::WithoutMatch) continue;
+                    strm << "Binary file: " << fileNames[i] << " skipped.\n";
                 }
             }
             accum.mFileNames.push_back(fileNames[i]);
@@ -1289,6 +1297,29 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
     f(search_buffer, bufferLength, &accum);
 }
+
+class LineNumberAccumulator : public grep::MatchAccumulator {
+public:
+    LineNumberAccumulator() {}
+    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
+    std::vector<uint64_t> && getAccumulatedLines() { return std::move(mLineNums); }
+private:
+    std::vector<uint64_t> mLineNums;
+};
+
+void LineNumberAccumulator::accumulate_match(const size_t lineNum, char * /* line_start */, char * /* line_end */) {
+    mLineNums.push_back(lineNum);
+}
+
+std::vector<uint64_t> lineNumGrep(re::RE * pattern, const char * buffer, size_t bufSize) {
+      LineNumberAccumulator accum;
+      CPUDriver driver("driver");
+      grep::InternalSearchEngine engine(driver);
+      engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+      engine.grepCodeGen(pattern);
+      engine.doGrep(buffer, bufSize, accum);
+      return accum.getAccumulatedLines();
+  }
 
 InternalMultiSearchEngine::InternalMultiSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),

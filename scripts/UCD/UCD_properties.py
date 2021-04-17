@@ -13,16 +13,36 @@ import string, os.path
 from UCD_parser import *
 from UCD_property_objects import *
 
-PropertyAliases_template = r"""
+PropertyAliases_h_template = r"""
 namespace UCD {
-    enum property_t {
-        %s};
+    enum property_t : int {
+        %s,
+        Undefined = -1};
+    const std::string & getPropertyEnumName(const property_t);
+    const std::string & getPropertyFullName(const property_t);
+    property_t getPropertyCode(std::string & propertyIdent);
+}
+"""
+
+PropertyAliases_cpp_template = r"""
+namespace UCD {
     const static std::vector<std::string> property_enum_name = {
         %s};
     const static std::vector<std::string> property_full_name = {
         %s};
     static std::unordered_map<std::string, int> alias_map {{
         %s}};
+    const std::string & getPropertyEnumName(const property_t p) {
+        return property_enum_name[p];
+    }
+    const std::string & getPropertyFullName(const property_t p) {
+        return property_full_name[p];
+    }
+    property_t getPropertyCode(std::string & propertyIdent) {
+        auto propit = alias_map.find(propertyIdent);
+        if (propit == alias_map.end()) return Undefined;
+        return static_cast<property_t>(propit->second);
+    }
 }
 """
 
@@ -39,16 +59,19 @@ EnumeratedProperty_template = r"""
     }
 """
 
+def buffer_allocation_length(buffer_length):
+    return (max(buffer_length,1) + 255) & -256
+
 def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map):
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} mapping to <none>
         ${null_set_ranges}**/
-        
+
         ${null_set_value}
 
         /** Code Point Ranges for ${prop_enum} mapping to <codepoint>
         ${reflexive_set_ranges}**/
-        
+
         ${reflexive_set_value}
 
         const static std::vector<unsigned> buffer_offsets = {
@@ -57,18 +80,18 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
 
         const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
-        static StringPropertyObject property_object(${prop_enum}, 
-                                                    std::move(null_codepoint_set), 
-                                                    std::move(reflexive_set), 
-                                                    static_cast<const char *>(string_buffer), 
-                                                    std::move(buffer_offsets), 
+        static StringPropertyObject property_object(${prop_enum},
+                                                    std::move(null_codepoint_set),
+                                                    std::move(reflexive_set),
+                                                    static_cast<const char *>(string_buffer),
+                                                    std::move(buffer_offsets),
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
     buffer_offsets = [0]
-    for cp in cps: 
+    for cp in cps:
         string_buffer += cp_value_map[cp] + "\n"
         buffer_offsets.append(len(string_buffer.encode("utf-8")))
     buffer_length = buffer_offsets[-1]
@@ -76,7 +99,7 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
                          prop_enum_up = property_code.upper(),
                          string_buffer = string_buffer,
                          buffer_offsets = cformat.multiline_fill(['%i' % o for o in buffer_offsets], ',', 8),
-                         allocation_length = (buffer_length + 255) & -256,
+                         allocation_length = buffer_allocation_length(buffer_length),
                          null_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(null_set)], ',', 8),
                          null_set_value = null_set.generate("null_codepoint_set", 8),
                          reflexive_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(reflexive_set)], ',', 8),
@@ -98,18 +121,18 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
 
         const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
-        static StringOverridePropertyObject property_object(${prop_enum}, 
-                                                    ${overridden}, 
-                                                    std::move(explicitly_defined_set), 
-                                                    static_cast<const char *>(string_buffer), 
-                                                    std::move(buffer_offsets), 
+        static StringOverridePropertyObject property_object(${prop_enum},
+                                                    ${overridden},
+                                                    std::move(explicitly_defined_set),
+                                                    static_cast<const char *>(string_buffer),
+                                                    std::move(buffer_offsets),
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
     buffer_offsets = [0]
-    for cp in cps: 
+    for cp in cps:
         string_buffer += cp_value_map[cp] + "\n"
         buffer_offsets.append(len(string_buffer.encode("utf-8")))
     buffer_length = buffer_offsets[-1]
@@ -118,7 +141,7 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
                          overridden = overridden_code,
                          string_buffer = string_buffer,
                          buffer_offsets = cformat.multiline_fill(['%i' % o for o in buffer_offsets], ',', 8),
-                         allocation_length = (buffer_length + 255) & -256,
+                         allocation_length = buffer_allocation_length(buffer_length),
                          overridden_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(override_set)], ',', 8),
                          overridden_set_value = override_set.generate("explicitly_defined_set", 8),
                          explicitly_defined_cp_count = len(cps),
@@ -137,16 +160,16 @@ def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
 
         const static std::vector<codepoint_t> defined_cps = {
         ${explicitly_defined_cps}};
-        static NumericPropertyObject property_object(${prop_enum}, 
-                                                    std::move(NaN_set), 
-                                                    static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+        static NumericPropertyObject property_object(${prop_enum},
+                                                    std::move(NaN_set),
+                                                    static_cast<const char *>(string_buffer),
+                                                    buffer_length,
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
-    for cp in cps: 
+    for cp in cps:
         string_buffer += cp_value_map[cp] + "\n"
     string_buffer += "NaN\n"  # This inserts the standard default value for strings as the last entry
     buffer_length = len(string_buffer.encode("utf-8"))
@@ -154,7 +177,7 @@ def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
                          prop_enum_up = property_code.upper(),
                          string_buffer = string_buffer,
                          buffer_length = buffer_length,
-                         allocation_length = (buffer_length + 255) & -256,
+                         allocation_length = buffer_allocation_length(buffer_length),
                          NaN_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(NaN_set)], ',', 8),
                          NaN_set_value = NaN_set.generate("NaN_set", 8),
                          explicitly_defined_cp_count = len(cps),
@@ -221,11 +244,11 @@ def simple_CaseClosure_map(fold_data):
    return cl_map
 
 #
-# Simple case fold map.     
+# Simple case fold map.
 # The simple case fold map is an ordered list of fold entries each of
-# the form (lo_codepoint, hicodepoint, offset).  Each entry describes 
+# the form (lo_codepoint, hicodepoint, offset).  Each entry describes
 # the case fold that applies for the consecutive entries in the given
-# codepoint range, according to the following equations.  
+# codepoint range, according to the following equations.
 # casefold(x) = x + offset, if ((x - low_codepoint) div offset) mod 2 = 0
 #             = x - offset, if ((x - low_codepoint) div offset) mod 2 = 1
 #
@@ -247,7 +270,7 @@ def caseFoldRangeMap(casemap):
          projected = []
          for (cp0, offset) in open_entries:
             even_odd_offset_group = int(abs(cp - cp0)/ abs(offset)) & 1
-            if even_odd_offset_group == 0: 
+            if even_odd_offset_group == 0:
                projected_foldcp = cp + offset
             else: projected_foldcp = cp - offset
             if not projected_foldcp in casemap[cp]:
@@ -311,30 +334,43 @@ class UCD_generator():
         self.missing_specs = {}
         self.binary_properties = {}
 
+    def add_identity_property(self):
+        self.property_enum_name_list = ['identity'] + self.property_enum_name_list
+        ident_obj = StringPropertyObject()
+        ident_obj.setID('identity', 'Identity')
+        ident_obj.setDefaultValue("<code point>")
+        ident_obj.finalizeProperty()
+        self.property_object_map['identity'] = ident_obj
+
     def load_property_name_info(self):
         (self.property_enum_name_list, self.property_object_map) = parse_PropertyAlias_txt()
-        self.property_lookup_map = getPropertyLookupMap(self.property_object_map)
         self.full_name_map = {}
+        self.add_identity_property()
+        self.property_lookup_map = getPropertyLookupMap(self.property_object_map)
         for p in self.property_enum_name_list:
             self.full_name_map[p] = self.property_object_map[p].getPropertyFullName()
 
 
-    def generate_PropertyAliases_h(self):
+    def generate_PropertyAliases(self):
         f = cformat.open_header_file_for_write('PropertyAliases')
-        cformat.write_imports(f, ["<string>", "<unordered_map>", "<vector>"])
+        cformat.write_imports(f, ["<string>"])
         enum_text = cformat.multiline_fill(self.property_enum_name_list, ',', 8)
         enum_text2 = cformat.multiline_fill(['"%s"' % e for e in self.property_enum_name_list], ',', 8)
         full_name_text = cformat.multiline_fill(['"%s"' % self.full_name_map[e] for e in self.property_enum_name_list], ',', 8)
         map_text = cformat.multiline_fill(['{"%s", %s}' % (k, self.property_lookup_map[k]) for k in sorted(self.property_lookup_map.keys())], ',', 8)
-        f.write(PropertyAliases_template % (enum_text, enum_text2, full_name_text, map_text))
+        f.write(PropertyAliases_h_template % (enum_text))
         cformat.close_header_file(f)
+        f = cformat.open_cpp_file_for_write('PropertyAliases')
+        cformat.write_imports(f, ["<string>", "<unordered_map>", "<vector>", '<unicode/data/PropertyAliases.h>'])
+        f.write(PropertyAliases_cpp_template % (enum_text2, full_name_text, map_text))
+        cformat.close_cpp_file(f)
 
     def load_property_value_info(self):
         initializePropertyValues(self.property_object_map, self.property_lookup_map)
 
-    def generate_PropertyValueAliases_h(self):
+    def generate_PropertyValueAliases(self):
         f = cformat.open_header_file_for_write('PropertyValueAliases')
-        cformat.write_imports(f, ['"PropertyAliases.h"', "<vector>", "<unordered_map>", "<string>"])
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', "<vector>", "<unordered_map>", "<string>"])
         f.write("namespace UCD {\n")
         #  Generate the aliases for all Binary properties.
         enum_text = cformat.multiline_fill(['N', 'Y'], ',', 12)
@@ -390,89 +426,102 @@ class UCD_generator():
             emit_numeric_property(f, property_code, property_object.NaN_set, property_object.cp_value_map)
         elif isinstance(property_object, ObsoletePropertyObject):
             emit_Obsolete_property(f, property_code)
-        else: 
+        else:
             print("%s: unsupported property.")
             return
+        p = property_code.upper()
+        f.write("PropertyObject * get_%s_PropertyObject() {  return & %s_ns::property_object; }\n" % (p, p))
         self.supported_props.append(property_code)
+
+
+    def generate_Identity_property(self):
+        basename = 'Identity'
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
+        f.write("\nnamespace UCD {\n")
+        self.emit_property(f, 'identity')
+        f.write("}\n")
+        cformat.close_cpp_file(f)
+        self.property_data_headers.append(basename)
 
     def generate_property_value_file(self, filename_root, property_code):
         if not property_code in self.property_object_map.keys():
             print("Property code %s not in property_object_map" % property_code)
-            return 
+            return
         property_object = self.property_object_map[property_code]
         parse_property_data(self.property_object_map[property_code], filename_root + '.txt')
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code)
         f.write("}\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
     def generate_multisection_properties_file(self, filename_root):
         props = parse_multisection_property_data(filename_root + '.txt', self.property_object_map, self.property_lookup_map)
         #(props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in sorted(props):
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
     def generate_multicolumn_properties_file(self, filename_root, prop_code_list):
         props = parse_multicolumn_property_data(filename_root + '.txt', self.property_object_map, self.property_lookup_map, prop_code_list)
         #(props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
             if p in self.property_object_map: self.emit_property(f, p)
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
-    def generate_UnicodeData_h(self):
+    def generate_UnicodeData(self):
         basename = 'UnicodeData'
         parse_UnicodeData_txt(self.property_object_map)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         prop_code_list = ['na', 'dm', 'suc', 'slc', 'stc', 'na1', 'isc', 'nv']
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
-    def generate_SpecialCasing_h(self):
+    def generate_SpecialCasing(self):
         basename = 'SpecialCasing'
         parse_SpecialCasing_txt(self.property_object_map)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in ['lc', 'uc', 'tc']:
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
-    def generate_ScriptExtensions_h(self):
+    def generate_ScriptExtensions(self):
         filename_root = 'ScriptExtensions'
         property_code = 'scx'
         extension_object = self.property_object_map['scx']
         extension_object.setBaseProperty(self.property_object_map['sc'])
         parse_property_data(extension_object, filename_root+'.txt')
         basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         prop_list = self.property_object_map['sc'].name_list_order
         value_map = extension_object.value_map
         f.write("\nnamespace UCD {\n")
@@ -488,13 +537,14 @@ class UCD_generator():
         f.write("        UCD::sc,\n")
         f.write("       {")
         f.write(cformat.multiline_fill(set_list, ',', 8))
-        f.write("\n        }};\n    }\n}\n")
-        cformat.close_header_file(f)
+        f.write("\n        }};\n    }\n\n")
+        f.write("PropertyObject * get_SCX_PropertyObject() {  return & SCX_ns::property_object; }\n}\n")
+        cformat.close_cpp_file(f)
         print("%s: %s bytes" % (basename, sum([value_map[v].bytes() for v in value_map.keys()])))
         self.supported_props.append(property_code)
         self.property_data_headers.append(basename)
 
-    def generate_CompatibilityProperties_h(self):
+    def generate_CompatibilityProperties(self):
         basename = 'CompatibilityProperties'
         # alnum
         alnum = self.property_object_map["alnum"]
@@ -526,38 +576,50 @@ class UCD_generator():
         join_c = self.property_object_map["Join_C"].value_map['Y']
         word.fromUnicodeSet(union_of_all([alpha, digit, connector, mark, join_c]))
 
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         for p in Compatibility_Properties:
             if p in self.property_object_map: self.emit_property(f, p)
         f.write("}\n\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.property_data_headers.append(basename)
 
 
-    def generate_PropertyObjectTable_h(self):
+    def generate_PropertyObjectTable(self):
         f = cformat.open_header_file_for_write('PropertyObjectTable')
-        cformat.write_imports(f, ['"PropertyObjects.h"', '"PropertyAliases.h"', '<array>'])
-        cformat.write_imports(f, ['"%s.h"' % fname for fname in self.property_data_headers])
+        cformat.write_imports(f, ['<unicode/data/PropertyObjects.h>', '"PropertyAliases.h"'])
+        f.write("\nnamespace UCD {\n")
+        for p in self.property_enum_name_list:
+            if p in self.supported_props:
+                f.write("PropertyObject * get_%s_PropertyObject();\n" % p.upper())
+        f.write("\nPropertyObject * getPropertyObject(property_t property_code);\n}\n")
+        cformat.close_header_file(f)
+        f = cformat.open_cpp_file_for_write('PropertyObjectTable')
+        cformat.write_imports(f, ['<unicode/data/PropertyObjectTable.h>', '<array>'])
         f.write("\nnamespace UCD {\n")
         objlist = []
         for p in self.property_enum_name_list:
             k = self.property_object_map[p].getPropertyKind()
             if p in self.supported_props:
-                objlist.append("&%s_ns::property_object" % p.upper())
+                objlist.append("get_%s_PropertyObject()" % p.upper())
             else:
                 objlist.append("new UnsupportedPropertyObject(%s, PropertyObject::ClassTypeId::%sProperty)" % (p, k))
         f.write("\n  const std::array<PropertyObject *, %i> property_object_table = {{\n    " % len(objlist))
-        f.write(",\n    ".join(objlist) + '  }};\n}\n')
-        cformat.close_header_file(f)
+        f.write(",\n    ".join(objlist) + '  }};\n\n')
+        f.write("PropertyObject * getPropertyObject(property_t property_code) {\n")
+        f.write("    return property_object_table[property_code];\n}\n}")
 
-    def generate_UCD_Config_h(self):
-        setVersionfromReadMe_txt()
+        cformat.close_cpp_file(f)
+
+
+
+
+    def generate_UCD_Config(self):
         f = cformat.open_header_file_for_write('UCD_Config')
         f.write("#include <utility>\n")
         f.write("namespace UCD {\n")
-        f.write("\tconst auto UnicodeVersion = \"%s\";\n" % UCD_config.version)
+        f.write("\tconst auto UnicodeVersion = \"%s\";\n" % UCD_config.UCD_version_string)
         f.write("\tusing codepoint_t = unsigned;\n")
         f.write("\tenum : codepoint_t { UNICODE_MAX = %s };\n" % UCD_config.UCD_max_code_point)
         f.write("\tusing interval_t = std::pair<codepoint_t, codepoint_t>;\n")
@@ -565,25 +627,29 @@ class UCD_generator():
         cformat.close_header_file(f)
 
 
-    def genCaseFolding_h(self):
+    def genCaseFolding(self):
         basename = 'CaseFolding'
         fold_data = parse_CaseFolding_txt(self.property_object_map)
         cm = simple_CaseClosure_map(fold_data)
-        f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>', '<vector>'])
+        f = cformat.open_cpp_file_for_write(basename)
+        cformat.write_imports(f, ['<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>', '<vector>'])
         f.write(foldDeclarations)
         f.write(genFoldEntryData(cm))
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, 'scf')
         self.emit_property(f, 'cf')
         f.write("}\n")
-        cformat.close_header_file(f)
+        cformat.close_cpp_file(f)
         self.supported_props.append(['scf', 'cf'])
         self.property_data_headers.append(basename)
 
 
 
 def UCD_main():
+    cformat.open_output_directory()
+    setVersionfromReadMe_txt()
+    if UCD_config.version != UCD_config.UCD_version_string:
+        print("UCD version mismatch %s vs %s" % (UCD_config.version, UCD_config.UCD_version_string))
     ucd = UCD_generator()
 
     # First parse all property names and their aliases
@@ -591,17 +657,19 @@ def UCD_main():
     #
     # Generate the PropertyAliases.h file to define all the Unicode property_t enum
     # and the basic property information.
-    ucd.generate_PropertyAliases_h()
+    ucd.generate_PropertyAliases()
     #
     # Next parse all property value names and their aliases.  Generate the data.
     ucd.load_property_value_info()
 
-    ucd.generate_UnicodeData_h()
-    
-    ucd.generate_SpecialCasing_h()
-    
-    ucd.genCaseFolding_h()
-    
+    ucd.generate_Identity_property()
+
+    ucd.generate_UnicodeData()
+
+    ucd.genCaseFolding()
+
+    ucd.generate_SpecialCasing()
+
     ucd.generate_multicolumn_properties_file('NameAliases', ['Name_Alias', 'Alias_Kind'])
 
     #
@@ -610,19 +678,19 @@ def UCD_main():
     #
     # The Block property
     ucd.generate_property_value_file('Blocks', 'blk')
-    
+
     # Scripts
     ucd.generate_property_value_file('Scripts', 'sc')
     #
     # # Script Extensions
-    ucd.generate_ScriptExtensions_h()
+    ucd.generate_ScriptExtensions()
     # #
     # General Category
     ucd.generate_property_value_file('extracted/DerivedGeneralCategory', 'gc')
-    
+
     # Binary properties from PropList.txt
     ucd.generate_multisection_properties_file('PropList')
-    
+
     # Binary properties from DerivedCoreProperties.txt
     ucd.generate_multisection_properties_file('DerivedCoreProperties')
     #
@@ -682,17 +750,17 @@ def UCD_main():
     #
     ucd.generate_property_value_file('Jamo', 'JSN')
     #
-    ucd.generate_CompatibilityProperties_h()
-    # 
+    ucd.generate_CompatibilityProperties()
+    #
         # Binary properties from PropList.txt
     ucd.generate_multisection_properties_file('emoji/emoji-data')
-    
+
     #
-    ucd.generate_PropertyValueAliases_h()
+    ucd.generate_PropertyValueAliases()
 
-    ucd.generate_PropertyObjectTable_h()
+    ucd.generate_PropertyObjectTable()
 
-    ucd.generate_UCD_Config_h()
+    ucd.generate_UCD_Config()
 
 if __name__ == "__main__":
   UCD_main()

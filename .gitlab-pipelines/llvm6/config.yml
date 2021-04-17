@@ -4,7 +4,6 @@ stages:
 
 build_llvm6:
   stage: build
-  image: luizperes/parabix:llvm-6.0.1
   script:
     - mkdir build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -12,9 +11,10 @@ build_llvm6:
 
 .test-default: &test-default
   stage: test
-  image: luizperes/parabix:llvm-6.0.1
   script:
     - mkdir -p build && cd build
+    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
+    # LLVM 6 is currently the default LLVM on cs-osl machines
     - cmake -DCMAKE_BUILD_TYPE=Release ..
     - make -j4 check && make kernel-tests
 
@@ -28,13 +28,7 @@ merge_request_llvm6:
     - if: '$CI_MERGE_REQUEST_IID'
 
 .test-avx-default: &test-avx-default
-  stage: test
-  script:
-    - mkdir -p build && cd build
-    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
-    # LLVM 6 is currently the default LLVM on cs-osl-08
-    - cmake -DCMAKE_BUILD_TYPE=Release ..
-    - make -j4 check && make kernel-tests
+  <<: *test-default
 
 test_avx2_llvm6:
   <<: *test-avx-default

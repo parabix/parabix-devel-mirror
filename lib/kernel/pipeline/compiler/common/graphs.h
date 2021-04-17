@@ -274,6 +274,7 @@ struct BufferNode {
     size_t   OverflowCapacity = 0;
     size_t   UnderflowCapacity = 0;
 
+    unsigned OutputItemCountId = 0;
 
     bool isOwned() const {
         return (Type & BufferType::Unowned) == 0;

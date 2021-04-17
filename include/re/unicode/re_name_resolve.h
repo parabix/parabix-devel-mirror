@@ -5,8 +5,8 @@ namespace re {
 
     class RE;
     class Name;
-
-    RE * resolveUnicodeNames(RE * re);
+    enum class NameStandard {Posix, Unicode};
+    RE * resolveEscapeNames(RE * re, NameStandard c = NameStandard::Unicode);
     RE * resolveAnchors(RE * r, RE * breakRE);
 
 }

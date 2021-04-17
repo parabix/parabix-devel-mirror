@@ -60,9 +60,9 @@ CC::CC(const CC * cc1, const CC * cc2)
 }
 
 
-CC::CC(const UCD::UnicodeSet && set, const cc::Alphabet * alphabet)
+CC::CC(const UCD::UnicodeSet set, const cc::Alphabet * alphabet)
 : RE(ClassTypeId::CC)
-, UCD::UnicodeSet(std::move(set))
+, UCD::UnicodeSet(set)
 , mAlphabet(alphabet) {}
 
 

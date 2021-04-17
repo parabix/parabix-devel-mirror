@@ -12,7 +12,7 @@
 #include <pablo/builder.hpp>
 #include <pablo/pe_ones.h>
 #include <re/ucd/ucd_compiler.hpp>
-#include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <llvm/Support/raw_ostream.h>
@@ -74,8 +74,10 @@ void WordMarkKernel::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("source"));
     UCD::UCDCompiler ucdCompiler(ccc);
-    re::Name * word = re::makeName("word", re::Name::Type::UnicodeProperty);
-    word = llvm::cast<re::Name>(re::resolveUnicodeNames(word));
+    re::RE * word_prop = re::makePropertyExpression("word");
+    word_prop = UCD::linkAndResolve(word_prop);
+    word_prop = UCD::externalizeProperties(word_prop);
+    re::Name * word = llvm::cast<re::Name>(word_prop);
     UCD::UCDCompiler::NameMap nameMap;
     nameMap.emplace(word, nullptr);
     ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);

@@ -1,7 +1,7 @@
 #ifndef PIPELINE_KERNEL_COMPILER_CONFIG_H
 #define PIPELINE_KERNEL_COMPILER_CONFIG_H
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 // #define DISABLE_ZERO_EXTEND
 
@@ -26,5 +26,7 @@
 // #define CHECK_EVERY_IO_PORT
 
 #define ENABLE_GRAPH_TESTING_FUNCTIONS
+
+// #define USE_LOOKBEHIND_FOR_LAST_VALUE // must match pipeline/internal/popcount_kernel.h
 
 #endif // PIPELINE_KERNEL_COMPILER_CONFIG_H

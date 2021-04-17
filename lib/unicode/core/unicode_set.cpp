@@ -264,9 +264,11 @@ void UnicodeSet::print(llvm::raw_ostream & out) const noexcept {
     } else {
         char joiner = '(';
         for (auto r : *this) {
-            out << joiner << std::get<0>(r);
+            out << joiner;
+            out.write_hex(std::get<0>(r));
             if (std::get<0>(r) != std::get<1>(r)) {
-                out << '-' << std::get<1>(r);
+                out << '-';
+                out.write_hex(std::get<1>(r));
             }
             joiner = ',';
         }

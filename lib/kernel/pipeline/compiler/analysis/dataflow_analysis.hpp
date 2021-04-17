@@ -88,15 +88,6 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
         return Z3_mk_mul(ctx, 2, args);
     };
 
-    auto abs_sub =[&](Z3_ast X, Z3_ast Y) {
-        Z3_ast args_1[2] = { X, Y };
-        const auto a = Z3_mk_sub(ctx, 2, args_1);
-        Z3_ast args_2[2] = { Y, X };
-        const auto b = Z3_mk_sub(ctx, 2, args_2);
-        const auto c = Z3_mk_le(ctx, X, Y);
-        return Z3_mk_ite(ctx, c, b, a);
-    };
-
     const auto ONE = Z3_mk_int(ctx, 1, realType);
 
     for (unsigned i = 0; i < numOfKernels; ++i) {
@@ -167,9 +158,7 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
                 assert (h != kernels.end() && *h == consumer);
                 const auto consumerId = std::distance(kernels.begin(), h);
 
-                if (LLVM_UNLIKELY(rate.isGreedy())) {
-                    soft_assert(Z3_mk_eq(ctx, expReps[consumerId], ONE));
-                } else {
+                if (LLVM_LIKELY(!rate.isGreedy())) {
 
                     const auto strideSize = node.Kernel->getStride();
                     const auto sum = rate.getLowerBound() + rate.getUpperBound();
@@ -183,9 +172,11 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
                         hard_assert(Z3_mk_ge(ctx, expOutRate, expInRate));
                         soft_assert(Z3_mk_eq(ctx, expOutRate, expInRate));
                     }
+
                 }
 
             }
+
         }
     }
 
@@ -202,7 +193,7 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
 
-        __int64 num, denom;
+        Z3_int64 num, denom;
         if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
@@ -403,13 +394,13 @@ void PipelineAnalysis::computeNumOfStridesInterval() {
 
         // Any kernel with all greedy rates must exhaust its input in a single iteration.
         if (LLVM_UNLIKELY(numOfGreedyRates > 0)) {
-            const auto ONE = Z3_mk_int(ctx, 1, intType);
-            const auto constraint = Z3_mk_eq(ctx, stridesPerSegmentVar, ONE);
             if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, mBufferGraph))) {
+                const auto ONE = Z3_mk_int(ctx, 1, intType);
+                const auto constraint = Z3_mk_eq(ctx, stridesPerSegmentVar, ONE);
                 hard_assert(constraint);
-            } else {
-                assumptions[LowerBound].push_back(constraint);
-                assumptions[UpperBound].push_back(constraint);
+//            } else {
+//                assumptions[LowerBound].push_back(constraint);
+//                assumptions[UpperBound].push_back(constraint);
             }
         }
 
@@ -489,7 +480,7 @@ void PipelineAnalysis::computeNumOfStridesInterval() {
                         report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
                     }
 
-                    __int64 num, denom;
+                    Z3_int64 num, denom;
                     if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
                         report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
                     }
@@ -846,6 +837,7 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
     if (!mLengthAssertions.empty()) {
         flat_map<const StreamSet *, unsigned> M;
 
+<<<<<<< HEAD
         for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
             const auto output = in_edge(streamSet, mBufferGraph);
             const BufferPort & br = mBufferGraph[output];
@@ -863,6 +855,17 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
             const auto A = VarList[offset(la[0])];
             const auto B = VarList[offset(la[1])];
             hard_assert(Z3_mk_eq(ctx, A, B));
+=======
+        Z3_int64 z3_num, z3_denom;
+        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &z3_num, &z3_denom) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+        }
+        assert (z3_num > 0);
+
+        const auto r = Rational{z3_num, z3_denom};
+        for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
+            current[kernel][bound] = r;
+>>>>>>> origin/master
         }
     }
 
@@ -903,7 +906,18 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
     Graph::edge_iterator begin, end;
     std::tie(begin, end) = edges(G);
 
+<<<<<<< HEAD
     auto ei = begin;
+=======
+                    Z3_int64 z3_num, z3_denom;
+                    if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &z3_num, &z3_denom) != Z3_L_TRUE)) {
+                        report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+                    }
+                    assert (z3_num > 0);
+                    current[kernel][bound] = Rational{z3_num, z3_denom};
+                }
+                Z3_model_dec_ref(ctx, model);
+>>>>>>> origin/master
 
     enum ConstraintType {
         EQ,

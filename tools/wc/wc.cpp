@@ -211,8 +211,10 @@ void WordCountKernel::generatePabloMethod() {
         pb.createAssign(lc, pb.createCount(LF));
     }
     if (CountWords) {
+        re::RE * WS_prop = re::makePropertyExpression("space");
+        WS_prop = UCD::linkAndResolve(WS_prop);
         re::Name * WS_name = re::makeName("space", re::Name::Type::UnicodeProperty);
-        WS_name->setDefinition(re::makeCC(UCD::resolveUnicodeSet(WS_name), &cc::Unicode));
+        WS_name->setDefinition(cast<PropertyExpression>(WS_prop)->getResolvedRE());
         UCD::UCDCompiler unicodeCompiler(*ccc.get());
         UCD::UCDCompiler::NameMap nameMap;
         nameMap.emplace(WS_name, nullptr);

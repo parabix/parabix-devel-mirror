@@ -4,18 +4,17 @@ stages:
 
 build_llvm5:
   stage: build
-  image: luizperes/parabix:llvm-5.0.2
   script:
     - mkdir build && cd build
-    - cmake -DCMAKE_BUILD_TYPE=Release ..
+    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm5 -DCMAKE_BUILD_TYPE=Release ..
     - make -j4
 
 .test-default: &test-default
   stage: test
-  image: luizperes/parabix:llvm-5.0.2
   script:
     - mkdir -p build && cd build
-    - cmake -DCMAKE_BUILD_TYPE=Release ..
+    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
+    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm5 -DCMAKE_BUILD_TYPE=Release ..
     - make -j4 check && make kernel-tests
 
 test_llvm5:
@@ -28,12 +27,7 @@ merge_request_llvm5:
     - if: '$CI_MERGE_REQUEST_IID'
 
 .test-avx512-default: &test-avx512-default
-  stage: test
-  script:
-    - mkdir -p build && cd build
-    # Make sure the runner has LLVM installed on /opt/llvm/libllvm{LLVM_VERSION}
-    - cmake -DCMAKE_PREFIX_PATH=/opt/llvm/libllvm5 -DCMAKE_BUILD_TYPE=Release ..
-    - make -j4 check && make kernel-tests
+  <<: *test-default
   tags:
     - avx512
 

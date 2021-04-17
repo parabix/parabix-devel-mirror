@@ -17,33 +17,15 @@
 namespace re { class RE; }
 
 namespace UCD {
-class PropertyObject;
-class BinaryPropertyObject;
-class EnumeratedPropertyObject;
-class ExtensionPropertyObject;
-class NumericPropertyObject;
-class StringPropertyObject;
-class StringOverridePropertyObject;
-}
-
-namespace grep {
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::PropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::BinaryPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::EnumeratedPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::ExtensionPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::NumericPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::StringPropertyObject * propObj, re::RE * pattern);
-const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::StringOverridePropertyObject * propObj, re::RE * pattern);
-}
-
-namespace UCD {
     
 std::string canonicalize_value_name(const std::string & prop_or_val);
 
+// Recursive property resolution is implemented using a grep lines function
+// that takes a text buffer and returns a vector of matched line numbers.
+typedef std::vector<uint64_t> (*GrepLinesFunctionType)(re::RE *, const char * buf, size_t bufSize);
+
 class PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(PropertyObject *, re::RE *);
-
     enum class ClassTypeId : unsigned {
         BinaryProperty,
         EnumeratedProperty,
@@ -51,6 +33,7 @@ public:
         NumericProperty,
         StringProperty,
         StringOverrideProperty,
+        BoundaryProperty,
         ObsoleteProperty,
         UnsupportedProperty
     };
@@ -64,9 +47,11 @@ public:
     }
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
     virtual const UnicodeSet GetCodepointSet(const std::string & prop_value_string);
-    // virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern);
-    virtual const UnicodeSet GetReflexiveSet() const;
-    virtual const std::string GetStringValue(UCD::codepoint_t cp) const;
+    virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType);
+    virtual const UnicodeSet GetNullSet() const;   // The set of codepoints mapping to the empty string.
+    virtual const UnicodeSet GetReflexiveSet() const;  // The set of codepoints mapping to themselves.
+    virtual const std::string GetStringValue(UCD::codepoint_t cp) const;  // The mapping for a codepoint.
+    virtual const UnicodeSet GetPropertyIntersection(PropertyObject * p);
 
     virtual const std::string & GetPropertyValueGrepString();
     const property_t the_property;
@@ -76,8 +61,6 @@ public:
 
 class BinaryPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(BinaryPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::BinaryProperty;
     }
@@ -91,9 +74,11 @@ public:
     , mN() {
 
     }
+    int GetPropertyValueEnumCode(const std::string & value_spec);
     const UnicodeSet GetCodepointSet(const std::string & prop_value_string) override;
     // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
+    const UnicodeSet GetPropertyIntersection(PropertyObject * p) override;
     const std::string & GetPropertyValueGrepString() override;
 private:
     const UnicodeSet mY;
@@ -103,8 +88,6 @@ private:
 
 class EnumeratedPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(EnumeratedPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::EnumeratedProperty;
     }
@@ -129,9 +112,10 @@ public:
     }
 
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
+    int GetEnumCount() {return independent_enum_count;}
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE *, GrepLinesFunctionType) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
     std::vector<UnicodeSet> & GetEnumerationBasisSets();
     unsigned GetEnumerationValue(codepoint_t cp);
@@ -159,8 +143,6 @@ private:
 
 class ExtensionPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(ExtensionPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::ExtensionProperty;
     }
@@ -186,7 +168,7 @@ public:
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
 
 private:
     const property_t base_property;
@@ -195,8 +177,6 @@ private:
 
 class NumericPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(NumericPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::NumericProperty;
     }
@@ -214,7 +194,7 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & numeric_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
 
 private:
     const UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
@@ -225,8 +205,6 @@ private:
 
 class StringPropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(StringPropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::StringProperty;
     }
@@ -245,9 +223,11 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
+    const UnicodeSet GetNullSet() const override;
     const UnicodeSet GetReflexiveSet() const override;
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
+    const UnicodeSet GetPropertyIntersection(PropertyObject * p) override;
 
 private:
     const UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
@@ -261,8 +241,6 @@ private:
 
 class StringOverridePropertyObject final : public PropertyObject {
 public:
-    friend const UnicodeSet grep::GetCodepointSetMatchingPattern(StringOverridePropertyObject *, re::RE *);
-
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::StringOverrideProperty;
     }
@@ -281,11 +259,13 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    // const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern, GrepLinesFunctionType) override;
+    const UnicodeSet GetNullSet() const override;
     const UnicodeSet GetReflexiveSet() const override;
     const UCD::property_t GetBaseProperty() {return mBaseProperty;}
     const UnicodeSet & GetOverriddenSet() const {return mOverriddenSet;}
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
+    const UnicodeSet GetPropertyIntersection(PropertyObject * p) override;
 
 private:
     UCD::property_t mBaseProperty;  // the base object that provides default values for this property unless overridden.
@@ -294,6 +274,22 @@ private:
     const std::vector<unsigned> mStringOffsets;        // the offsets of each string within the buffer.
     //unsigned mBufSize;                               // mStringOffsets has one extra element for buffer size.
     const std::vector<codepoint_t> mExplicitCps;
+};
+
+class BoundaryPropertyObject final : public PropertyObject {
+public:
+    static inline bool classof(const PropertyObject * p) {
+        return p->getClassTypeId() == ClassTypeId::BoundaryProperty;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+    BoundaryPropertyObject(UCD::property_t p)
+    : PropertyObject(p, ClassTypeId::BoundaryProperty)
+    {
+
+    }
 };
 
 class ObsoletePropertyObject final : public PropertyObject {
@@ -325,9 +321,6 @@ public:
     UnsupportedPropertyObject(property_t p, ClassTypeId)
     : PropertyObject(p, ClassTypeId::UnsupportedProperty) {}
 };
-    
-    
-PropertyObject * getPropertyObject(property_t property_code);
 
 }
 

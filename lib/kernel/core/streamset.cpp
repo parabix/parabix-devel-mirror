@@ -140,7 +140,11 @@ unsigned StreamSetBuffer::getFieldWidth() const {
  */
 Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Value * absolutePosition) const {
     Type * const itemTy = mBaseType->getArrayElementType()->getVectorElementType();
+    #if LLVM_VERSION_CODE < LLVM_VERSION_CODE(13, 0, 0)
     const auto itemWidth = itemTy->getPrimitiveSizeInBits();
+    #else
+    const auto itemWidth = itemTy->getPrimitiveSizeInBits().getFixedSize();
+    #endif
     IntegerType * const sizeTy = b->getSizeTy();
     streamIndex = b->CreateZExt(streamIndex, sizeTy);
     absolutePosition = b->CreateZExt(absolutePosition, sizeTy);
@@ -563,7 +567,6 @@ void StaticBuffer::copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consum
 
 }
 
-
 Value * StaticBuffer::getMallocAddress(BuilderPtr b) const {
     if (mLinear) {
         Value * const ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(MallocedAddress)});
@@ -977,6 +980,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             b->CreateStore(mallocAddress, priorBufferField);
             b->CreateStore(expandedBuffer, mallocAddrField);
             b->CreateMemCpy(expandedBuffer, unreadDataPtr, bytesToCopy, blockSize);
+
             BasicBlock * const expandAndCopyBackExit = b->GetInsertBlock();
             b->CreateBr(updateBaseAddress);
 

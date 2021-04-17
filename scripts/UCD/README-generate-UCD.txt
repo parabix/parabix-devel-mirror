@@ -1,14 +1,15 @@
 Generating UCD data files.
 
-1. Edit UCD_config.py - set UCD_src_dir, UCD_output_dir
+1. Edit UCD_config.py - set the Unicode version
+   Ensure that the Unicode database is placed in the UCD_src_dir
    Make sure that emoji files have been placed in the emoji subdirectory of the UCD_src_dir
-   Create the UCD_output_dir
 
 2. python3 UCD_properties.py
-   copy generated UCD_Config.h to include/unicode/core
-   copy other generated files to include/unicode/data
 3. python3 UCD_equivalence.py
-   copy generated Equivalence.cpp to lib/unicode/data
-   copy generated PrecomposedMappings.h  to include/unicode/data
-4. python3 generate_UCD_tests.py > proptest.xml
+4, python3 Unihan_parser.py  -- for CJK Radical support
+5. copy generated include/UCD_Config.h to include/unicode/core
+   copy other generated include files to include/unicode/data
+   copy generated src files to lib/unicode/data
+
+6. python3 generate_UCD_tests.py > proptest.xml
    copy proptest.xml to the QA directory

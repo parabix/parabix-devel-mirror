@@ -5,7 +5,7 @@
 // This option is mostly for testing lookbehind of an input streamset but
 // creates a cross-thread memory dependency that is otherwise unnecessary.
 
-// #define USE_LOOKBEHIND_FOR_LAST_VALUE
+// #define USE_LOOKBEHIND_FOR_LAST_VALUE // must match pipeline/compiler/config.h
 
 using namespace llvm;
 
@@ -244,6 +244,21 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
     b->CreateCondBr(done, popCountLoop, popCountExit);
 
     b->SetInsertPoint(popCountExit);
+
+    #ifndef USE_LOOKBEHIND_FOR_LAST_VALUE
+    if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
+        Value * count = positivePartialSum;
+        if (LLVM_UNLIKELY(mType == PopCountType::NEGATIVE)) {
+            count = negativePartialSum;
+        }
+        assert (count);
+        b->setScalarField("count", count);
+    } else {
+        b->setScalarField("posCount", positivePartialSum);
+        b->setScalarField("negCount", negativePartialSum);
+    }
+    #endif
+
 }
 
 #ifdef USE_LOOKBEHIND_FOR_LAST_VALUE

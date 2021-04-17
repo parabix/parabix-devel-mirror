@@ -385,8 +385,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
     }
 
 
-
-
 }
 
 
@@ -436,8 +434,89 @@ void PipelineAnalysis::identifyBufferLocality() { //const LinkedPartitionGraph &
         bn.Locality = BufferLocality::GloballyShared;
     }
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyLinearBuffers
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::identifyOutputNodeIds() {
+
+    if (mLengthAssertions.empty()) {
+
+        for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+            BufferNode & bn = mBufferGraph[streamSet];
+            bn.OutputItemCountId = streamSet;
+        }
+
+    } else {
+
+        const auto n = LastStreamSet - FirstStreamSet + 1;
+
+        flat_map<const StreamSet *, unsigned> StreamSetToNodeIdMap;
+        StreamSetToNodeIdMap.reserve(n);
+
+        for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+            assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
+            const StreamSet * const ss = cast<StreamSet>(mStreamGraph[streamSet].Relationship);
+            StreamSetToNodeIdMap.emplace(ss, streamSet - FirstStreamSet);
+        }
+
+        std::vector<unsigned> component(n);
+        std::iota(component.begin(), component.end(), 0);
+
+        std::function<unsigned(unsigned)> find = [&](unsigned x) {
+            assert (x < n);
+            if (component[x] != x) {
+                component[x] = find(component[x]);
+            }
+            return component[x];
+        };
+
+        auto union_find = [&](unsigned x, unsigned y) {
+
+            x = find(x);
+            y = find(y);
+
+            if (x < y) {
+                component[y] = x;
+            } else {
+                component[x] = y;
+            }
+
+        };
+
+        for (const auto & pair : mLengthAssertions) {
+            unsigned id[2];
+            for (unsigned i = 0; i < 2; ++i) {
+                const auto f = StreamSetToNodeIdMap.find(pair[i]);
+                if (f == StreamSetToNodeIdMap.end()) {
+                    report_fatal_error("Length equality assertions contains an unknown streamset");
+                }
+                id[i] = f->second;
+            }
+            auto a = id[0], b = id[1];
+            if (b > a) {
+                std::swap(a, b);
+            }
+            union_find(a, b);
+        }
+
+
+
+
+
+        for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+            BufferNode & bn = mBufferGraph[streamSet];
+            const auto id = FirstStreamSet + find(component[streamSet - FirstStreamSet]);
+            assert (id >= FirstStreamSet && id <= streamSet);
+            bn.OutputItemCountId = id;
+        }
+
+    }
+
 
 }
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinearBuffers

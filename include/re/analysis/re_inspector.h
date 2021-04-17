@@ -35,6 +35,7 @@ protected:
     virtual void inspectRange(Range * rg);
     virtual void inspectGroup(Group * g);
     virtual void inspectAssertion(Assertion * a);
+    virtual void inspectPropertyExpression(PropertyExpression * pe);
 private:
     const InspectionMode mIgnoreNonUnique;
     std::set<RE *, MemoizerComparator> mMap;

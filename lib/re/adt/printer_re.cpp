@@ -136,6 +136,25 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         }
         retVal.append(PrintRE(g->getRE()));
         retVal.append(")");
+    } else if (const PropertyExpression * pe = dyn_cast<const PropertyExpression>(re)) {
+        if (pe->getKind() == PropertyExpression::Kind::Boundary) {
+            retVal = "Boundary(";
+        } else {
+            retVal = "Property(";
+        }
+        retVal.append(pe->getPropertyIdentifier());
+        PropertyExpression::Operator op = pe->getOperator();
+        std::string val_str = pe->getValueString();
+        if ((val_str != "") || (op != PropertyExpression::Operator::Eq)) {
+            if (op == PropertyExpression::Operator::Eq) retVal.append(":");
+            else if (op == PropertyExpression::Operator::NEq) retVal.append("!=");
+            else if (op == PropertyExpression::Operator::LEq) retVal.append("<=");
+            else if (op == PropertyExpression::Operator::GEq) retVal.append(">=");
+            else if (op == PropertyExpression::Operator::Less) retVal.append("<");
+            else if (op == PropertyExpression::Operator::Greater) retVal.append(">");
+            retVal.append(pe->getValueString());
+        }
+        retVal.append(")");
     } else if (isa<const Start>(re)) {
         retVal = "Start";
     } else if (isa<const Any>(re)) {
