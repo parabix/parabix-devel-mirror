@@ -22,41 +22,6 @@
 using namespace kernel;
 using namespace pablo;
 
-
-GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(BuilderRef iBuilder, StreamSet *BasisBits, StreamSet * u8index, StreamSet * GCB_stream)
-: PabloKernel(iBuilder, re::AnnotateWithREflags("gcb"),
-// inputs
-{Binding{"basis", BasisBits},
- Binding{"u8index", u8index, FixedRate(), ZeroExtended()}},
-// output
-{Binding{"\\b{g}", GCB_stream, FixedRate(), Add1()}}) {
-
-}
-
-void GraphemeClusterBreakKernel::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::vector<PabloAST *> basis = getInputStreamSet("basis");
-    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
-    UCD::UCDCompiler unicodeCompiler(ccc);
-    re::RE_Compiler re_compiler(getEntryScope(), &cc::UTF8);
-    re_compiler.addAlphabet(&cc::UTF8, basis);
-    re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
-    GCB = UCD::linkAndResolve(GCB);
-    GCB = UCD::externalizeProperties(GCB);
-    std::set<re::Name *> externals;
-    re::gatherNames(GCB, externals);
-    UCD::UCDCompiler::NameMap nameMap;
-    for (auto & name : externals) {
-        nameMap.emplace(name, nullptr);
-    }
-    unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    PabloAST * u8index = pb.createExtract(getInputStreamVar("u8index"), pb.getInteger(0));
-    re_compiler.addPrecompiled("UTF8_index", re::RE_Compiler::Marker(u8index));
-    re::RE_Compiler::Marker gcb_marker = re_compiler.compileRE(GCB);
-    Var * const breaks = getOutputStreamVar("\\b{g}");
-    pb.createAssign(pb.createExtract(breaks, pb.getInteger(0)), gcb_marker.stream());
-}
-
 BoundaryKernel::BoundaryKernel(BuilderRef kb, StreamSet * PropertyBasis, StreamSet * IndexStream, StreamSet * BoundaryStream, bool invert)
 : PabloKernel(kb, "boundary_" + std::to_string(PropertyBasis->getNumElements()) + (invert ? "x1_negated" : "x1"),
               {Binding{"basis", PropertyBasis}, Binding{"index", IndexStream, FixedRate(), ZeroExtended()}},

@@ -73,17 +73,13 @@ WordMarkKernel::WordMarkKernel(BuilderRef kb, StreamSet * BasisBits, StreamSet *
 void WordMarkKernel::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("source"));
-    UCD::UCDCompiler ucdCompiler(ccc);
     re::RE * word_prop = re::makePropertyExpression("word");
     word_prop = UCD::linkAndResolve(word_prop);
-    word_prop = UCD::externalizeProperties(word_prop);
-    re::Name * word = llvm::cast<re::Name>(word_prop);
-    UCD::UCDCompiler::NameMap nameMap;
-    nameMap.emplace(word, nullptr);
-    ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    auto f = nameMap.find(word);
-    if (f == nameMap.end()) llvm::report_fatal_error("Cannot find word property");
-    PabloAST * wordChar = f->second;
+    re::CC * word_CC = cast<re::CC>(cast<re::PropertyExpression>(word_prop)->getResolvedRE());
+    Var * wordChar = pb.createVar("word");
+    UCD::UCDCompiler unicodeCompiler(ccc, pb);
+    unicodeCompiler.addTarget(wordChar, word_CC);
+    unicodeCompiler.compile();
     pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(0)), wordChar);
 }
 

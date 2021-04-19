@@ -40,14 +40,14 @@ class UCDCompiler {
     static const RangeList noIfHierachy;
 
 public:
-
+    enum class IfHierarchy {None, Default};
     using NameMap = boost::container::flat_map<re::Name *, PabloAST *>;
 
-    UCDCompiler(cc::CC_Compiler & ccCompiler);
+    UCDCompiler(cc::CC_Compiler & ccCompiler, PabloBuilder & pb);
 
-    void generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry);
+    void addTarget(pablo::Var * theVar, re::CC * theCC);
 
-    void generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry);
+    void compile(IfHierarchy h = IfHierarchy::Default);
 
 protected:
 
@@ -78,10 +78,9 @@ protected:
 
     static RangeList innerRanges(const RangeList & list);
 
-    void makeTargets(PabloBuilder & entry, NameMap & names);
-
 private:
     cc::CC_Compiler &       mCodeUnitCompiler;
+    PabloBuilder &          mPb;
     PabloAST *              mSuffixVar;
     TargetMap               mTarget;
     ValueMap                mTargetValue;

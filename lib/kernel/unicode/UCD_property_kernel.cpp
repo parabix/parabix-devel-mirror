@@ -12,6 +12,7 @@
 #include <re/ucd/ucd_compiler.hpp>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
+#include <pablo/pe_zeroes.h>
 #include <llvm/Support/ErrorHandling.h>
 
 using namespace kernel;
@@ -36,14 +37,12 @@ void UnicodePropertyKernelBuilder::generatePabloMethod() {
     } else {
         ccc = llvm::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
-    UCD::UCDCompiler unicodeCompiler(*ccc.get());
-    UCD::UCDCompiler::NameMap nameMap;
-    nameMap.emplace(mName, nullptr);
-    unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    auto f = nameMap.find(mName);
-    if (f == nameMap.end()) llvm::report_fatal_error("Unknown property");
-    PabloAST * theStream = f-> second;
+    UCD::UCDCompiler unicodeCompiler(*ccc.get(), pb);
+    re::CC * propertyCC = llvm::cast<re::CC>(mName->getDefinition());
+    pablo::Var * propertyVar = pb.createVar(mName->getFullName(), pb.createZeroes());
+    unicodeCompiler.addTarget(propertyVar, propertyCC);
+    unicodeCompiler.compile();
     Var * const property_stream = getOutputStreamVar("property_stream");
-    pb.createAssign(pb.createExtract(property_stream, pb.getInteger(0)), theStream);
+    pb.createAssign(pb.createExtract(property_stream, pb.getInteger(0)), propertyVar);
 }
 

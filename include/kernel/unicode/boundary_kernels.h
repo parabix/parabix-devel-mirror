@@ -9,13 +9,6 @@
 
 namespace kernel {
     
-class GraphemeClusterBreakKernel : public pablo::PabloKernel {
-public:
-    GraphemeClusterBreakKernel(BuilderRef kb, StreamSet * BasisBits, StreamSet * RequiredStreams, StreamSet * GCB_stream);
-protected:
-    void generatePabloMethod() override;
-};
-
 /*  Given a set of 1 or more property basis streams and an
     index stream marking final code unit positions, determine
     a boundary stream at each index position such that a
