@@ -41,6 +41,7 @@ class LGPhraseCompressor:
                 if not segment:
                     break
                 words = compress_words.Compressor().readSegment(segment)
+                #print(words, 'words')
                 self.wordsLen += len(words)
                 self.words = words
                 # first compress the segment for all the possible 4 word phrases.
@@ -58,7 +59,10 @@ class LGPhraseCompressor:
                         phraseLen, self.cmp)
                     #print(self.cmp, 'self.cmp')
                 self.compressed += self.cmp
+        # self.printSummary()
+        return self.compressed
 
+    def printSummary(self):
         print(self.wordsLen, 'words length')
         # print('collisions: collisionsCWLenExceeded -> ',
         #      self.collisionsCWLenExceeded)
@@ -68,16 +72,14 @@ class LGPhraseCompressor:
         print("freqPhraseToCodewordHashTableList table size")
         for h in self.freqPhraseToCodewordHashTableList:
             print(len(h))
-        #    for i in h.items():
-        #        print(i)
-        print("lengthwisePhraseList table size")
-        for h in self.lengthwisePhraseList:
-            print(len(h))
-        #print("All hashVals")
-        # for h in self.allHashVals.items():
-        #    print(h)
-        #print(self.compressed, 'self.compressed')
-        return self.compressed
+            for i in h.items():
+                print(i)
+        #print("lengthwisePhraseList table size")
+        # for h in self.lengthwisePhraseList:
+        #    print(len(h))
+        print("All hashVals")
+        for h in self.allHashVals.items():
+            print(h)
 
     def idPhraseCompress(self, phraseLen, words):
         compress = bytearray(b'')
@@ -91,6 +93,7 @@ class LGPhraseCompressor:
             if index+(phraseLen-1) < wordsLen:
                 phrase, singleByteSyms = compress_words.Compressor().getPhrase(
                     words, index, phraseLen, wordsLen)
+                #print(phrase, 'check phrase')
             else:
                 for w in words[index::]:
                     compress += bytearray(w, 'utf-8')
@@ -104,11 +107,11 @@ class LGPhraseCompressor:
             hashTablePos = -1
             hashVal, hashTablePos, startIdx = self.getHashValfromTable(
                 wLen, phrase)
-            if hashVal:  # and index < (startIdx+phraseLen+singleByteSyms):
+            # and index < (startIdx+phraseLen+singleByteSyms): ---> overlapping phrases elimination?
+            if hashVal:
                 if self.printPlainText:
                     compress += bytearray(phrase, 'utf-8')
                 if self.printWordCodeword:
-                    # compressed += bytearray(phrase+'-41>', 'utf-8')
                     compress += bytearray(str(hashVal), 'utf-8')
                 if not self.hideHashVal:
                     compress += hashVal
@@ -118,7 +121,6 @@ class LGPhraseCompressor:
                     compress += bytearray(phrase, 'utf-8')
                     index += (singleByteSyms + phraseLen)
                 elif 3 <= wLen <= 32:
-                    #print(phrase, '-->phrase')
                     encodedWord = self.checkPhraseFreq(
                         wLen, hashTablePos, phrase, phraseLen+singleByteSyms, None, index)
                     if encodedWord:
@@ -142,7 +144,6 @@ class LGPhraseCompressor:
         index = 0
         subCompressed = bytearray(b'')
         # add error check to confirm any valid UTF-8 sequences are not ignored
-        # because they consist of code unit > 0xC0 (192)
         length = len(compressed)
         plaintext = bytearray(b'')
         while index < length:
@@ -151,7 +152,6 @@ class LGPhraseCompressor:
                 while index < length and compressed[index] < 192:
                     plaintext.append(compressed[index])
                     index += 1
-                # print(plaintext, 'plaintext')
             else:
                 codeWord = bytearray(b'')
                 if compressed[index] >= 192 and compressed[index] <= 223 and index+1 < length:
@@ -235,10 +235,8 @@ class LGPhraseCompressor:
                                                                         numSymsInPhrase)
         encodedPrefix = 0
         sfxIdx = 0
-        # while encodedPrefix == 0:
         encodedPrefix = compress_words.Compressor(
         ).getPrefix(encodedSuffix[0], wLen)
-        # sfxIdx += 1
         if encodedPrefix <= 247:
             # switch just one of the suffix bytes(first one) to ASCII value
             encodedSuffix[0] = encodedSuffix[0] % 128
@@ -256,8 +254,8 @@ class LGPhraseCompressor:
     # generate codeword for all phrases, if a phrase is repeated previously, use the codeword corresponding to the phrase in compressing
     # (only if the codeword doesn't conflict with another phrase previously seen in the input => needed for decompression to easily identify the phrase corresponding to a codeword)
 
-# generate codeword for every phrase and save in hash table
-# if codeword conflict found, pass the phrase compression
+    # generate codeword for every phrase and save in hash table
+    # if codeword conflict found, ignore the phrase compression
 
     def checkPhraseFreq(self, wLen, hashTablePos, word, numSymsInPhrase, encodedWord, startIdx):
         encodedWord, codeword = self.getCodeword(word, numSymsInPhrase)

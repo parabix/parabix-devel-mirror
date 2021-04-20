@@ -63,9 +63,10 @@ if __name__ == '__main__':
     if options.decompress:
         for algorithm in DecmpAlgorithmList:
             decompressedData = algorithm.Decompress(text)
-            # print(decompressedData.decode('utf-8'))
+            print(decompressedData)
         output_file = open(decompressFileName, "wb")
-        output_file.write(decompressedData.decode('utf-8'))
+        #decompressedData = decompressedData.decode('utf-8')
+        output_file.write(decompressedData)
         output_file.close()
     else:
         # segment the input as per unicode text segmentation rules
