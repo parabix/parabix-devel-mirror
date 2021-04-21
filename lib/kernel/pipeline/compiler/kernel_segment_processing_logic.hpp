@@ -50,8 +50,6 @@ void PipelineCompiler::start(BuilderRef b) {
     initializePipelineInputTerminationSignal(b);
     identifyAllInternallySynchronizedKernels();
 
-
-
     mKernel = nullptr;
     mKernelId = 0;
 
@@ -77,6 +75,8 @@ void PipelineCompiler::start(BuilderRef b) {
 inline void PipelineCompiler::executeKernel(BuilderRef b) {
     clearInternalStateForCurrentKernel();
 
+    checkForPartitionEntry(b);
+
     mFixedRateLCM = getLCMOfFixedRateInputs(mKernel);
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
@@ -87,7 +87,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     identifyPipelineInputs(mKernelId);
     identifyLocalPortIds(mKernelId);
-    checkForPartitionEntry(b);    
 
     const auto kernelRequiresSynchronization = RequiresSynchronization[mKernelId];
 
@@ -125,7 +124,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
 
     #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
-
     const auto nextPartitionId = mCurrentPartitionId + 1U;
     const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
     const auto canJumpToAnotherPartition = mIsPartitionRoot && (mIsBounded || nextPartitionId == jumpId);
@@ -138,7 +136,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     const auto prefix = makeKernelName(mKernelId);
 
     /// -------------------------------------------------------------------------------------
-    /// KERNEL ENTRY
+    /// BASIC BLOCK CONSTRUCTION
     /// -------------------------------------------------------------------------------------
 
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", mNextPartitionEntryPoint);
@@ -170,6 +168,16 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     // Subsequent optimization phases will collapse it into the correct exit block.
     mKernelLoopExitPhiCatch = b->CreateBasicBlock(prefix + "_kernelExitPhiCatch", mNextPartitionEntryPoint);
     mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", mNextPartitionEntryPoint);
+
+    /// -------------------------------------------------------------------------------------
+    /// KERNEL ENTRY
+    /// -------------------------------------------------------------------------------------
+
+    if (mIsPartitionRoot) {
+        identifyPartitionKernelRange();
+        determinePartitionStrideRates();
+        calculatePartitionSegmentLength(b);
+    }
 
     readProcessedItemCounts(b);
     readProducedItemCounts(b);
@@ -371,16 +379,16 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         debugPrint(b, "* " + prefix + ".totalStridesOnExit = %" PRIu64, mTotalNumOfStridesAtExitPhi);
         #endif
 
-        if (mIsPartitionRoot) {
-            const auto factor = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
-            mNumOfPartitionStrides = b->CreateMulRational(mTotalNumOfStridesAtExitPhi, factor);
-            // mNumOfPartitionStrides = b->CreateAdd(mNumOfPartitionStrides, mPartialPartitionStridesAtLoopExitPhi);
-            #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, "* " + prefix + ".partitionStridesAdded = %" PRIu64, mPartialPartitionStridesAtLoopExitPhi);
-            debugPrint(b, "* " + prefix + ".partitionStridesOnExit = %" PRIu64, mNumOfPartitionStrides);
-            debugPrint(b, "* " + prefix + ".partitionTerminationOnExit = %" PRIu8, mTerminatedAtExitPhi);
-            #endif
-        }
+//        if (mIsPartitionRoot) {
+//            const auto factor = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
+//            mNumOfPartitionStrides = b->CreateMulRational(mTotalNumOfStridesAtExitPhi, factor);
+//            // mNumOfPartitionStrides = b->CreateAdd(mNumOfPartitionStrides, mPartialPartitionStridesAtLoopExitPhi);
+//            #ifdef PRINT_DEBUG_MESSAGES
+//            debugPrint(b, "* " + prefix + ".partitionStridesAdded = %" PRIu64, mPartialPartitionStridesAtLoopExitPhi);
+//            debugPrint(b, "* " + prefix + ".partitionStridesOnExit = %" PRIu64, mNumOfPartitionStrides);
+//            debugPrint(b, "* " + prefix + ".partitionTerminationOnExit = %" PRIu8, mTerminatedAtExitPhi);
+//            #endif
+//        }
     }
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
@@ -613,7 +621,7 @@ inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b)
     mIsFinalInvocationPhi = b->CreatePHI(sizeTy, 2, prefix + "_isFinalPhi");
     mPartialPartitionStridesPhi = nullptr;
     if (mIsPartitionRoot) {
-        mPartialPartitionStridesPhi = b->CreatePHI(sizeTy, 2, prefix + "_partialPartitionStrides");
+        // mPartialPartitionStridesPhi = b->CreatePHI(sizeTy, 2, prefix + "_partialPartitionStrides");
     }
 }
 

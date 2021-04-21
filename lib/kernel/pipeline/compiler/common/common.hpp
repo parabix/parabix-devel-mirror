@@ -347,6 +347,7 @@ private:
 template <typename Graph>
 LLVM_READNONE
 inline typename graph_traits<Graph>::edge_descriptor first_in_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    assert (in_degree(u, G) >= 1);
     return *in_edges(u, G).first;
 }
 
@@ -366,6 +367,7 @@ inline typename graph_traits<Graph>::vertex_descriptor parent(const typename gra
 template <typename Graph>
 LLVM_READNONE
 inline typename graph_traits<Graph>::edge_descriptor first_out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    assert (out_degree(u, G) >= 1);
     return *out_edges(u, G).first;
 }
 

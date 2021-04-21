@@ -246,7 +246,8 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
 
     // Now fill in all of the remaining kernels subsitute position
     KernelPartitionId.resize(numOfKernels);
-    ExpectedNumOfStrides.resize(numOfKernels);
+
+    MinimumNumOfStrides.resize(numOfKernels);
 
     KernelPartitionId[PipelineInput] = 0;
 
@@ -258,19 +259,21 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
 
     const auto origPartitionCount = num_vertices(partitionGraph);
 
-    auto calculateExpectedNumOfStrides = [&](const unsigned kernelId, const unsigned partitionId) {
+    auto calculateExpectedNumOfStrides = [&](const unsigned kernelId, const unsigned partitionId) -> unsigned {
         assert (partitionId < origPartitionCount);
         const PartitionData & P = partitionGraph[partitionId];
         const auto & R = P.Repetitions;
         if (R.empty()) {
-            return Rational{0};
+            return 0U;
         }
         const Partition & K = P.Kernels;
         assert (P.Repetitions.size() == K.size());
         const auto k = std::find(K.begin(), K.end(), kernelId);
         assert (k != K.end());
         const auto j = std::distance(K.begin(), k);
-        return R[j] * P.ExpectedRepetitions;
+        const auto expected = R[j] * P.ExpectedRepetitions;
+        assert (expected.numerator() > 0 && expected.denominator() == 1);
+        return expected.numerator();
     };
 
     SmallVector<unsigned, 64> remappedPartitionId(origPartitionCount);
@@ -286,7 +289,7 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
         assert (f != PartitionIds.end());
         const auto origPartitionId = f->second;
 
-        ExpectedNumOfStrides[i] = calculateExpectedNumOfStrides(in, origPartitionId);
+        MinimumNumOfStrides[i] = calculateExpectedNumOfStrides(in, origPartitionId);
 
         // renumber the partitions to reflect the selected ordering
         #ifndef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
@@ -310,7 +313,7 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
     const auto f = PartitionIds.find(PipelineOutput);
     assert (f != PartitionIds.end());
     const auto origPartitionId = f->second;
-    ExpectedNumOfStrides[newPipelineOutput] = calculateExpectedNumOfStrides(PipelineOutput, origPartitionId);
+    MinimumNumOfStrides[newPipelineOutput] = calculateExpectedNumOfStrides(PipelineOutput, origPartitionId);
 
     END_SCOPED_REGION
 

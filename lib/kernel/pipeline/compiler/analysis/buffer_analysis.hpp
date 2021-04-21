@@ -138,7 +138,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
         const RelationshipNode & node = mStreamGraph[kernel];
         const Kernel * const kernelObj = node.Kernel; assert (kernelObj);
 
-
         auto makeBufferPort = [&](const RelationshipType port,
                                   const RelationshipNode & bindingNode,
                                   const unsigned streamSet) -> BufferPort {
@@ -174,12 +173,11 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             BufferPort bp(port, binding, lb, ub);
 
             bool cannotBePlacedIntoThreadLocalMemory = false;
-            bool mustBeGloballyShared = false;
             bool mustBeLinear = false;
 
             if (LLVM_UNLIKELY(rate.getKind() == RateId::Unknown)) {
                 bp.IsManaged = true;
-                mustBeGloballyShared = true;
+                cannotBePlacedIntoThreadLocalMemory = true;
             }
 
             for (const Attribute & attr : binding.getAttributes()) {
@@ -209,12 +207,12 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                         mustBeLinear = true;
                         break;
                     case AttrId::Deferred:
-                        mustBeGloballyShared = true;
+                        cannotBePlacedIntoThreadLocalMemory = true;
                         mustBeLinear = true;
                         bp.IsDeferred = true;
                         break;
                     case AttrId::SharedManagedBuffer:
-                        mustBeGloballyShared = true;
+                        cannotBePlacedIntoThreadLocalMemory = true;
                         bp.IsShared = true;
                         break;                        
                     case AttrId::ManagedBuffer:
@@ -225,12 +223,8 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             }
 
             BufferNode & bn = mBufferGraph[streamSet];
-            if (cannotBePlacedIntoThreadLocalMemory || mustBeGloballyShared) {
-                if (mustBeGloballyShared) {
-                    bn.Locality = BufferLocality::GloballyShared;
-                } else if (bn.Locality == BufferLocality::ThreadLocal) {
-                    bn.Locality = BufferLocality::PartitionLocal;
-                }
+            if (cannotBePlacedIntoThreadLocalMemory) {
+                bn.Locality = BufferLocality::PartitionLocal;
             }
             if (mustBeLinear) {
                 bn.NonLinear = false;
@@ -390,9 +384,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief identifyBufferLocality
+ * @brief markInterPartitionStreamSetsAsGloballyShared
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::identifyBufferLocality() { //const LinkedPartitionGraph & L)
+void PipelineAnalysis::markInterPartitionStreamSetsAsGloballyShared() {
 
     for (const auto input : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(input, mBufferGraph);
@@ -414,17 +408,8 @@ void PipelineAnalysis::identifyBufferLocality() { //const LinkedPartitionGraph &
             if (partitionId != consumerPartitionId) {
                 BufferNode & bn = mBufferGraph[streamSet];
                 bn.Locality = BufferLocality::GloballyShared;
-
-//                if (edge(partitionId, consumerPartitionId, L).second) {
-//                    if (bn.Locality == BufferLocality::ThreadLocal) {
-//                        bn.Locality = BufferLocality::PartitionLocal;
-//                    }
-//                } else {
-//                    bn.Locality = BufferLocality::GloballyShared;
-//                }
                 break;
             }
-
         }
     }
 

@@ -215,14 +215,22 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
     auto printStreamSet = [&](const unsigned streamSet) {
         out << "v" << streamSet << " [shape=record,";
         const BufferNode & bn = mBufferGraph[streamSet];
-        if (bn.isNonThreadLocal()) {
-            out << "style=bold,";
+        switch (bn.Locality) {
+            case BufferLocality::GloballyShared:
+            case BufferLocality::PartitionLocal:
+                out << "style=bold,";
+            default:
+                break;
         }
-        #ifdef PERMIT_BUFFER_MEMORY_REUSE
-        if (bn.Locality == BufferLocality::ThreadLocal) {
-            out << "color=blue,";
+
+        switch (bn.Locality) {
+            case BufferLocality::ThreadLocal:
+            case BufferLocality::PartitionLocal:
+                out << "color=blue,";
+            default:
+                break;
         }
-        #endif
+
         out << "label=\"" << streamSet << "|{";
 
         const StreamSetBuffer * const buffer = bn.Buffer;
@@ -335,14 +343,15 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         const auto borders = nonLinear ? '2' : '1';
         out << "v" << kernel << " [label=\"[" <<
                 kernel << "] " << name << "\\n";
-        if (ExpectedNumOfStrides.size() > 0) {
-            out << " Expected: ";
-            print_rational(ExpectedNumOfStrides[kernel]);
-            if (MinimumNumOfStrides.size() > 0) {
-                out << " ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
-                             print_rational(MaximumNumOfStrides[kernel]) << "]";
+        if (MinimumNumOfStrides.size() > 0) {
+            out << " Expected: [";
+            if (MaximumNumOfStrides.size() > 0) {
+                print_rational(MinimumNumOfStrides[kernel]) << ',';
+                print_rational(MaximumNumOfStrides[kernel]);
+            } else {
+                print_rational(MinimumNumOfStrides[kernel]) << ",?";
             }
-            out << "\\n";
+            out << "]\\n";
         }
         if (kernelObj->canSetTerminateSignal()) {
             out << "<CanTerminateEarly>\\n";

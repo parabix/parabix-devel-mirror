@@ -19,15 +19,6 @@ void PipelineAnalysis::determineBufferSize(BuilderRef b) {
         const auto producerOutput = in_edge(streamSet, mBufferGraph);
         const BufferPort & producerRate = mBufferGraph[producerOutput];
 
-        bool cannotBePlacedIntoThreadLocalMemory = false;
-        bool mustBeGloballyShared = false;
-
-        // Does this stream cross a partition boundary?
-        const auto producer = source(producerOutput, mBufferGraph);
-        if (producer == PipelineInput) {
-            mustBeGloballyShared = true;
-        }
-
         if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
 
             // TODO: If we have an open system, then the input rate to this pipeline cannot
@@ -45,14 +36,11 @@ void PipelineAnalysis::determineBufferSize(BuilderRef b) {
             auto maxLookAhead = producerRate.LookAhead;
             auto maxLookBehind = producerRate.LookBehind;
 
+            const auto producer = source(producerOutput, mBufferGraph);
+
             auto bMin = floor(producerRate.Minimum * MinimumNumOfStrides[producer]);
             auto bMax = ceiling(producerRate.Maximum * MaximumNumOfStrides[producer]);
 
-            assert (producerRate.Maximum >= producerRate.Minimum);
-
-            if (producerRate.Minimum < producerRate.Maximum) {
-                cannotBePlacedIntoThreadLocalMemory = true;
-            }
 
             for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
 
@@ -64,11 +52,6 @@ void PipelineAnalysis::determineBufferSize(BuilderRef b) {
                 const auto cMax = ceiling(consumerRate.Maximum * MaximumNumOfStrides[consumer]);
 
                 assert (cMax >= cMin);
-
-                // Could we consume less data than we produce?
-                if (consumerRate.Minimum < consumerRate.Maximum) {
-                    mustBeGloballyShared = true;
-                }
 
                 assert (consumerRate.Maximum >= consumerRate.Minimum);
 
@@ -102,25 +85,11 @@ void PipelineAnalysis::determineBufferSize(BuilderRef b) {
             const auto reqSize2 = 2 * (overflowSize + underflowSize);
             auto requiredSize = std::max(reqSize1, reqSize2);
 
-            // if this buffer is "stateful", we cannot make it *thread* local
-            if (maxLookBehind || maxDelay || bn.CopyBack || maxLookAhead) {
-                cannotBePlacedIntoThreadLocalMemory = true;
-            }
-
             bn.OverflowCapacity = overflowSize;
             bn.UnderflowCapacity = underflowSize;
             bn.RequiredCapacity = requiredSize;
 
         }
-
-        if (cannotBePlacedIntoThreadLocalMemory || mustBeGloballyShared) {
-            if (mustBeGloballyShared) {
-                bn.Locality = BufferLocality::GloballyShared;
-            } else if (bn.Locality == BufferLocality::ThreadLocal) {
-                bn.Locality = BufferLocality::PartitionLocal;
-            }
-        }
-
     }
 
 

@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <queue>
 #include <z3.h>
-#include <util/maxsat.hpp>
+// #include <util/maxsat.hpp>
 #include <assert.h>
 
 #include <kernel/core/kernel.h>
@@ -61,7 +61,7 @@ public:
 
         errs() << "computeExpectedDataFlowRates\n";
 
-        P.computeExpectedDataFlowRates(partitionGraph);
+        P.computeMinimumExpectedDataflow(partitionGraph);
 
         errs() << "schedulePartitionedProgram\n";
 
@@ -81,7 +81,11 @@ public:
 
         errs() << "computeNumOfStridesInterval\n";
 
-        P.computeNumOfStridesInterval();
+//        #ifdef PRINT_BUFFER_GRAPH
+//        P.printBufferGraph(errs());
+//        #endif
+
+        P.computeMaximumExpectedDataflow();
 
         errs() << "computeInterPartitionSymbolicRates\n";
 
@@ -97,7 +101,10 @@ public:
 
         errs() << "identifyBufferLocality\n";
 
-        P.identifyBufferLocality(); // linkedPartitions
+        P.markInterPartitionStreamSetsAsGloballyShared(); // linkedPartitions
+
+
+        P.makePartitionIOGraph();
 
         errs() << "identifyTerminationChecks\n";
 
@@ -113,7 +120,10 @@ public:
         P.identifyLinearBuffers();
 
         // Make the remaining graphs
-        P.makeConsumerGraph();        
+        P.makeConsumerGraph();
+
+
+
         P.makePartitionJumpTree();
         P.makeTerminationPropagationGraph();
 
@@ -126,6 +136,8 @@ public:
         #ifdef PRINT_BUFFER_GRAPH
         P.printBufferGraph(errs());
         #endif
+
+     //   exit(-1);
 
         return P;
     }
@@ -184,6 +196,8 @@ private:
 
     PartitionGraph identifyKernelPartitions();
 
+    void makePartitionIOGraph();
+
     void determinePartitionJumpIndices();
 
     void makePartitionJumpTree();
@@ -217,7 +231,7 @@ private:
     void determineBufferLayout(BuilderRef b, random_engine & rng);
 
     void identifyLinearBuffers();
-    void identifyBufferLocality();
+    void markInterPartitionStreamSetsAsGloballyShared();
     void identifyLocalPortIds();
 
     void identifyOutputNodeIds();
@@ -230,9 +244,9 @@ private:
 
     // dataflow analysis functions
 
-    void computeExpectedDataFlowRates(PartitionGraph & P);
+    void computeMinimumExpectedDataflow(PartitionGraph & P);
 
-    void computeNumOfStridesInterval();
+    void computeMaximumExpectedDataflow();
 
     void identifyInterPartitionSymbolicRates();
 
@@ -302,11 +316,12 @@ public:
 
     Partition                       KernelPartitionId;
 
-    std::vector<Rational>           ExpectedNumOfStrides;
-    std::vector<Rational>           MinimumNumOfStrides;
-    std::vector<Rational>           MaximumNumOfStrides;
+    std::vector<unsigned>           MinimumNumOfStrides;
+    std::vector<unsigned>           MaximumNumOfStrides;
 
     BufferGraph                     mBufferGraph;
+
+    PartitionIOGraph                mPartitionIOGraph;
     std::vector<unsigned>           mPartitionJumpIndex;
     PartitionJumpTree               mPartitionJumpTree;
 

@@ -146,6 +146,7 @@ public:
     void checkForPartitionEntry(BuilderRef b);
     void identifyPartitionKernelRange();
     void determinePartitionStrideRates();
+    void calculatePartitionSegmentLength(BuilderRef b);
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
 
     void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
@@ -464,12 +465,13 @@ protected:
     const bool                                  TraceProducedItemCounts;
 
     const Partition                             KernelPartitionId;
-    const std::vector<Rational>                 MinimumNumOfStrides;
-    const std::vector<Rational>                 MaximumNumOfStrides;
+    const std::vector<unsigned>                 MinimumNumOfStrides;
+    const std::vector<unsigned>                 MaximumNumOfStrides;
 
     const RelationshipGraph                     mStreamGraph;
     const RelationshipGraph                     mScalarGraph;
     const BufferGraph                           mBufferGraph;
+    const PartitionIOGraph                      mPartitionIOGraph;
     const std::vector<unsigned>                 mPartitionJumpIndex;
     const PartitionJumpTree                     mPartitionJumpTree;
     const ConsumerGraph                         mConsumerGraph;
@@ -524,8 +526,12 @@ protected:
     unsigned                                    mCurrentPartitionId = 0;
     unsigned                                    FirstKernelInPartition = 0;
     unsigned                                    LastKernelInPartition = 0;
+
+    Value *                                     mPartitionSegmentLength = nullptr;
+    Value *                                     mPartitionAnyClosed = nullptr;
+
     Value *                                     mNumOfPartitionStrides = nullptr;
-    Rational                                    MaxPartitionStrideRate;
+    unsigned                                    MaxPartitionStrideRate;
     Rational                                    PartitionStrideFactor;
     Value *                                     mPartitionRootTerminationSignal = nullptr;
     BasicBlock *                                mNextPartitionEntryPoint;
@@ -720,6 +726,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mStreamGraph(std::move(P.mStreamGraph))
 , mScalarGraph(std::move(P.mScalarGraph))
 , mBufferGraph(std::move(P.mBufferGraph))
+, mPartitionIOGraph(std::move(P.mPartitionIOGraph))
 , mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))
 , mPartitionJumpTree(std::move(P.mPartitionJumpTree))
 , mConsumerGraph(std::move(P.mConsumerGraph))

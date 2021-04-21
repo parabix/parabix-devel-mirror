@@ -1298,8 +1298,13 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
                 const Binding & b = rn.Binding;
                 const ProcessingRate & rate = b.getRate();
                 if (rate.isGreedy()) {
-                    const auto f = first_in_edge(j, G);
-                    add_edge(j, i, G[f], G);
+                    if (in_degree(j, G) > 0) {
+                        const auto f = first_in_edge(j, G);
+                        add_edge(j, i, G[f], G);
+                    } else {
+                        #warning handle greedy rates better here
+                        add_edge(j, i, Rational{1}, G);
+                    }
                 } else {
                     // If we have a PopCount producer/consumer in the same partition,
                     // they're both perform an identical number of strides. So long
@@ -1338,8 +1343,6 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
         }
     }
 
-
-
     // add fake input arcs
     flat_set<unsigned> externalStreamSets;
     for (const auto e : make_iterator_range(in_edges(currentPartitionId, P))) {
@@ -1374,6 +1377,42 @@ SchedulingGraph PipelineAnalysis::makeIntraPartitionSchedulingGraph(const Partit
         }
 
         add_edge(fakeInput, j, itemsPerStride, G);
+    }
+
+    for (auto i = fakeInput + 1; i < fakeOutput; ++i) {
+        const auto u = kernels[i - 1U];
+        const RelationshipNode & node = Relationships[u];
+        assert (node.Type == RelationshipNode::IsKernel);
+        const auto strideSize = currentPartition.Repetitions[i - 1U] * node.Kernel->getStride();
+        assert (strideSize > 0);
+
+        for (const auto e : make_iterator_range(in_edges(u, Relationships))) {
+            const auto binding = source(e, Relationships);
+            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+                const auto f = first_in_edge(binding, Relationships);
+                assert (Relationships[f].Reason != ReasonType::Reference);
+                const auto streamSet = source(f, Relationships);
+                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
+                const auto j = getStreamSetIndex(streamSet);
+                assert (j < num_vertices(G));
+                const RelationshipNode & rn = Relationships[binding];
+                const Binding & b = rn.Binding;
+                const ProcessingRate & rate = b.getRate();
+                if (rate.isGreedy()) {
+                    const auto f = first_in_edge(j, G);
+                    add_edge(j, i, G[f], G);
+                } else {
+                    // If we have a PopCount producer/consumer in the same partition,
+                    // they're both perform an identical number of strides. So long
+                    // as the producing/consuming strideRate match, the equation will
+                    // work. Since the lower bound of PopCounts is 0, we always use the
+                    // upper bound.
+                    const auto itemsPerStride = rate.getUpperBound() * strideSize;
+                    add_edge(j, i, itemsPerStride, G);
+                }
+            }
+        }
     }
 
     // add fake output arcs

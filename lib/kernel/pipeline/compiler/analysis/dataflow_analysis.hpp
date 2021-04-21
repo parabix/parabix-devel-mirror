@@ -6,48 +6,9 @@
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeExpectedDataFlowRates
+ * @brief computeMinimumExpectedDataflow
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
-
-    const auto numOfPartitions = num_vertices(P);
-
-    Partition kernels;
-
-    for (unsigned partition = 0; partition < numOfPartitions; ++partition) {
-        PartitionData & N = P[partition];
-        const auto & K = N.Kernels;
-        kernels.insert(kernels.end(), K.begin(), K.end());
-        N.Repetitions.resize(K.size());
-    }
-
-    const auto numOfKernels = kernels.size();
-
-    std::sort(kernels.begin(), kernels.end());
-
-    Partition streamSets;
-
-    for (const auto u : kernels) {
-        const RelationshipNode & node = Relationships[u];
-        assert (node.Type == RelationshipNode::IsKernel);
-        for (const auto e : make_iterator_range(out_edges(u, Relationships))) {
-            const auto binding = target(e, Relationships);
-            if (Relationships[binding].Type == RelationshipNode::IsBinding) {
-                const auto f = first_out_edge(binding, Relationships);
-                assert (Relationships[f].Reason != ReasonType::Reference);
-                const auto streamSet = target(f, Relationships);
-                assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
-                assert (isa<StreamSet>(Relationships[streamSet].Relationship));
-                streamSets.push_back(streamSet);
-            }
-        }
-    }
-
-    const auto numOfStreamSets = streamSets.size();
-
-    std::sort(streamSets.begin(), streamSets.end());
-
-    std::vector<Z3_ast> expReps(numOfKernels);
+void PipelineAnalysis::computeMinimumExpectedDataflow(PartitionGraph & P) {
 
     const auto cfg = Z3_mk_config();
     Z3_set_param_value(cfg, "model", "true");
@@ -67,14 +28,14 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
     };
 
     auto check = [&]() -> Z3_lbool {
-        #if Z3_VERSION_INTEGER > 40500
+        #if Z3_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 5, 0)
         return Z3_optimize_check(ctx, solver, 0, nullptr);
         #else
         return Z3_optimize_check(ctx, solver);
         #endif
     };
 
-    const auto realType = Z3_mk_int_sort(ctx);
+    const auto intType = Z3_mk_int_sort(ctx);
 
     auto constant_real = [&](const Rational value) {
         assert (value.numerator() > 0);
@@ -88,146 +49,157 @@ void PipelineAnalysis::computeExpectedDataFlowRates(PartitionGraph & P) {
         return Z3_mk_mul(ctx, 2, args);
     };
 
-    const auto ONE = Z3_mk_int(ctx, 1, realType);
+    const auto ONE = Z3_mk_int(ctx, 1, intType);
 
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        auto v = Z3_mk_fresh_const(ctx, nullptr, realType);
-        hard_assert(Z3_mk_ge(ctx, v, ONE));
-        expReps[i] = v;
+    const auto numOfPartitions = num_vertices(P);
+
+    const auto m = num_vertices(Relationships);
+
+    std::vector<Z3_ast> VarList(m);
+
+    for (unsigned partition = 1; partition < numOfPartitions; ++partition) {
+        PartitionData & N = P[partition];
+        const auto & K = N.Kernels;
+//        auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+//        hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
+//        if (in_degree(partition, P) == 0) {
+//            assert (K.size() == 1);
+//            for (const auto u : K) {
+//                VarList[u] = rootVar;
+//            }
+//        } else {
+            for (const auto u : K) {
+                auto repVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+                hard_assert(Z3_mk_ge(ctx, repVar, ONE));
+                VarList[u] = repVar; // multiply(rootVar, repVar);
+            }
+//        }
     }
 
-    for (unsigned i = 0; i < numOfStreamSets; ++i) {
+    #warning Verify min dataflow considers multiple inputs of differing rates
 
-        const auto streamSet = streamSets[i];
+    for (unsigned producerPartitionId = 1; producerPartitionId < numOfPartitions; ++producerPartitionId) {
+        PartitionData & N = P[producerPartitionId];
+        const auto & K = N.Kernels;
 
-        const auto f = first_in_edge(streamSet, Relationships);
-        assert (Relationships[f].Reason != ReasonType::Reference);
+        for (const auto producer : K) {
 
-        const auto binding = source(f, Relationships);
-        const RelationshipNode & output = Relationships[binding];
-        assert (output.Type == RelationshipNode::IsBinding);
+            const RelationshipNode & producerNode = Relationships[producer];
+            assert (producerNode.Type == RelationshipNode::IsKernel);
 
-        const Binding & outputBinding = output.Binding;
-        const ProcessingRate & rate = outputBinding.getRate();
-        // ignore unknown output rates; we cannot reason about them here.
-        if (LLVM_LIKELY(rate.isUnknown())) {
-            continue;
-        }
+            const auto strideSize = producerNode.Kernel->getStride();
 
-        const auto g = first_in_edge(binding, Relationships);
-        assert (Relationships[g].Reason != ReasonType::Reference);
-        const unsigned producer = source(g, Relationships);
+            assert (Relationships[producer].Type == RelationshipNode::IsKernel);
+            for (const auto e : make_iterator_range(out_edges(producer, Relationships))) {
+                const auto binding = target(e, Relationships);
+                if (Relationships[binding].Type == RelationshipNode::IsBinding) {
+                    const auto f = first_out_edge(binding, Relationships);
+                    assert (Relationships[f].Reason != ReasonType::Reference);
+                    const auto streamSet = target(f, Relationships);
+                    assert (Relationships[streamSet].Type == RelationshipNode::IsRelationship);
+                    assert (isa<StreamSet>(Relationships[streamSet].Relationship));
 
-        const auto p = PartitionIds.find(producer);
-        assert (p != PartitionIds.end());
-        const auto producerPartitionId = p->second;
-        assert (producerPartitionId > 0);
+                    const RelationshipNode & output = Relationships[binding];
+                    assert (output.Type == RelationshipNode::IsBinding);
 
-        const RelationshipNode & node = Relationships[producer];
-        assert (node.Type == RelationshipNode::IsKernel);
-        const auto h = std::lower_bound(kernels.begin(), kernels.end(), producer);
-        assert (h != kernels.end() && *h == producer);
-        const auto producerId = std::distance(kernels.begin(), h);
+                    const Binding & outputBinding = output.Binding;
+                    const ProcessingRate & rate = outputBinding.getRate();
+                    // ignore unknown output rates; we cannot reason about them here.
+                    if (LLVM_LIKELY(rate.isUnknown())) {
+                        continue;
+                    }
 
-        const auto strideSize = node.Kernel->getStride();
-        const auto sum = rate.getLowerBound() + rate.getUpperBound();
-        const auto expectedOutput = sum * Rational{strideSize, 2};
-
-        const Z3_ast expOutRate = multiply(expReps[producerId], constant_real(expectedOutput));
-
-        for (const auto e : make_iterator_range(out_edges(streamSet, Relationships))) {
-            const auto binding = target(e, Relationships);
-            const RelationshipNode & input = Relationships[binding];
-            if (LLVM_LIKELY(input.Type == RelationshipNode::IsBinding)) {
-                const auto f = first_out_edge(binding, Relationships);
-                assert (Relationships[f].Reason != ReasonType::Reference);
-                const unsigned consumer = target(f, Relationships);
-
-                const Binding & inputBinding = input.Binding;
-                const ProcessingRate & rate = inputBinding.getRate();
-
-                const auto c = PartitionIds.find(consumer);
-                assert (c != PartitionIds.end());
-                const auto consumerPartitionId = c->second;
-                assert (producerPartitionId <= consumerPartitionId);
-
-                const RelationshipNode & node = Relationships[consumer];
-                assert (node.Type == RelationshipNode::IsKernel);
-
-                const auto h = std::lower_bound(kernels.begin(), kernels.end(), consumer);
-                assert (h != kernels.end() && *h == consumer);
-                const auto consumerId = std::distance(kernels.begin(), h);
-
-                if (LLVM_LIKELY(!rate.isGreedy())) {
-
-                    const auto strideSize = node.Kernel->getStride();
                     const auto sum = rate.getLowerBound() + rate.getUpperBound();
-                    const auto expectedInput = sum * Rational{strideSize, 2};
+                    const auto expectedOutput = sum * Rational{strideSize, 2};
 
-                    const Z3_ast expInRate = multiply(expReps[consumerId], constant_real(expectedInput));
+                    const Z3_ast expOutRate = multiply(VarList[producer], constant_real(expectedOutput));
 
-                    if (producerPartitionId == consumerPartitionId) {
-                        hard_assert(Z3_mk_eq(ctx, expOutRate, expInRate));
-                    } else {
-                        hard_assert(Z3_mk_ge(ctx, expOutRate, expInRate));
-                        soft_assert(Z3_mk_eq(ctx, expOutRate, expInRate));
+                    for (const auto e : make_iterator_range(out_edges(streamSet, Relationships))) {
+                        const auto binding = target(e, Relationships);
+                        const RelationshipNode & input = Relationships[binding];
+                        if (LLVM_LIKELY(input.Type == RelationshipNode::IsBinding)) {
+                            const auto f = first_out_edge(binding, Relationships);
+                            assert (Relationships[f].Reason != ReasonType::Reference);
+                            const unsigned consumer = target(f, Relationships);
+
+                            const Binding & inputBinding = input.Binding;
+                            const ProcessingRate & rate = inputBinding.getRate();
+
+                            const auto c = PartitionIds.find(consumer);
+                            assert (c != PartitionIds.end());
+                            const auto consumerPartitionId = c->second;
+                            assert (producerPartitionId <= consumerPartitionId);
+
+                            const RelationshipNode & node = Relationships[consumer];
+                            assert (node.Type == RelationshipNode::IsKernel);
+
+                            if (LLVM_LIKELY(!rate.isGreedy())) {
+
+                                const auto strideSize = node.Kernel->getStride();
+                                const auto sum = rate.getLowerBound() + rate.getUpperBound();
+                                const auto expectedInput = sum * Rational{strideSize, 2};
+                                assert (VarList[consumer]);
+                                const Z3_ast expInRate = multiply(VarList[consumer], constant_real(expectedInput));
+
+                                if (producerPartitionId == consumerPartitionId && rate.isFixed()) {
+                                    hard_assert(Z3_mk_eq(ctx, expOutRate, expInRate));
+                                } else {
+                                    hard_assert(Z3_mk_ge(ctx, expOutRate, expInRate));
+                                    soft_assert(Z3_mk_eq(ctx, expOutRate, expInRate));
+//                                    Z3_ast args[2] = { expOutRate, expInRate };
+//                                    const auto diff = Z3_mk_sub(ctx, 2, args);
+//                                    Z3_optimize_minimize(ctx, solver, diff);
+                                }
+                            }
+                        }
                     }
 
                 }
-
             }
-
         }
     }
 
+    #warning ADD LENGTH EQUALITY ASSERTIONS HERE
+
     if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
-        report_fatal_error("Z3 failed to find a solution to partition scheduling solution");
+        assert (false);
+        report_fatal_error("Z3 failed to find a solution to minimum expected dataflow problem");
     }
 
     const auto model = Z3_optimize_get_model(ctx, solver);
     Z3_model_inc_ref(ctx, model);
-    for (unsigned i = 0; i < numOfKernels; ++i) {
+    for (unsigned partition = 1; partition < numOfPartitions; ++partition) {
+        PartitionData & N = P[partition];
+        const auto & K = N.Kernels;
+        const auto n = K.size();
+        N.Repetitions.resize(n);
+        for (unsigned i = 0; i < n; ++i) {
+            Z3_ast value;
+            if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, VarList[K[i]], Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+            }
 
-        Z3_ast value;
-        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, expReps[i], Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+            Z3_int64 num, denom;
+            if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+            }
+            assert (num > 0 && denom == 1);
+            N.Repetitions[i] = num;
         }
 
-        Z3_int64 num, denom;
-        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-        }
-        assert (num > 0);
 
-        const auto kernelId = kernels[i];
-        const auto f = PartitionIds.find(kernelId);
-        assert (f != PartitionIds.end());
-        const auto partitionId = f->second;
-        assert (partitionId < numOfPartitions);
-
-        auto & Pi = P[partitionId];
-
-        const auto & K = Pi.Kernels;
-        assert (Pi.Repetitions.size() == K.size());
-
-        const auto h = std::find(K.begin(), K.end(), kernelId);
-        assert (h != K.end() && *h == kernelId);
-        const auto index = std::distance(K.begin(), h);
-
-        Pi.Repetitions[index] = Rational{num, denom};
     }
     Z3_model_dec_ref(ctx, model);
 
     Z3_optimize_dec_ref(ctx, solver);
     Z3_del_context(ctx);
-    Z3_reset_memory();
 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeParitionDataFlowRates
+ * @brief computeMaximumExpectedDataflow
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::computeNumOfStridesInterval() {
+void PipelineAnalysis::computeMaximumExpectedDataflow() {
 
     using Bound = std::array<Rational, 2>;
 
@@ -236,8 +208,24 @@ void PipelineAnalysis::computeNumOfStridesInterval() {
     Z3_set_param_value(cfg, "proof", "false");
     const auto ctx = Z3_mk_context(cfg);
     Z3_del_config(cfg);
-    const auto solver = Z3_mk_solver(ctx);
-    Z3_solver_inc_ref(ctx, solver);
+    const auto solver = Z3_mk_optimize(ctx);
+    Z3_optimize_inc_ref(ctx, solver);
+
+    auto hard_assert = [&](Z3_ast c) {
+        Z3_optimize_assert(ctx, solver, c);
+    };
+
+    auto soft_assert = [&](Z3_ast c) {
+        Z3_optimize_assert_soft(ctx, solver, c, "1", nullptr);
+    };
+
+    auto check = [&]() -> Z3_lbool {
+        #if Z3_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 5, 0)
+        return Z3_optimize_check(ctx, solver, 0, nullptr);
+        #else
+        return Z3_optimize_check(ctx, solver);
+        #endif
+    };
 
     const auto intType = Z3_mk_int_sort(ctx);
 
@@ -257,76 +245,37 @@ void PipelineAnalysis::computeNumOfStridesInterval() {
         return constant_real(rate.Minimum);
     };
 
-    auto lower_bounded_variable = [&](const BufferPort & rate) {
-        auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
-        auto c1 = Z3_mk_ge(ctx, v, minimum(rate));
-        Z3_solver_assert(ctx, solver, c1);
-        return v;
-    };
-
-    auto bounded_variable = [&](const BufferPort & rate) {
-        assert (rate.Minimum < rate.Maximum);
-        auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
-        auto c1 = Z3_mk_ge(ctx, v, minimum(rate));
-        Z3_solver_assert(ctx, solver, c1);
-        auto c2 = Z3_mk_le(ctx, v, maximum(rate));
-        Z3_solver_assert(ctx, solver, c2);
-        return v;
-    };
-
     auto multiply =[&](Z3_ast X, Z3_ast Y) {
         Z3_ast args[2] = { X, Y };
         return Z3_mk_mul(ctx, 2, args);
     };
-
-//    const auto ctx = Z3_mk_context(cfg);
-//    Z3_del_config(cfg);
-//    const auto solver = Z3_mk_optimize(ctx);
-//    Z3_optimize_inc_ref(ctx, solver);
-
-    auto hard_assert = [&](Z3_ast c) {
-        Z3_solver_assert(ctx, solver, c);
-    };
-
-//    auto soft_assert = [&](Z3_ast c) {
-//        Z3_optimize_assert_soft(ctx, solver, c, "1", nullptr);
-//    };
 
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
 
     std::vector<Z3_ast> VarList(LastStreamSet + 1);
 
-    enum {
-        LowerBound = 0,
-        UpperBound = 1
-    };
-
-    auto make_partition_vars = [&](const unsigned first, const unsigned last) {
-
-        const auto & expectedBase = ExpectedNumOfStrides[first];
-        assert (expectedBase.numerator() >= 1);
-        const auto expected = constant_real(expectedBase);
-
-        auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
-
-        VarList[first] = rootVar;
-
-        hard_assert(Z3_mk_ge(ctx, rootVar, expected));
-        const auto expected_x_2 = constant_real(ExpectedNumOfStrides[first] * Rational{2});
-        hard_assert(Z3_mk_le(ctx, rootVar, expected_x_2));
-
-        for (auto kernel = first + 1U; kernel <= last; ++kernel) {
-            const auto r = ExpectedNumOfStrides[kernel] / expectedBase;
-            auto kernelVar = rootVar;
-            if (LLVM_UNLIKELY(r != Rational{1})) {
-                kernelVar = multiply(kernelVar, constant_real(r));
-            }
-            VarList[kernel] = kernelVar;
-        }
-    };
+    const auto ONE = Z3_mk_int(ctx, 1, intType);
+    const auto TWO = Z3_mk_int(ctx, 2, intType);
 
     BEGIN_SCOPED_REGION
+
+    auto make_partition_vars = [&](const unsigned first, const unsigned last) {
+        if (in_degree(first, mBufferGraph) == 0) {
+            assert (first == last);
+            for (auto kernel = first; kernel <= last; ++kernel) {
+                VarList[kernel] = constant_real(MinimumNumOfStrides[kernel]);
+            }
+        } else {
+            auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+            hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
+            hard_assert(Z3_mk_le(ctx, rootVar, TWO));
+            for (auto kernel = first; kernel <= last; ++kernel) {
+                assert (in_degree(kernel, mBufferGraph) > 0);
+                VarList[kernel] = multiply(rootVar, constant_real(MinimumNumOfStrides[kernel]));
+            }
+        }
+    };
 
     auto currentPartitionId = KernelPartitionId[firstKernel];
     auto firstKernelInPartition = firstKernel;
@@ -345,20 +294,20 @@ void PipelineAnalysis::computeNumOfStridesInterval() {
 
     END_SCOPED_REGION
 
-    std::array<std::vector<Z3_ast>, 3> assumptions;
-
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        const auto partitionId = KernelPartitionId[kernel];
 
         const auto stridesPerSegmentVar = VarList[kernel];
         assert (stridesPerSegmentVar);
-        const auto partitionId = KernelPartitionId[kernel];
 
         unsigned numOfGreedyRates = 0;
 
         for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-            const auto buffer = source(input, mBufferGraph);
-            const auto producer = parent(buffer, mBufferGraph);
+            const auto streamSet = source(input, mBufferGraph);
+            const auto producer = parent(streamSet, mBufferGraph);
 
+            // we're only interested in inter-partition dataflow here
             if (KernelPartitionId[producer] == partitionId) {
                 continue;
             }
@@ -367,66 +316,49 @@ void PipelineAnalysis::computeNumOfStridesInterval() {
             const Binding & binding = inputRate.Binding;
             const ProcessingRate & rate = binding.getRate();
 
-            const auto producedRate = VarList[buffer]; assert (producedRate);
+            const auto producedRate = VarList[streamSet]; assert (producedRate);
 
-            if (LLVM_LIKELY(rate.isFixed())) {
+            if (LLVM_UNLIKELY(rate.isGreedy())) {
+                ++numOfGreedyRates;
+                // ideally we want to always have enough data to execute
+                soft_assert(Z3_mk_ge(ctx, producedRate, minimum(inputRate)));
+            } else { // Fixed, Bounded or Partial Sum
                 const auto consumedRate = multiply(stridesPerSegmentVar, minimum(inputRate));
                 hard_assert(Z3_mk_ge(ctx, producedRate, consumedRate));
-                const auto constraint = Z3_mk_eq(ctx, producedRate, consumedRate);
-                assumptions[LowerBound].push_back(constraint);
-                assumptions[UpperBound].push_back(constraint);
-            } else if (LLVM_UNLIKELY(rate.isGreedy())) {
-                ++numOfGreedyRates;
-                if (inputRate.Minimum > Rational{0}) {
-                    const auto lb = constant_real(inputRate.Minimum);
-                    const auto constraint = Z3_mk_ge(ctx, producedRate, lb);
-                    // ideally we want to always have enough data to execute
-                    assumptions[LowerBound].push_back(constraint);
-                    assumptions[UpperBound].push_back(constraint);
-                }
-            } else {
-                const auto ub = multiply(stridesPerSegmentVar, maximum(inputRate));
-                assumptions[LowerBound].push_back(Z3_mk_ge(ctx, producedRate, ub));
-                const auto lb = multiply(stridesPerSegmentVar, minimum(inputRate));
-                assumptions[UpperBound].push_back(Z3_mk_ge(ctx, producedRate, lb));
+                Z3_ast args[2] = { producedRate, consumedRate };
+                const auto diff = Z3_mk_sub(ctx, 2, args);
+                Z3_optimize_minimize(ctx, solver, diff);
             }
         }
 
         // Any kernel with all greedy rates must exhaust its input in a single iteration.
-        if (LLVM_UNLIKELY(numOfGreedyRates > 0)) {
-            if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, mBufferGraph))) {
-                const auto ONE = Z3_mk_int(ctx, 1, intType);
-                const auto constraint = Z3_mk_eq(ctx, stridesPerSegmentVar, ONE);
-                hard_assert(constraint);
-//            } else {
-//                assumptions[LowerBound].push_back(constraint);
-//                assumptions[UpperBound].push_back(constraint);
-            }
+        if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, mBufferGraph))) {
+            hard_assert(Z3_mk_eq(ctx, stridesPerSegmentVar, ONE));
         }
 
         for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const BufferPort & outputRate = mBufferGraph[output];
             const Binding & binding = outputRate.Binding;
             const ProcessingRate & rate = binding.getRate();
-            const auto buffer = target(output, mBufferGraph);
-            if (LLVM_LIKELY(rate.isFixed())) {
-                const auto producedRate = multiply(stridesPerSegmentVar, maximum(outputRate));
-                VarList[buffer] = producedRate;
-            } else if (LLVM_UNLIKELY(rate.isUnknown())) {
+            const auto streamSet = target(output, mBufferGraph);
+
+            assert (VarList[streamSet] == nullptr);
+
+            if (LLVM_UNLIKELY(rate.isUnknown())) {
                 // TODO: is there a better way to handle unknown outputs? This
                 // free variable represents the ideal amount of data to transfer
                 // to subsequent kernels but that isn't very meaningful here.
-                VarList[buffer] = lower_bounded_variable(outputRate);
-            } else {
-                const auto outputRateVar = bounded_variable(outputRate);
-                const auto producedRate = multiply(stridesPerSegmentVar, outputRateVar);
-                VarList[buffer] = producedRate;
-                assumptions[LowerBound].push_back(Z3_mk_eq(ctx, outputRateVar, minimum(outputRate)));
-                assumptions[UpperBound].push_back(Z3_mk_eq(ctx, outputRateVar, maximum(outputRate)));
+                auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
+                hard_assert(Z3_mk_ge(ctx, v, minimum(outputRate)));
+                VarList[streamSet] = v;
+            } else { // Fixed, Bounded or Partial Sum
+                VarList[streamSet] = multiply(stridesPerSegmentVar, maximum(outputRate));
             }
         }
     }
 
+
+    // Include any length equality assertions
     if (!mLengthAssertions.empty()) {
         flat_map<const StreamSet *, unsigned> M;
 
@@ -446,96 +378,40 @@ void PipelineAnalysis::computeNumOfStridesInterval() {
         for (const LengthAssertion & la : mLengthAssertions) {
             const auto A = VarList[offset(la[0])];
             const auto B = VarList[offset(la[1])];
-            Z3_solver_assert(ctx, solver, Z3_mk_eq(ctx, A, B));
+            soft_assert(Z3_mk_eq(ctx, A, B));
         }
     }
 
-    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-        report_fatal_error("Z3 failed to find a solution to the core dataflow graph");
+    if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
+        assert (false);
+        report_fatal_error("Z3 failed to find a solution to the maximum permitted dataflow problem");
     }
 
-    std::vector<Bound> bounds(PipelineOutput + 1);
-
-    // Now check whether any of the upper/lower bound assumptions alter the results
-
-    for (;;) {
-
-        for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
-
-            const auto & A = assumptions[bound];
-
-            Z3_solver_push(ctx, solver);
-
-            const auto m = Z3_maxsat(ctx, solver, A);
-
-            if (LLVM_LIKELY(m != 0 || A.empty())) {
-
-                const auto model = Z3_solver_get_model(ctx, solver);
-                Z3_model_inc_ref(ctx, model);
-                for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-
-                    Z3_ast const stridesPerSegmentVar = VarList[kernel];
-                    Z3_ast value;
-                    if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-                        report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
-                    }
-
-                    Z3_int64 num, denom;
-                    if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-                        report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-                    }
-
-                    assert (num > 0 && denom != 0);
-                    bounds[kernel][bound] = Rational{num, denom};
-                }
-                Z3_model_dec_ref(ctx, model);
-
-            }
-
-            Z3_solver_pop(ctx, solver, 1);
-        }
-
-
-        // If we find a solution but discover that min > max for any bound, we're going to have to
-        // recompute the solution. This unfortunately does discard the learned clauses from the prior
-        // lower/upper bound checks but appears that the amount of duplicate work is relatively small.
-
-        // TODO: is there a way to have "divergent" solvers from the common assumption checks?
-
-        bool done = true;
-        for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-            const Bound & bound = bounds[kernel];
-            if (LLVM_UNLIKELY(bound[LowerBound] > bound[UpperBound])) {
-                const auto stridesPerSegmentVar = VarList[kernel];
-                assumptions[LowerBound].push_back(Z3_mk_le(ctx, stridesPerSegmentVar, constant_real(bound[UpperBound])));
-                assumptions[UpperBound].push_back(Z3_mk_ge(ctx, stridesPerSegmentVar, constant_real(bound[LowerBound])));
-                done = false;
-            }
-        }
-
-        if (LLVM_LIKELY(done)) {
-            break;
-        }
-
-    }
-
-    Z3_solver_dec_ref(ctx, solver);
-    Z3_del_context(ctx);
-    Z3_reset_memory();
-
-    // Then write them out
-    MinimumNumOfStrides.resize(PipelineOutput + 1);
     MaximumNumOfStrides.resize(PipelineOutput + 1);
 
+    const auto model = Z3_optimize_get_model(ctx, solver);
+    Z3_model_inc_ref(ctx, model);
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-        auto & b = bounds[kernel];
-        auto & lb = b[LowerBound];
-        auto & ub = b[UpperBound];
-        assert(lb.denominator() == 1);
-        assert(ub.denominator() == 1);
-        MinimumNumOfStrides[kernel] = lb;
-        MaximumNumOfStrides[kernel] = ub;
+
+        Z3_ast const stridesPerSegmentVar = VarList[kernel];
+        Z3_ast value;
+        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+        }
+
+        Z3_int64 num, denom;
+        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+        }
+
+        assert (num > 0 && denom == 1);
+        MaximumNumOfStrides[kernel]  = num;
     }
+    Z3_model_dec_ref(ctx, model);
+
+    Z3_optimize_dec_ref(ctx, solver);
+    Z3_del_context(ctx);
+    Z3_reset_memory();
 
 }
 

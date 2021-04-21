@@ -9,6 +9,8 @@ namespace kernel {
 
 #define PRINT_PARTITION_COMBINATIONS
 
+#define USE_SIBLING_PARTITION_TEST
+
 void PipelineAnalysis::addKernelRelationshipsInReferenceOrdering(const unsigned kernel, const RelationshipGraph & G,
                                                                  std::function<void(PortType, unsigned, unsigned)> insertionFunction) {
 
@@ -177,7 +179,6 @@ void PipelineAnalysis::addKernelRelationshipsInReferenceOrdering(const unsigned 
     }
 
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyKernelPartitions
@@ -388,6 +389,8 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     assert (synchronousPartitionCount > 0);
 
+    std::vector<Rational> partitionRepetitionVector(m);
+
     // Stage 2: estimate synchronous inter-partition dataflow
 
     // From the first pass analysis, determine the synchronous dataflow of each partition
@@ -402,8 +405,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         const auto ctx = Z3_mk_context(cfg);
         Z3_del_config(cfg);
-
-        const auto realType = Z3_mk_real_sort(ctx);
 
         const auto intType = Z3_mk_int_sort(ctx);
 
@@ -429,28 +430,25 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             Z3_solver_assert(ctx, solver, c);
         };
 
-        auto variable_real = [&]() {
-            auto v = Z3_mk_fresh_const(ctx, nullptr, realType);
-            hard_assert(Z3_mk_ge(ctx, v, ONE));
-            return v;
-        };
-
         std::vector<Z3_ast> repetitions(m);
 
         for (unsigned i = 0; i < m; ++i) {
             const auto u = sequence[i];
             const RelationshipNode & currentNode = Relationships[u];
+            Z3_ast var = nullptr;
             if (currentNode.Type == RelationshipNode::IsKernel) {
-                repetitions[i] = variable_real();
+                var = Z3_mk_fresh_const(ctx, nullptr, intType);
+                hard_assert(Z3_mk_ge(ctx, var, ONE));
             }
+            repetitions[i] = var;
         }
 
-        for (unsigned i = 0; i < m; ++i) {
-            if (repetitions[i]) {
+        for (unsigned streamSet = 0; streamSet < m; ++streamSet) {
+            if (repetitions[streamSet]) {
                 continue;
             }
 
-            const auto output = in_edge(i, G);
+            const auto output = in_edge(streamSet, G);
             const auto producer = source(output, G);
             const auto prodPartId = partitionIds[producer];
 
@@ -462,7 +460,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
                 Z3_ast outRate = nullptr;
 
-                for (const auto input : make_iterator_range(out_edges(i, G))) {
+                for (const auto input : make_iterator_range(out_edges(streamSet, G))) {
                     const auto consumer = target(output, G);
                     const auto consPartId = partitionIds[consumer];
                     // we're only concerned with intra-partition relationships here
@@ -499,8 +497,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             report_fatal_error("Z3 failed to find an intra-partition dataflow solution");
         }
 
-        std::vector<Rational> numOfStridesMultiplier(m);
-
         const auto model = Z3_solver_get_model(ctx, solver);
         Z3_model_inc_ref(ctx, model);
         for (unsigned i = 0; i < m; ++i) {
@@ -513,8 +509,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
                     report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
                 }
-                assert (num > 0);
-                numOfStridesMultiplier[i] = Rational{num, denom};
+                assert (num > 0 && denom == 1);
+                partitionRepetitionVector[i] = Rational{num, denom};
+
             }
         }
 
@@ -522,9 +519,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         Z3_solver_dec_ref(ctx, solver);
         Z3_del_context(ctx);
 
-        return numOfStridesMultiplier;
     };
-
 
     // Stage 3: fuse stride-linked partitions
 
@@ -534,8 +529,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     // detection of this case when attempting to fuse partitions.
 
     auto fuseStrideLinkedPartitions = [&]() {
-
-        const auto numOfStridesMultiplier = estimateSynchronousDataflow();
 
         const auto cfg = Z3_mk_config();
         Z3_set_param_value(cfg, "model", "false");
@@ -562,9 +555,8 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         struct PartitionVariables {
             Z3_ast StrideVar;
             flat_set<Z3_app> Vars;
-            void setRoot(Z3_context ctx, Z3_ast root) {
+            void setRoot(Z3_ast root) {
                 StrideVar = root;
-                addVar(ctx, root);
             }
             void addVar(Z3_context ctx, Z3_ast var) {
                 assert (Z3_is_app(ctx, var));
@@ -619,6 +611,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         };
 
         const auto ONE = Z3_mk_int(ctx, 1, intType);
+        const auto TWO = Z3_mk_int(ctx, 2, intType);
 
         DependencyGraph H(synchronousPartitionCount);
 
@@ -655,7 +648,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         #ifdef PRINT_PARTITION_COMBINATIONS
         BEGIN_SCOPED_REGION
         auto & out = errs();
-        out << "graph \"P\" {\n";
+        out << "digraph \"P\" {\n";
         for (unsigned partitionId = 0; partitionId < synchronousPartitionCount; ++partitionId) {
             out << "v" << partitionId << " [label=\"P" << partitionId << "\n";
             for (unsigned i = 0; i < m; ++i) {
@@ -682,11 +675,12 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         transitive_reduction_dag(H);
 
         for (unsigned i = 0; i < synchronousPartitionCount; ++i) {
-            const auto var = Z3_mk_fresh_const(ctx, nullptr, intType);
-            PartitionVariables & V = P[i];
-            V.addVar(ctx, var);
+            const auto var = Z3_mk_fresh_const(ctx, "partition", intType);
             hard_assert(Z3_mk_ge(ctx, var, ONE));
-            V.setRoot(ctx, var);
+            hard_assert(Z3_mk_le(ctx, var, TWO));
+            PartitionVariables & V = P[i];
+            V.setRoot(var);
+            V.addVar(ctx, var);
         }
 
         flat_map<unsigned, Z3_ast> symbolicPopCountRateVar;
@@ -728,7 +722,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
                     FusionConstaints & fusionConstraints = P[e.first];
 
-                    auto calculateBaseSymbolicRateVar = [&](const BindingVertex bindingVertex, const ProcessingRate & rate, const unsigned kernel, const unsigned partId)  {
+                    auto calculateBaseSymbolicRateVar = [&](const BindingVertex bindingVertex,
+                                                            const PortType portType, const ProcessingRate & rate,
+                                                            const unsigned kernel, const unsigned partId)  {
                         const RelationshipNode & node = Relationships[sequence[kernel]];
                         assert (node.Type == RelationshipNode::IsKernel);
 
@@ -748,11 +744,14 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                             llvm_unreachable("could not find reference?");
                         };
 
+                        assert (partitionRepetitionVector[kernel] > 0);
+
+                        const auto strideSize = node.Kernel->getStride() * partitionRepetitionVector[kernel];
+
                         switch (rate.getKind()) {
                             case RateId::Fixed:
                                 BEGIN_SCOPED_REGION
-                                const auto strideSize = node.Kernel->getStride() * numOfStridesMultiplier[kernel];
-                                const auto numOfItems = rate.getLowerBound() * strideSize;
+                                const auto numOfItems = rate.getRate() * strideSize;
                                 var = V.StrideVar;
                                 expr = multiply(V.StrideVar, constant_real(numOfItems));
                                 END_SCOPED_REGION
@@ -770,10 +769,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 break;
                             case RateId::Bounded:
                                 BEGIN_SCOPED_REGION
-                                const auto strideSize = node.Kernel->getStride() * numOfStridesMultiplier[kernel];
                                 const auto lb = rate.getLowerBound() * strideSize;
                                 const auto ub = rate.getUpperBound() * strideSize;
-                                var = Z3_mk_fresh_const(ctx, nullptr, intType);
+                                var = Z3_mk_fresh_const(ctx, "bounded", intType);
                                 V.addVar(ctx, var);
                                 hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, floor(lb), intType)));
                                 hard_assert(Z3_mk_le(ctx, var, Z3_mk_int(ctx, ceiling(ub), intType)));
@@ -787,14 +785,17 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 assert (Relationships[refStreamSet].Type == RelationshipNode::IsRelationship);
                                 const auto f = symbolicPopCountRateVar.find(refStreamSet);
                                 if (f == symbolicPopCountRateVar.end()) {
-                                    var = Z3_mk_fresh_const(ctx, nullptr, intType);
+                                    var = Z3_mk_fresh_const(ctx, "partialSumVar", intType);
+                                    hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, 0, intType)));
+
+
+
                                     symbolicPopCountRateVar.emplace(refStreamSet, var);
                                 } else {
                                     var = f->second;
                                 }
                                 V.addVar(ctx, var);
-
-                                Z3_ast args[3] = { var, V.StrideVar, constant_real(numOfStridesMultiplier[kernel]) };
+                                Z3_ast args[3] = { var, V.StrideVar, constant_real(strideSize) };
                                 expr = Z3_mk_mul(ctx, 3, args);                                
                                 END_SCOPED_REGION
                                 break;
@@ -814,9 +815,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 break;
                             case RateId::Unknown:
                                 BEGIN_SCOPED_REGION
-                                var = Z3_mk_fresh_const(ctx, nullptr, intType);
+                                var = Z3_mk_fresh_const(ctx, "unknown", intType);
                                 V.addVar(ctx, var);
-                                hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, floor(rate.getLowerBound()), intType)));
+                                hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, floor(rate.getRate()), intType)));
                                 expr = var;
                                 END_SCOPED_REGION
                                 break;
@@ -838,7 +839,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                         const Binding & binding = rn.Binding;
                         const ProcessingRate & rate = binding.getRate();
 
-                        std::tie(outRateVar, outRateExpr) = calculateBaseSymbolicRateVar(bindingVertex, rate, producer, prodPartId);
+                        std::tie(outRateVar, outRateExpr) = calculateBaseSymbolicRateVar(bindingVertex, PortType::Output, rate, producer, prodPartId);
 
                         for (const Attribute & attr : binding.getAttributes()) {
                             switch (attr.getKind()) {
@@ -886,7 +887,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                     const Binding & binding = rn.Binding;
                     const ProcessingRate & rate = binding.getRate();
 
-                    Z3_ast inRateExpr = calculateBaseSymbolicRateVar(bindingVertex, rate, consumer, consPartId).second;
+                    Z3_ast inRateExpr = calculateBaseSymbolicRateVar(bindingVertex, PortType::Input, rate, consumer, consPartId).second;
 
                     for (const Attribute & attr : binding.getAttributes()) {
                         switch (attr.getKind()) {
@@ -1008,6 +1009,8 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             const auto s = source(e, H);
             const auto t = target(e, H);
 
+            assert ("transitive reduction H contains an edge not in P?" && edge(s, t, P).second);
+
             const auto x = find(s);
             const auto y = find(t);
 
@@ -1015,16 +1018,18 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 continue;
             }
 
+            const auto & A = P[s];
             const auto & B = P[t];
 
             Z3_solver_push(ctx, solver);
+
 
             assert (vars.empty());
             assert (list.empty());
             assert (universalSet.none());
 
             for (const auto f : make_iterator_range(edges(P))) {
-                if (target(f, P) == t && find(source(f, P)) == x) {
+                if (find(target(f, P)) == y && find(source(f, P)) == x) {
                     universalSet.set(source(f, P));
                     for (const FusionConstraint & c : P[f]) {
                         Z3_ast e;
@@ -1041,10 +1046,31 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             assert (list.size() > 0);
             const auto constraints = Z3_mk_and(ctx, list.size(), list.data());
             list.clear();
-            const auto & Co = B.Vars;
-            const auto exists = Z3_mk_exists_const(ctx, 0, Co.size(), &*Co.begin(), 0, nullptr, constraints);
 
-            hard_assert(make_universal_clause(exists));
+            const auto ratio = Z3_mk_fresh_const(ctx, nullptr, intType);
+            hard_assert(Z3_mk_ge(ctx, ratio, ONE));
+            hard_assert(Z3_mk_eq(ctx, A.StrideVar, multiply(B.StrideVar, ratio)));
+
+//            const auto & Co = B.Vars;
+//            const auto exists = Z3_mk_exists_const(ctx, 0, 1, (Z3_app*)&ratio, 0, nullptr, constraints);
+
+            const auto & Co = B.Vars;
+
+            assert (vars.empty());
+
+            vars.insert(vars.end(), Co.begin(), Co.end());
+
+            const auto f = std::lower_bound(vars.begin(), vars.end(), (Z3_app)B.StrideVar);
+            assert (f != vars.end());
+            vars.erase(f);
+
+            auto clause = constraints;
+            if (!vars.empty()) {
+                clause = Z3_mk_exists_const(ctx, 0, vars.size(), vars.data(), 0, nullptr, constraints);
+                vars.clear();
+            }
+
+            hard_assert(make_universal_clause(clause));
 
             #ifdef PRINT_PARTITION_COMBINATIONS
             errs() << "-----------------------------------\n";
@@ -1067,110 +1093,113 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
         }
 
-#if 0
-        const auto realType = Z3_mk_real_sort(ctx);
+        #ifdef USE_SIBLING_PARTITION_TEST
 
-        const auto ZERO = Z3_mk_real(ctx, 0, 1);
+        if (!fusedAny) {
 
-        BitVector sourceSet(synchronousPartitionCount);
+            BitVector sourceSet(synchronousPartitionCount);
 
-        for (unsigned i = 0; i < synchronousPartitionCount; ++i) {
+            for (unsigned i = 0; i < synchronousPartitionCount; ++i) {
 
-            if (out_degree(i, H) > 1) {
-                graph_traits<DependencyGraph>::out_edge_iterator begin, end;
-                std::tie(begin, end) = out_edges(i, H);
+                if (out_degree(i, H) > 1) {
+                    graph_traits<DependencyGraph>::out_edge_iterator begin, end;
+                    std::tie(begin, end) = out_edges(i, H);
 
-                const auto root = find(i);
+                    const auto root = find(i);
 
-                for (auto ei = begin; ei != end; ++ei) {
-                    for (auto ej = ei; ++ej != end; ) {
+                    for (auto ei = begin; ei != end; ++ei) {
+                        for (auto ej = ei; ++ej != end; ) {
 
-                        const auto a = target(*ei, H);
-                        const auto b = target(*ej, H);
+                            const auto a = target(*ei, H);
+                            const auto b = target(*ej, H);
 
-                        const auto x = find(a);
-                        const auto y = find(b);
+                            const auto x = find(a);
+                            const auto y = find(b);
 
-                        if (x == y || x == root || y == root) {
-                            continue;
-                        }
+                            if (x == y || x == root || y == root) {
+                                continue;
+                            }
 
-                        assert (sourceSet.none());
+                            assert (sourceSet.none());
 
-                        for (const auto f : make_iterator_range(in_edges(a, P))) {
-                            sourceSet.set(find(source(f, P)));
-                        }
-                        for (const auto f : make_iterator_range(in_edges(b, P))) {
-                            sourceSet.set(find(source(f, P)));
-                        }
+                            for (const auto f : make_iterator_range(in_edges(a, P))) {
+                                sourceSet.set(find(source(f, P)));
+                            }
+                            for (const auto f : make_iterator_range(in_edges(b, P))) {
+                                sourceSet.set(find(source(f, P)));
+                            }
 
-                        assert (sourceSet.test(find(i)));
+                            assert (sourceSet.test(find(i)));
 
-                        Z3_solver_push(ctx, solver);
+                            Z3_solver_push(ctx, solver);
 
-                        assert (vars.empty());
-                        assert (list.empty());
-                        assert (universalSet.none());
-                        for (const auto f : make_iterator_range(edges(P))) {
-                            const auto t = target(f, P);
-                            if ((t == a || t == b) && sourceSet.test(find(source(f, P)))) {
-                                universalSet.set(source(f, P));
-                                for (const FusionConstraint & c : P[f]) {
-                                    list.push_back(Z3_mk_ge(ctx, std::get<1>(c), std::get<2>(c)));
+                            assert (vars.empty());
+                            assert (list.empty());
+                            assert (universalSet.none());
+                            for (const auto f : make_iterator_range(edges(P))) {
+                                const auto t = target(f, P);
+                                if ((t == a || t == b) && sourceSet.test(find(source(f, P)))) {
+                                    universalSet.set(source(f, P));
+                                    for (const FusionConstraint & c : P[f]) {
+                                        list.push_back(Z3_mk_ge(ctx, std::get<1>(c), std::get<2>(c)));
+                                    }
                                 }
                             }
-                        }
-                        sourceSet.reset();
+                            sourceSet.reset();
 
-                        assert (universalSet.test(i));
-                        assert (list.size() > 0);
-                        const auto constraints = Z3_mk_and(ctx, list.size(), list.data());
-                        list.clear();
+                            assert (universalSet.test(i));
+                            assert (list.size() > 0);
+                            const auto constraints = Z3_mk_and(ctx, list.size(), list.data());
+                            list.clear();
 
-                        const auto & A = P[a];
-                        const auto & B = P[b];
+                            const auto & A = P[a];
+                            const auto & B = P[b];
 
-                        // Since these are siblings in a transitive reduction of the program graph,
-                        // they by definition have no relationships in which we can ensure they can
-                        // be stride linked. The following ensures some form of relationship exists.
-                        const auto ratio = Z3_mk_fresh_const(ctx, nullptr, realType);
-                        hard_assert(Z3_mk_gt(ctx, ratio, ZERO));
-                        hard_assert(Z3_mk_eq(ctx, A.StrideVar, multiply(ratio, B.StrideVar)));
+                            // Since these are siblings in a transitive reduction of the program graph,
+                            // they by definition have no relationships in which we can ensure they can
+                            // be stride linked. The following ensures some form of relationship exists.
+                            hard_assert(Z3_mk_eq(ctx, A.StrideVar, B.StrideVar));
 
-                        assert (vars.empty());
-                        std::merge(A.Vars.begin(), A.Vars.end(), B.Vars.begin(), B.Vars.end(), std::back_inserter(vars));
-                        const auto end = std::unique(vars.begin(), vars.end());
-                        const auto k = std::distance(vars.begin(), end);
-                        assert (k > 0);
-                        const auto exists = Z3_mk_exists_const(ctx, 0, k, vars.data(), 0, nullptr, constraints);
-                        vars.clear();
+                            assert (vars.empty());
+                            std::merge(A.Vars.begin(), A.Vars.end(), B.Vars.begin(), B.Vars.end(), std::back_inserter(vars));
+                            const auto end = std::unique(vars.begin(), vars.end());
+                            const auto k = std::distance(vars.begin(), end);
+                            assert (k > 0);
+                            assert (std::find(vars.begin(), end, (Z3_app)A.StrideVar) != end);
+                            assert (std::find(vars.begin(), end, (Z3_app)B.StrideVar) != end);
+                            const auto exists = Z3_mk_exists_const(ctx, 0, k, vars.data(), 0, nullptr, constraints);
+                            vars.clear();
 
-                        hard_assert(make_universal_clause(exists));
+                            hard_assert(make_universal_clause(exists));
 
-                        #ifdef PRINT_PARTITION_COMBINATIONS
-                        errs() << "-----------------------------------\n";
-                        errs() << "SIBS: " << i << " -> " << a << ", "
-                                           << i << " -> " << b << "\n";
-                        errs() << Z3_solver_to_string(ctx, solver) << "\n";
-                        #endif
+                            #ifdef PRINT_PARTITION_COMBINATIONS
+                            errs() << "-----------------------------------\n";
+                            errs() << "SIBS: " << i << " -> " << a << ", "
+                                               << i << " -> " << b << "\n";
+                            errs() << Z3_solver_to_string(ctx, solver) << "\n";
+                            #endif
 
-                        const auto r = Z3_solver_check(ctx, solver);
+                            const auto r = Z3_solver_check(ctx, solver);
 
-                        #ifdef PRINT_PARTITION_COMBINATIONS
-                        errs() << "r=" << r << "\n";
-                        #endif
+                            #ifdef PRINT_PARTITION_COMBINATIONS
+                            errs() << "r=" << r << "\n";
+                            #endif
 
-                        if (LLVM_UNLIKELY(r == Z3_L_TRUE)) {
-                            union_find(a, b);
-                            fusedAny = true;
-                        } else {
-                            Z3_solver_pop(ctx, solver, 1);
+                            if (LLVM_UNLIKELY(r == Z3_L_TRUE)) {
+                                union_find(a, b);
+                                fusedAny = true;
+                            } else {
+                                Z3_solver_pop(ctx, solver, 1);
+                            }
                         }
                     }
                 }
             }
+
         }
-#endif
+
+        #endif
+
         Z3_tactic_dec_ref (ctx, tQE);
         Z3_tactic_dec_ref (ctx, tSMT);
         Z3_solver_dec_ref(ctx, solver);
@@ -1225,7 +1254,10 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
         return fusedAny;
     };
 
-    while (fuseStrideLinkedPartitions()); // fuse until fix-point
+
+    do {
+        estimateSynchronousDataflow();
+    } while (fuseStrideLinkedPartitions()); // fuse until fix-point
 
 
     // TODO: when only lookahead relationships are preventing us from fusing two partitions,
@@ -1385,8 +1417,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
     assert (renumbered[0] == 0);
 
-
-
     PartitionGraph P(partitionCount);
 
     for (unsigned i = 0; i < m; ++i) {
@@ -1451,6 +1481,330 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
     PartitionCount = partitionCount;
 
     return P;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePartitionIOGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::makePartitionIOGraph() {
+
+    std::vector<unsigned> streamSets;
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        const BufferNode & bn = mBufferGraph[streamSet];
+        #ifndef NDEBUG
+        BEGIN_SCOPED_REGION
+        const auto producer = parent(streamSet, mBufferGraph);
+        const auto pid = KernelPartitionId[producer];
+        bool isInterPartitionStreamSet = false;
+        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const auto consumer = target(e, mBufferGraph);
+            const auto cid = KernelPartitionId[consumer];
+            if (pid != cid) {
+                isInterPartitionStreamSet = true;
+                break;
+            }
+        }
+        assert ((bn.Locality != BufferLocality::GloballyShared) ^ isInterPartitionStreamSet);
+        END_SCOPED_REGION
+        #endif
+        if (bn.Locality == BufferLocality::GloballyShared)  {
+            streamSets.push_back(streamSet);
+        }
+    }
+
+    const auto n = streamSets.size();
+
+    PartitionIOGraph G(PartitionCount + n);
+
+    for (unsigned i = 0; i < PartitionCount; ++i) {
+        G[i] = 0;
+    }
+
+    for (unsigned i = 0; i < n; ++i) {
+
+        const auto streamSet = streamSets[i];
+        assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
+        const auto output = in_edge(streamSet, mBufferGraph);
+        const unsigned producer = source(output, mBufferGraph);
+        assert (PipelineInput <= producer && producer < PipelineOutput);
+        const auto pid = KernelPartitionId[producer];
+
+        G[PartitionCount + i] = streamSet;
+
+        BufferPort & outputPort = mBufferGraph[output];
+
+        assert (outputPort.Port.Type == PortType::Output);
+
+        add_edge(pid, PartitionCount + i, PartitionIOData{outputPort, producer}, G);
+        for (const auto input : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const unsigned consumer = target(input, mBufferGraph);
+            assert (consumer > PipelineInput && consumer <= PipelineOutput);
+            const auto cid = KernelPartitionId[consumer];
+            if (pid != cid) {
+                BufferPort & inputPort = mBufferGraph[input];
+
+                assert (inputPort.Port.Type == PortType::Input);
+
+                const Binding & inputBinding = inputPort.Binding;
+                const ProcessingRate & inputRate = inputBinding.getRate();
+
+                if (LLVM_UNLIKELY(inputRate.isGreedy())) {
+                    if (inputRate.getLowerBound().numerator() > 0) {
+                        continue;
+                    }
+                }
+
+                add_edge(PartitionCount + i, cid, PartitionIOData{inputPort, consumer}, G);
+            }
+        }
+
+    }
+
+    printGraph(G, errs(), "P");
+
+
+#if 0
+
+    const auto cfg = Z3_mk_config();
+    Z3_set_param_value(cfg, "model", "true");
+    Z3_set_param_value(cfg, "proof", "false");
+    const auto ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
+
+    const auto tQE = Z3_mk_tactic(ctx, "qe");
+    Z3_tactic_inc_ref (ctx, tQE);
+    const auto tSMT = Z3_mk_tactic(ctx, "smt");
+    Z3_tactic_inc_ref (ctx, tSMT);
+    const auto tactics = Z3_tactic_and_then (ctx, tQE, tSMT);
+    const auto solver = Z3_mk_solver_from_tactic(ctx, tactics);
+    Z3_solver_inc_ref(ctx, solver);
+    Z3_tactic_dec_ref (ctx, tQE);
+    Z3_tactic_dec_ref (ctx, tSMT);
+
+    Z3_params params = Z3_mk_params(ctx);
+    Z3_params_inc_ref(ctx, params);
+
+    Z3_symbol r = Z3_mk_string_symbol(ctx, ":timeout");
+    Z3_params_set_uint(ctx, params, r, 500);
+    Z3_solver_set_params(ctx, solver, params);
+    Z3_params_dec_ref(ctx, params);
+
+    std::vector<Z3_ast> VarList(PartitionCount + n);
+
+    auto hard_assert = [&](Z3_ast c) {
+        Z3_solver_assert(ctx, solver, c);
+    };
+
+    const auto intType = Z3_mk_int_sort(ctx);
+
+    auto constant_real = [&](const Rational & value) {
+        if (value.denominator() == 1) {
+            return Z3_mk_int(ctx, value.numerator(), intType);
+        } else {
+            return Z3_mk_real(ctx, value.numerator(), value.denominator());
+        }
+    };
+
+    auto multiply =[&](Z3_ast X, Z3_ast Y) {
+        Z3_ast args[2] = { X, Y };
+        return Z3_mk_mul(ctx, 2, args);
+    };
+
+    const auto ONE = Z3_mk_int(ctx, 1, intType);
+
+    const auto TWO = Z3_mk_int(ctx, 2, intType);
+
+    std::vector<std::vector<Z3_app>> partitionVars(PartitionCount);
+
+    BEGIN_SCOPED_REGION
+
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    unsigned currentPartitionId = 0;
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+        const auto partitionId = KernelPartitionId[kernel];
+        if (partitionId != currentPartitionId) {
+
+            Z3_ast rootVar = ONE;
+            if (MinimumNumOfStrides[kernel] != MaximumNumOfStrides[kernel]) {
+                #ifndef NDEBUG
+                const auto r = MaximumNumOfStrides[kernel] / MinimumNumOfStrides[kernel];
+                assert (r == Rational{2});
+                #endif
+                rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+                hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
+                hard_assert(Z3_mk_le(ctx, rootVar, TWO));
+            }
+
+            VarList[currentPartitionId] = rootVar;
+            assert (Z3_is_app(ctx, rootVar));
+            partitionVars[currentPartitionId].push_back((Z3_app)rootVar);
+            currentPartitionId = partitionId;
+        }
+    }
+
+
+    END_SCOPED_REGION
+
+
+    flat_map<unsigned, Z3_ast> symbolicPopCountRateVar;
+
+    flat_map<unsigned, Z3_ast> IORateVarMap;
+
+    IORateVarMap.reserve(num_edges(G));
+
+    flat_map<const StreamSet *, Z3_ast> streamSetVar;
+
+    for (unsigned i = 0; i < n; ++i) {
+
+        const auto streamSet = streamSets[i];
+        const auto output = in_edge(streamSet, mBufferGraph);
+        const unsigned producer = source(output, mBufferGraph);
+        assert (producer >= PipelineInput && producer < PipelineOutput);
+        const auto pid = KernelPartitionId[producer];
+
+        Z3_ast outRateExpr = nullptr;
+
+        auto calculateBaseSymbolicRateVar = [&](const unsigned partitionId, const unsigned kernel, const BufferPort & port)  {
+
+            const auto strideVar =  (Z3_ast)partitionVars[partitionId].front();
+
+            const Binding & binding = port.Binding;
+            const ProcessingRate & rate = binding.getRate();
+
+            Z3_ast expr = nullptr;
+
+            switch (rate.getKind()) {
+                case RateId::Fixed:
+                    BEGIN_SCOPED_REGION
+                    expr = multiply(strideVar, constant_real(MinimumNumOfStrides[kernel] * port.Minimum));
+                    END_SCOPED_REGION
+                    break;
+                case RateId::Greedy:
+                    BEGIN_SCOPED_REGION
+                    assert ("greedy rate cannot be an output rate" && producer != kernel);
+                    assert (outRateExpr);
+                    expr = outRateExpr;
+                    END_SCOPED_REGION
+                    break;
+                case RateId::Bounded:
+                    BEGIN_SCOPED_REGION
+                    assert (port.Minimum < port.Maximum);
+                    auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
+                    assert (Z3_is_app(ctx, v));
+                    partitionVars[partitionId].push_back((Z3_app)v);
+
+                    const auto lb = constant_real(MinimumNumOfStrides[kernel] * port.Minimum);
+                    hard_assert(Z3_mk_ge(ctx, v, lb));
+                    const auto ub = constant_real(MinimumNumOfStrides[kernel] * port.Maximum);
+                    hard_assert(Z3_mk_le(ctx, v, ub));
+                    expr = multiply(strideVar, v);
+                    END_SCOPED_REGION
+                    break;
+                case RateId::Unknown:
+                    BEGIN_SCOPED_REGION
+                    auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
+                    assert (Z3_is_app(ctx, v));
+                    partitionVars[partitionId].push_back((Z3_app)v);
+                    const auto lb = constant_real(MinimumNumOfStrides[kernel] * port.Minimum);
+                    hard_assert(Z3_mk_ge(ctx, v, lb));
+                    expr = multiply(strideVar, v);
+                    END_SCOPED_REGION
+                    break;
+                case RateId::PartialSum:
+                    BEGIN_SCOPED_REGION
+                    const auto refStreamSet = getReferenceBufferVertex(kernel, port.Port);
+                    const auto f = symbolicPopCountRateVar.find(refStreamSet);
+                    Z3_ast symbolicRateVar;
+                    if (f == symbolicPopCountRateVar.end()) {
+                        symbolicRateVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+                        const auto ZERO = Z3_mk_int(ctx, 0, intType);
+                        Z3_solver_assert(ctx, solver, Z3_mk_ge(ctx, symbolicRateVar, ZERO));
+                        symbolicPopCountRateVar.emplace(refStreamSet, symbolicRateVar);
+                    } else {
+                        symbolicRateVar = f->second;
+                    }
+
+                    assert (Z3_is_app(ctx, symbolicRateVar));
+                    partitionVars[partitionId].push_back((Z3_app)symbolicRateVar);
+
+                    Z3_ast args[2] = { symbolicRateVar, strideVar };
+                    expr = Z3_mk_mul(ctx, 2, args);
+                    END_SCOPED_REGION
+                    break;
+                case RateId::Relative:
+                    BEGIN_SCOPED_REGION
+                    const auto refBinding = getReferenceBufferVertex(kernel, port.Port);
+                    const auto f = IORateVarMap.find(refBinding);
+                    assert ("relative rate occured before ref" && f != IORateVarMap.end());
+                    expr = f->second;
+                    assert ("failed to locate symbolic rate for relative rate?" && expr);
+                    if (rate.getLowerBound() != Rational{1}) {
+                        expr = multiply(expr, constant_real(rate.getLowerBound()) );
+                    }
+                    END_SCOPED_REGION
+                    break;
+                default:
+                    llvm_unreachable("unknown rate type?");
+            }
+            assert (expr);
+
+            for (const Attribute & attr : binding.getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::LookAhead:
+                        if (port.Port.Type == PortType::Output) {
+                            break;
+                        }
+                    case AttrId::Delayed:
+                        BEGIN_SCOPED_REGION
+                        Z3_ast args[2] = { expr, Z3_mk_int(ctx, attr.amount(), intType) };
+                        expr = Z3_mk_sub(ctx, 2, args);
+                        END_SCOPED_REGION
+                        break;
+                    case AttrId::Deferred:
+                        // A deferred output rate is closer to an bounded rate than a
+                        // countable rate but a deferred input rate simply means the
+                        // buffer must be dynamic.
+                        if (port.Port.Type == PortType::Output) {
+                            const auto deferred = Z3_mk_fresh_const(ctx, nullptr, intType);
+                            vars.push_back((Z3_app)deferred);
+                            hard_assert(Z3_mk_ge(ctx, deferred, Z3_mk_int(ctx, 0, intType)));
+                            hard_assert(Z3_mk_le(ctx, deferred, expr));
+                            expr = deferred;
+                        }
+                        break;
+                    case AttrId::BlockSize:
+                        BEGIN_SCOPED_REGION
+                        expr = Z3_mk_mod(ctx, expr, Z3_mk_int(ctx, attr.amount(), intType) );
+                        END_SCOPED_REGION
+                        break;
+                    default: break;
+                }
+            }
+
+            return expr;
+        };
+
+
+
+        for (const auto input : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const unsigned consumer = target(input, mBufferGraph);
+            assert (consumer > PipelineInput && consumer <= PipelineOutput);
+            const auto cid = KernelPartitionId[consumer];
+            if (pid != cid) {
+
+            }
+        }
+
+    }
+
+    Z3_solver_dec_ref(ctx, solver);
+    Z3_del_context(ctx);
+
+#endif
+
+    mPartitionIOGraph = G;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

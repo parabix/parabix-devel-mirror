@@ -85,20 +85,108 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
  * @brief detemineMaximumNumberOfStrides
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
-    const auto & max = MaximumNumOfStrides[mKernelId];
-    if (mIsPartitionRoot) {
-        if (ExternallySynchronized) {
-            mMaximumNumOfStrides = nullptr;
-        } else {
-            mMaximumNumOfStrides = b->getSize(ceiling(max));
-        }
-    } else {
-        const auto factor = (max / MaxPartitionStrideRate);
-        assert (mNumOfPartitionStrides);
-        mMaximumNumOfStrides = b->CreateMulRational(mNumOfPartitionStrides, factor);
-    }
+    ConstantInt * const strideFactor = b->getSize(MinimumNumOfStrides[mKernelId]);
+    mMaximumNumOfStrides = b->CreateMul(mPartitionSegmentLength, strideFactor);
+
+
+
+//    const auto & max = MaximumNumOfStrides[mKernelId];
+//    if (mIsPartitionRoot) {
+//        if (ExternallySynchronized) {
+//            mMaximumNumOfStrides = nullptr;
+//        } else {
+//            mMaximumNumOfStrides = b->getSize(ceiling(max));
+//        }
+//    } else {
+//        const auto factor = (max / MaxPartitionStrideRate);
+//        assert (mNumOfPartitionStrides);
+//        mMaximumNumOfStrides = b->CreateMulRational(mNumOfPartitionStrides, factor);
+//    }
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief determineNumOfLinearStrides
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
+
+    // If this kernel does not have an explicit do final segment, then we want to know whether this stride will
+    // be the final stride of the kernel. (i.e., that it will be flagged as terminated after executing the kernel
+    // code.) For this to occur, at least one of the inputs must be closed and we must pass all of the data from
+    // that closed input stream to the kernel. It is possible for a stream to be closed but to have more data
+    // left to process (either due to some data being divided across a buffer boundary or because another stream
+    // has less data (relatively speaking) than the closed stream.
+
+    if (LLVM_UNLIKELY(TraceIO)) {
+        mBranchToLoopExit = b->getFalse();
+    }
+
+    // If this kernel is the root of a partition, we'll use the available input to compute how many strides the
+    // kernels within the partition will execute. Otherwise we begin by bounding the kernel by the expected number
+    // of strides w.r.t. its partition's root.
+
+    assert (mKernelIsFinal == nullptr);
+
+    Value * numOfLinearStrides = nullptr;
+
+    if (mMayLoopToEntry && !ExternallySynchronized) {
+        numOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStridesAtLoopEntryPhi);
+    } else {
+        numOfLinearStrides = mMaximumNumOfStrides;
+    }
+
+    for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
+        const PartitionIOData & IO = mPartitionIOGraph[e];
+        if (IO.Kernel == mKernelId) {
+            const auto streamSet = mPartitionIOGraph[source(e, mPartitionIOGraph)];
+            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
+            checkForSufficientInputData(b, IO.Port, streamSet);
+        }
+    }
+
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & br = mBufferGraph[e];
+        getAccessibleInputItems(b, br);
+    }
+
+    const auto prefix = makeKernelName(mKernelId);
+
+    for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
+        const PartitionIOData & IO = mPartitionIOGraph[e];
+        if (IO.Kernel == mKernelId) {
+            Value * const strides = getNumOfAccessibleStrides(b, IO.Port, numOfLinearStrides);
+            numOfLinearStrides = b->CreateUMin(numOfLinearStrides, strides);
+        }
+    }
+
+    mNumOfLinearStrides = numOfLinearStrides;
+
+    determineIsFinal(b);
+    calculateItemCounts(b);
+
+    for (const auto e : make_iterator_range(out_edges(mCurrentPartitionId, mPartitionIOGraph))) {
+        const PartitionIOData & IO = mPartitionIOGraph[e];
+        if (IO.Kernel == mKernelId) {
+            const auto t = target(e, mPartitionIOGraph);
+            assert (t >= PartitionCount);
+            const auto streamSet = mPartitionIOGraph[t];
+            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
+            ensureSufficientOutputSpace(b, IO.Port, streamSet);
+        }
+    }
+
+    if (mMayLoopToEntry) {
+        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, numOfLinearStrides);
+    } else {
+        mUpdatedNumOfStrides = numOfLinearStrides;
+    }
+
+    assert (mIsFinal);
+
+}
+
+
+#if 0
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief determineNumOfLinearStrides
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -282,6 +370,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     assert (mIsFinal);
 
 }
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateItemCounts
@@ -313,7 +402,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         }
         mIsFinalInvocationPhi->addIncoming(terminationSignal, exitBlock);
         if (mIsPartitionRoot) {
-            mPartialPartitionStridesPhi->addIncoming(partialPartitionStrides, exitBlock);
+            // mPartialPartitionStridesPhi->addIncoming(partialPartitionStrides, exitBlock);
         }
     };
     // --- lambda function end
@@ -449,8 +538,7 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const BufferPor
     assert (inputPort.Type == PortType::Input);
 
     Value * const strideLength = getInputStrideLength(b, port);
-    Value * const segmentLength = b->CreateMulRational(strideLength, MinimumNumOfStrides[mKernelId]);
-    Value * const required = addLookahead(b, port, segmentLength); assert (required);
+    Value * const required = addLookahead(b, port, strideLength); assert (required);
     const auto prefix = makeBufferName(mKernelId, inputPort);
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + "_requiredInput (%" PRIu64 ") = %" PRIu64, b->getSize(streamSet), required);
@@ -1219,23 +1307,23 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
     }
 
     partialPartitionStrides = nullptr;
-    if (LLVM_LIKELY(mIsPartitionRoot)) {
-        const auto scale = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
-        if (minFixedRateFactor == nullptr || (scale.numerator() == 1 && scale.denominator() == 1)) {
-            partialPartitionStrides = b->getSize(0);
-        } else {
-            const auto factor = scale / (mFixedRateLCM * mKernel->getStride());
-            partialPartitionStrides = b->CreateMulRational(minFixedRateFactor, factor);
-        }
-        assert (partialPartitionStrides);
-    }
+//    if (LLVM_LIKELY(mIsPartitionRoot)) {
+//        const auto scale = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
+//        if (minFixedRateFactor == nullptr || (scale.numerator() == 1 && scale.denominator() == 1)) {
+//            partialPartitionStrides = b->getSize(0);
+//        } else {
+//            const auto factor = scale / (mFixedRateLCM * mKernel->getStride());
+//            partialPartitionStrides = b->CreateMulRational(minFixedRateFactor, factor);
+//        }
+//        assert (partialPartitionStrides);
+//    }
 
     Constant * const ONE = b->getSize(1);
 
 //    Value * numOfOutputStrides = nullptr;
 //    if (minFixedRateFactor) {
-//        const auto factor = Rational{mKernel->getStride()} * mFixedRateLCM;
-//        numOfOutputStrides = b->CreateCeilUDivRate(minFixedRateFactor, factor);
+//        const auto factor =  mFixedRateLCM * mKernel->getStride();
+//        numOfOutputStrides = b->CreateCeilUDivRational(minFixedRateFactor, factor);
 //    } else {
 //        numOfOutputStrides = b->getSize(1);
 //    }

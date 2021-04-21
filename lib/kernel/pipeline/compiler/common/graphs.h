@@ -256,10 +256,7 @@ struct BufferNode {
     unsigned Type = 0;
     bool NonLinear = false;
 
-#warning fix NonLocal flag to use Locality
-
     BufferLocality Locality = BufferLocality::ThreadLocal;
-
 
     unsigned CopyBack = 0;
     unsigned CopyBackReflection = 0;
@@ -398,7 +395,6 @@ enum CountingType : unsigned {
 
 ENABLE_ENUM_FLAGS(CountingType)
 
-using PipelineIOGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 template <typename T>
 using OwningVector = std::vector<std::unique_ptr<T>>;
@@ -417,6 +413,26 @@ struct PartitionData {
 };
 
 using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, StreamSetId>;
+
+
+struct PartitionIOData {
+
+    // RefWrapper<const BufferPort> Port;
+    BufferPort Port;
+    unsigned Kernel;
+
+    PartitionIOData() = default;
+
+    PartitionIOData(BufferPort & port, unsigned kernel)
+    : Port(port)
+    , Kernel(kernel) {
+
+    }
+
+};
+
+
+using PartitionIOGraph =  adjacency_list<vecS, vecS, bidirectionalS, unsigned, PartitionIOData>;
 
 using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
 
