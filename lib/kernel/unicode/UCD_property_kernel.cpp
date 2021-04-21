@@ -38,9 +38,16 @@ void UnicodePropertyKernelBuilder::generatePabloMethod() {
         ccc = llvm::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
     UCD::UCDCompiler unicodeCompiler(*ccc.get(), pb);
-    re::CC * propertyCC = llvm::cast<re::CC>(mName->getDefinition());
     pablo::Var * propertyVar = pb.createVar(mName->getFullName(), pb.createZeroes());
-    unicodeCompiler.addTarget(propertyVar, propertyCC);
+    re::RE * property_defn = mName->getDefinition();
+    if (re::CC * propertyCC = llvm::dyn_cast<re::CC>(property_defn)) {
+        unicodeCompiler.addTarget(propertyVar, propertyCC);
+    } else if (re::PropertyExpression * pe = llvm::dyn_cast<re::PropertyExpression>(property_defn)) {
+        if (pe->getKind() == re::PropertyExpression::Kind::Codepoint) {
+            re::CC * propertyCC = llvm::cast<re::CC>(pe->getResolvedRE());
+            unicodeCompiler.addTarget(propertyVar, propertyCC);
+        }
+    }
     unicodeCompiler.compile();
     Var * const property_stream = getOutputStreamVar("property_stream");
     pb.createAssign(pb.createExtract(property_stream, pb.getInteger(0)), propertyVar);
