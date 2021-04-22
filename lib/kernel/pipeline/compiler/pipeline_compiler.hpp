@@ -144,9 +144,15 @@ public:
     void branchToInitialPartition(BuilderRef b);
     BasicBlock * getPartitionExitPoint(BuilderRef b);
     void checkForPartitionEntry(BuilderRef b);
+
+
+
     void identifyPartitionKernelRange();
     void determinePartitionStrideRates();
-    void calculatePartitionSegmentLength(BuilderRef b);
+
+    void writePartitionEntryIOGuard(BuilderRef b);
+    Value * calculatePartitionSegmentLength(BuilderRef b);
+
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
 
     void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
@@ -534,7 +540,8 @@ protected:
     unsigned                                    MaxPartitionStrideRate;
     Rational                                    PartitionStrideFactor;
     Value *                                     mPartitionRootTerminationSignal = nullptr;
-    BasicBlock *                                mNextPartitionEntryPoint;
+    BasicBlock *                                mCurrentPartitionEntryGuard = nullptr;
+    BasicBlock *                                mNextPartitionEntryPoint = nullptr;
     FixedVector<Value *>                        mPartitionTerminationSignal;
     FixedVector<PHINode *>                      mExhaustedPipelineInputAtPartitionEntry;
     FixedVector<Value *>                        mInitialConsumedItemCount;

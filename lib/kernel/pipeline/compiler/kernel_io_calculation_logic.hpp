@@ -86,9 +86,8 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
     ConstantInt * const strideFactor = b->getSize(MinimumNumOfStrides[mKernelId]);
+    assert (mPartitionSegmentLength);
     mMaximumNumOfStrides = b->CreateMul(mPartitionSegmentLength, strideFactor);
-
-
 
 //    const auto & max = MaximumNumOfStrides[mKernelId];
 //    if (mIsPartitionRoot) {
@@ -135,12 +134,14 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         numOfLinearStrides = mMaximumNumOfStrides;
     }
 
-    for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
-        const PartitionIOData & IO = mPartitionIOGraph[e];
-        if (IO.Kernel == mKernelId) {
-            const auto streamSet = mPartitionIOGraph[source(e, mPartitionIOGraph)];
-            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-            checkForSufficientInputData(b, IO.Port, streamSet);
+    if (mCheckIO) {
+        for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
+            const PartitionIOData & IO = mPartitionIOGraph[e];
+            if (IO.Kernel == mKernelId) {
+                const auto streamSet = mPartitionIOGraph[source(e, mPartitionIOGraph)];
+                assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
+                checkForSufficientInputData(b, IO.Port, streamSet);
+            }
         }
     }
 
@@ -151,11 +152,13 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     const auto prefix = makeKernelName(mKernelId);
 
-    for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
-        const PartitionIOData & IO = mPartitionIOGraph[e];
-        if (IO.Kernel == mKernelId) {
-            Value * const strides = getNumOfAccessibleStrides(b, IO.Port, numOfLinearStrides);
-            numOfLinearStrides = b->CreateUMin(numOfLinearStrides, strides);
+    if (mCheckIO) {
+        for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
+            const PartitionIOData & IO = mPartitionIOGraph[e];
+            if (IO.Kernel == mKernelId) {
+                Value * const strides = getNumOfAccessibleStrides(b, IO.Port, numOfLinearStrides);
+                numOfLinearStrides = b->CreateUMin(numOfLinearStrides, strides);
+            }
         }
     }
 

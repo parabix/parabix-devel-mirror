@@ -80,6 +80,8 @@ inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
         assert (partitionId != jumpIdx);
         mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
         mIsPartitionRoot = true;
+        identifyPartitionKernelRange();
+        determinePartitionStrideRates();
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "  *** entering partition %" PRIu64, b->getSize(mCurrentPartitionId));
         #endif
@@ -114,9 +116,24 @@ void PipelineCompiler::determinePartitionStrideRates() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief writePartitionEntryIOGuard
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::writePartitionEntryIOGuard(BuilderRef b) {
+    b->SetInsertPoint(mCurrentPartitionEntryGuard);
+    Value * const processPartition = calculatePartitionSegmentLength(b);
+    detemineMaximumNumberOfStrides(b);
+    b->CreateLikelyCondBr(processPartition, mKernelLoopEntry, mKernelJumpToNextUsefulPartition);
+
+    BasicBlock * const exitBlock = b->GetInsertBlock();
+    if (mExhaustedInputAtJumpPhi) {
+        mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculatePartitionSegmentLength
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
+Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
 
     const auto minFirst = MinimumNumOfStrides[FirstKernelInPartition];
     const auto maxFirst = MaximumNumOfStrides[FirstKernelInPartition];
@@ -126,6 +143,8 @@ void PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
     ConstantInt * const maxPartitionStrides = b->getSize(maxNumOfStrides);
 
     Value * availPartitionStrides = maxPartitionStrides;
+
+    Value * anyClosed = nullptr;
 
     for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
 
@@ -195,6 +214,14 @@ void PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
                 break;
         }
 
+        Value * const closed = isClosed(b, streamSet);
+        assert (closed);
+        if (anyClosed) {
+            anyClosed = b->CreateOr(anyClosed, closed);
+        } else {
+            anyClosed = closed;
+        }
+
         #ifndef DISABLE_ZERO_EXTEND
         if (LLVM_UNLIKELY(port.IsZeroExtended)) {
             // To zero-extend an input stream, we must first exhaust all input for this stream before
@@ -203,14 +230,23 @@ void PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
 
             // NOTE: the producer of this stream will zero out all data after its last produced item
             // that can be read by a single iteration of any consuming kernel.
-            Value * const closed = isClosed(b, streamSet);
             segmentStrides = b->CreateSelect(closed, segmentStrides, maxPartitionStrides);
         }
         #endif
         availPartitionStrides = b->CreateUMin(availPartitionStrides, segmentStrides);
     }
+
     mPartitionSegmentLength = availPartitionStrides;
+
     b->CallPrintInt("mPartitionSegmentLength", mPartitionSegmentLength);
+
+    if (anyClosed) {
+        Value * const hasFullSegment = b->CreateICmpNE(availPartitionStrides, b->getSize(0));
+        return b->CreateOr(anyClosed, hasFullSegment);
+    } else {
+        return b->getTrue();
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -266,23 +302,30 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
             produced = mLocallyAvailableItems[streamSet];
         } else {
             if (kernel == mKernelId) {
+
+                if (LLVM_UNLIKELY(br.IsDeferred)) {
+                    produced = mInitiallyProducedDeferredItemCount[streamSet];
+                } else {
+                    produced = mInitiallyProducedItemCount[streamSet];
+                }
+
                 if (fromInitiallyTerminated) {
-                    if (LLVM_UNLIKELY(br.IsDeferred)) {
-                        produced = mInitiallyProducedDeferredItemCount[streamSet];
-                    } else {
-                        produced = mInitiallyProducedItemCount[streamSet];
-                    }
+//                    if (LLVM_UNLIKELY(br.IsDeferred)) {
+//                        produced = mInitiallyProducedDeferredItemCount[streamSet];
+//                    } else {
+//                        produced = mInitiallyProducedItemCount[streamSet];
+//                    }
                 } else {
 
-                    Value * alreadyProduced = nullptr;
-                    if (LLVM_UNLIKELY(br.IsDeferred)) {
-                        alreadyProduced = mAlreadyProducedDeferredPhi[br.Port];
-                    } else {
-                        alreadyProduced = mAlreadyProducedPhi[br.Port];
-                    }
-                    assert (alreadyProduced);
+                    Value * alreadyProduced = produced;
+//                    if (LLVM_UNLIKELY(br.IsDeferred)) {
+//                        alreadyProduced = mAlreadyProducedDeferredPhi[br.Port];
+//                    } else {
+//                        alreadyProduced = mAlreadyProducedPhi[br.Port];
+//                    }
+//                    assert (alreadyProduced);
 
-                    produced = alreadyProduced;
+//                    produced = alreadyProduced;
 
                     const auto nextPartitionId = mCurrentPartitionId + 1U;
                     const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
@@ -300,14 +343,16 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
 
                         const auto ip = b->saveIP();
                         b->SetInsertPoint(entryPoint, entryPoint->begin());
-                        PHINode * const phi = b->CreatePHI(b->getSizeTy(), 2);
+                        PHINode * const phi = b->CreatePHI(b->getSizeTy(), 3);
                         assert ((mKernelInitiallyTerminatedExit == nullptr) ^ (mKernelInitiallyTerminated != nullptr));
+                        assert (mCurrentPartitionEntryGuard);
+                        phi->addIncoming(initiallyProduced, mCurrentPartitionEntryGuard);
                         if (mKernelInitiallyTerminatedExit) {
                             phi->addIncoming(initiallyProduced, mKernelInitiallyTerminatedExit);
                         }
-                        if (mKernelInsufficientInput) {
-                            phi->addIncoming(alreadyProduced, mKernelInsufficientInput);
-                        }
+//                        if (mKernelInsufficientInput) {
+//                            phi->addIncoming(alreadyProduced, mKernelInsufficientInput);
+//                        }
                         produced = phi;
                         b->restoreIP(ip);                       
                     }
@@ -401,8 +446,9 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief phiOutPartitionStatusFlags
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId, const bool fromKernelEntry,
-                                                  BasicBlock * const entryPoint) {
+void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId,
+                                                  const bool /* fromKernelEntry */,
+                                                  BasicBlock * const /* entryPoint */) {
 
     BasicBlock * const exitPoint = b->GetInsertBlock();
 
@@ -487,6 +533,8 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
+    b->SetInsertPoint(mKernelInitiallyTerminated);
+
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
 
     // create a temporary basic block to act a constant exit block of any phi nodes;
@@ -521,7 +569,6 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
                 }
                 phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, mKernelInitiallyTerminated);
             }
-
             phiOutPartitionStatusFlags(b, nextPartitionId, true, mKernelInitiallyTerminated);
 
             updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
@@ -549,6 +596,7 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeOnInitialTerminationJumpToNextPartitionToCheck
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -558,13 +606,20 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     assert (mCurrentPartitionId < nextPartitionId);
 
     Value * const startTime = acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
-    BasicBlock * const exitBlock = b->GetInsertBlock(); // b->CreateBasicBlock();
+    BasicBlock * const exitBlock = b->GetInsertBlock();
     if (LLVM_UNLIKELY(EnableCycleCounter)) {
         mPartitionStartTimePhi[nextPartitionId]->addIncoming(startTime, exitBlock);
+    }
+
+    PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
+    if (exhaustedInputPhi) {       
+        Value * const exhausted = mIsBounded ? mExhaustedInputAtJumpPhi : mExhaustedInput;
+        exhaustedInputPhi->addIncoming(exhausted, exitBlock); assert (exhausted);
     }
     for (auto kernel = PipelineInput; kernel <= mKernelId; ++kernel) {
         phiOutPartitionItemCounts(b, kernel, nextPartitionId, false, mKernelJumpToNextUsefulPartition);
     }
+    // NOTE: break condition differs from "writeInitiallyTerminatedPartitionExit"
     for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
         if (mPartitionJumpIndex[KernelPartitionId[kernel]] > nextPartitionId) {
             break;
@@ -572,11 +627,6 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
         phiOutPartitionItemCounts(b, kernel, nextPartitionId, false, mKernelJumpToNextUsefulPartition);
     }
     phiOutPartitionStatusFlags(b, nextPartitionId, false, mKernelJumpToNextUsefulPartition);
-    PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
-    if (exhaustedInputPhi) {       
-        Value * const exhausted = mIsBounded ? mExhaustedInputAtJumpPhi : mExhaustedInput;
-        exhaustedInputPhi->addIncoming(exhausted, exitBlock); assert (exhausted);
-    }
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, "** " + makeKernelName(mKernelId) + ".jumping = %" PRIu64, mSegNo);
