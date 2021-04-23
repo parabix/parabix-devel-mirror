@@ -369,21 +369,15 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     setCurrentTerminationSignal(b, mTerminatedAtExitPhi);
 
-    if (mTotalNumOfStridesAtExitPhi) {
+    if (mIsPartitionRoot) {
+        assert (mTotalNumOfStridesAtExitPhi);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "* " + prefix + ".totalStridesOnExit = %" PRIu64, mTotalNumOfStridesAtExitPhi);
         #endif
-
-//        if (mIsPartitionRoot) {
+        mNumOfPartitionStrides = mTotalNumOfStridesAtExitPhi;
 //            const auto factor = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
 //            mNumOfPartitionStrides = b->CreateMulRational(mTotalNumOfStridesAtExitPhi, factor);
 //            // mNumOfPartitionStrides = b->CreateAdd(mNumOfPartitionStrides, mPartialPartitionStridesAtLoopExitPhi);
-//            #ifdef PRINT_DEBUG_MESSAGES
-//            debugPrint(b, "* " + prefix + ".partitionStridesAdded = %" PRIu64, mPartialPartitionStridesAtLoopExitPhi);
-//            debugPrint(b, "* " + prefix + ".partitionStridesOnExit = %" PRIu64, mNumOfPartitionStrides);
-//            debugPrint(b, "* " + prefix + ".partitionTerminationOnExit = %" PRIu8, mTerminatedAtExitPhi);
-//            #endif
-//        }
     }
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);

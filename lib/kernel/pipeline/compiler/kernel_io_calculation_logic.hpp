@@ -85,22 +85,28 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
  * @brief detemineMaximumNumberOfStrides
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
-    ConstantInt * const strideFactor = b->getSize(MinimumNumOfStrides[mKernelId]);
-    assert (mPartitionSegmentLength);
-    mMaximumNumOfStrides = b->CreateMul(mPartitionSegmentLength, strideFactor);
+    // The partition root kernel determines the amount of data processed based on the partition input.
+    // During normal execution, it always performs max num of strides worth of work. However, if this
+    // segment is the last segment, mPartitionSegmentLength is artificially raised to a value of ONE
+    // even though we likely can only execute a partial segment worth of work. The root kernel
+    // calculates how many strides can be performed and sets mNumOfPartitionStrides to that value.
 
-//    const auto & max = MaximumNumOfStrides[mKernelId];
-//    if (mIsPartitionRoot) {
+    // To avoid having every kernel test their I/O during normal execution, the non-root kernels in
+    // the same partition refer to the mNumOfPartitionStrides to determine how their segment length.
+
+    if (mIsPartitionRoot) {
 //        if (ExternallySynchronized) {
 //            mMaximumNumOfStrides = nullptr;
 //        } else {
-//            mMaximumNumOfStrides = b->getSize(ceiling(max));
+            ConstantInt * const strideFactor = b->getSize(MinimumNumOfStrides[mKernelId]);
+            assert (mPartitionSegmentLength);
+            mMaximumNumOfStrides = b->CreateMul(mPartitionSegmentLength, strideFactor);
 //        }
-//    } else {
-//        const auto factor = (max / MaxPartitionStrideRate);
-//        assert (mNumOfPartitionStrides);
-//        mMaximumNumOfStrides = b->CreateMulRational(mNumOfPartitionStrides, factor);
-//    }
+    } else {
+        Rational factor{MinimumNumOfStrides[mKernelId], MinimumNumOfStrides[FirstKernelInPartition]};
+        assert (mNumOfPartitionStrides);
+        mMaximumNumOfStrides = b->CreateMulRational(mNumOfPartitionStrides, factor);
+    }
 }
 
 
@@ -134,11 +140,16 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         numOfLinearStrides = mMaximumNumOfStrides;
     }
 
+#warning only partition root input or non-linear buffers ought to be tested. revise this check.
+
     if (mCheckIO) {
         for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
             const PartitionIOData & IO = mPartitionIOGraph[e];
             if (IO.Kernel == mKernelId) {
-                const auto streamSet = mPartitionIOGraph[source(e, mPartitionIOGraph)];
+
+                const auto i = source(e, mPartitionIOGraph);
+                assert (i >= PartitionCount);
+                const auto streamSet = FirstStreamSet + i - PartitionCount;
                 assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
                 checkForSufficientInputData(b, IO.Port, streamSet);
             }
@@ -149,8 +160,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         const BufferPort & br = mBufferGraph[e];
         getAccessibleInputItems(b, br);
     }
-
-    const auto prefix = makeKernelName(mKernelId);
 
     if (mCheckIO) {
         for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
@@ -170,9 +179,9 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mCurrentPartitionId, mPartitionIOGraph))) {
         const PartitionIOData & IO = mPartitionIOGraph[e];
         if (IO.Kernel == mKernelId) {
-            const auto t = target(e, mPartitionIOGraph);
-            assert (t >= PartitionCount);
-            const auto streamSet = mPartitionIOGraph[t];
+            const auto i = target(e, mPartitionIOGraph);
+            assert (i >= PartitionCount);
+            const auto streamSet = FirstStreamSet + i - PartitionCount;
             assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
             ensureSufficientOutputSpace(b, IO.Port, streamSet);
         }
@@ -665,17 +674,30 @@ Value * PipelineCompiler::anyInputClosed(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determineIsFinal(BuilderRef b) {
     if (mKernelIsFinal == nullptr) {
-        Value * const anyClosed = anyInputClosed(b); assert (anyClosed);
         if (mMayLoopToEntry) {
             ConstantInt * const sz_ZERO = b->getSize(0);
             Value * const noMoreStrides = b->CreateICmpEQ(mNumOfLinearStrides, sz_ZERO);
-            mKernelIsFinal = b->CreateAnd(anyClosed, noMoreStrides);
+            mKernelIsFinal = b->CreateAnd(mPartitionAllClosed, noMoreStrides);
             Value * const hasMoreStrides = b->CreateICmpNE(mNumOfLinearStrides, sz_ZERO);
-            mKernelIsPenultimate = b->CreateAnd(anyClosed, hasMoreStrides);
+            mKernelIsPenultimate = b->CreateAnd(mPartitionAllClosed, hasMoreStrides);
         } else {
-            mKernelIsFinal = anyClosed;            
+            mKernelIsFinal = mPartitionAllClosed;
+            mKernelIsPenultimate = nullptr;
         }
     }
+
+//    if (mKernelIsFinal == nullptr) {
+//        Value * const anyClosed = anyInputClosed(b); assert (anyClosed);
+//        if (mMayLoopToEntry) {
+//            ConstantInt * const sz_ZERO = b->getSize(0);
+//            Value * const noMoreStrides = b->CreateICmpEQ(mNumOfLinearStrides, sz_ZERO);
+//            mKernelIsFinal = b->CreateAnd(anyClosed, noMoreStrides);
+//            Value * const hasMoreStrides = b->CreateICmpNE(mNumOfLinearStrides, sz_ZERO);
+//            mKernelIsPenultimate = b->CreateAnd(anyClosed, hasMoreStrides);
+//        } else {
+//            mKernelIsFinal = anyClosed;
+//        }
+//    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -7,7 +7,7 @@
 
 namespace kernel {
 
-#define PRINT_PARTITION_COMBINATIONS
+// #define PRINT_PARTITION_COMBINATIONS
 
 #define USE_SIBLING_PARTITION_TEST
 
@@ -1488,11 +1488,20 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::makePartitionIOGraph() {
 
-    std::vector<unsigned> streamSets;
+    // NOTE: we iterate through the kernels to assemble the final graph --- despite the fact
+    // it would be faster to iterate through the streamsets. The reason for this is want the
+    // edges to be in the same order they occur in the buffer graph.
+
+    // When the buffer graph is constructed, it rearranges the I/O ordering to put reference
+    // channels for both PopCount/PartialSum and Relative rates prior to them, regardless of
+    // the actual port ordering. We need this property for checking PartialSum streams later
+    // since we want to ensure we do not read an out-of-bounds/undefined value later.
+
+    // Ensuring the edges in this graph are correctly ordered simplifies compilation later.
+
+    #ifndef NDEBUG
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         const BufferNode & bn = mBufferGraph[streamSet];
-        #ifndef NDEBUG
-        BEGIN_SCOPED_REGION
         const auto producer = parent(streamSet, mBufferGraph);
         const auto pid = KernelPartitionId[producer];
         bool isInterPartitionStreamSet = false;
@@ -1505,59 +1514,37 @@ void PipelineAnalysis::makePartitionIOGraph() {
             }
         }
         assert ((bn.Locality != BufferLocality::GloballyShared) ^ isInterPartitionStreamSet);
-        END_SCOPED_REGION
-        #endif
-        if (bn.Locality == BufferLocality::GloballyShared)  {
-            streamSets.push_back(streamSet);
-        }
     }
+    #endif
 
-    const auto n = streamSets.size();
+    const auto numOfStreamSets = LastStreamSet - FirstStreamSet + 1;
 
-    PartitionIOGraph G(PartitionCount + n);
+    PartitionIOGraph G(PartitionCount + numOfStreamSets);
 
-    for (unsigned i = 0; i < PartitionCount; ++i) {
-        G[i] = 0;
-    }
-
-    for (unsigned i = 0; i < n; ++i) {
-
-        const auto streamSet = streamSets[i];
-        assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-        const auto output = in_edge(streamSet, mBufferGraph);
-        const unsigned producer = source(output, mBufferGraph);
-        assert (PipelineInput <= producer && producer < PipelineOutput);
-        const auto pid = KernelPartitionId[producer];
-
-        G[PartitionCount + i] = streamSet;
-
-        BufferPort & outputPort = mBufferGraph[output];
-
-        assert (outputPort.Port.Type == PortType::Output);
-
-        add_edge(pid, PartitionCount + i, PartitionIOData{outputPort, producer}, G);
-        for (const auto input : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const unsigned consumer = target(input, mBufferGraph);
-            assert (consumer > PipelineInput && consumer <= PipelineOutput);
-            const auto cid = KernelPartitionId[consumer];
-            if (pid != cid) {
-                BufferPort & inputPort = mBufferGraph[input];
-
-                assert (inputPort.Port.Type == PortType::Input);
-
-                const Binding & inputBinding = inputPort.Binding;
-                const ProcessingRate & inputRate = inputBinding.getRate();
-
-                if (LLVM_UNLIKELY(inputRate.isGreedy())) {
-                    if (inputRate.getLowerBound().numerator() > 0) {
-                        continue;
-                    }
+    for (auto kernel = PipelineInput; kernel <= PipelineOutput; ++kernel) {
+        const auto partId = KernelPartitionId[kernel];
+        assert (partId < PartitionCount);
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const auto streamSet = source(input, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            if (bn.Locality == BufferLocality::GloballyShared)  {
+                // Only add in cross-partition edges
+                if (KernelPartitionId[parent(streamSet, mBufferGraph)] != partId) {
+                    BufferPort & inputPort = mBufferGraph[input];
+                    const auto streamSetId = PartitionCount + streamSet - FirstStreamSet;
+                    add_edge(streamSetId, partId, PartitionIOData{inputPort, kernel}, G);
                 }
-
-                add_edge(PartitionCount + i, cid, PartitionIOData{inputPort, consumer}, G);
             }
         }
-
+        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            const auto streamSet = target(output, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            if (bn.Locality == BufferLocality::GloballyShared)  {
+                BufferPort & outputPort = mBufferGraph[output];
+                const auto streamSetId = PartitionCount + streamSet - FirstStreamSet;
+                add_edge(partId, streamSetId, PartitionIOData{outputPort, kernel}, G);
+            }
+        }
     }
 
     printGraph(G, errs(), "P");

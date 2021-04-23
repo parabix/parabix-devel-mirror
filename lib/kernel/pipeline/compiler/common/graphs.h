@@ -431,8 +431,7 @@ struct PartitionIOData {
 
 };
 
-
-using PartitionIOGraph =  adjacency_list<vecS, vecS, bidirectionalS, unsigned, PartitionIOData>;
+using PartitionIOGraph =  adjacency_list<vecS, vecS, bidirectionalS, no_property, PartitionIOData>;
 
 using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
 

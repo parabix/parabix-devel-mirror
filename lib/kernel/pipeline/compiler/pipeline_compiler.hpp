@@ -534,7 +534,7 @@ protected:
     unsigned                                    LastKernelInPartition = 0;
 
     Value *                                     mPartitionSegmentLength = nullptr;
-    Value *                                     mPartitionAnyClosed = nullptr;
+    Value *                                     mPartitionAllClosed = nullptr;
 
     Value *                                     mNumOfPartitionStrides = nullptr;
     unsigned                                    MaxPartitionStrideRate;
