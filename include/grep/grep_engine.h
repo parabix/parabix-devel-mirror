@@ -293,8 +293,6 @@ private:
     unsigned mNumOfThreads;
 };
 
-std::vector<uint64_t> lineNumGrep(re::RE * pattern, const char * buffer, size_t bufSize);
-
 enum class PatternKind {Include, Exclude};
 class InternalMultiSearchEngine {
 public:
@@ -302,10 +300,10 @@ public:
 
     InternalMultiSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine);
 
-    ~InternalMultiSearchEngine();
+    ~InternalMultiSearchEngine() {};
 
     void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
-    void setCaseInsensitive()  {mCaseInsensitive = true;}
+    void setCaseInsensitive() {mCaseInsensitive = true;}
 
     void grepCodeGen(const re::PatternVector & patterns);
 
@@ -318,6 +316,28 @@ private:
     void * mMainMethod;
     unsigned mNumOfThreads;
 };
+
+/**
+ * Returns which lines of a given buffer matches with a given regex pattern.
+ *
+ * @param pattern the regex pattern.
+ * @param buffer the buffer to search for a match.
+ * @param bufSize the size of the buffer.
+ *
+ * @return a vector with the lines that match the regex pattern.
+ */
+std::vector<uint64_t> lineNumGrep(re::RE * pattern, const char * buffer, size_t bufSize);
+
+/**
+ * Returns whether a given buffer matches with a given regex pattern.
+ *
+ * @param pattern the regex pattern.
+ * @param buffer the buffer to search for a match.
+ * @param bufSize the size of the buffer.
+ *
+ * @return true if there is any matches and false otherwise.
+ */
+bool matchOnlyGrep(re::RE * pattern, const char * buffer, size_t bufSize);
 
 }
 

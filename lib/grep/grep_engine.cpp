@@ -1296,35 +1296,15 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     f(search_buffer, bufferLength, &accum);
 }
 
-class LineNumberAccumulator : public grep::MatchAccumulator {
-public:
-    LineNumberAccumulator() {}
-    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
-    std::vector<uint64_t> && getAccumulatedLines() { return std::move(mLineNums); }
-private:
-    std::vector<uint64_t> mLineNums;
-};
-
-void LineNumberAccumulator::accumulate_match(const size_t lineNum, char * /* line_start */, char * /* line_end */) {
-    mLineNums.push_back(lineNum);
-}
-
-std::vector<uint64_t> lineNumGrep(re::RE * pattern, const char * buffer, size_t bufSize) {
-      LineNumberAccumulator accum;
-      CPUDriver driver("driver");
-      grep::InternalSearchEngine engine(driver);
-      engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-      engine.grepCodeGen(pattern);
-      engine.doGrep(buffer, bufSize, accum);
-      return accum.getAccumulatedLines();
-  }
-
 InternalMultiSearchEngine::InternalMultiSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mCaseInsensitive(false),
     mGrepDriver(driver),
     mMainMethod(nullptr),
     mNumOfThreads(1) {}
+
+InternalMultiSearchEngine::InternalMultiSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine) :
+    InternalMultiSearchEngine(engine->mGrepDriver) {}
 
 void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) {
     auto & idb = mGrepDriver.getBuilder();
@@ -1403,11 +1383,50 @@ void InternalMultiSearchEngine::doGrep(const char * search_buffer, size_t buffer
     f(search_buffer, bufferLength, &accum);
 }
 
-InternalMultiSearchEngine::InternalMultiSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine)
-: InternalMultiSearchEngine(engine->mGrepDriver) {
+class LineNumberAccumulator : public grep::MatchAccumulator {
+public:
+    LineNumberAccumulator() {}
+    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
+    std::vector<uint64_t> && getAccumulatedLines() { return std::move(mLineNums); }
+private:
+    std::vector<uint64_t> mLineNums;
+};
 
+void LineNumberAccumulator::accumulate_match(const size_t lineNum, char * /* line_start */, char * /* line_end */) {
+    mLineNums.push_back(lineNum);
 }
 
-InternalMultiSearchEngine::~InternalMultiSearchEngine() { }
+std::vector<uint64_t> lineNumGrep(re::RE * pattern, const char * buffer, size_t bufSize) {
+    LineNumberAccumulator accum;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine engine(driver);
+    engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+    engine.grepCodeGen(pattern);
+    engine.doGrep(buffer, bufSize, accum);
+    return accum.getAccumulatedLines();
+}
+
+class MatchOnlyAccumulator : public grep::MatchAccumulator {
+public:
+    MatchOnlyAccumulator() : mFoundMatch(false) {}
+    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
+    bool foundAnyMatches() { return mFoundMatch; }
+private:
+    bool mFoundMatch;
+};
+
+void MatchOnlyAccumulator::accumulate_match(const size_t lineNum, char * /* line_start */, char * /* line_end */) {
+    mFoundMatch = true;
+}
+
+bool matchOnlyGrep(re::RE * pattern, const char * buffer, size_t bufSize) {
+    MatchOnlyAccumulator accum;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine engine(driver);
+    engine.setRecordBreak(grep::GrepRecordBreakKind::Null);
+    engine.grepCodeGen(pattern);
+    engine.doGrep(buffer, bufSize, accum);
+    return accum.foundAnyMatches();
+}
 
 }
