@@ -640,27 +640,20 @@ bool PipelineCommonGraphFunctions::mayHaveNonLinearIO(const size_t kernel) const
     // able to execute its full segment without splitting the work across
     // two or more linear sub-segments.
 
-//    Rational fixedRateLCM;
-
-
-//    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
-//        const auto streamSet = source(input, mBufferGraphRef);
-//        const BufferNode & node = mBufferGraphRef[streamSet];
-//        if (node.NonLinear) {
-//            return true;
-//        }
-////        const BufferRateData & br = mBufferGraphRef[input];
-////        if (br.Add) {
-////            return true;
-////        }
-//    }
-//    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
-//        const auto streamSet = target(output, mBufferGraphRef);
-//        const BufferNode & node = mBufferGraphRef[streamSet];
-//        if (node.NonLinear) {
-//            return true;
-//        }
-//    }
+    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
+        const auto streamSet = source(input, mBufferGraphRef);
+        const BufferNode & node = mBufferGraphRef[streamSet];
+        if (node.NonLinear) {
+            return true;
+        }
+    }
+    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
+        const auto streamSet = target(output, mBufferGraphRef);
+        const BufferNode & node = mBufferGraphRef[streamSet];
+        if (node.NonLinear) {
+            return true;
+        }
+    }
     return false;
 }
 

@@ -139,19 +139,18 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     } else {
         numOfLinearStrides = mMaximumNumOfStrides;
     }
-
-#warning only partition root input or non-linear buffers ought to be tested. revise this check.
-
     if (mCheckIO) {
         for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
             const PartitionIOData & IO = mPartitionIOGraph[e];
             if (IO.Kernel == mKernelId) {
-
                 const auto i = source(e, mPartitionIOGraph);
                 assert (i >= PartitionCount);
                 const auto streamSet = FirstStreamSet + i - PartitionCount;
                 assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-                checkForSufficientInputData(b, IO.Port, streamSet);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (mIsPartitionRoot || bn.NonLinear) {
+                    checkForSufficientInputData(b, IO.Port, streamSet);
+                }
             }
         }
     }
@@ -183,7 +182,10 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             assert (i >= PartitionCount);
             const auto streamSet = FirstStreamSet + i - PartitionCount;
             assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-            ensureSufficientOutputSpace(b, IO.Port, streamSet);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            if (mIsPartitionRoot || bn.NonLinear) {
+                ensureSufficientOutputSpace(b, IO.Port, streamSet);
+            }
         }
     }
 
@@ -192,8 +194,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     } else {
         mUpdatedNumOfStrides = numOfLinearStrides;
     }
-
-    assert (mIsFinal);
 
 }
 
@@ -414,7 +414,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         }
         mIsFinalInvocationPhi->addIncoming(terminationSignal, exitBlock);
         if (mIsPartitionRoot) {
-            // mPartialPartitionStridesPhi->addIncoming(partialPartitionStrides, exitBlock);
+            mFinalPartialStrideFixedRateRemainderPhi->addIncoming(partialPartitionStrides, exitBlock);
         }
     };
     // --- lambda function end
@@ -677,27 +677,14 @@ void PipelineCompiler::determineIsFinal(BuilderRef b) {
         if (mMayLoopToEntry) {
             ConstantInt * const sz_ZERO = b->getSize(0);
             Value * const noMoreStrides = b->CreateICmpEQ(mNumOfLinearStrides, sz_ZERO);
-            mKernelIsFinal = b->CreateAnd(mPartitionAllClosed, noMoreStrides);
+            mKernelIsFinal = b->CreateAnd(mFinalPartitionSegment, noMoreStrides);
             Value * const hasMoreStrides = b->CreateICmpNE(mNumOfLinearStrides, sz_ZERO);
-            mKernelIsPenultimate = b->CreateAnd(mPartitionAllClosed, hasMoreStrides);
+            mKernelIsPenultimate = b->CreateAnd(mFinalPartitionSegment, hasMoreStrides);
         } else {
-            mKernelIsFinal = mPartitionAllClosed;
+            mKernelIsFinal = mFinalPartitionSegment;
             mKernelIsPenultimate = nullptr;
         }
     }
-
-//    if (mKernelIsFinal == nullptr) {
-//        Value * const anyClosed = anyInputClosed(b); assert (anyClosed);
-//        if (mMayLoopToEntry) {
-//            ConstantInt * const sz_ZERO = b->getSize(0);
-//            Value * const noMoreStrides = b->CreateICmpEQ(mNumOfLinearStrides, sz_ZERO);
-//            mKernelIsFinal = b->CreateAnd(anyClosed, noMoreStrides);
-//            Value * const hasMoreStrides = b->CreateICmpNE(mNumOfLinearStrides, sz_ZERO);
-//            mKernelIsPenultimate = b->CreateAnd(anyClosed, hasMoreStrides);
-//        } else {
-//            mKernelIsFinal = anyClosed;
-//        }
-//    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -877,20 +864,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const BufferPort
 //        }
     }
 
-
-
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, overflow);
-
-//    if (LLVM_UNLIKELY(CheckAssertions)) {
-//        Value * intCapacity = buffer->getInternalCapacity(b);
-//        if (overflow) {
-//            intCapacity = b->CreateAdd(intCapacity, overflow);
-//        }
-//        Value * const ok = b->CreateICmpULE(accessible, intCapacity);
-//        const Binding & input = getInputBinding(inputPort);
-//        b->CreateAssert(ok, "%s.%s reported %" PRIu64 " accessible items but only has capacity for %" PRIu64,
-//                        mCurrentKernelName, b->GetString(input.getName()), accessible, intCapacity);
-//    }
 
     #ifndef DISABLE_ZERO_EXTEND
     if (LLVM_UNLIKELY(port.IsZeroExtended)) {
@@ -1194,7 +1168,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
                                                 Vec<Value *> & accessibleItems,
                                                 Vec<Value *> & writableItems,
                                                 Value *& minFixedRateFactor,
-                                                Value *& partialPartitionStrides) {
+                                                Value *& finalStrideRemainder) {
 
     for (auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferPort & port = mBufferGraph[e];
@@ -1299,28 +1273,11 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
                     } else {
                         y = b->CreateSub(xh, g);
                     }
-                    const Rational r = factor / Rational{stride};
+
+                    const Rational r{factor.numerator(), factor.denominator() * stride}; // := factor / Rational{stride};
                     Value * const z = b->CreateCeilUMulRational(y, r);
                     calculated = b->CreateSelect(isClosedNormally(b, inputPort), z, calculated);
-
-//                    Value * const outputFactor = b->CreateCeilUDivRate(calculated, factor);
-//                    maxFixedRateFactor = b->CreateUMax(maxFixedRateFactor, outputFactor);
                 }
-
-//                if (LLVM_UNLIKELY(mCheckAssertions)) {
-//                    Value * const accessible = accessibleItems[i];
-//                    Value * correctItemCount = b->CreateICmpULE(calculated, accessible);
-//                    Value * const zeroExtended = mIsInputZeroExtended(mKernelId, inputPort);
-//                    if (LLVM_UNLIKELY(zeroExtended != nullptr)) {
-//                        correctItemCount = b->CreateOr(correctItemCount, zeroExtended);
-//                    }
-//                    b->CreateAssert(correctItemCount,
-//                                    "%s.%s: final calculated rate item count (%" PRIu64 ") "
-//                                    "exceeds accessible item count (%" PRIu64 ")",
-//                                    mKernelAssertionName,
-//                                    b->GetString(input.getName()),
-//                                    calculated, accessible);
-//                }
 
                 accessibleItems[inputPort.Number] = calculated;
             }
@@ -1331,19 +1288,17 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
         }
     }
 
-    partialPartitionStrides = nullptr;
-//    if (LLVM_LIKELY(mIsPartitionRoot)) {
-//        const auto scale = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
-//        if (minFixedRateFactor == nullptr || (scale.numerator() == 1 && scale.denominator() == 1)) {
-//            partialPartitionStrides = b->getSize(0);
-//        } else {
-//            const auto factor = scale / (mFixedRateLCM * mKernel->getStride());
-//            partialPartitionStrides = b->CreateMulRational(minFixedRateFactor, factor);
-//        }
-//        assert (partialPartitionStrides);
-//    }
+    finalStrideRemainder = nullptr;
+    if (LLVM_LIKELY(mIsPartitionRoot)) {
+        if (minFixedRateFactor == nullptr) {
+            finalStrideRemainder = b->getSize(0);
+        } else {
+            finalStrideRemainder = minFixedRateFactor;
+        }
+        assert (finalStrideRemainder);
+    }
 
-    Constant * const ONE = b->getSize(1);
+    Constant * const sz_ONE = b->getSize(1);
 
 //    Value * numOfOutputStrides = nullptr;
 //    if (minFixedRateFactor) {
@@ -1365,7 +1320,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
             const auto factor = rate.getRate() / mFixedRateLCM;
             writable = b->CreateCeilUMulRational(minFixedRateFactor, factor);
         } else {
-            writable = calculateNumOfLinearItems(b, port, ONE);
+            writable = calculateNumOfLinearItems(b, port, sz_ONE);
         }
 
         // update the final item counts with any Add/RoundUp attributes

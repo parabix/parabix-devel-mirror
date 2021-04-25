@@ -1803,6 +1803,14 @@ void PipelineAnalysis::makePartitionIOGraph() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::determinePartitionJumpIndices() {
 
+    mPartitionJumpIndex.resize(PartitionCount);
+    for (unsigned i = 0; i < (PartitionCount - 1); ++i) {
+        mPartitionJumpIndex[i] = i + 1;
+    }
+    mPartitionJumpIndex[(PartitionCount - 1)] = (PartitionCount - 1);
+
+#if 0
+
     using BV = dynamic_bitset<>;
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
@@ -1810,7 +1818,6 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
     // between the partitions.
 
     Graph G(PartitionCount);
-    std::vector<BV> paths(PartitionCount);
 
     for (auto consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
        const auto cid = KernelPartitionId[consumer];
@@ -1841,74 +1848,138 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
     transitive_reduction_dag(ordering, G);
     END_SCOPED_REGION
 
-    for (auto partitionId = 0U; partitionId < terminal; ++partitionId) {
-        if (mTerminationCheck[partitionId] & TerminationCheckFlag::Soft) {
-            add_edge(partitionId, partitionId + 1U, G);
-        }
-    }
-    add_edge(terminal, terminal, G);
-
-    // Generate a post dominator tree of G. If we do not have enough data to execute
-    // a partition along some branched path, it's possible a post dominator of the paths
-    // was prevented from executing because of some other paths output. If that path was
-    // successfully executed, it may have enough data to process now despite the fact we
-    // produced no new data along this path.
-
-    BEGIN_SCOPED_REGION
-
-    for (auto u = 0U; u < PartitionCount; ++u) {
-        BV & P = paths[u];
-        P.resize(PartitionCount);
-        P.set(u);
-    }
-
-    BV M(PartitionCount);
-
-    for (auto u = PartitionCount; u--; ) { // forward topological ordering
-        assert (out_degree(u, G) > 0);
-        M.set();
-        assert (M.count() == PartitionCount);
-        for (const auto e : make_iterator_range(out_edges(u, G))) {
-            const auto v = target(e, G);
-            assert (v < PartitionCount);
-            M &= paths[v];
-        }
-        BV & P = paths[u];
-        P |= M;
-    }
-
-    // reverse topological ordering starting at (PartitionCount - 1)
-    for (auto u = terminal; u--; ) {
-
-        const BV & P = paths[u];
-
-        auto v = u;
-
-        while (++v < terminal) {
-            const BV & O = paths[v];
-            if (LLVM_UNLIKELY(!O.is_subset_of(P))) {
-                break;
-            }
-        }
-
-        // v is the immediate post-dominator of u; however, since this graph indicates
-        // that we could not execute u nor any of its branched paths, we search for the
-        // first non-immediate post dominator with an in-degree > 1. We're guaranteed
-        // to find one since the common sink must have an in-degree >= 2.
-
-        clear_out_edges(u, G);
-        assert (u != v);
-        add_edge(u, v, G);
-    }
-
-    END_SCOPED_REGION
-
-    mPartitionJumpIndex.resize(PartitionCount);
+    #ifndef NDEBUG
     for (unsigned i = 0; i < PartitionCount; ++i) {
-        const auto j = child(i, G);
+        mPartitionJumpIndex[i] = -1U;
+    }
+    #endif
+
+    auto l = PartitionCount;
+
+    std::vector<unsigned> rank(l);
+    for (unsigned i = 0; i < l; ++i) { // forward topological ordering
+        unsigned newRank = 0;
+        for (const auto e : make_iterator_range(in_edges(i, G))) {
+            newRank = std::max(newRank, rank[source(e, G)]);
+        }
+        rank[i] = newRank + 1;
+    }
+
+    std::vector<unsigned> occurences(l);
+    std::vector<unsigned> singleton(l);
+
+    std::vector<std::bitset<2>> ancestors(l);
+
+    std::vector<unsigned> reverseLCA(l);
+
+    for (unsigned i = 0; i < l; ++i) {
+        reverseLCA[i] = i + 1;
+    }
+
+    for (unsigned i = 0; i < l; ++i) {  // forward topological ordering
+        const auto d = in_degree(i, G);
+
+        if (d > 1) {
+
+            Graph::in_edge_iterator begin, end;
+            std::tie(begin, end) = in_edges(i, G);
+
+            auto lca = i;
+
+            for (auto ei = begin; (++ei) != end; ) {
+                const auto x = source(*ei, G);
+                for (auto ej = begin; ej != ei; ++ej) {
+                    const auto y = source(*ej, G);
+
+                    // Determine the common ancestors of each input to node_i
+                    for (unsigned j = 0; j < lca; ++j) {
+                        ancestors[j].reset();
+                    }
+                    ancestors[x].set(0);
+                    ancestors[y].set(1);
+
+                    std::fill_n(occurences.begin(), rank[i] - 1, 0);
+                    for (auto j = lca; j--; ) { // reverse topological ordering
+                        for (const auto e : make_iterator_range(out_edges(j, G))) {
+                            const auto v = target(e, G);
+                            ancestors[j] |= ancestors[v];
+                        }
+                        if (ancestors[j].all()) {
+                            const auto k = rank[j];
+                            occurences[k]++;
+                            singleton[k] = j;
+                        }
+                    }
+                    // Now scan again through them to determine the single ancestor
+                    // to the pair of inputs that is of highest rank.
+
+                    for (auto j = rank[i] - 1; j--; ) {
+                        if (occurences[j] == 1) {
+                            lca = singleton[j];
+                            break;
+                        }
+                    }
+                }
+            }
+
+
+            assert ((lca < i) || (lca == i && i == (l - 1)));
+
+            reverseLCA[lca] = i;
+        }
+    }
+
+    for (auto partitionId = 1; partitionId < terminal; ++partitionId) {
+       add_edge(partitionId, partitionId + 1, G);
+    }
+
+    auto & out = errs();
+
+    out << "digraph \"" << "J0" << "\" {\n";
+    for (auto v : make_iterator_range(vertices(G))) {
+        out << "v" << v << " [label=\"" << v << " : {";
+        out << reverseLCA[v];
+        out << "}\"];\n";
+    }
+    for (auto e : make_iterator_range(edges(G))) {
+        const auto s = source(e, G);
+        const auto t = target(e, G);
+        out << "v" << s << " -> v" << t << ";\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+    exit(-1);
+
+//    BV ipostdom(PartitionCount);
+//    for (auto u = PartitionCount; u--; ) { // reverse topological ordering
+
+//        ipostdom.reset();
+//        for (const auto e : make_iterator_range(out_edges(u, G))) {
+//            const auto v = target(e, G);
+//            assert (v < PartitionCount);
+//            ipostdom |= postdom[v];
+//        }
+
+//        ipostdom.flip(); // negate
+//        ipostdom &= postdom[u];
+
+//        for (auto i : ipostdom.set_bits()) {
+//            assert (mPartitionJumpIndex[i] == -1U);
+//            assert (i <= u);
+//            mPartitionJumpIndex[i] = u;
+//        }
+//    }
+    #ifndef NDEBUG
+    for (unsigned i = 0; i < PartitionCount; ++i) {
+        assert(mPartitionJumpIndex[i] != -1U);
+    }
+    #endif
+
+    #ifndef NDEBUG
+    for (unsigned i = 0; i < PartitionCount; ++i) {
+        const auto j = mPartitionJumpIndex[i];
         assert ("jump target cannot preceed source" && i <= j);
-        mPartitionJumpIndex[i] = j;
-        #ifndef NDEBUG
         for (unsigned k = 0; k < i; ++k) {
 
             /* Recall that G is a tree where each node is numbered
@@ -1934,9 +2005,9 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
 
             assert ("degenerate jump tree structure!" && (mPartitionJumpIndex[k] <= j));
         }
-        #endif
     }
-
+    #endif
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1944,10 +2015,10 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::makePartitionJumpTree() {
     mPartitionJumpTree = PartitionJumpTree(PartitionCount);
-    for (auto i = 0U; i < (PartitionCount - 1); ++i) {        
+    for (auto i = 0U; i < (PartitionCount - 1); ++i) {
+        assert (mPartitionJumpIndex[i] >= i && mPartitionJumpIndex[i] < PartitionCount);
         add_edge(i, mPartitionJumpIndex[i], mPartitionJumpTree);
     }
-    printGraph(mPartitionJumpTree, errs(), "J");
 }
 
 } // end of namespace kernel

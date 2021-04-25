@@ -4,6 +4,8 @@
 
 namespace kernel {
 
+#warning CACHE ACTIVE KERNEL VALUES AT ENTRY BLOCK
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -131,14 +133,7 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const BufferPort & inp
     }
     Constant * const lookAhead = b->getSize(inputPort.LookAhead);
     Value * const closed = isClosed(b, inputPort.Port);
-    if (LLVM_UNLIKELY(CheckAssertions)) {
-        const Binding & binding = inputPort.Binding;
-        b->CreateAssert(b->CreateOr(b->CreateICmpUGE(itemCount, lookAhead), closed),
-                        "%s.%s: look ahead exceeds item count",
-                        mCurrentKernelName,
-                        b->GetString(binding.getName()));
-    }
-    Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
+    Value * const reducedItemCount = b->CreateSaturatingSub(itemCount, lookAhead);
     return b->CreateSelect(closed, itemCount, reducedItemCount);
 }
 
@@ -526,7 +521,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
 
     mHasZeroExtendedInput = nullptr;
     mZeroExtendBufferPhi = nullptr;
-    mAnyRemainingInput = nullptr;
     mExhaustedPipelineInputPhi = nullptr;
     mExhaustedInputAtJumpPhi = nullptr;
 

@@ -49,11 +49,18 @@
 #define IN_DEBUG_MODE false
 #endif
 
+#if defined(__clang__) || defined (__GNUC__)
+    #define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#else
+    #define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif
+
 using namespace llvm;
 using namespace kernel;
 
 using AttrId = kernel::Attribute::KindId;
 
+ATTRIBUTE_NO_SANITIZE_ADDRESS
 CPUDriver::CPUDriver(std::string && moduleName)
 : BaseDriver(std::move(moduleName))
 , mTarget(nullptr)

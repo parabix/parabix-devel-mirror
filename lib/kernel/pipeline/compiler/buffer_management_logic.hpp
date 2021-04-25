@@ -68,12 +68,12 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
             if (bn.Locality == BufferLocality::ThreadLocal && mThreadLocalStreamSetBaseAddress) {
                 assert (RequiredThreadLocalStreamSetMemory > 0);
                 assert (isa<StaticBuffer>(buffer));
-
                 Value * const startOffset = b->CreateMul(mExpectedNumOfStridesMultiplier, b->getSize(bn.BufferStart));
                 Value * const baseAddress = b->CreateGEP(mThreadLocalStreamSetBaseAddress, startOffset);
-
+                const auto capacity = bn.RequiredCapacity * b->getBitBlockWidth();
+                assert (capacity > 0);
                 buffer->setBaseAddress(b, b->CreatePointerCast(baseAddress, buffer->getPointerType()));
-                buffer->setCapacity(b, b->getSize(bn.RequiredCapacity * b->getBitBlockWidth()));
+                buffer->setCapacity(b, b->getSize(capacity));
             }
             #endif
         }
@@ -702,34 +702,16 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
-
+void PipelineCompiler::prepareLinearThreadLocalBuffers(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-//        StreamSetBuffer * const buffer = bn.Buffer;
-
         if (LLVM_UNLIKELY(bn.Locality == BufferLocality::ThreadLocal)) {
             Value * const produced = mInitiallyProducedItemCount[streamSet];
             // purely threadlocal buffers are guaranteed to consume every produced
             // item each segment.
             bn.Buffer->copyBackLinearOutputBuffer(b, produced);
         }
-
-//        if (bn.isOwned() && buffer->isLinear()) {
-//            Value * const produced = mInitiallyProducedItemCount[streamSet];
-//            Value * consumed = produced;
-//            if (LLVM_UNLIKELY(bn.Locality != BufferLocality::ThreadLocal)) {
-//                consumed = mInitialConsumedItemCount[streamSet];
-//            }
-//            debugPrint(b, "StreamSet %" PRIu64 " produced=%" PRIu64 " consumed=%" PRIu64, b->getSize(streamSet), produced, consumed);
-
-//            const BufferPort & br = mBufferGraph[e];
-//            // buffer->copyBackLinearOutputBuffer(b, produced, consumed, br.LookBehind);
-
-
-
-//        }
     }
 }
 

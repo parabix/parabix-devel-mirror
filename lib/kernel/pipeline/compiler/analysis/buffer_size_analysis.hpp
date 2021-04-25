@@ -534,25 +534,6 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
     END_SCOPED_REGION
 
-//    auto & out = errs();
-
-//    out << "graph \"" << "I" << "\" {\n";
-//    for (auto v : make_iterator_range(vertices(I))) {
-
-//        const auto & a = allocations[v];
-
-//        out << "v" << v << " [label=\"" << v << " [" << a.A << ',' << a.D << "] {" << a.S << "}\"];\n";
-//    }
-//    for (auto e : make_iterator_range(edges(I))) {
-//        const auto s = source(e, I);
-//        const auto t = target(e, I);
-//        out << "v" << s << " -- v" << t << ";\n";
-//    }
-
-//    out << "}\n\n";
-//    out.flush();
-
-
     BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
                              std::move(I), std::move(allocations), std::move(weight), std::move(remaining), rng);
 
@@ -561,12 +542,6 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     RequiredThreadLocalStreamSetMemory = BA.getBestFitnessValue();
 
     auto O = BA.getResult();
-
-    const auto t1 = std::chrono::high_resolution_clock::now();
-
-    const auto bs_total_ga_time = (t1 - t0).count();
-
-  //  errs() << "\n" << bs_total_ga_time << "," << bs_init_time << "," << bs_fitness_time << "," << bs_fitness_calls << "\n";
 
     // TODO: apart from total memory, when would one layout be better than another?
     // Can we quantify it based on the buffer graph order? Currently, we just take
@@ -584,7 +559,6 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
                 assert ("inconsistent graph traversal?" && (mapping[streamSet - FirstStreamSet] == l));
                 const auto & interval = intervals[l];
                 bn.BufferStart = interval.first;
-
                 ++l;
             }
         }

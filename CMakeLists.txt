@@ -96,6 +96,7 @@ string(REGEX REPLACE "[0-9]+[.][0-9]+[.]([0-9]+).*" "\\1" Z3_VERSION_PATCH "${Z3
 math(EXPR Z3_VERSION_INTEGER "${Z3_VERSION_MAJOR} * 10000 + ${Z3_VERSION_MINOR} * 100 + ${Z3_VERSION_PATCH}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DZ3_VERSION_INTEGER=${Z3_VERSION_INTEGER}")
 
+
 ###   Project Configuration   ###
 
 # Require that compilers support all features of C11 and C++11.

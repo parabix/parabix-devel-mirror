@@ -81,7 +81,6 @@ inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
         mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
         mIsPartitionRoot = true;
         identifyPartitionKernelRange();
-       // determinePartitionStrideRates();
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "  *** entering partition %" PRIu64, b->getSize(mCurrentPartitionId));
         #endif
@@ -101,18 +100,6 @@ void PipelineCompiler::identifyPartitionKernelRange() {
             break;
         }
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief determinePartitionStrideRates
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::determinePartitionStrideRates() {
-//    const auto max = MaximumNumOfStrides[FirstKernelInPartition];
-//    MaxPartitionStrideRate = max;
-//    for (auto i = FirstKernelInPartition + 1U; i <= LastKernelInPartition; ++i) {
-//        const auto max = MaximumNumOfStrides[i];
-//        MaxPartitionStrideRate = std::max<unsigned>(MaxPartitionStrideRate, max);
-//    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -139,12 +126,21 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
     const auto maxFirst = MaximumNumOfStrides[FirstKernelInPartition];
     assert ((maxFirst % minFirst) == 0);
     const auto maxNumOfStrides = maxFirst / minFirst;
-
+    assert (mKernelId == FirstKernelInPartition);
     ConstantInt * const maxPartitionStrides = b->getSize(maxNumOfStrides);
 
-    Value * availPartitionStrides = maxPartitionStrides;
+    Value * availSegmentLength = maxPartitionStrides;
+    Value * allInputExhausted = nullptr;
 
-    Value * allClosed = nullptr;
+    Value * pendingPipelineHalt = nullptr;
+
+
+    Constant * const sz_ZERO = b->getSize(0);
+    Constant * const sz_ONE = b->getSize(1);
+
+    Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+//    Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
+    Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
 
     for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
 
@@ -158,55 +154,69 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
         assert (FirstKernelInPartition <= IO.Kernel && IO.Kernel <= LastKernelInPartition);
         assert (maxNumOfStrides == (MaximumNumOfStrides[IO.Kernel] / MinimumNumOfStrides[IO.Kernel]));
 
-        mKernel = getKernel(IO.Kernel);
+        if (IO.Kernel != mKernelId) {
+            setActiveKernel(b, IO.Kernel, true);
+        }
 
         const BufferPort & port = IO.Port;
         assert (port.Port.Type == PortType::Input);
 
         Value * const avail = subtractLookahead(b, port, mLocallyAvailableItems[streamSet]);
-        Value * segmentStrides = nullptr;
-
+        Value * segmentLength = nullptr;
         const Binding & binding = port.Binding;
 
-        b->CallPrintInt(binding.getName() + "_avail", avail);
+
+        b->CallPrintInt(binding.getName() + "_availSegmentLength", availSegmentLength);
 
         const ProcessingRate & rate = binding.getRate();
+
         if (LLVM_UNLIKELY(rate.getKind() == RateId::PartialSum)) {
             const auto ref = getReference(IO.Kernel, port.Port);
             assert (ref.Type == PortType::Input);
             const StreamSetBuffer * const buffer = getInputBuffer(IO.Kernel, ref);
-            Constant * const ZERO = b->getSize(0);
-            Constant * const ONE = b->getSize(1);
+
             const auto step = MinimumNumOfStrides[IO.Kernel];
-            Constant * const STEP = b->getSize(step);
+
+            b->CallPrintInt(binding.getName() + "_avail", avail);
 
             const auto partialSumPrefix = makeBufferName(IO.Kernel, ref);
-            Value * partialSumStrides = ZERO;
-            Value * const processed = b->getScalarField(partialSumPrefix + ITEM_COUNT_SUFFIX);
+            Value * partialSumStrides = sz_ZERO;
+            Value * const basePartialSumOffset = b->getScalarField(partialSumPrefix + ITEM_COUNT_SUFFIX);
             for (unsigned i = 0; i < maxNumOfStrides; ++i) {
-                Value * const withinBounds = b->CreateICmpULT(b->getSize(i), availPartitionStrides);
-                Value * const idx = b->CreateSelect(withinBounds, b->getSize(i + 1), availPartitionStrides);
-                Value * const pos = b->CreateSub(b->CreateMul(idx, STEP), ONE);
-                Value * const position = b->CreateAdd(processed, pos);
-                Value * const requiredPtr = buffer->getRawItemPointer(b, ZERO, position);
+
+                Value * const withinBounds = b->CreateICmpULT(b->getSize(i), availSegmentLength);
+
+                Value * const attemptedOffset = b->getSize(((i + 1) * step) - 1);
+                Value * const offset = b->CreateSelect(withinBounds, attemptedOffset, sz_ZERO);
+
+                Value * const position = b->CreateAdd(basePartialSumOffset, offset);
+
+                b->CallPrintInt(binding.getName() + "_position" + std::to_string(i), position);
+
+                Value * const requiredPtr = buffer->getRawItemPointer(b, sz_ZERO, position);
+
+                b->CallPrintInt(binding.getName() + "_requiredPtr@" + std::to_string((i + 1) * step), requiredPtr);
+
                 Value * const required = b->CreateLoad(requiredPtr);
-                b->CallPrintInt(binding.getName() + "_required.P" + std::to_string(i * step), required);
+
+                b->CallPrintInt(binding.getName() + "_required@" + std::to_string((i + 1) * step), required);
+
                 // NOTE: because PartialSums are monotonically non-decreasing, required is compared against
                 // all available instead of the unprocessed item count.
                 Value * const hasEnough = b->CreateICmpUGE(avail, required);
                 Value * const sufficent = b->CreateZExt(b->CreateAnd(hasEnough, withinBounds), b->getSizeTy());
+
+                b->CallPrintInt(binding.getName() + "_sufficent", sufficent);
+
                 partialSumStrides = b->CreateAdd(partialSumStrides, sufficent);
             }
 
-            segmentStrides = partialSumStrides;
+            segmentLength = partialSumStrides;
 
         } else {
 
             const auto prefix = makeBufferName(IO.Kernel, port.Port);
             Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-
-            b->CallPrintInt(binding.getName() + "_processed", processed);
-
             Value * const unprocessed = b->CreateSub(avail, processed);
 
             b->CallPrintInt(binding.getName() + "_unprocessed", unprocessed);
@@ -217,17 +227,21 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
                     BEGIN_SCOPED_REGION
                     Value * const strideLength = calculateStrideLength(b, port);
                     ConstantInt * const numOfStrides = b->getSize(MinimumNumOfStrides[IO.Kernel]);
-                    Value * const segmentLength = b->CreateMul(strideLength, numOfStrides);
-                    b->CallPrintInt(binding.getName() + "_segmentLength", segmentLength);
-                    segmentStrides = b->CreateUDiv(unprocessed, segmentLength);
+                    Value * const segmentSize = b->CreateMul(strideLength, numOfStrides);
+
+                    b->CallPrintInt(binding.getName() + "_segmentSize", segmentSize);
+
+                    segmentLength = b->CreateUDiv(unprocessed, segmentSize);
                     END_SCOPED_REGION
                     break;
                 case RateId::Greedy:
                     BEGIN_SCOPED_REGION
+
+                    // check deferred item count!
+
                     Value * const required = b->getSize(floor(rate.getLowerBound()));
-                    b->CallPrintInt(binding.getName() + "_required.G", required);
                     Value * const sufficient = b->CreateZExt(b->CreateICmpUGE(unprocessed, required), b->getSizeTy());
-                    segmentStrides = b->CreateMul(sufficient, maxPartitionStrides);
+                    segmentLength = b->CreateMul(sufficient, maxPartitionStrides);
                     END_SCOPED_REGION
                     break;
                 case RateId::Relative:
@@ -237,39 +251,60 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
             }
         }
 
-        Value * const closed = isClosed(b, streamSet);
-        assert (closed);
-        if (allClosed) {
-            allClosed = b->CreateOr(allClosed, closed);
-        } else {
-            allClosed = closed;
+        const auto producer = parent(streamSet, mBufferGraph);
+        const auto partitionId = KernelPartitionId[producer];
+        Value * const signal = mPartitionTerminationSignal[partitionId]; assert (signal);
+        Value * const closed = b->CreateICmpNE(signal, unterminated);
+
+        Value * exhausted = closed;
+        if (LLVM_UNLIKELY(rate.getKind() != RateId::Greedy)) {
+            exhausted = b->CreateAnd(closed, b->CreateICmpULT(segmentLength, maxPartitionStrides));
         }
 
-        Value * selector = b->CreateICmpUGT(availPartitionStrides, segmentStrides);
-        selector = b->CreateOr(selector, closed);
-        availPartitionStrides = b->CreateSelect(selector, segmentStrides, availPartitionStrides);
+        if (allInputExhausted) {
+            allInputExhausted = b->CreateAnd(allInputExhausted, exhausted);
+        } else {
+            allInputExhausted = exhausted;
+        }
+
+//        if (kernelCanTerminateAbnormally(producer)) {
+//            Value * const fatalTermination = b->CreateICmpEQ(signal, fatal);
+//            if (pendingPipelineHalt) {
+//                pendingPipelineHalt = b->CreateOr(pendingPipelineHalt, fatalTermination);
+//            } else {
+//                pendingPipelineHalt = fatalTermination;
+//            }
+//        }
+
+        Value * const selector = b->CreateICmpULT(segmentLength, availSegmentLength);
+        availSegmentLength = b->CreateSelect(selector, segmentLength, availSegmentLength);
     }
 
-    mKernel = getKernel(FirstKernelInPartition);
+    setActiveKernel(b, FirstKernelInPartition, true);
 
     Value * result = nullptr;
+    if (allInputExhausted) {
+        Value * finalSegment = allInputExhausted;
+//        if (pendingPipelineHalt) {
+//            finalSegment = b->CreateOr(allInputExhausted, pendingPipelineHalt);
+//        }
 
-    if (allClosed) {
-        mPartitionAllClosed = allClosed;
-        b->CreateZExt(allClosed, b->getSizeTy());
-        Value * const hasFullSegment = b->CreateICmpNE(availPartitionStrides, b->getSize(0));
-        Value * const intAllClosed = b->CreateZExt(allClosed, b->getSizeTy());
-        mPartitionSegmentLength = b->CreateSelect(hasFullSegment, availPartitionStrides, intAllClosed);
-        result = b->CreateOr(allClosed, hasFullSegment);
+        // Since the pipeline root will calculate exactly how many strides to perform during
+        // the final invocation, we pass maxPartitionStrides instead of the calculated number
+        // since its value will likely truncate the last segment.
+
+        mPartitionSegmentLength = b->CreateSelect(finalSegment, maxPartitionStrides, availSegmentLength);
+        mFinalPartitionSegment = finalSegment;
+        Value * const hasFullSegment = b->CreateICmpNE(availSegmentLength, sz_ZERO);
+        result = b->CreateOr(mFinalPartitionSegment, hasFullSegment);
     } else {
-        ConstantInt * const b_TRUE = b->getTrue();
         mPartitionSegmentLength = maxPartitionStrides;
-        mPartitionAllClosed = b_TRUE;
-        result = b_TRUE;
+        mFinalPartitionSegment = b->getFalse();
+        result = b->getTrue();
     }
 
     b->CallPrintInt("mPartitionSegmentLength", mPartitionSegmentLength);
-    b->CallPrintInt("mPartitionAllClosed", mPartitionAllClosed);
+    b->CallPrintInt("mFinalPartitionSegment", mFinalPartitionSegment);
 
     return result;
 }
@@ -291,7 +326,7 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartiti
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel,
                                                  const unsigned targetPartitionId,
-                                                 const bool fromInitiallyTerminated,
+                                                 const bool fromKernelEntryBlock,
                                                  BasicBlock * const entryPoint) {
 
     BasicBlock * const exitPoint = b->GetInsertBlock();
@@ -334,23 +369,7 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                     produced = mInitiallyProducedItemCount[streamSet];
                 }
 
-                if (fromInitiallyTerminated) {
-//                    if (LLVM_UNLIKELY(br.IsDeferred)) {
-//                        produced = mInitiallyProducedDeferredItemCount[streamSet];
-//                    } else {
-//                        produced = mInitiallyProducedItemCount[streamSet];
-//                    }
-                } else {
-
-                    Value * alreadyProduced = produced;
-//                    if (LLVM_UNLIKELY(br.IsDeferred)) {
-//                        alreadyProduced = mAlreadyProducedDeferredPhi[br.Port];
-//                    } else {
-//                        alreadyProduced = mAlreadyProducedPhi[br.Port];
-//                    }
-//                    assert (alreadyProduced);
-
-//                    produced = alreadyProduced;
+                if (!fromKernelEntryBlock) {
 
                     const auto nextPartitionId = mCurrentPartitionId + 1U;
                     const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
@@ -375,20 +394,15 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                         if (mKernelInitiallyTerminatedExit) {
                             phi->addIncoming(initiallyProduced, mKernelInitiallyTerminatedExit);
                         }
-//                        if (mKernelInsufficientInput) {
-//                            phi->addIncoming(alreadyProduced, mKernelInsufficientInput);
-//                        }
+
                         produced = phi;
                         b->restoreIP(ip);                       
                     }
 
                 }
 
-//                assert (mTerminatedInitially);
-//                Value * const termSignal = b->CreateTrunc(mTerminatedInitially, b->getInt1Ty(), "termSignal");
-//                produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, termSignal);
             } else {
-                if (fromInitiallyTerminated) {
+                if (fromKernelEntryBlock) {
                     const auto prefix = makeBufferName(kernel, br.Port);
                     if (LLVM_UNLIKELY(br.IsDeferred)) {
                         produced = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
@@ -561,10 +575,6 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
     b->SetInsertPoint(mKernelInitiallyTerminated);
 
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
-
-    // create a temporary basic block to act a constant exit block of any phi nodes;
-    // once we've determined the actual exit block of this portion of the program,
-    // replace the phi catch with it.
 
     if (mIsPartitionRoot) {
 

@@ -2314,8 +2314,6 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 
     BV M(l);
 
-    // AVX-512: 08 api problem?
-
     for (unsigned i = 0; i < activePartitions; ++i) {
 
         if (in_degree(i, D) == 0) {

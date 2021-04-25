@@ -57,6 +57,15 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
         const auto prefix = makeBufferName(mKernelId, port);
         debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
         #endif
+        if (LLVM_UNLIKELY(CheckAssertions)) {
+            Value * const produced = mInitiallyProducedItemCount[streamSet];
+            Value * const valid = b->CreateOr(b->CreateICmpULE(consumed, produced), mInitiallyTerminated);
+            constexpr auto msg =
+                "Consumed item count (%" PRId64 ") of %s.%s exceeded its produced item count (%" PRId64 ").";
+            Constant * const bindingName = b->GetString(getBinding(mKernelId, port).getName());
+            b->CreateAssert(valid, msg,
+                consumed, mCurrentKernelName, bindingName, produced);
+        }
     }
 }
 

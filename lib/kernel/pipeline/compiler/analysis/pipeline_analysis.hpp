@@ -32,7 +32,9 @@ public:
 
         PipelineAnalysis P(pipelineKernel);
 
-        const auto seed = std::random_device{}();
+        #warning FIXED PIPELINE COMPILATION SEED
+
+        const auto seed = 2081280305; // std::random_device{}();
 
         random_engine rng(seed);
 
@@ -52,8 +54,6 @@ public:
         errs() << "identifyKernelPartitions\n";
 
         auto partitionGraph = P.identifyKernelPartitions();
-
-        const auto partitionCount = num_vertices(partitionGraph);
 
         // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
         // the same sequence. This will help us to partition the graph later and is useful to determine

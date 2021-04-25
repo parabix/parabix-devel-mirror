@@ -145,18 +145,15 @@ public:
     BasicBlock * getPartitionExitPoint(BuilderRef b);
     void checkForPartitionEntry(BuilderRef b);
 
-
-
     void identifyPartitionKernelRange();
-    void determinePartitionStrideRates();
 
     void writePartitionEntryIOGuard(BuilderRef b);
     Value * calculatePartitionSegmentLength(BuilderRef b);
 
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
 
-    void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
-    void phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
+    void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntryBlock, BasicBlock * const entryPoint);
+    void phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId, const bool fromKernelEntryBlock, BasicBlock * const entryPoint);
 
     Value * acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId);
 
@@ -192,7 +189,7 @@ public:
         Value * partialPartitionStrides;
     };
 
-    void calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems, Value *& minFixedRateFactor, Value *& partialPartitionStrides);
+    void calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems, Value *& minFixedRateFactor, Value *& finalStrideRemainder);
 
     void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddresses);
 
@@ -235,8 +232,6 @@ public:
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
 
-    void verifyExpectedNumOfStrides(BuilderRef b);
-
 // intra-kernel codegen functions
 
     Value * getInputStrideLength(BuilderRef b, const BufferPort &inputPort);
@@ -268,8 +263,10 @@ public:
     Value * hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally = false) const;
     Value * isClosed(BuilderRef b, const StreamSetPort inputPort) const;
     Value * isClosed(BuilderRef b, const unsigned streamSet) const;
+
     Value * isClosedNormally(BuilderRef b, const StreamSetPort inputPort) const;
-    Value * initiallyTerminated(BuilderRef b);
+    bool kernelCanTerminateAbnormally(const unsigned kernel) const;
+    void checkIfKernelIsAlreadyTerminated(BuilderRef b);
     Value * readTerminationSignal(BuilderRef b, const unsigned kernelId);
     void writeTerminationSignal(BuilderRef b, Value * const signal);
     Value * hasPipelineTerminated(BuilderRef b) const;
@@ -302,7 +299,7 @@ public:
     void resetInternalBufferHandles();
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
 
-    void prepareLinearBuffers(BuilderRef b);
+    void prepareLinearThreadLocalBuffers(BuilderRef b);
     Value * getVirtualBaseAddress(BuilderRef b, const BufferPort & rateData, const BufferNode & bn, Value * position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
@@ -534,11 +531,10 @@ protected:
     unsigned                                    LastKernelInPartition = 0;
 
     Value *                                     mPartitionSegmentLength = nullptr;
-    Value *                                     mPartitionAllClosed = nullptr;
+    Value *                                     mFinalPartitionSegment = nullptr;
 
     Value *                                     mNumOfPartitionStrides = nullptr;
-    unsigned                                    MaxPartitionStrideRate;
-    Rational                                    PartitionStrideFactor;
+
     Value *                                     mPartitionRootTerminationSignal = nullptr;
     BasicBlock *                                mCurrentPartitionEntryGuard = nullptr;
     BasicBlock *                                mNextPartitionEntryPoint = nullptr;
@@ -552,10 +548,11 @@ protected:
     FixedVector<PHINode *>                      mPartitionPipelineProgressPhi;
 
     // kernel state
-    Value *                                     mTerminatedInitially = nullptr;
+    Value *                                     mInitialTerminationSignal = nullptr;
+    Value *                                     mInitiallyTerminated = nullptr;
     Value *                                     mMaximumNumOfStrides = nullptr;
-    PHINode *                                   mPartialPartitionStridesPhi = nullptr;
-    PHINode *                                   mPartialPartitionStridesAtLoopExitPhi = nullptr;
+    PHINode *                                   mFinalPartialStrideFixedRateRemainderPhi = nullptr;
+    PHINode *                                   mFinalPartialStrideFixedRateRemainderAtLoopExitPhi = nullptr;
     PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
     Value *                                     mKernelIsPenultimate = nullptr;
@@ -576,11 +573,9 @@ protected:
     Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mHasZeroExtendedInput = nullptr;
-    Value *                                     mAnyRemainingInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
     BasicBlock *                                mNextPartitionWithPotentialInput = nullptr;
-    BasicBlock *                                mGotoNextPartition = nullptr;
 
     BitVector                                   mHasPipelineInput;
 
