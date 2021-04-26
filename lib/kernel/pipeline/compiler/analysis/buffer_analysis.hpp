@@ -105,6 +105,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 // an upper bound to the buffer size for all potential inputs. Build a dataflow analysis to
                 // determine this.
                 const auto bufferSize = bn.RequiredCapacity * mNumOfThreads;
+                assert (bufferSize > 0);
                 buffer = new DynamicBuffer(b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
             } else {
                 auto bufferSize = bn.RequiredCapacity;

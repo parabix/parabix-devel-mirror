@@ -175,7 +175,7 @@ struct ProgramGraph : public RelationshipGraph {
         return static_cast<const RelationshipGraph &>(*this);
     }
 
-    ProgramGraph() noexcept = default;
+    ProgramGraph() = default;
 
     ProgramGraph(size_t n) noexcept : RelationshipGraph(n) { }
 
@@ -185,7 +185,7 @@ struct ProgramGraph : public RelationshipGraph {
 
     }
 
-    ProgramGraph & operator=(ProgramGraph && G) noexcept = default;
+    ProgramGraph & operator=(ProgramGraph && G) = default;
 
 private:
 

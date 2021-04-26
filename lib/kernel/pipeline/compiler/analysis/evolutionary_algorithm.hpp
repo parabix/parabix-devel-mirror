@@ -8,6 +8,20 @@
 
 #warning cleanup this code if the approach works
 
+namespace  {
+
+template<typename T>
+T abs_subtract(const T a, const T b) {
+    if (a < b) {
+        return b - a;
+    } else {
+        return a - b;
+    }
+}
+
+
+
+}
 
 namespace kernel {
 
@@ -86,6 +100,10 @@ public:
 
         const auto enumeratedAll = initGA(population);
 
+        if (LLVM_UNLIKELY(population.empty())) {
+            report_fatal_error("Initial GA candidate set is empty");
+        }
+
         if (LLVM_UNLIKELY(enumeratedAll)) {
             goto enumerated_entire_search_space;
         }
@@ -111,7 +129,7 @@ public:
         unsigned bestStallCount = 0;
 
         double priorAverageFitness = worstFitnessValue;
-        auto priorBestFitness = worstFitnessValue;
+        FitnessValueType priorBestFitness = worstFitnessValue;
 
         FitnessValueType bestFitness = worstFitnessValue;
 
@@ -123,7 +141,7 @@ public:
         for (unsigned g = 0; g < maxGenerations; ++g) {
 
             const auto populationSize = population.size();
-            assert (populationSize > 1 && populationSize <= maxCandidates);
+            assert (populationSize > 0);
 
             const auto c = maxStallGenerations - std::max(averageStallCount, bestStallCount);
             const auto d = std::min(maxGenerations - g, c);
@@ -229,7 +247,7 @@ public:
 
             const double averageGenerationFitness = ((double)sumOfGenerationalFitness) / ((double)n);
 
-            auto bestGenerationalFitness = maxFitness;
+            FitnessValueType bestGenerationalFitness = maxFitness;
             if (FitnessValueEvaluator::eval(minFitness, maxFitness)) {
                 bestGenerationalFitness = minFitness;
             }
@@ -254,7 +272,7 @@ public:
                 continue;
             }
 
-            if (std::abs<FitnessValueType>(averageGenerationFitness - priorAverageFitness) <= averageStallThreshold) {
+            if (abs_subtract(averageGenerationFitness, priorAverageFitness) <= static_cast<double>(averageStallThreshold)) {
                 if (++averageStallCount == maxStallGenerations) {
                     break;
                 }
@@ -265,7 +283,7 @@ public:
 
 
 
-            if (std::abs<FitnessValueType>(bestGenerationalFitness - priorBestFitness) <= averageStallThreshold) {
+            if (abs_subtract(bestGenerationalFitness, priorBestFitness) <= averageStallThreshold) {
                 if (++bestStallCount == maxStallGenerations) {
                     break;
                 }

@@ -165,9 +165,6 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
         Value * segmentLength = nullptr;
         const Binding & binding = port.Binding;
 
-
-        b->CallPrintInt(binding.getName() + "_availSegmentLength", availSegmentLength);
-
         const ProcessingRate & rate = binding.getRate();
 
         if (LLVM_UNLIKELY(rate.getKind() == RateId::PartialSum)) {
@@ -176,9 +173,6 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
             const StreamSetBuffer * const buffer = getInputBuffer(IO.Kernel, ref);
 
             const auto step = MinimumNumOfStrides[IO.Kernel];
-
-            b->CallPrintInt(binding.getName() + "_avail", avail);
-
             const auto partialSumPrefix = makeBufferName(IO.Kernel, ref);
             Value * partialSumStrides = sz_ZERO;
             Value * const basePartialSumOffset = b->getScalarField(partialSumPrefix + ITEM_COUNT_SUFFIX);
@@ -190,24 +184,13 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
                 Value * const offset = b->CreateSelect(withinBounds, attemptedOffset, sz_ZERO);
 
                 Value * const position = b->CreateAdd(basePartialSumOffset, offset);
-
-                b->CallPrintInt(binding.getName() + "_position" + std::to_string(i), position);
-
                 Value * const requiredPtr = buffer->getRawItemPointer(b, sz_ZERO, position);
-
-                b->CallPrintInt(binding.getName() + "_requiredPtr@" + std::to_string((i + 1) * step), requiredPtr);
-
                 Value * const required = b->CreateLoad(requiredPtr);
-
-                b->CallPrintInt(binding.getName() + "_required@" + std::to_string((i + 1) * step), required);
 
                 // NOTE: because PartialSums are monotonically non-decreasing, required is compared against
                 // all available instead of the unprocessed item count.
                 Value * const hasEnough = b->CreateICmpUGE(avail, required);
                 Value * const sufficent = b->CreateZExt(b->CreateAnd(hasEnough, withinBounds), b->getSizeTy());
-
-                b->CallPrintInt(binding.getName() + "_sufficent", sufficent);
-
                 partialSumStrides = b->CreateAdd(partialSumStrides, sufficent);
             }
 
@@ -219,8 +202,6 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
             Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
             Value * const unprocessed = b->CreateSub(avail, processed);
 
-            b->CallPrintInt(binding.getName() + "_unprocessed", unprocessed);
-
             switch (rate.getKind()) {
                 case RateId::Fixed:
                 case RateId::Bounded:
@@ -228,9 +209,6 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
                     Value * const strideLength = calculateStrideLength(b, port);
                     ConstantInt * const numOfStrides = b->getSize(MinimumNumOfStrides[IO.Kernel]);
                     Value * const segmentSize = b->CreateMul(strideLength, numOfStrides);
-
-                    b->CallPrintInt(binding.getName() + "_segmentSize", segmentSize);
-
                     segmentLength = b->CreateUDiv(unprocessed, segmentSize);
                     END_SCOPED_REGION
                     break;
@@ -302,10 +280,6 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
         mFinalPartitionSegment = b->getFalse();
         result = b->getTrue();
     }
-
-    b->CallPrintInt("mPartitionSegmentLength", mPartitionSegmentLength);
-    b->CallPrintInt("mFinalPartitionSegment", mFinalPartitionSegment);
-
     return result;
 }
 
@@ -415,13 +389,13 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
             }
         }
 
-        #ifdef PRINT_DEBUG_MESSAGES
-        SmallVector<char, 256> tmp;
-        raw_svector_ostream out(tmp);
-        out << makeKernelName(mKernelId) << " -> " <<
-               makeBufferName(kernel, br.Port) << "_avail = %" PRIu64;
-        debugPrint(b, out.str(), produced);
-        #endif
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        SmallVector<char, 256> tmp;
+//        raw_svector_ostream out(tmp);
+//        out << makeKernelName(mKernelId) << " -> " <<
+//               makeBufferName(kernel, br.Port) << "_avail = %" PRIu64;
+//        debugPrint(b, out.str(), produced);
+//        #endif
 
         producedSet.emplace_back(streamSet, produced);
 
@@ -445,13 +419,13 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                 assert (consumed);
             }            
 
-            #ifdef PRINT_DEBUG_MESSAGES
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << makeKernelName(mKernelId) << " -> " <<
-                   makeBufferName(kernel, br.Port) << "_consumed = %" PRIu64;
-            debugPrint(b, out.str(), consumed);
-            #endif
+//            #ifdef PRINT_DEBUG_MESSAGES
+//            SmallVector<char, 256> tmp;
+//            raw_svector_ostream out(tmp);
+//            out << makeKernelName(mKernelId) << " -> " <<
+//                   makeBufferName(kernel, br.Port) << "_consumed = %" PRIu64;
+//            debugPrint(b, out.str(), consumed);
+//            #endif
 
             consumedSet.emplace_back(streamSet, consumed);
         }
@@ -663,9 +637,9 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     }
     phiOutPartitionStatusFlags(b, nextPartitionId, false, mKernelJumpToNextUsefulPartition);
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, "** " + makeKernelName(mKernelId) + ".jumping = %" PRIu64, mSegNo);
-    #endif
+//    #ifdef PRINT_DEBUG_MESSAGES
+//    debugPrint(b, "** " + makeKernelName(mKernelId) + ".jumping = %" PRIu64, mSegNo);
+//    #endif
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
 

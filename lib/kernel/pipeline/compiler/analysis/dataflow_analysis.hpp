@@ -201,8 +201,6 @@ void PipelineAnalysis::computeMinimumExpectedDataflow(PartitionGraph & P) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::computeMaximumExpectedDataflow() {
 
-    using Bound = std::array<Rational, 2>;
-
     const auto cfg = Z3_mk_config();
     Z3_set_param_value(cfg, "model", "true");
     Z3_set_param_value(cfg, "proof", "false");
@@ -261,19 +259,11 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
     BEGIN_SCOPED_REGION
 
     auto make_partition_vars = [&](const unsigned first, const unsigned last) {
-        if (in_degree(first, mBufferGraph) == 0) {
-            assert (first == last);
-            for (auto kernel = first; kernel <= last; ++kernel) {
-                VarList[kernel] = constant_real(MinimumNumOfStrides[kernel]);
-            }
-        } else {
-            auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
-            hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
-            hard_assert(Z3_mk_le(ctx, rootVar, TWO));
-            for (auto kernel = first; kernel <= last; ++kernel) {
-                assert (in_degree(kernel, mBufferGraph) > 0);
-                VarList[kernel] = multiply(rootVar, constant_real(MinimumNumOfStrides[kernel]));
-            }
+        auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+        hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
+        hard_assert(Z3_mk_le(ctx, rootVar, TWO));
+        for (auto kernel = first; kernel <= last; ++kernel) {
+            VarList[kernel] = multiply(rootVar, constant_real(MinimumNumOfStrides[kernel]));
         }
     };
 
@@ -332,7 +322,7 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
         }
 
         // Any kernel with all greedy rates must exhaust its input in a single iteration.
-        if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, mBufferGraph))) {
+        if (LLVM_UNLIKELY(numOfGreedyRates > 0 && numOfGreedyRates == in_degree(kernel, mBufferGraph))) {
             hard_assert(Z3_mk_eq(ctx, stridesPerSegmentVar, ONE));
         }
 
@@ -356,7 +346,6 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
             }
         }
     }
-
 
     // Include any length equality assertions
     if (!mLengthAssertions.empty()) {
@@ -383,7 +372,6 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
     }
 
     if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
-        assert (false);
         report_fatal_error("Z3 failed to find a solution to the maximum permitted dataflow problem");
     }
 

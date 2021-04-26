@@ -747,7 +747,6 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
     }
 
     Value * const address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
-
     return b->CreatePointerCast(address, bufferType);
 }
 

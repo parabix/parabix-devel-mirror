@@ -398,7 +398,8 @@ void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(Build
     #ifdef PERMIT_BUFFER_MEMORY_REUSE
     if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
         ConstantInt * const reqMemory = b->getSize(RequiredThreadLocalStreamSetMemory);
-        Value * const base = b->CreateCacheAlignedMalloc(b->CreateMul(reqMemory, expectedNumOfStrides));
+        Value * const memorySize = b->CreateMul(reqMemory, expectedNumOfStrides);
+        Value * const base = b->CreateCacheAlignedMalloc(memorySize);
         PointerType * const int8PtrTy = b->getInt8PtrTy();
         b->setScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY, b->CreatePointerCast(base, int8PtrTy));
     }

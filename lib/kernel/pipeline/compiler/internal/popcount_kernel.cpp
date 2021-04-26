@@ -32,7 +32,7 @@ inline static unsigned floor_log2(const unsigned v) {
     return ((sizeof(unsigned) * CHAR_BIT) - 1U) - __builtin_clz(v);
 }
 
-#define PRINT_POP_COUNTS_TO_STDERR
+// #define PRINT_POP_COUNTS_TO_STDERR
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiBlockLogic

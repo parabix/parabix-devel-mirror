@@ -182,10 +182,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             assert (i >= PartitionCount);
             const auto streamSet = FirstStreamSet + i - PartitionCount;
             assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-            const BufferNode & bn = mBufferGraph[streamSet];
-            if (mIsPartitionRoot || bn.NonLinear) {
-                ensureSufficientOutputSpace(b, IO.Port, streamSet);
-            }
+            ensureSufficientOutputSpace(b, IO.Port, streamSet);
         }
     }
 
@@ -697,17 +694,9 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
     ConstantInt * const i1_TRUE = b->getTrue();
     Value * notAtSegmentLimit = i1_TRUE;
 
-    b->CallPrintInt("mKernelIsPenultimate", mKernelIsPenultimate);
-
     if (mMaximumNumOfStrides) {
         assert (mUpdatedNumOfStrides);
-
-        b->CallPrintInt("mUpdatedNumOfStrides", mUpdatedNumOfStrides);
-        b->CallPrintInt("mMaximumNumOfStrides", mMaximumNumOfStrides);
-
         notAtSegmentLimit = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
-
-        b->CallPrintInt("notAtSegmentLimit", notAtSegmentLimit);
     }
 
 
@@ -1435,6 +1424,9 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
 
     assert (numOfLinearStrides);
 
+
+
+
     IntegerType * const sizeTy = b->getSizeTy();
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
@@ -1501,16 +1493,17 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
     BasicBlock * const popCountLoopExit =
         b->CreateBasicBlock(prefix + "LoopExit", mKernelCheckOutputSpace);
     Value * const baseOffset = mAlreadyProcessedPhi[ref];
+
+
     Value * const baseAddress = buffer->getRawItemPointer(b, ZERO, baseOffset);
     BasicBlock * const popCountEntry = b->GetInsertBlock();
     Value * const initialStrideCount = b->CreateMul(numOfLinearStrides, STEP);
 
+    Value * cond = b->CreateICmpNE(numOfLinearStrides, ZERO);
     if (peekableItemCount) {
-        Value * const hasNonOverflowStride = b->CreateICmpUGE(sourceItemCount, minimumItemCount);
-        b->CreateLikelyCondBr(hasNonOverflowStride, popCountLoop, popCountLoopExit);
-    } else {
-        b->CreateBr(popCountLoop);
+        cond = b->CreateAnd(cond, b->CreateICmpUGE(sourceItemCount, minimumItemCount));
     }
+    b->CreateLikelyCondBr(cond, popCountLoop, popCountLoopExit);
 
     // TODO: replace this with a parallel icmp check and bitscan? binary search with initial
     // check on the rightmost entry?
@@ -1524,7 +1517,6 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
     Value * const strideIndex = b->CreateSub(numOfStrides, STEP);
     Value * const ptr = b->CreateInBoundsGEP(baseAddress, strideIndex);
     Value * const requiredItems = b->CreateLoad(ptr);
-
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);
 
     // NOTE: popcount streams are produced with a 1 element lookbehind window.
@@ -1546,17 +1538,17 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
     b->CreateCondBr(hasEnough, popCountLoopExit, popCountLoop);
 
     b->SetInsertPoint(popCountLoopExit);
-    Value * finalNumOfStrides = numOfStrides;
+    PHINode * const numOfStridesPhi = b->CreatePHI(sizeTy, 2);
+    numOfStridesPhi->addIncoming(ZERO, popCountEntry);
+    numOfStridesPhi->addIncoming(numOfStrides, popCountLoop);
+    PHINode * const requiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    requiredItemsPhi->addIncoming(ZERO, popCountEntry);
+    requiredItemsPhi->addIncoming(requiredItems, popCountLoop);
+    PHINode * const nextRequiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);
+    nextRequiredItemsPhi->addIncoming(nextRequiredItems, popCountLoop);
+    Value * finalNumOfStrides = numOfStridesPhi;
     if (peekableItemCount) {
-        PHINode * const numOfStridesPhi = b->CreatePHI(sizeTy, 2);
-        numOfStridesPhi->addIncoming(ZERO, popCountEntry);
-        numOfStridesPhi->addIncoming(numOfStrides, popCountLoop);
-        PHINode * const requiredItemsPhi = b->CreatePHI(sizeTy, 2);
-        requiredItemsPhi->addIncoming(ZERO, popCountEntry);
-        requiredItemsPhi->addIncoming(requiredItems, popCountLoop);
-        PHINode * const nextRequiredItemsPhi = b->CreatePHI(sizeTy, 2);
-        nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);
-        nextRequiredItemsPhi->addIncoming(nextRequiredItems, popCountLoop);
         // Since we want to allow the stream to peek into the overflow but not start
         // in it, check to see if we can support one more stride by using it.
         Value * const endedPriorToBufferEnd = b->CreateICmpNE(requiredItemsPhi, sourceItemCount);

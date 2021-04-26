@@ -37,12 +37,10 @@ void PipelineCompiler::start(BuilderRef b) {
     debugPrint(b, prefix + " +++ IS FINAL %" PRIu8 "+++", mIsFinal);
     #endif
 
-    #ifdef PERMIT_BUFFER_MEMORY_REUSE
     if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
         mExpectedNumOfStridesMultiplier = b->getScalarField(EXPECTED_NUM_OF_STRIDES_MULTIPLIER);
         mThreadLocalStreamSetBaseAddress = b->getScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY);
     }
-    #endif
 
     loadInternalStreamSetHandles(b, true);
     loadInternalStreamSetHandles(b, false);
@@ -228,7 +226,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     #warning fix this to determine the initial (non-linear) number of strides
 
     b->SetInsertPoint(mKernelLoopEntry);
-
     if (kernelRequiresSynchronization) {
         determineNumOfLinearStrides(b);
     } else {

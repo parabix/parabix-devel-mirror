@@ -1499,24 +1499,6 @@ void PipelineAnalysis::makePartitionIOGraph() {
 
     // Ensuring the edges in this graph are correctly ordered simplifies compilation later.
 
-    #ifndef NDEBUG
-    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
-        const BufferNode & bn = mBufferGraph[streamSet];
-        const auto producer = parent(streamSet, mBufferGraph);
-        const auto pid = KernelPartitionId[producer];
-        bool isInterPartitionStreamSet = false;
-        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const auto consumer = target(e, mBufferGraph);
-            const auto cid = KernelPartitionId[consumer];
-            if (pid != cid) {
-                isInterPartitionStreamSet = true;
-                break;
-            }
-        }
-        assert ((bn.Locality != BufferLocality::GloballyShared) ^ isInterPartitionStreamSet);
-    }
-    #endif
-
     const auto numOfStreamSets = LastStreamSet - FirstStreamSet + 1;
 
     PartitionIOGraph G(PartitionCount + numOfStreamSets);
@@ -1546,9 +1528,6 @@ void PipelineAnalysis::makePartitionIOGraph() {
             }
         }
     }
-
-    printGraph(G, errs(), "P");
-
 
 #if 0
 

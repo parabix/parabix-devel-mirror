@@ -440,6 +440,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         Value * const localHandle = b->CreateAllocaAtEntryPoint(buffer->getHandleType(b));
         buffer->setHandle(localHandle);
         buffer->setBaseAddress(b, virtualBaseAddress);
+
         if (LLVM_UNLIKELY(enableAsserts)) {
             b->CreateAssert(buffer->getBaseAddress(b), "%s.%s: virtual base address cannot be null",
                             b->GetString(getName()), b->GetString(input.getName()));

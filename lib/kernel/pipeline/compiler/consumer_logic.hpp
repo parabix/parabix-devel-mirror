@@ -62,6 +62,8 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
             Value * const valid = b->CreateOr(b->CreateICmpULE(consumed, produced), mInitiallyTerminated);
             constexpr auto msg =
                 "Consumed item count (%" PRId64 ") of %s.%s exceeded its produced item count (%" PRId64 ").";
+            const ConsumerEdge & c = mConsumerGraph[e];
+            const StreamSetPort port{PortType::Output, c.Port};
             Constant * const bindingName = b->GetString(getBinding(mKernelId, port).getName());
             b->CreateAssert(valid, msg,
                 consumed, mCurrentKernelName, bindingName, produced);

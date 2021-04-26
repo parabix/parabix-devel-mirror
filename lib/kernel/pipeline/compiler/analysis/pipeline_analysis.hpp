@@ -42,7 +42,7 @@ public:
 
 //        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
 
-        errs() << "generateInitialPipelineGraph\n";
+//        errs() << "generateInitialPipelineGraph\n";
 
         P.generateInitialPipelineGraph(b);
 
@@ -51,7 +51,7 @@ public:
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
 
-        errs() << "identifyKernelPartitions\n";
+//        errs() << "identifyKernelPartitions\n";
 
         auto partitionGraph = P.identifyKernelPartitions();
 
@@ -59,11 +59,11 @@ public:
         // the same sequence. This will help us to partition the graph later and is useful to determine
         // whether we can bypass a region without testing every kernel.
 
-        errs() << "computeExpectedDataFlowRates\n";
+//        errs() << "computeExpectedDataFlowRates\n";
 
         P.computeMinimumExpectedDataflow(partitionGraph);
 
-        errs() << "schedulePartitionedProgram\n";
+//        errs() << "schedulePartitionedProgram\n";
 
         P.schedulePartitionedProgram(partitionGraph, rng, 1.0, 1);
 
@@ -73,13 +73,13 @@ public:
         // P.printRelationshipGraph(P.mStreamGraph, errs(), "Streams");
         // P.printRelationshipGraph(P.mScalarGraph, errs(), "Scalars");
 
-        errs() << "generateInitialBufferGraph\n";
+//        errs() << "generateInitialBufferGraph\n";
 
         P.generateInitialBufferGraph();
 
         P.identifyOutputNodeIds();
 
-        errs() << "computeNumOfStridesInterval\n";
+//        errs() << "computeNumOfStridesInterval\n";
 
 //        #ifdef PRINT_BUFFER_GRAPH
 //        P.printBufferGraph(errs());
@@ -87,26 +87,25 @@ public:
 
         P.computeMaximumExpectedDataflow();
 
-        errs() << "computeInterPartitionSymbolicRates\n";
+//        errs() << "computeInterPartitionSymbolicRates\n";
 
         P.identifyInterPartitionSymbolicRates();
 
-        errs() << "determineBufferSize\n";
+//        errs() << "determineBufferSize\n";
 
         P.determineBufferSize(b);
 
-        errs() << "determineBufferLayout\n";
+//        errs() << "determineBufferLayout\n";
 
         P.determineBufferLayout(b, rng);
 
-        errs() << "identifyBufferLocality\n";
+//        errs() << "identifyBufferLocality\n";
 
         P.markInterPartitionStreamSetsAsGloballyShared(); // linkedPartitions
 
-
         P.makePartitionIOGraph();
 
-        errs() << "identifyTerminationChecks\n";
+//        errs() << "identifyTerminationChecks\n";
 
         P.identifyTerminationChecks();
         P.determinePartitionJumpIndices();
