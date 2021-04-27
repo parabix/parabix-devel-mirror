@@ -134,11 +134,12 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     Value * numOfLinearStrides = nullptr;
 
-    if (mMayLoopToEntry && !ExternallySynchronized) {
+    if (mMayLoopToEntry) {
         numOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStridesAtLoopEntryPhi);
     } else {
         numOfLinearStrides = mMaximumNumOfStrides;
     }
+
     if (mCheckIO) {
         for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
             const PartitionIOData & IO = mPartitionIOGraph[e];
@@ -555,7 +556,7 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const BufferPor
 
     Value * const accessible = getAccessibleInputItems(b, port); assert (accessible);
     #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, prefix + "_accessible (%" PRIu64 ") = %" PRIu8, b->getSize(streamSet), accessible);
+    debugPrint(b, prefix + "_accessible (%" PRIu64 ") = %" PRIu64, b->getSize(streamSet), accessible);
     #endif
 
     Value * const hasEnough = b->CreateICmpUGE(accessible, required);
@@ -854,7 +855,6 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const BufferPort
     }
 
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, overflow);
-
     #ifndef DISABLE_ZERO_EXTEND
     if (LLVM_UNLIKELY(port.IsZeroExtended)) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before

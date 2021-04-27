@@ -248,24 +248,6 @@ Value * PipelineCompiler::getThreadLocalHandlePtr(BuilderRef b, const unsigned k
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief supportsInternalSynchronization
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::supportsInternalSynchronization() const {
-    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized))) {
-        if (LLVM_UNLIKELY(mMayHaveNonLinearIO)) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "PipelineCompiler error: " <<
-                   mKernel->getName() << " is internally synchronized"
-                   " but permits non-linear I/O.";
-            report_fatal_error(out.str());
-        }
-        return true;
-    }
-    return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isBounded
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::isBounded() const {
@@ -395,6 +377,20 @@ bool PipelineCompiler::hasExternalIO(const size_t kernel) const {
         const auto streamSet = source(input, mBufferGraph);
         const BufferNode & node = mBufferGraph[streamSet];
         if (node.isExternal()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasAtLeastOneNonGreedyInput
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::hasAtLeastOneNonGreedyInput() const {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & bp = mBufferGraph[e];
+        const Binding & binding = bp.Binding;
+        if (!binding.getRate().isGreedy()) {
             return true;
         }
     }

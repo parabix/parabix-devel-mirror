@@ -82,12 +82,14 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     BasicBlock * const setTermination = b->CreateBasicBlock("setTermination");
     BasicBlock * const exit = b->CreateBasicBlock("mmapSourceExit");
 
+    Value * const numOfStrides = b->getNumOfStrides();
+
     ConstantInt * const MMAP_PAGE_SIZE = b->getSize(getPageSize());
-    ConstantInt * const STRIDE_ITEMS = b->getSize(stride);
+    Value * const STRIDE_ITEMS = b->CreateMul(numOfStrides, b->getSize(stride));
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     ConstantInt * const CODE_UNIT_BYTES = b->getSize(codeUnitWidth / 8);
 
-    ConstantInt * const STRIDE_BYTES = b->getSize((codeUnitWidth * stride) / 8);
+    Value * const STRIDE_BYTES = b->CreateMul(numOfStrides, b->getSize((codeUnitWidth * stride) / 8));
     ConstantInt * const PADDING_SIZE = b->getSize(b->getBitBlockWidth() * codeUnitWidth / 8);
 
     Value * const consumedItems = b->getConsumedItemCount("sourceBuffer");
@@ -169,9 +171,10 @@ void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
 
 void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
 
-    ConstantInt * const strideItems = b->getSize(stride);
+    Value * const numOfStrides = b->getNumOfStrides();
+    Value * const segmentItems = b->CreateMul(numOfStrides, b->getSize(stride));
     ConstantInt * const codeUnitBytes = b->getSize(codeUnitWidth / 8);
-    Constant * const strideBytes = ConstantExpr::getMul(strideItems, codeUnitBytes);
+    Value * const segmentBytes = b->CreateMul(segmentItems, codeUnitBytes);
 
     BasicBlock * const entryBB = b->GetInsertBlock();
     BasicBlock * const moveData = b->CreateBasicBlock("MoveData");
@@ -183,10 +186,11 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     // Can we append to our existing buffer without impacting any subsequent kernel?
     Value * const produced = b->getProducedItemCount("sourceBuffer");
-    Value * const itemsPending = b->CreateAdd(produced, strideItems);
+    Value * const itemsPending = b->CreateAdd(produced, segmentItems);
     Value * const effectiveCapacity = b->getScalarField("effectiveCapacity");
     Value * const baseBuffer = b->getScalarField("buffer");
     Value * const fd = b->getScalarField("fileDescriptor");
+
 
     Value * const permitted = b->CreateICmpULT(itemsPending, effectiveCapacity);
     b->CreateLikelyCondBr(permitted, readData, moveData);
@@ -211,7 +215,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     Value * const unreadItems = b->CreateSub(produced, consumed);
     Value * const unreadData = b->getRawOutputPointer("sourceBuffer", consumed);
-    Value * const potentialItems = b->CreateAdd(unreadItems, strideItems);
+    Value * const potentialItems = b->CreateAdd(unreadItems, segmentItems);
 
     Value * const toWrite = b->CreateGEP(baseBuffer, potentialItems);
     Value * const canCopy = b->CreateICmpULT(toWrite, unreadData);
@@ -271,9 +275,9 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     // Regardless of whether we're simply appending data or had to allocate a new buffer, read a new page
     // of data into the input source buffer. This may involve multiple read calls.
     b->SetInsertPoint(readData);
-    PHINode * const bytesToRead = b->CreatePHI(strideBytes->getType(), 3);
-    bytesToRead->addIncoming(strideBytes, entryBB);
-    bytesToRead->addIncoming(strideBytes, prepareBuffer);
+    PHINode * const bytesToRead = b->CreatePHI(segmentBytes->getType(), 3);
+    bytesToRead->addIncoming(segmentBytes, entryBB);
+    bytesToRead->addIncoming(segmentBytes, prepareBuffer);
     PHINode * const producedSoFar = b->CreatePHI(produced->getType(), 3);
     producedSoFar->addIncoming(produced, entryBB);
     producedSoFar->addIncoming(produced, prepareBuffer);
@@ -289,7 +293,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->SetInsertPoint(readIncomplete);
     // Keep reading until a the full stride is read, or there is no more data.
     Value * moreToRead = b->CreateSub(bytesToRead, bytesRead);
-    Value * readSoFar = b->CreateSub(strideBytes, moreToRead);
+    Value * readSoFar = b->CreateSub(segmentBytes, moreToRead);
     Value * const itemsRead = b->CreateUDiv(readSoFar, codeUnitBytes);
     Value * const itemsBuffered = b->CreateAdd(produced, itemsRead);
     bytesToRead->addIncoming(moreToRead, readIncomplete);
@@ -374,6 +378,7 @@ void FDSourceKernel::generateDoSegmentMethod(BuilderRef b) {
     BasicBlock * DoSegmentMMap = b->CreateBasicBlock("DoSegmentMMap");
     BasicBlock * DoSegmentDone = b->CreateBasicBlock("DoSegmentDone");
     Value * const useMMap = b->CreateIsNotNull(b->getScalarField("useMMap"));
+
     b->CreateCondBr(useMMap, DoSegmentMMap, DoSegmentRead);
     b->SetInsertPoint(DoSegmentMMap);
     MMapSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, mStride, b);
@@ -400,10 +405,12 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
 
     const auto source = b->getOutputStreamSet("sourceBuffer");
 
+    Value * const numOfStrides = b->getNumOfStrides();
+
     const auto codeUnitWidth = source->getFieldWidth();
 
-    Constant * const STRIDE_ITEMS = b->getSize(getStride());
-    Constant * const STRIDE_SIZE = b->getSize(getStride() * codeUnitWidth);
+    Value * const segmentItems = b->CreateMul(numOfStrides, b->getSize(getStride()));
+    Value * const segmentSize = b->CreateMul(numOfStrides, b->getSize(getStride() * codeUnitWidth));
     Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
 
     BasicBlock * const createTemporary = b->CreateBasicBlock("createTemporary");
@@ -411,7 +418,7 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
 
     Value * const fileItems = b->getScalarField("fileItems");
     Value * const producedItems = b->getProducedItemCount("sourceBuffer");
-    Value * const nextProducedItems = b->CreateAdd(producedItems, STRIDE_ITEMS);
+    Value * const nextProducedItems = b->CreateAdd(producedItems, segmentItems);
     Value * const lastPage = b->CreateICmpULE(fileItems, nextProducedItems);
     b->CreateUnlikelyCondBr(lastPage, createTemporary, exit);
 
@@ -449,7 +456,7 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
     Value * const readEndInt = b->CreatePtrToInt(readEnd, intPtrTy);
     Value * const readStartInt = b->CreatePtrToInt(readStart, intPtrTy);
     Value * const unconsumedBytes = b->CreateTrunc(b->CreateSub(readEndInt, readStartInt), b->getSizeTy());
-    Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, BLOCK_WIDTH), STRIDE_SIZE);
+    Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, BLOCK_WIDTH), segmentSize);
     Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
     PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
     b->setScalarField("ancillaryBuffer", b->CreatePointerCast(buffer, codeUnitPtrTy));

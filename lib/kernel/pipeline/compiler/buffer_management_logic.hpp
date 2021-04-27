@@ -46,6 +46,13 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief loadExternalStreamSetHandles
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::loadExternalStreamSetHandles(BuilderRef /* b */) {
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadInternalStreamSetHandles
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool nonLocal) {
@@ -56,6 +63,7 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
         if (LLVM_UNLIKELY(bn.isExternal())) {
             assert (isFromCurrentFunction(b, buffer->getHandle()));
         } else if (bn.isNonThreadLocal() == nonLocal) {
+            assert (bn.isInternal());
             const auto pe = in_edge(streamSet, mBufferGraph);
             const auto producer = source(pe, mBufferGraph);
             const BufferPort & rd = mBufferGraph[pe];
@@ -63,19 +71,17 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
             Value * const handle = b->getScalarFieldPtr(handleName);
             assert (buffer->getHandle() == nullptr);
             buffer->setHandle(handle);
-            #ifdef PERMIT_BUFFER_MEMORY_REUSE
-            #warning TODO: buffer node alone should dictate whether its safe to do this
             if (bn.Locality == BufferLocality::ThreadLocal && mThreadLocalStreamSetBaseAddress) {
                 assert (RequiredThreadLocalStreamSetMemory > 0);
                 assert (isa<StaticBuffer>(buffer));
                 Value * const startOffset = b->CreateMul(mExpectedNumOfStridesMultiplier, b->getSize(bn.BufferStart));
                 Value * const baseAddress = b->CreateGEP(mThreadLocalStreamSetBaseAddress, startOffset);
-                const auto capacity = bn.RequiredCapacity * b->getBitBlockWidth();
-                assert (capacity > 0);
+                const auto baseCapacity = bn.RequiredCapacity * b->getBitBlockWidth();
+                assert (baseCapacity > 0);
+                Value * const capacity = b->CreateMul(mExpectedNumOfStridesMultiplier, b->getSize(baseCapacity));
                 buffer->setBaseAddress(b, b->CreatePointerCast(baseAddress, buffer->getPointerType()));
-                buffer->setCapacity(b, b->getSize(capacity));
+                buffer->setCapacity(b, capacity);
             }
-            #endif
         }
     }
 }

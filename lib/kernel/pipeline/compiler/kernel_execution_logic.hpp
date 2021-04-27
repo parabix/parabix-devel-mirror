@@ -48,10 +48,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     if (mKernelCanTerminateEarly) {
         mTerminatedExplicitly = doSegmentRetVal;
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeKernelName(mKernelId);
-        debugPrint(b, "* " + prefix + "_terminatedExplicitly = %" PRIu64, mTerminatedExplicitly);
-        #endif
     } else {
         mTerminatedExplicitly = nullptr;
     }
@@ -127,7 +123,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
-            // addNextArg(mMaximumNumOfStrides);
         }
         addNextArg(mKernelIsFinal);
     } else {

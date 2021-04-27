@@ -342,7 +342,7 @@ void PipelineCompiler::verifyPostInvocationTerminationSignal(BuilderRef b) {
             "after invocation.";
         Value * const valid = b->CreateOr(b->CreateNot(mFinalPartitionSegment), mPartitionRootTerminationSignal);
         b->CreateAssert(valid, msg, mCurrentKernelName, b->getSize(mCurrentPartitionId));
-    } else {
+    } else if (!mKernelCanTerminateEarly) {
         Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
         constexpr auto msg =
             "Kernel %s in partition %" PRId64 " should have been flagged as terminated "

@@ -294,6 +294,7 @@ public:
 
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
     void allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal);
+    void loadExternalStreamSetHandles(BuilderRef b);
     void loadInternalStreamSetHandles(BuilderRef b, const bool nonLocal);
     void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);
     void resetInternalBufferHandles();
@@ -350,7 +351,6 @@ public:
 
 // kernel config functions
 
-    bool supportsInternalSynchronization() const;
     bool isBounded() const;
     bool requiresExplicitFinalStride() const ;
     bool mayLoopBackToEntry() const;
@@ -428,6 +428,8 @@ public:
     void clearInternalStateForCurrentKernel();
     void initializeKernelAssertions(BuilderRef b);
     void verifyBufferRelationships() const;
+
+    bool hasAtLeastOneNonGreedyInput() const;
 
 protected:
 
@@ -584,7 +586,6 @@ protected:
     Value *                                     mBranchToLoopExit = nullptr;
 
 
-    bool                                        mMayHaveNonLinearIO = false;
     bool                                        mIsBounded = false;
     bool                                        mKernelIsInternallySynchronized = false;
     bool                                        mKernelCanTerminateEarly = false;

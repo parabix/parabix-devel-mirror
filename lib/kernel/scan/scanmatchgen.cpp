@@ -54,6 +54,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 
     Module * const m = b->getModule();
     Constant * const sz_STRIDE = b->getSize(mStride);
+    assert ((mStride % b->getBitBlockWidth()) == 0);
     Constant * const sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * const sz_ZERO = b->getSize(0);
     Constant * const sz_ONE = b->getSize(1);

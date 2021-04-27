@@ -127,20 +127,20 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
     assert ((maxFirst % minFirst) == 0);
     const auto maxNumOfStrides = maxFirst / minFirst;
     assert (mKernelId == FirstKernelInPartition);
-    ConstantInt * const maxPartitionStrides = b->getSize(maxNumOfStrides);
+    Value * maxPartitionStrides = b->CreateMul(mExpectedNumOfStridesMultiplier, b->getSize(maxNumOfStrides));
 
     Value * availSegmentLength = maxPartitionStrides;
     Value * allInputExhausted = nullptr;
 
-    Value * pendingPipelineHalt = nullptr;
+//    Value * pendingPipelineHalt = nullptr;
 
 
     Constant * const sz_ZERO = b->getSize(0);
-    Constant * const sz_ONE = b->getSize(1);
+//    Constant * const sz_ONE = b->getSize(1);
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
 //    Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
-    Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
+//    Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
 
     for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
 
@@ -172,15 +172,18 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
             assert (ref.Type == PortType::Input);
             const StreamSetBuffer * const buffer = getInputBuffer(IO.Kernel, ref);
 
-            const auto step = MinimumNumOfStrides[IO.Kernel];
+            ConstantInt * const baseNumOfStrides = b->getSize(MinimumNumOfStrides[IO.Kernel]);
+            Value * const stepFactor = b->CreateMul(mExpectedNumOfStridesMultiplier, baseNumOfStrides);
+
+            Constant * const sz_ONE = b->getSize(1);
+
             const auto partialSumPrefix = makeBufferName(IO.Kernel, ref);
-            Value * partialSumStrides = sz_ZERO;
+            Value * partialSumSteps = sz_ZERO;
             Value * const basePartialSumOffset = b->getScalarField(partialSumPrefix + ITEM_COUNT_SUFFIX);
             for (unsigned i = 0; i < maxNumOfStrides; ++i) {
 
                 Value * const withinBounds = b->CreateICmpULT(b->getSize(i), availSegmentLength);
-
-                Value * const attemptedOffset = b->getSize(((i + 1) * step) - 1);
+                Value * const attemptedOffset = b->CreateSub(b->CreateMul(stepFactor, b->getSize(i + 1)), sz_ONE);
                 Value * const offset = b->CreateSelect(withinBounds, attemptedOffset, sz_ZERO);
 
                 Value * const position = b->CreateAdd(basePartialSumOffset, offset);
@@ -191,10 +194,10 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
                 // all available instead of the unprocessed item count.
                 Value * const hasEnough = b->CreateICmpUGE(avail, required);
                 Value * const sufficent = b->CreateZExt(b->CreateAnd(hasEnough, withinBounds), b->getSizeTy());
-                partialSumStrides = b->CreateAdd(partialSumStrides, sufficent);
+                partialSumSteps = b->CreateAdd(partialSumSteps, sufficent);
             }
 
-            segmentLength = partialSumStrides;
+            segmentLength = b->CreateMul(mExpectedNumOfStridesMultiplier, partialSumSteps);
 
         } else {
 
@@ -207,7 +210,8 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
                 case RateId::Bounded:
                     BEGIN_SCOPED_REGION
                     Value * const strideLength = calculateStrideLength(b, port);
-                    ConstantInt * const numOfStrides = b->getSize(MinimumNumOfStrides[IO.Kernel]);
+                    ConstantInt * const baseNumOfStrides = b->getSize(MinimumNumOfStrides[IO.Kernel]);
+                    Value * const numOfStrides = b->CreateMul(mExpectedNumOfStridesMultiplier, baseNumOfStrides);
                     Value * const segmentSize = b->CreateMul(strideLength, numOfStrides);
                     segmentLength = b->CreateUDiv(unprocessed, segmentSize);
                     END_SCOPED_REGION
@@ -280,6 +284,9 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
         mFinalPartitionSegment = b->getFalse();
         result = b->getTrue();
     }
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, " PartitionSegmentLength=%" PRIu64 ", FinalPartitionSegment=%" PRIu8, mPartitionSegmentLength, mFinalPartitionSegment);
+    #endif
     return result;
 }
 
