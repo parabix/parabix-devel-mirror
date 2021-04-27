@@ -201,12 +201,16 @@ std::pair<int, int> getLengthRange(const RE * re, const cc::Alphabet * indexAlph
                                   UTF<8>::encoded_length(hi_codepoint(cc->back())));
         }
         return std::make_pair(0, INT_MAX);
+    } else if (const PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        RE * resolved = pe->getResolvedRE();
+        if (resolved) return getLengthRange(resolved, indexAlphabet);
+        return std::make_pair(0, INT_MAX);
     } else if (const Name * n = dyn_cast<Name>(re)) {
         RE * defn = n->getDefinition();
         if (defn) return getLengthRange(defn, indexAlphabet);
         return std::make_pair(0, INT_MAX);
     }
-    return std::make_pair(1, 1);
+    return std::make_pair(0, INT_MAX);
 }
 
 bool isFixedLength(const RE * re) {

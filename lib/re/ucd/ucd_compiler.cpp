@@ -468,67 +468,23 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
     return ranges;
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateWithDefaultIfHierarchy
- ** ------------------------------------------------------------------------------------------------------------- */
-void UCDCompiler::generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry) {
-    makeTargets(entry, names);
-    generateRange(defaultIfHierachy, entry);
+void UCDCompiler::addTarget(Var * theVar, CC * theCC) {
+    mTarget.emplace(theCC, theVar);
+    mTargetValue.emplace(theCC, mPb.createZeroes());
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateWithoutIfHierarchy
- ** ------------------------------------------------------------------------------------------------------------- */
-void UCDCompiler::generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry) {
-    makeTargets(entry, names);
-    generateRange(noIfHierachy, entry);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addTargets
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::makeTargets(PabloBuilder & entry, NameMap & names) {
-
-    mTargetValue.clear();
-    mTarget.clear();
-
-    struct Comparator {
-        inline bool operator() (const CC * lh, const CC * rh) const{
-            return *lh < *rh;
-        }
-    } ec;
-
-    flat_map<CC *, Var *, Comparator> CCs(ec);
-
-    Zeroes * const zeroes = entry.createZeroes();
-
-    for (auto & t : names) {
-        Name * const name = t.first;
-        CC * const cc = dyn_cast<CC>(name->getDefinition());
-        if (cc && (cc->getAlphabet() == &cc::Unicode)) {
-            const auto f = CCs.find(cc);
-            // This check may not be needed. Memoization ought to detect duplicate classes earlier.
-            if (LLVM_LIKELY(f == CCs.end())) {
-                PabloAST * const value = t.second ? t.second : zeroes;
-                mTargetValue.emplace(cc, value);
-                Var * const var = entry.createVar(name->getName(), value);
-                mTarget.emplace(cc, var);
-                CCs.emplace(cc, var);
-                t.second = var;
-            } else {
-                t.second = f->second;
-            }
-        } else {
-            report_fatal_error(name->getName() + " is not defined by a Unicode CC!");
-        }
-    }
+void UCDCompiler::compile(IfHierarchy h) {
+    if (h == IfHierarchy::None) generateRange(noIfHierachy, mPb);
+    else generateRange(defaultIfHierachy, mPb);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-UCDCompiler::UCDCompiler(cc::CC_Compiler & ccCompiler)
+UCDCompiler::UCDCompiler(cc::CC_Compiler & ccCompiler, PabloBuilder & pb)
 : mCodeUnitCompiler(ccCompiler)
-, mSuffixVar(nullptr) { }
+, mPb(pb)
+, mSuffixVar(nullptr) {
+ }
 
 }

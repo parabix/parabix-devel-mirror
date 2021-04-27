@@ -418,7 +418,8 @@ void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & 
     }
     if (PropertyKernels) {
         for (auto e : mExternalNames) {
-            if (isa<re::CC>(e->getDefinition())) {
+            re::RE * def = e->getDefinition();
+            if (isa<re::CC>(def) || isa<re::PropertyExpression>(def)) {
                 auto name = e->getFullName();
                 StreamSet * property = P->CreateStreamSet(1, 1);
                 //errs() << "preparing external: " << name << "\n";

@@ -213,15 +213,11 @@ void WordCountKernel::generatePabloMethod() {
     if (CountWords) {
         re::RE * WS_prop = re::makePropertyExpression("space");
         WS_prop = UCD::linkAndResolve(WS_prop);
-        re::Name * WS_name = re::makeName("space", re::Name::Type::UnicodeProperty);
-        WS_name->setDefinition(cast<PropertyExpression>(WS_prop)->getResolvedRE());
-        UCD::UCDCompiler unicodeCompiler(*ccc.get());
-        UCD::UCDCompiler::NameMap nameMap;
-        nameMap.emplace(WS_name, nullptr);
-        unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-        auto f = nameMap.find(WS_name);
-        if (f == nameMap.end()) llvm::report_fatal_error("Cannot resolve whitespace property");
-        PabloAST * WS = f-> second;
+        re::CC * WS_CC = cast<re::CC>(cast<PropertyExpression>(WS_prop)->getResolvedRE());
+        Var * WS = pb.createVar("space");
+        UCD::UCDCompiler unicodeCompiler(*ccc.get(), pb);
+        unicodeCompiler.addTarget(WS, WS_CC);
+        unicodeCompiler.compile();
         //PabloAST * WS = ccc->compileCC(re::makeCC(re::re::makeByte(0x09, 0x0D), re::re::makeByte(0x20)));
         PabloAST * wordChar = pb.createAnd(pb.createNot(WS), u8final, "wordChar");
         // WS_follow_or_start = 1 past WS or at start of file
@@ -364,7 +360,7 @@ int main(int argc, char *argv[]) {
         }
         std::cout << " " << allFiles[i].string() << std::endl;
     }
-    if (inputFiles.size() > 1) {
+    if (allFiles.size() > 1) {
         std::cout << std::setw(displayColumnWidth-1);
         if (CountLines) {
             std::cout << TotalLines << std::setw(displayColumnWidth);

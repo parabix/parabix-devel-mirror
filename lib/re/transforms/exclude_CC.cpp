@@ -33,6 +33,13 @@ struct CC_Remover : public RE_Transformer {
         if (d == defn) return name;
         return d;
     }
+    RE * transformPropertyExpression (PropertyExpression * pe) override {
+        RE * defn = pe->getResolvedRE();
+        if (!defn) return pe;
+        RE * d = transform(defn);
+        if (d == defn) return pe;
+        return d;
+    }
     RE * transformAssertion (Assertion * a) override {
         if (!mProcessAsserted) return a;
         RE * a0 = a->getAsserted();

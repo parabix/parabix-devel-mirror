@@ -12,6 +12,7 @@
 #include <re/adt/re_name.h>
 #include <re/ucd/ucd_compiler.hpp>
 #include <pablo/builder.hpp>
+#include <pablo/pe_zeroes.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -72,28 +73,20 @@ void CharClassesKernel::generatePabloMethod() {
     }
     unsigned n = mCCs.size();
 
-    NameMap nameMap;
-    std::vector<Name *> names;
+    UCD::UCDCompiler unicodeCompiler(*ccc.get(), pb);
+    std::vector<Var *> mpx;
     for (unsigned i = 0; i < n; i++) {
-        Name * name = re::makeName("mpx_basis" + std::to_string(i), mCCs[i]);
-        nameMap.emplace(name, nullptr);
-        names.push_back(name);
+        mpx.push_back(pb.createVar("mpx_basis" + std::to_string(i), pb.createZeroes()));
+        unicodeCompiler.addTarget(mpx[i], mCCs[i]);
     }
-
-    UCD::UCDCompiler unicodeCompiler(*ccc.get());
     if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
-        unicodeCompiler.generateWithoutIfHierarchy(nameMap, pb);
+        unicodeCompiler.compile(UCDCompiler::IfHierarchy::None);
     } else {
-        unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
+        unicodeCompiler.compile();
     }
-    for (unsigned i = 0; i < names.size(); i++) {
-        auto t = nameMap.find(names[i]);
-        if (t != nameMap.end()) {
-            Extract * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
-            pb.createAssign(r, pb.createInFile(t->second));
-        } else {
-            llvm::report_fatal_error("Can't compile character classes.");
-        }
+    for (unsigned i = 0; i < mpx.size(); i++) {
+        Extract * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
+        pb.createAssign(r, pb.createInFile(mpx[i]));
     }
 }
 

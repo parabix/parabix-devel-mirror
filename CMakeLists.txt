@@ -23,6 +23,7 @@ enable_testing()
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 option(LLVM_PATH "LLVM root directory")
+option(GENERATE_TOOLS "Controls whether or not it generate tools" ON)
 
 # Build Artifact Configuration
 set(ARTIFACT_MODE "Multiple" CACHE STRING "Build framework into a single artifact (Single) or multiple artifacts (Multiple)")
@@ -325,25 +326,26 @@ add_subdirectory(lib/kernel/unicode)
 add_subdirectory(lib/kernel/util)
 
 # Executables
-add_subdirectory(tools/base64)
-add_subdirectory(tools/editd)
-add_subdirectory(tools/icgrep)
-add_subdirectory(tools/idisa_test)
-add_subdirectory(tools/transcoders)
-add_subdirectory(tools/wc)
-# add_subdirectory(tools/wc/wc-pablo)
-add_subdirectory(tools/xml)
-add_subdirectory(tools/ztf8)
-add_subdirectory(tools/util)
+if (GENERATE_TOOLS)
+    add_subdirectory(tools/base64)
+    add_subdirectory(tools/editd)
+    add_subdirectory(tools/icgrep)
+    add_subdirectory(tools/idisa_test)
+    add_subdirectory(tools/transcoders)
+    add_subdirectory(tools/wc)
+    # add_subdirectory(tools/wc/wc-pablo)
+    add_subdirectory(tools/xml)
+    add_subdirectory(tools/ztf8)
+    add_subdirectory(tools/util)
+endif()
 
 # Kernel Tests
 add_subdirectory(tests)
 
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")
-    target_link_libraries(${PARABIX_MONO_TARGET} ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
+    target_link_libraries(${PARABIX_MONO_TARGET} ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${Z3_LIBRARIES})
 endif()
-
 
 ###   Test Suite   ###
 
