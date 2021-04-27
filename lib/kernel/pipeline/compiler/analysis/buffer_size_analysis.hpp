@@ -416,20 +416,19 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
     // Construct the weighted interval graph for our local streamsets
 
-    const auto t0 = std::chrono::high_resolution_clock::now();
-
     const auto n = LastStreamSet - FirstStreamSet + 1U;
+
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
 
     #warning TODO: can we insert a zero-extension region rather than having a secondary buffer?
 
     IntervalGraph I(n);
     std::vector<size_t> weight(n, 0);
     std::vector<int> remaining(n, 0); // NOTE: signed int type is necessary here
-    std::vector<unsigned> mapping(n, -1U);
     std::vector<Pack> allocations(n);
+    std::vector<unsigned> mapping(n, -1U);
 
-    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
-    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
 
     unsigned numOfLocalStreamSets = 0;
 
@@ -441,20 +440,13 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
     DataLayout DL(b->getModule());
 
-
-    auto alignment = b->getCacheAlignment();
-
+    const auto alignment = b->getCacheAlignment();
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
-        const auto lastStreamSet = numOfLocalStreamSets;
-
         for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const auto streamSet = target(output, mBufferGraph);
-            BufferNode & bn = mBufferGraph[streamSet];
-
-            const auto i = streamSet - FirstStreamSet;
-            assert (i < n);
+            const BufferNode & bn = mBufferGraph[streamSet];
 
             if (bn.Locality == BufferLocality::ThreadLocal) {
                 // determine the number of bytes this streamset requires
@@ -477,19 +469,24 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
                 const auto w = round_up_to(c * typeSize, alignment);
                 assert (w > 0);
 
-                mapping[i] = numOfLocalStreamSets;
+                const auto i = streamSet - FirstStreamSet;
+                assert (i < n);
 
-                Pack & P = allocations[numOfLocalStreamSets];
+                const auto j = numOfLocalStreamSets++;
+
+                mapping[i] = j;
+
+                Pack & P = allocations[j];
                 assert (P.A == 0);
                 P.A = kernel;
                 P.D = kernel;
                 P.S = w;
-                weight[numOfLocalStreamSets] = w;
+                weight[j] = w;
 
                 // record how many consumers exist before the streamset memory can be reused
-                remaining[numOfLocalStreamSets] = out_degree(streamSet, mBufferGraph);
-
-                ++numOfLocalStreamSets;
+                // (NOTE: the +1 is to indicate this kernel requires each output streamset
+                // to be distinct even if one or more of the outputs is not used later.)
+                remaining[j] = out_degree(streamSet, mBufferGraph) + 1U;
             }
         }
 
@@ -501,8 +498,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
         // candidates have been generated. Instead we use a general interval graph
         // within the first-fit process but guide colouring based on candidate order.
 
-        for (unsigned i = lastStreamSet; i < numOfLocalStreamSets; ++i) {
-            // NOTE: remaining may be less than 0
+        for (unsigned i = 0; i < numOfLocalStreamSets; ++i) {
             if (remaining[i] > 0) {
                 for (unsigned j = 0; j < i; ++j) {
                     if (remaining[j] > 0) {
@@ -512,23 +508,32 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
             }
         }
 
-        // Determine which streamsets are no longer alive
-        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-            const auto streamSet = source(input, mBufferGraph);
-            // NOTE: remaining may go below 0 for non local streamsets
+        auto markFinishedStreamSets = [&](const unsigned streamSet) {
+
             const auto i = streamSet - FirstStreamSet;
+            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
             assert (i < n);
             const auto j = mapping[i];
+
             if (j != -1U) {
+                assert (j < numOfLocalStreamSets);
                 auto & r = remaining[j];
                 if ((--r) == 0) {
                     Pack & P = allocations[j];
                     assert (P.A == P.D);
                     assert (firstKernel <= P.A && P.A <= kernel);
                     P.D = kernel;
-                    r = -1;
                 }
             }
+
+        };
+
+        // Determine which streamsets are no longer alive
+        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            markFinishedStreamSets(target(output, mBufferGraph));
+        }
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            markFinishedStreamSets(source(input, mBufferGraph));
         }
     }
 
@@ -549,26 +554,16 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
     const auto intervals = BA.getIntervals(O);
 
-    unsigned l = 0;
-
-    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-            const auto streamSet = target(output, mBufferGraph);
-            BufferNode & bn = mBufferGraph[streamSet];
-            if (bn.Locality == BufferLocality::ThreadLocal) {
-                assert ("inconsistent graph traversal?" && (mapping[streamSet - FirstStreamSet] == l));
-                const auto & interval = intervals[l];
-                bn.BufferStart = interval.first;
-                ++l;
-            }
+    for (unsigned i = 0; i < n; ++i) {
+        const auto j = mapping[i];
+        if (j != -1U) {
+            BufferNode & bn = mBufferGraph[FirstStreamSet + i];
+            const auto & interval = intervals[j];
+            bn.BufferStart = interval.first;
         }
     }
 
-    assert (l == numOfLocalStreamSets);
-
     assert (RequiredThreadLocalStreamSetMemory > 0);
-
-
 
 }
 

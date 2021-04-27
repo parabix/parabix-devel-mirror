@@ -185,7 +185,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             } else {
                 addr = mInputVirtualBaseAddressPhi[rt.Port];
             }
-
             addNextArg(b->CreatePointerCast(addr, voidPtrTy));
 
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {

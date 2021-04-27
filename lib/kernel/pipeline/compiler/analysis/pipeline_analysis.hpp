@@ -79,7 +79,7 @@ public:
 
         P.identifyOutputNodeIds();
 
-//        errs() << "computeNumOfStridesInterval\n";
+//        errs() << "computeMaximumExpectedDataflow\n";
 
 //        #ifdef PRINT_BUFFER_GRAPH
 //        P.printBufferGraph(errs());

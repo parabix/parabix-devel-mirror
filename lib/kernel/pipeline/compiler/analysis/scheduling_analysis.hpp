@@ -83,6 +83,10 @@ void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P, random_eng
     // edgeless if any permutation of its kernels is valid or contains all of its optimal
     // orderings for the kernels within each partition.
 
+    // TODO: look into performance problem with
+    // bin/icgrep -EnableTernaryOpt -DisableMatchStar '(?g)fodder|simple' ../QA/testfiles/simple1 -colors=always
+
+
 //    executeHarmonySearchTest(std::random_device()());
 
 //    executeHarmonySearchByCSV("./testcases.csv", std::random_device()());
