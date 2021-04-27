@@ -103,9 +103,10 @@ void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
             mMaximumNumOfStrides = b->CreateMul(mPartitionSegmentLength, strideFactor);
 //        }
     } else {
-        Rational factor{MinimumNumOfStrides[mKernelId], MinimumNumOfStrides[FirstKernelInPartition]};
-        assert (mNumOfPartitionStrides);
-        mMaximumNumOfStrides = b->CreateMulRational(mNumOfPartitionStrides, factor);
+
+        const Rational strideRateFactor{MinimumNumOfStrides[mKernelId], MinimumNumOfStrides[FirstKernelInPartition]};
+        mMaximumNumOfStrides = b->CreateMulRational(mNumOfPartitionStrides, strideRateFactor / mPartitionStrideRateScalingFactor);
+
     }
 }
 
@@ -396,7 +397,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
                                const Vec<Value *> & writableItems,
                                Value * const fixedRateFactor,
                                Constant * const terminationSignal,
-                               Value * const partialPartitionStrides) {
+                               Value * const fixedRatePartialStrideRemainder) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto port = StreamSetPort{ PortType::Input, i };
@@ -412,7 +413,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         }
         mIsFinalInvocationPhi->addIncoming(terminationSignal, exitBlock);
         if (mIsPartitionRoot) {
-            mFinalPartialStrideFixedRateRemainderPhi->addIncoming(partialPartitionStrides, exitBlock);
+            mFinalPartialStrideFixedRateRemainderPhi->addIncoming(fixedRatePartialStrideRemainder, exitBlock);
         }
     };
     // --- lambda function end
@@ -1378,22 +1379,22 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const BufferPort 
     }
     assert (prior);
 
-    Constant * const ZERO = b->getSize(0);
+    Constant * const sz_ZERO = b->getSize(0);
     Value * position = mAlreadyProcessedPhi[ref];
 
     if (offset) {
         if (LLVM_UNLIKELY(CheckAssertions)) {
             const Binding & binding = partialSumPort.Binding;
-            b->CreateAssert(b->CreateICmpNE(offset, ZERO),
+            b->CreateAssert(b->CreateICmpNE(offset, sz_ZERO),
                             "%s.%s: partial sum offset must be non-zero",
                             mCurrentKernelName,
                             b->GetString(binding.getName()));
         }
-        Constant * const ONE = b->getSize(1);
-        position = b->CreateAdd(position, b->CreateSub(offset, ONE));
+        Constant * const sz_ONE = b->getSize(1);
+        position = b->CreateAdd(position, b->CreateSub(offset, sz_ONE));
     }
 
-    Value * const currentPtr = buffer->getRawItemPointer(b, ZERO, position);
+    Value * const currentPtr = buffer->getRawItemPointer(b, sz_ZERO, position);
     Value * current = b->CreateLoad(currentPtr);
 
 //    b->CreateDprintfCall(b->getInt32(STDERR_FILENO),
@@ -1428,7 +1429,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
 
 
     IntegerType * const sizeTy = b->getSizeTy();
-    Constant * const ZERO = b->getSize(0);
+    Constant * const sz_ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
     Constant * const MAX_INT = ConstantInt::getAllOnesValue(sizeTy);
 
@@ -1495,11 +1496,11 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
     Value * const baseOffset = mAlreadyProcessedPhi[ref];
 
 
-    Value * const baseAddress = buffer->getRawItemPointer(b, ZERO, baseOffset);
+    Value * const baseAddress = buffer->getRawItemPointer(b, sz_ZERO, baseOffset);
     BasicBlock * const popCountEntry = b->GetInsertBlock();
     Value * const initialStrideCount = b->CreateMul(numOfLinearStrides, STEP);
 
-    Value * cond = b->CreateICmpNE(numOfLinearStrides, ZERO);
+    Value * cond = b->CreateICmpNE(numOfLinearStrides, sz_ZERO);
     if (peekableItemCount) {
         cond = b->CreateAnd(cond, b->CreateICmpUGE(sourceItemCount, minimumItemCount));
     }
@@ -1539,10 +1540,10 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
 
     b->SetInsertPoint(popCountLoopExit);
     PHINode * const numOfStridesPhi = b->CreatePHI(sizeTy, 2);
-    numOfStridesPhi->addIncoming(ZERO, popCountEntry);
+    numOfStridesPhi->addIncoming(sz_ZERO, popCountEntry);
     numOfStridesPhi->addIncoming(numOfStrides, popCountLoop);
     PHINode * const requiredItemsPhi = b->CreatePHI(sizeTy, 2);
-    requiredItemsPhi->addIncoming(ZERO, popCountEntry);
+    requiredItemsPhi->addIncoming(sz_ZERO, popCountEntry);
     requiredItemsPhi->addIncoming(requiredItems, popCountLoop);
     PHINode * const nextRequiredItemsPhi = b->CreatePHI(sizeTy, 2);
     nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);

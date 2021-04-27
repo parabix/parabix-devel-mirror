@@ -259,6 +259,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         // If the kernel explicitly terminates, it must set its processed/produced item counts.
         // Otherwise, the pipeline will update any countable rates, even upon termination.
         readCountableItemCountsAfterAbnormalTermination(b);
+        #warning review this
+        // TODO: We could have a *fixed-rate* source kernel be a partition root but will need to
+        // calculate how many items are the stride "remainder" here.
         signalAbnormalTermination(b);
         b->CreateBr(mKernelTerminated);
 
@@ -423,14 +426,14 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         mProducedAtTerminationPhi[port]->addIncoming(mProducedItemCount[port], exitBlock);
     }
     mTerminatedSignalPhi->addIncoming(terminationSignal, exitBlock);
-//    if (mIsPartitionRoot) {
-//        Value * incomingValue = mFinalPartialStrideFixedRateRemainderPhi;
-//        if (incomingValue == nullptr) {
-//            incomingValue = b->getSize(0);
-//        }
-//        mFinalPartialStrideFixedRateRemainderAtLoopExitPhi->addIncoming(incomingValue, exitBlock);
-//    }
 
+    if (mTotalNumOfStridesAtLoopExitPhi) {
+        Value * updatedNumOfStrides = mUpdatedNumOfStrides; assert (mUpdatedNumOfStrides);
+        if (mIsPartitionRoot) {
+            updatedNumOfStrides = b->CreateMulRational(updatedNumOfStrides, mPartitionStrideRateScalingFactor);
+        }
+        mTotalNumOfStridesAtLoopExitPhi->addIncoming(updatedNumOfStrides, exitBlock);
+    }
     b->CreateUnlikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
@@ -449,9 +452,6 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     }
     mTerminatedAtLoopExitPhi->addIncoming(terminationSignal, exitBlock);
     mAnyProgressedAtLoopExitPhi->addIncoming(i1_TRUE, exitBlock);
-    if (mTotalNumOfStridesAtLoopExitPhi) {
-        mTotalNumOfStridesAtLoopExitPhi->addIncoming(mUpdatedNumOfStrides, exitBlock);
-    }
     mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
 }
 
@@ -675,10 +675,7 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         }
     }
 
-
-
     b->CreateBr(mKernelLoopExit);
-
 }
 
 
@@ -725,7 +722,8 @@ inline void PipelineCompiler::updateKernelExitPhisAfterInitiallyTerminated(Build
     Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
     mTerminatedAtExitPhi->addIncoming(completed, mKernelInitiallyTerminatedExit);
     if (mTotalNumOfStridesAtExitPhi) {
-        mTotalNumOfStridesAtExitPhi->addIncoming(b->getSize(0), mKernelInitiallyTerminatedExit);
+        ConstantInt * const sz_ZERO = b->getSize(0);
+        mTotalNumOfStridesAtExitPhi->addIncoming(sz_ZERO, mKernelInitiallyTerminatedExit);
     }
 
     phiOutConsumedItemCountsAfterInitiallyTerminated(b);
@@ -749,20 +747,19 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     mAnyProgressedAtLoopExitPhi->addIncoming(b->getTrue(), exitBlock);
     mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
     if (mTotalNumOfStridesAtLoopExitPhi) {
-        Value * totalNumOfStrides = mUpdatedNumOfStrides;
-//        if (mIsPartitionRoot && mFinalPartialStrideFixedRateRemainderPhi) {
-//            Value * const nonEmptyFinalStride = b->CreateIsNotNull(mFinalPartialStrideFixedRateRemainderPhi);
-//            totalNumOfStrides = b->CreateAdd(totalNumOfStrides, b->CreateZExt(nonEmptyFinalStride, b->getSizeTy()));
-//        }
-        mTotalNumOfStridesAtLoopExitPhi->addIncoming(totalNumOfStrides, exitBlock);
+        Value * finalNumOfStrides = mUpdatedNumOfStrides; assert (mUpdatedNumOfStrides);
+        if (mIsPartitionRoot) {
+            if (mFinalPartialStrideFixedRateRemainderPhi) {
+                const Rational fixedRateFactor = mFixedRateLCM * Rational{mKernel->getStride()};
+                Value * fixedRateItems = b->CreateMulRational(finalNumOfStrides, fixedRateFactor);
+                fixedRateItems = b->CreateAdd(fixedRateItems, mFinalPartialStrideFixedRateRemainderPhi);
+                finalNumOfStrides = b->CreateMulRational(fixedRateItems, mPartitionStrideRateScalingFactor / fixedRateFactor);
+            } else {
+                finalNumOfStrides = b->CreateMulRational(finalNumOfStrides, mPartitionStrideRateScalingFactor);
+            }
+        }
+        mTotalNumOfStridesAtLoopExitPhi->addIncoming(finalNumOfStrides, exitBlock);
     }
-//    if (mIsPartitionRoot) {
-//        Value * incomingValue = mFinalPartialStrideFixedRateRemainderPhi;
-//        if (incomingValue == nullptr) {
-//            incomingValue = b->getSize(0);
-//        }
-//        mFinalPartialStrideFixedRateRemainderAtLoopExitPhi->addIncoming(incomingValue, exitBlock);
-//    }
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const auto port = mBufferGraph[e].Port;
         Value * const totalCount = getLocallyAvailableItemCount(b, port);

@@ -146,6 +146,7 @@ public:
     void checkForPartitionEntry(BuilderRef b);
 
     void identifyPartitionKernelRange();
+    void determinePartitionStrideRateScalingFactor();
 
     void writePartitionEntryIOGuard(BuilderRef b);
     Value * calculatePartitionSegmentLength(BuilderRef b);
@@ -532,6 +533,8 @@ protected:
     unsigned                                    FirstKernelInPartition = 0;
     unsigned                                    LastKernelInPartition = 0;
 
+    Rational                                    mPartitionStrideRateScalingFactor;
+
     Value *                                     mPartitionSegmentLength = nullptr;
     Value *                                     mFinalPartitionSegment = nullptr;
 
@@ -554,7 +557,6 @@ protected:
     Value *                                     mInitiallyTerminated = nullptr;
     Value *                                     mMaximumNumOfStrides = nullptr;
     PHINode *                                   mFinalPartialStrideFixedRateRemainderPhi = nullptr;
-    PHINode *                                   mFinalPartialStrideFixedRateRemainderAtLoopExitPhi = nullptr;
     PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
     Value *                                     mKernelIsPenultimate = nullptr;

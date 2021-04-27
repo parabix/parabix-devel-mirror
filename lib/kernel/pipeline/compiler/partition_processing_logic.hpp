@@ -81,6 +81,7 @@ inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
         mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
         mIsPartitionRoot = true;
         identifyPartitionKernelRange();
+        determinePartitionStrideRateScalingFactor();
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "  *** entering partition %" PRIu64, b->getSize(mCurrentPartitionId));
         #endif
@@ -101,6 +102,24 @@ void PipelineCompiler::identifyPartitionKernelRange() {
         }
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief determinePartitionStrideRateScalingFactor
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::determinePartitionStrideRateScalingFactor() {
+    auto max = MinimumNumOfStrides[FirstKernelInPartition];
+    for (auto i = FirstKernelInPartition + 1U; i <= LastKernelInPartition; ++i) {
+        max = std::max(MinimumNumOfStrides[i], max);
+    }
+    // If a kernel within this partition has a min/max stride value that is greater
+    // than the min/max stride of the partition root then when the root kernel
+    // executes its final block, its partial stride may actually require the other
+    // kernel executes N full strides and a final block. To accomidate this
+    // possibility, the partition root scales the num of partition strides
+    // full+partial strides by to the following ratio:
+    mPartitionStrideRateScalingFactor = Rational{max, MinimumNumOfStrides[FirstKernelInPartition]};
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writePartitionEntryIOGuard
