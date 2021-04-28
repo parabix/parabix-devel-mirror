@@ -169,8 +169,7 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
         assert (maxNumOfStrides == (MaximumNumOfStrides[IO.Kernel] / MinimumNumOfStrides[IO.Kernel]));
 
         if (IO.Kernel != mKernelId) {
-            continue;
-            //setActiveKernel(b, IO.Kernel, true);
+            setActiveKernel(b, IO.Kernel, true);
         }
 
         const BufferPort & port = IO.Port;
@@ -567,8 +566,6 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
     b->SetInsertPoint(mKernelInitiallyTerminated);
 
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
-
-
 
     if (mIsPartitionRoot) {
 

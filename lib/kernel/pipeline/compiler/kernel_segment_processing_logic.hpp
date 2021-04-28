@@ -75,8 +75,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     clearInternalStateForCurrentKernel();
 
-    verifyCurrentSynchronizationLock(b);
-
     checkForPartitionEntry(b);
 
     mFixedRateLCM = getLCMOfFixedRateInputs(mKernel);
@@ -160,6 +158,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// KERNEL / PARTITION ENTRY BLOCK
     /// -------------------------------------------------------------------------------------
 
+    verifyCurrentSynchronizationLock(b);
     checkIfKernelIsAlreadyTerminated(b);
     readProcessedItemCounts(b);
     readProducedItemCounts(b);
@@ -356,7 +355,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     mExhaustedInput = mExhaustedPipelineInputAtExit;
     mPipelineProgress = mAnyProgressedAtExitPhi;
     if (mIsPartitionRoot) {
-        assert (mTotalNumOfStridesAtExitPhi);
         mNumOfPartitionStrides = mTotalNumOfStridesAtExitPhi;
     }
 

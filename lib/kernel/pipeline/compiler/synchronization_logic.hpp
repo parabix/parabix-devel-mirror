@@ -153,14 +153,17 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned k
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::verifyCurrentSynchronizationLock(BuilderRef b) const {
     if (CheckAssertions) {
-        const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-        const unsigned waitingOnIdx = serialize ? LastKernel : mKernelId;
-        const auto waitingOn = makeKernelName(waitingOnIdx);
-        Value * const waitingOnPtr = getScalarFieldPtr(b.get(), waitingOn + LOGICAL_SEGMENT_SUFFIX);
-        Value * const currentSegNo = b->CreateLoad(waitingOnPtr);
-        Value * const valid = b->CreateICmpEQ(mSegNo, currentSegNo);
-        b->CreateAssert(valid, "%s does not have the correct segment number (%" PRIu64 " instead of %" PRIu64 ")",
-                        mCurrentKernelName,currentSegNo, mSegNo);
+        const auto required = RequiresSynchronization[mKernelId] && (mNumOfThreads > 1 || ExternallySynchronized);
+        if (required) {
+            const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
+            const unsigned waitingOnIdx = serialize ? LastKernel : mKernelId;
+            const auto waitingOn = makeKernelName(waitingOnIdx);
+            Value * const waitingOnPtr = getScalarFieldPtr(b.get(), waitingOn + LOGICAL_SEGMENT_SUFFIX);
+            Value * const currentSegNo = b->CreateLoad(waitingOnPtr);
+            Value * const valid = b->CreateICmpEQ(mSegNo, currentSegNo);
+            b->CreateAssert(valid, "%s does not have the correct segment number (%" PRIu64 " instead of %" PRIu64 ")",
+                            mCurrentKernelName,currentSegNo, mSegNo);
+        }
     }
 }
 
