@@ -122,7 +122,6 @@ public:
     void end(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
-    void updateInternalPipelineItemCount(BuilderRef b);
     void writeExternalProducedItemCounts(BuilderRef b);
 
 // internal pipeline functions
@@ -366,6 +365,7 @@ public:
     void incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId);
     void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId);
+    void verifyCurrentSynchronizationLock(BuilderRef b) const;
 
 // family functions
 
@@ -579,7 +579,6 @@ protected:
     Value *                                     mHasZeroExtendedInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
-    BasicBlock *                                mNextPartitionWithPotentialInput = nullptr;
 
     BitVector                                   mHasPipelineInput;
 

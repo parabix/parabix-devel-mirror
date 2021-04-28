@@ -75,6 +75,8 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     clearInternalStateForCurrentKernel();
 
+    verifyCurrentSynchronizationLock(b);
+
     checkForPartitionEntry(b);
 
     mFixedRateLCM = getLCMOfFixedRateInputs(mKernel);
@@ -168,8 +170,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     incrementNumberOfSegmentsCounter(b);
     recordUnconsumedItemCounts(b);
 
+    mFinalPartialStrideFixedRateRemainderPhi = nullptr;
+
     if (mIsPartitionRoot) {
-        mFinalPartialStrideFixedRateRemainderPhi = nullptr;
         mCurrentPartitionEntryGuard = b->CreateBasicBlock(prefix + "_partitionEntry", mKernelLoopEntry);
         b->CreateUnlikelyCondBr(mInitiallyTerminated, mKernelInitiallyTerminated, mCurrentPartitionEntryGuard);
         mKernelLoopStart = mCurrentPartitionEntryGuard;
@@ -335,7 +338,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     if (canJumpToAnotherPartition) {
-        b->SetInsertPoint(mKernelJumpToNextUsefulPartition);
         writeJumpToNextPartition(b);
     }
 

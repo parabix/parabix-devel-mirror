@@ -145,30 +145,6 @@ void PipelineCompiler::addPipelinePriorItemCountProperties(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addPipelinePriorItemCountProperties
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::updateInternalPipelineItemCount(BuilderRef b) {
-
-//    if (ExternallySynchronized) {
-
-//        for (const auto input : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-//            const BufferPort & br = mBufferGraph[input];
-//            const auto prefix = makeBufferName(PipelineInput, br.Port);
-//            Value * const ptr = b->getScalarFieldPtr(prefix + EXTERNAL_IO_PRIOR_ITEM_COUNT_SUFFIX);
-//            Value * const prior = b->CreateLoad(ptr);
-//            Value * const current = getProcessedInputItemsPtr(br.Port.Number);
-//            b->CreateStore(current, ptr);
-//            b->CreateSub(current, prior);
-
-//        }
-
-
-
-//    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelId) {

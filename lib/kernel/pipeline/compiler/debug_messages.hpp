@@ -33,19 +33,29 @@ void PipelineCompiler::debugInit(BuilderRef b) {
 
 template <typename ... Args>
 BOOST_NOINLINE void PipelineCompiler::debugPrint(BuilderRef b, Twine format, Args ...args) const {
+    #ifdef PRINT_DEBUG_MESSAGES_FOR_KERNEL_NUM
+    const std::initializer_list<unsigned> L{0,PRINT_DEBUG_MESSAGES_FOR_KERNEL_NUM};
+    if (std::find(L.begin(), L.end(), mKernelId) == L.end()) {
+        return;
+    }
+    #endif
     SmallVector<char, 512> tmp;
     raw_svector_ostream out(tmp);
+    #ifdef PRINT_DEBUG_MESSAGES_INCLUDE_THREAD_NUM
     if (mThreadId) {
         out << "%016" PRIx64 "  ";
-    }   
+    }
+    #endif
     out << format << "\n";
 
     SmallVector<Value *, 8> argVals(2);
     argVals[0] = b->getInt32(STDERR_FILENO);
     argVals[1] = b->GetString(out.str());
+    #ifdef PRINT_DEBUG_MESSAGES_INCLUDE_THREAD_NUM
     if (mThreadId) {
         argVals.push_back(mThreadId);
     }
+    #endif
     argVals.append(std::initializer_list<llvm::Value *>{std::forward<Args>(args)...});
     #ifndef NDEBUG
     for (Value * arg : argVals) {

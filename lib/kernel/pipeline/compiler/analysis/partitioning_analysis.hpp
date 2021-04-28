@@ -1329,19 +1329,22 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                     assert (node.Kernel == mPipelineKernel);
                 }
                 demarcateOutputs = true;
-            } else {
-                // Check whether this (internal) kernel could terminate early
-                const auto kernelObj = node.Kernel;
-                if (kernelObj != mPipelineKernel) {
-                    demarcateOutputs |= kernelObj->canSetTerminateSignal();
-                    // TODO: an internally synchronzied kernel with fixed rate I/O can be contained within a partition
-                    // but cannot be the root of a non-isolated partition. To permit them to be roots, they'd need
-                    // some way of informing the pipeline as to how many strides they executed or the pipeline
-                    // would need to know to calculate it from its outputs. Rather than handling this complication,
-                    // for now we simply prevent this case.
-                    demarcateOutputs |= kernelObj->hasAttribute(AttrId::InternallySynchronized);
+            }
+            // Check whether this (internal) kernel could terminate early
+            const auto kernelObj = node.Kernel;
+            if (kernelObj != mPipelineKernel) {
+                demarcateOutputs |= kernelObj->canSetTerminateSignal();
+                // TODO: an internally synchronzied kernel with fixed rate I/O can be contained within a partition
+                // but cannot be the root of a non-isolated partition. To permit them to be roots, they'd need
+                // some way of informing the pipeline as to how many strides they executed or the pipeline
+                // would need to know to calculate it from its outputs. Rather than handling this complication,
+                // for now we simply prevent this case.
+                if (kernelObj->hasAttribute(AttrId::InternallySynchronized)) {
+                    V.set(nextRateId++);
+                    demarcateOutputs = true;
                 }
             }
+
 
             if (LLVM_UNLIKELY(demarcateOutputs)) {
                 const auto demarcationId = nextRateId++;

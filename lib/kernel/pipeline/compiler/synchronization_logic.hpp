@@ -62,11 +62,6 @@ void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * con
         segNo->addIncoming(b->getSize(0), entryBlock);
         mSegNo = segNo;
     }
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, "# obtained SegNo %" PRIu64, mSegNo);
-    #endif
-
     mNextSegNo = b->CreateAdd(mSegNo, ONE);
 }
 
@@ -152,6 +147,23 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned k
         }
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief verifyCurrentSynchronizationLock
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::verifyCurrentSynchronizationLock(BuilderRef b) const {
+    if (CheckAssertions) {
+        const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
+        const unsigned waitingOnIdx = serialize ? LastKernel : mKernelId;
+        const auto waitingOn = makeKernelName(waitingOnIdx);
+        Value * const waitingOnPtr = getScalarFieldPtr(b.get(), waitingOn + LOGICAL_SEGMENT_SUFFIX);
+        Value * const currentSegNo = b->CreateLoad(waitingOnPtr);
+        Value * const valid = b->CreateICmpEQ(mSegNo, currentSegNo);
+        b->CreateAssert(valid, "%s does not have the correct segment number (%" PRIu64 " instead of %" PRIu64 ")",
+                        mCurrentKernelName,currentSegNo, mSegNo);
+    }
+}
+
 
 }
 

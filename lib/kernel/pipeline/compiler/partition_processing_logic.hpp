@@ -51,7 +51,6 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
 
     mKernelStartTime = startCycleCounter(b);
     acquireSynchronizationLock(b, FirstKernel);
-    updateInternalPipelineItemCount(b);
     updateCycleCounter(b, FirstKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
 }
 
@@ -71,14 +70,10 @@ inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef /* b */) 
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);    
-    mNextPartitionWithPotentialInput = nullptr;
     mIsPartitionRoot = false;
     const auto partitionId = KernelPartitionId[mKernelId];
     if (partitionId != mCurrentPartitionId) {
         mCurrentPartitionId = partitionId;
-        const auto jumpIdx = mPartitionJumpIndex[partitionId];
-        assert (partitionId != jumpIdx);
-        mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
         mIsPartitionRoot = true;
         identifyPartitionKernelRange();
         determinePartitionStrideRateScalingFactor();
@@ -174,7 +169,8 @@ Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
         assert (maxNumOfStrides == (MaximumNumOfStrides[IO.Kernel] / MinimumNumOfStrides[IO.Kernel]));
 
         if (IO.Kernel != mKernelId) {
-            setActiveKernel(b, IO.Kernel, true);
+            continue;
+            //setActiveKernel(b, IO.Kernel, true);
         }
 
         const BufferPort & port = IO.Port;
@@ -360,68 +356,62 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
 
         if (kernel < mKernelId) {
             produced = mLocallyAvailableItems[streamSet];
-        } else {
-            if (kernel == mKernelId) {
+        } else if (kernel == mKernelId) {
 
-                if (LLVM_UNLIKELY(br.IsDeferred)) {
-                    produced = mInitiallyProducedDeferredItemCount[streamSet];
-                } else {
-                    produced = mInitiallyProducedItemCount[streamSet];
-                }
-
-                if (!fromKernelEntryBlock) {
-
-                    const auto nextPartitionId = mCurrentPartitionId + 1U;
-                    const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
-
-                    assert (nextPartitionId <= jumpId);
-
-                    if (LLVM_UNLIKELY(nextPartitionId == jumpId)) {
-                        Value * initiallyProduced = nullptr;
-                        if (LLVM_UNLIKELY(br.IsDeferred)) {
-                            initiallyProduced = mInitiallyProducedDeferredItemCount[streamSet];
-                        } else {
-                            initiallyProduced = mInitiallyProducedItemCount[streamSet];
-                        }
-                        assert (initiallyProduced);
-
-                        const auto ip = b->saveIP();
-                        b->SetInsertPoint(entryPoint, entryPoint->begin());
-                        PHINode * const phi = b->CreatePHI(b->getSizeTy(), 3);
-                        assert ((mKernelInitiallyTerminatedExit == nullptr) ^ (mKernelInitiallyTerminated != nullptr));
-                        assert (mCurrentPartitionEntryGuard);
-                        phi->addIncoming(initiallyProduced, mCurrentPartitionEntryGuard);
-                        if (mKernelInitiallyTerminatedExit) {
-                            phi->addIncoming(initiallyProduced, mKernelInitiallyTerminatedExit);
-                        }
-
-                        produced = phi;
-                        b->restoreIP(ip);                       
-                    }
-
-                }
-
+            if (LLVM_UNLIKELY(br.IsDeferred)) {
+                produced = mInitiallyProducedDeferredItemCount[streamSet];
             } else {
-                if (fromKernelEntryBlock) {
-                    const auto prefix = makeBufferName(kernel, br.Port);
+                produced = mInitiallyProducedItemCount[streamSet];
+            }
+
+            if (!fromKernelEntryBlock) {
+
+                const auto nextPartitionId = mCurrentPartitionId + 1U;
+                const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
+
+                assert (nextPartitionId <= jumpId);
+
+                if (LLVM_UNLIKELY(nextPartitionId == jumpId)) {
+                    Value * initiallyProduced = nullptr;
                     if (LLVM_UNLIKELY(br.IsDeferred)) {
-                        produced = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+                        initiallyProduced = mInitiallyProducedDeferredItemCount[streamSet];
                     } else {
-                        produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+                        initiallyProduced = mInitiallyProducedItemCount[streamSet];
                     }
-                } else {
-                    produced = mInitiallyAvailableItemsPhi[streamSet];
+                    assert (initiallyProduced);
+
+                    const auto ip = b->saveIP();
+                    b->SetInsertPoint(entryPoint, entryPoint->begin());
+                    PHINode * const phi = b->CreatePHI(b->getSizeTy(), 3);
+                    assert ((mKernelInitiallyTerminatedExit == nullptr) ^ (mKernelInitiallyTerminated != nullptr));
+                    assert (mCurrentPartitionEntryGuard);
+                    phi->addIncoming(initiallyProduced, mCurrentPartitionEntryGuard);
+                    if (mKernelInitiallyTerminatedExit) {
+                        phi->addIncoming(initiallyProduced, mKernelInitiallyTerminatedExit);
+                    }
+
+                    produced = phi;
+                    b->restoreIP(ip);
                 }
+
+            }
+
+        } else { // if (kernel > mKernelId) {
+            const auto prefix = makeBufferName(kernel, br.Port);
+            if (LLVM_UNLIKELY(br.IsDeferred)) {
+                produced = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+            } else {
+                produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
             }
         }
 
-//        #ifdef PRINT_DEBUG_MESSAGES
-//        SmallVector<char, 256> tmp;
-//        raw_svector_ostream out(tmp);
-//        out << makeKernelName(mKernelId) << " -> " <<
-//               makeBufferName(kernel, br.Port) << "_avail = %" PRIu64;
-//        debugPrint(b, out.str(), produced);
-//        #endif
+        #ifdef PRINT_DEBUG_MESSAGES
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << makeKernelName(mKernelId) << " -> " <<
+               makeBufferName(kernel, br.Port) << "_avail = %" PRIu64;
+        debugPrint(b, out.str(), produced);
+        #endif
 
         producedSet.emplace_back(streamSet, produced);
 
@@ -445,13 +435,13 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                 assert (consumed);
             }            
 
-//            #ifdef PRINT_DEBUG_MESSAGES
-//            SmallVector<char, 256> tmp;
-//            raw_svector_ostream out(tmp);
-//            out << makeKernelName(mKernelId) << " -> " <<
-//                   makeBufferName(kernel, br.Port) << "_consumed = %" PRIu64;
-//            debugPrint(b, out.str(), consumed);
-//            #endif
+            #ifdef PRINT_DEBUG_MESSAGES
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << makeKernelName(mKernelId) << " -> " <<
+                   makeBufferName(kernel, br.Port) << "_consumed = %" PRIu64;
+            debugPrint(b, out.str(), consumed);
+            #endif
 
             consumedSet.emplace_back(streamSet, consumed);
         }
@@ -552,15 +542,17 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
         if (KernelPartitionId[firstKernelInTargetPartition] == partitionId) {
             break;
         }
+        assert (KernelPartitionId[firstKernelInTargetPartition] < partitionId);
     }
-    assert (firstKernelInTargetPartition > mKernelId);    
-    lastConsumer = std::min(lastConsumer, LastKernel);
+    assert (firstKernelInTargetPartition > mKernelId);
+    const auto toAcquire = std::min(std::max(lastConsumer, firstKernelInTargetPartition), LastKernel);
 
     // TODO: experiment with a mutex lock here.
     Value * const startTime = startCycleCounter(b);
-    acquireSynchronizationLock(b, lastConsumer);
+    acquireSynchronizationLock(b, toAcquire);
     updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
     for (auto kernel = mKernelId; kernel < firstKernelInTargetPartition; ++kernel) {
+        assert (KernelPartitionId[kernel] < partitionId);
         releaseSynchronizationLock(b, kernel);
     }
 
@@ -576,11 +568,15 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
 
+
+
     if (mIsPartitionRoot) {
 
-        #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
         const auto nextPartitionId = mCurrentPartitionId + 1U;
         const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
+
+
+
 
         assert (nextPartitionId <= jumpId);       
         if (LLVM_LIKELY(nextPartitionId != jumpId)) {
@@ -611,15 +607,12 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
             b->CreateBr(mNextPartitionEntryPoint);
 
         } else {
-        #endif
             mKernelInitiallyTerminatedExit = b->GetInsertBlock();
             b->CreateBr(mKernelJumpToNextUsefulPartition);
             if (mExhaustedInputAtJumpPhi) {
                 mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
             }
-        #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
         }
-        #endif
 
     } else { // if (!mIsPartitionRoot) {
 
@@ -635,7 +628,9 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeOnInitialTerminationJumpToNextPartitionToCheck
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
+void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
+
+    b->SetInsertPoint(mKernelJumpToNextUsefulPartition);
 
     const auto nextPartitionId = mPartitionJumpIndex[mCurrentPartitionId];
     assert (mCurrentPartitionId < nextPartitionId);
@@ -663,15 +658,13 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     }
     phiOutPartitionStatusFlags(b, nextPartitionId, false, mKernelJumpToNextUsefulPartition);
 
-//    #ifdef PRINT_DEBUG_MESSAGES
-//    debugPrint(b, "** " + makeKernelName(mKernelId) + ".jumping = %" PRIu64, mSegNo);
-//    #endif
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "** " + makeKernelName(mKernelId) + ".jumping = %" PRIu64, mSegNo);
+    #endif
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
 
-    assert (mNextPartitionWithPotentialInput);
-
-    b->CreateBr(mNextPartitionWithPotentialInput);
+    b->CreateBr(mPartitionEntryPoint[nextPartitionId]);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
