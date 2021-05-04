@@ -483,7 +483,7 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
         } else {
             StreamSet * iU8_LB = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mLineBreakStream, iU8_LB);
-            options->addExternal("UTF8_LB", iU8_LB, 1);
+            options->addExternal("UTF8_LB", iU8_LB);
         }
     }
 }

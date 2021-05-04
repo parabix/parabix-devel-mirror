@@ -168,24 +168,23 @@ void GrepKernelOptions::addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet *
     mAlphabets.emplace_back(a, basis);
 }
 
-void GrepKernelOptions::addExternal(std::string name, StreamSet * strm, int offset, int lgth, StreamSet * indexStrm) {
-    if ((lgth != 1) || (indexStrm != nullptr)) {
-        llvm::report_fatal_error("Length and index stream parameters for grep externals not yet supported.");
-    }
+void GrepKernelOptions::addExternal(std::string name, StreamSet * strm, unsigned offset, unsigned lgth) {
     if (offset == 0) {
         if (mSource) {
-            mExternals.emplace_back(name, strm, FixedRate(), ZeroExtended());
+            mExternalBindings.emplace_back(name, strm, FixedRate(), ZeroExtended());
         } else {
-            mExternals.emplace_back(name, strm);
+            mExternalBindings.emplace_back(name, strm);
         }
     } else {
         if (mSource) {
             std::initializer_list<Attribute> attrs{ZeroExtended(), LookAhead(offset)};
-            mExternals.emplace_back(name, strm, FixedRate(), attrs);
+            mExternalBindings.emplace_back(name, strm, FixedRate(), attrs);
         } else {
-            mExternals.emplace_back(name, strm, FixedRate(), LookAhead(offset));
+            mExternalBindings.emplace_back(name, strm, FixedRate(), LookAhead(offset));
         }
     }
+    mExternalOffsets.push_back(offset);
+    mExternalLengths.push_back(lgth);
 }
 
 Bindings GrepKernelOptions::streamSetInputBindings() {
@@ -196,7 +195,7 @@ Bindings GrepKernelOptions::streamSetInputBindings() {
     for (const auto & a : mAlphabets) {
         inputs.emplace_back(a.first->getName() + "_basis", a.second);
     }
-    for (const auto & a : mExternals) {
+    for (const auto & a : mExternalBindings) {
         inputs.emplace_back(a);
     }
     if (mEncodingTransformer) {
@@ -239,7 +238,7 @@ std::string GrepKernelOptions::makeSignature() {
     if (mEncodingTransformer) {
         sig << ':' << mEncodingTransformer->getIndexingAlphabet()->getName();
     }
-    for (const auto & e : mExternals) {
+    for (const auto & e : mExternalBindings) {
         sig << '_' << e.getName();
     }
     for (const auto & a: mAlphabets) {
@@ -289,13 +288,15 @@ void ICGrepKernel::generatePabloMethod() {
         PabloAST * idxStrm = pb.createExtract(getInputStreamVar("mIndexing"), pb.getInteger(0));
         re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
     }
-    for (const auto & e : mOptions->mExternals) {
-        auto extName = e.getName();
+    for (unsigned i = 0; i < mOptions->mExternalBindings.size(); i++) {
+        auto extName = mOptions->mExternalBindings[i].getName();
         PabloAST * extStrm = pb.createExtract(getInputStreamVar(extName), pb.getInteger(0));
+        unsigned offset = mOptions->mExternalOffsets[i];
+        unsigned lgth = mOptions->mExternalLengths[i];
         if ((extName == "\\b{g}") || (extName == "\\b")) {
             re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 1), 0));
         } else {
-            re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 0), 1));
+            re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, offset), lgth));
         }
     }
     Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
@@ -331,13 +332,15 @@ void ICGrepKernel::generatePabloMethod() {
             PabloAST * idxStrm = pb.createExtract(getInputStreamVar("mIndexing"), pb.getInteger(0));
             re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
         }
-        for (const auto & e : mOptions->mExternals) {
-            auto extName = e.getName();
+        for (unsigned i = 0; i < mOptions->mExternalBindings.size(); i++) {
+            auto extName = mOptions->mExternalBindings[i].getName();
             PabloAST * extStrm = pb.createExtract(getInputStreamVar(extName), pb.getInteger(0));
+            unsigned offset = mOptions->mExternalOffsets[i];
+            unsigned lgth = mOptions->mExternalLengths[i];
             if ((extName == "\\b{g}") || (extName == "\\b")) {
                 re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 1), 0));
             } else {
-                re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 0), 1));
+                re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, offset), lgth));
             }
         }
         RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE, prefixMatches);
