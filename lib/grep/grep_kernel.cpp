@@ -290,8 +290,13 @@ void ICGrepKernel::generatePabloMethod() {
         re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
     }
     for (const auto & e : mOptions->mExternals) {
-        PabloAST * extStrm = pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0));
-        re_compiler.addPrecompiled(e.getName(), RE_Compiler::Marker(extStrm));
+        auto extName = e.getName();
+        PabloAST * extStrm = pb.createExtract(getInputStreamVar(extName), pb.getInteger(0));
+        if ((extName == "\\b{g}") || (extName == "\\b")) {
+            re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 1), 0));
+        } else {
+            re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 0), 1));
+        }
     }
     Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
     if (mOptions->mPrefixRE) {
@@ -327,8 +332,13 @@ void ICGrepKernel::generatePabloMethod() {
             re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
         }
         for (const auto & e : mOptions->mExternals) {
-            PabloAST * extStrm = pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0));
-            re_compiler.addPrecompiled(e.getName(), RE_Compiler::Marker(extStrm));
+            auto extName = e.getName();
+            PabloAST * extStrm = pb.createExtract(getInputStreamVar(extName), pb.getInteger(0));
+            if ((extName == "\\b{g}") || (extName == "\\b")) {
+                re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 1), 0));
+            } else {
+                re_compiler.addPrecompiled(extName, RE_Compiler::ExternalStream(RE_Compiler::Marker(extStrm, 0), 1));
+            }
         }
         RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE, prefixMatches);
         PabloAST * matchResult = matches.stream();
