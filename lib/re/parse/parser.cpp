@@ -13,7 +13,6 @@
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/ADT/STLExtras.h> // for make_unique
 #include <re/parse/parser_helper.h>
 #include <re/parse/PCRE_parser.h>
 #include <re/parse/ERE_parser.h>
@@ -36,25 +35,25 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     std::unique_ptr<RE_Parser> parser = nullptr;
     switch (syntax) {
         case RE_Syntax::PCRE:
-            parser = make_unique<PCRE_Parser>(regular_expression);
+            parser = std::make_unique<PCRE_Parser>(regular_expression);
             break;
         case RE_Syntax::ERE:
-            parser = make_unique<ERE_Parser>(regular_expression);
+            parser = std::make_unique<ERE_Parser>(regular_expression);
             break;
         case RE_Syntax::BRE:
-            parser = make_unique<BRE_Parser>(regular_expression);
+            parser = std::make_unique<BRE_Parser>(regular_expression);
             break;
         case RE_Syntax::FileGLOB:
-            parser = make_unique<FileGLOB_Parser>(regular_expression);
+            parser = std::make_unique<FileGLOB_Parser>(regular_expression);
             break;
         case RE_Syntax::GitGLOB:
-            parser = make_unique<FileGLOB_Parser>(regular_expression, GLOB_kind::GIT);
+            parser = std::make_unique<FileGLOB_Parser>(regular_expression, GLOB_kind::GIT);
             break;
         case RE_Syntax ::PROSITE:
-            parser = make_unique<RE_Parser_PROSITE>(regular_expression);
+            parser = std::make_unique<RE_Parser_PROSITE>(regular_expression);
             break;
         default:
-            parser = make_unique<FixedStringParser>(regular_expression);
+            parser = std::make_unique<FixedStringParser>(regular_expression);
             break;
     }
     parser->fByteMode = ByteMode;

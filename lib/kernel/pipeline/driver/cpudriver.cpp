@@ -133,7 +133,7 @@ inline void CPUDriver::preparePassManager() {
 
     if (mPassManager) return;
 
-    mPassManager = make_unique<legacy::PassManager>();
+    mPassManager = std::make_unique<legacy::PassManager>();
 
     PassRegistry * Registry = PassRegistry::getPassRegistry();
     initializeCore(*Registry);
@@ -143,9 +143,9 @@ inline void CPUDriver::preparePassManager() {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (!codegen::ShowUnoptimizedIROption.empty()) {
                 std::error_code error;
-                mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
+                mUnoptimizedIROutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
             } else {
-                mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+                mUnoptimizedIROutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
         mPassManager->add(createPrintModulePass(*mUnoptimizedIROutputStream));
@@ -160,9 +160,9 @@ inline void CPUDriver::preparePassManager() {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (!codegen::ShowIROption.empty()) {
                 std::error_code error;
-                mIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
+                mIROutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
             } else {
-                mIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+                mIROutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
         mPassManager->add(createPrintModulePass(*mIROutputStream));
@@ -185,9 +185,9 @@ inline void CPUDriver::preparePassManager() {
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
         if (!codegen::ShowASMOption.empty()) {
             std::error_code error;
-            mASMOutputStream = make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
         } else {
-            mASMOutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
         }
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
         if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, TargetMachine::CGFT_AssemblyFile))) {
@@ -280,7 +280,7 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     addModules(Normal, codegen::BackEndOptLevel);
 
     // write/declare the "main" method
-    auto mainModule = make_unique<Module>("main", *mContext);
+    auto mainModule = std::make_unique<Module>("main", *mContext);
     mainModule->setTargetTriple(mMainModule->getTargetTriple());
     mainModule->setDataLayout(mMainModule->getDataLayout());
     mBuilder->setModule(mainModule.get());

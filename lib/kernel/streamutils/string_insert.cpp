@@ -99,7 +99,7 @@ void StringReplaceKernel::generatePabloMethod() {
     std::vector<PabloAST *> runIndex = getInputStreamSet("runIndex");
     Var * output = getOutputStreamVar("output");
     std::unique_ptr<cc::CC_Compiler> ccc;
-    ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(pb.getPabloBlock(), runIndex);
+    ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(pb.getPabloBlock(), runIndex);
     PabloAST * runMask = pb.createInFile(pb.createNot(spreadMask));
     std::vector<PabloAST *> insertSpans(insertMarks.size());
     for (unsigned i = 0; i < mInsertStrings.size(); i++) {

@@ -6,7 +6,7 @@
 
 #include <re/compile/re_compiler.h>
 
-#include <llvm/ADT/STLExtras.h>         // for make_unique
+#include <llvm/ADT/STLExtras.h>         // for std::make_unique
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <pablo/builder.hpp>            // for PabloBuilder
@@ -44,9 +44,9 @@ void RE_Compiler::addAlphabet(const cc::Alphabet * a, std::vector<pablo::PabloAS
     bool useDirectCC = basis_set[0]->getType()->getVectorElementType()->getIntegerBitWidth() > 1;
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (useDirectCC) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(mEntryScope, basis_set[0]);
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(mEntryScope, basis_set[0]);
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, basis_set);
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, basis_set);
     }
     mAlphabetCompilers.push_back(std::move(ccc));
 }

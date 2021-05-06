@@ -54,9 +54,9 @@ void UTF8_index::generatePabloMethod() {
     std::unique_ptr<cc::CC_Compiler> ccc;
     bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
     if (useDirectCC) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
 
     Zeroes * const ZEROES = pb.createZeroes();
@@ -593,7 +593,7 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
     auto GCB_basis = GCB_mpx->getMultiplexedCCs();
     StreamSet * const GCB_Classes = P->CreateStreamSet(GCB_basis.size());
     P->CreateKernelCall<CharClassesKernel>(std::move(GCB_basis), Source, GCB_Classes);
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+    std::unique_ptr<GrepKernelOptions> options = std::make_unique<GrepKernelOptions>();
     options->setIndexingTransformer(t, U8index);
     options->setRE(GCB);
     options->setSource(GCB_Classes);
