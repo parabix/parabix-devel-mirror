@@ -376,13 +376,13 @@ RE * RE_Parser::parseEscapedSet() {
             }
             return complemented ? makeZerowidthComplement(re) : re;
         case 'd':
-            re = createName("\\d");
+            re = makePropertyExpression("digit");
             return complemented ? makeComplement(re) : re;
         case 's':
-            re = createName("\\s");
+            re = makePropertyExpression("whitespace");
             return complemented ? makeComplement(re) : re;
         case 'w':
-            re = createName("\\w");
+            re = makePropertyExpression("word");
             return complemented ? makeComplement(re) : re;
         case 'q':
             require('{');
@@ -547,12 +547,10 @@ RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
                 }
                 ++mCursor;
             }
-            //return createName(prop, std::string(val_start, mCursor.pos()));
             return makePropertyExpression(k, prop, op, std::string(val_start, mCursor.pos()));
         }
     }
     return makePropertyExpression(k, prop);
-    //return createName(prop);
 }
 
 RE * RE_Parser::parseNamePatternExpression(){
