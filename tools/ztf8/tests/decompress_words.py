@@ -15,14 +15,11 @@ class Decompressor:
         self.hashVals = {}
         self.decompressed = bytearray(b'')
         self.word_list = []
-        self.nonFinalCodewordHashTableList = [{}, {}, {}, {}, {}]
         self.fourWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
         self.threeWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
         self.twoWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
         self.oneWordsPhraseHashTableList = [{}, {}, {}, {}, {}]
         self.plaintext = bytearray(b'')
-        self.lastDcmpPhraseWords = 0
-        self.numWordsInPrevPhrase = 0
 
     def Name(self):
         return 'text'
@@ -188,20 +185,20 @@ class Decompressor:
                     cwStartIdx = index
                     index += 4
                 if codeWord:
-                    print(codeWord, 'codeWord')
+                    #print(codeWord, 'codeWord')
                     cwLen, hashTablePos = self._codeWordLenRange(cwPfx)
                     phrase, numWordsInPhrase = self.finalCodewordHashTableList[hashTablePos].get(
                         str(codeWord), [None, None])
                     if phrase:
                         #print(plaintext, 'plaintext2')
-                        print(phrase, 'phrase')
+                        #print(phrase, 'phrase')
                         plaintext += bytearray(phrase.encode())
                     else:
                         for nWords in range(4, 0, -1):
                             phrase1 = self.queryPhraseHashTable(
                                 nWords, codeWord, hashTablePos)
                             if phrase1:
-                                print(phrase1, 'phrase1')
+                                #print(phrase1, 'phrase1')
                                 if not self.finalCodewordHashTableList[hashTablePos].get(str(
                                         codeWord)):
                                     self.finalCodewordHashTableList[hashTablePos][str(
@@ -257,7 +254,7 @@ class Decompressor:
             if len(curPhrase) < 3 or len(curPhrase) > 32:
                 index += 1
             else:
-                print(curPhrase, 'curPhrase')
+                #print(curPhrase, 'curPhrase')
                 wLen = len(curPhrase)
                 hashTablePos = self.getHashTablePos(wLen)
                 encodeWord, codeword = self._HashCode(
@@ -269,16 +266,9 @@ class Decompressor:
                         foundPhraseFinal = foundPhrase
                         nFound = True
                     index += 1
-                    #index += (numWordsInPhrase+singleByteSyms)
-                # if not self.nonFinalCodewordHashTableList[hashTablePos].get(str(encodeWord), None):
-                #    if encodeWord == curCodeWord:
-                #        foundPhrase = curPhrase
-                # if foundPhrase:
-                #    self.finalCodewordHashTableList[hashTablePos][str(
-                #        encodeWord)] = foundPhrase
                 else:
                     index += 1
-        return  # foundPhraseFinal
+        return
 
     def checkForLongerPhraseCollision(self, phrase, numWords, codeWord, hashTablePos):
         maxWords = 4
