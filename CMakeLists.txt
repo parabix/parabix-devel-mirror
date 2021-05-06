@@ -436,9 +436,9 @@ add_custom_target(gb18030_single_threaded_test
   WORKING_DIRECTORY ${QA_DIR}/gb18030
   COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=1")
 
-add_custom_target(gb18030_multithreaded_test
-  WORKING_DIRECTORY ${QA_DIR}/gb18030
-  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
+#add_custom_target(gb18030_multithreaded_test
+#  WORKING_DIRECTORY ${QA_DIR}/gb18030
+#  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
 
 add_custom_target (abc_gen
     WORKING_DIRECTORY ${QA_DIR}
