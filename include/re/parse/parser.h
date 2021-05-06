@@ -203,20 +203,6 @@ protected:
 
     RE * parseNamePatternExpression();
 
-    RE * makeComplement(RE * s);
-    RE * makeZerowidthComplement(RE * s);
-
-    RE * makeWordBoundary();
-    RE * makeWordNonBoundary();
-    RE * makeReBoundary(RE * wordC);
-    RE * makeReNonBoundary(RE * wordC);
-    RE * makeWordBegin();
-    RE * makeWordEnd();
-    Name * makeDigitSet();
-    Name * makeAlphaNumeric();
-    Name * makeWhitespaceSet();
-    Name * makeWordSet();
-   
     Name * createName(std::string value);
     Name * createName(std::string prop, std::string value);
 

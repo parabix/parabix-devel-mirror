@@ -21,6 +21,7 @@
 #include <re/parse/Prosite_parser.h>
 #include <re/parse/fixed_string_parser.h>
 #include <re/adt/adt.h>
+#include <re/adt/re_utility.h>
 #include <re/adt/printer_re.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/RadicalSets.h>
@@ -769,57 +770,6 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
 
 CC * RE_Parser::createCC(const codepoint_t cp) {
     return makeCC(cp);
-}
-
-RE * RE_Parser::makeComplement(RE * s) {
-  return makeDiff(makeAny(), s);
-}
-
-RE * RE_Parser::makeZerowidthComplement(RE * s) {
-    return makeDiff(makeSeq({}), s);
-}
-
-RE * RE_Parser::makeWordBoundary() {
-    Name * wordC = makeWordSet();
-    return makeReBoundary(wordC);
-}
-
-RE * RE_Parser::makeWordNonBoundary() {
-    Name * wordC = makeWordSet();
-    return makeReNonBoundary(wordC);
-}
-
-inline RE * RE_Parser::makeReBoundary(RE * re) {
-    return makeBoundaryAssertion(re);
-}
-inline RE * RE_Parser::makeReNonBoundary(RE * re) {
-    return makeNegativeBoundaryAssertion(re);
-}
-
-RE * RE_Parser::makeWordBegin() {
-    Name * wordC = makeWordSet();
-    return makeNegativeLookBehindAssertion(wordC);
-}
-
-RE * RE_Parser::makeWordEnd() {
-    Name * wordC = makeWordSet();
-    return makeNegativeLookAheadAssertion(wordC);
-}
-
-Name * RE_Parser::makeDigitSet() {
-    return createName("nd");
-}
-
-Name * RE_Parser::makeAlphaNumeric() {
-    return createName("alnum");
-}
-
-Name * RE_Parser::makeWhitespaceSet() {
-    return createName("whitespace");
-}
-
-Name * RE_Parser::makeWordSet() {
-    return createName("word");
 }
 
 Name * RE_Parser::createName(std::string value) {
