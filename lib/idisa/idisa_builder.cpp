@@ -74,7 +74,7 @@ CallInst * IDISA_Builder::CallPrintRegister(StringRef name, Value * const value,
         builder.CreateRetVoid();
         printRegister = function;
     }
-    return CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
+    return createCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
