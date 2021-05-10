@@ -18,7 +18,7 @@ namespace IDISA {
 
 
 inline bool isStreamTy(llvm::Type * t) {
-    return t->isVectorTy() && (t->getVectorNumElements() == 0);
+    return t->isVectorTy() && (llvm::cast<llvm::VectorType>(t)->getNumElements() == 0);
 }
 
 inline bool isStreamSetTy(llvm::Type * t) {

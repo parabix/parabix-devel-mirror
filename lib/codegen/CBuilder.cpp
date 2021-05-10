@@ -1617,7 +1617,7 @@ Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine Name
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");
         }
-        Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
+        Constant * const Size = ConstantInt::get(Idx->getType(), llvm::cast<llvm::VectorType>(Vec->getType())->getNumElements());
         // exctracting an element from a position that exceeds the length of the vector is undefined
         __CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }
@@ -1629,7 +1629,7 @@ Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, 
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");
         }
-        Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
+        Constant * const Size = ConstantInt::get(Idx->getType(), llvm::cast<llvm::VectorType>(Vec->getType())->getNumElements());
         // inserting an element into a position that exceeds the length of the vector is undefined
         __CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }

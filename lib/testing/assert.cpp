@@ -86,7 +86,7 @@ void StreamEquivalenceKernel::generateMultiBlockLogic(BuilderRef b, Value * cons
         // Perform vector comparison lhs != rhs.
         // Result will be a vector of all zeros if lhs == rhs
         Value * const vComp = b->CreateICmpNE(lhs, rhs);
-        Value * const vCompAsInt = b->CreateBitCast(vComp, b->getIntNTy(vComp->getType()->getVectorNumElements()));
+        Value * const vCompAsInt = b->CreateBitCast(vComp, b->getIntNTy(llvm::cast<llvm::VectorType>(vComp->getType())->getNumElements()));
         // `comp` will be `true` iff lhs == rhs (i.e., `vComp` is a vector of all zeros)
         Value * const comp = b->CreateICmpEQ(vCompAsInt, Constant::getNullValue(vCompAsInt->getType()));
         // `and` `comp` into `accum` so that `accum` will be `true` iff lhs == rhs for all blocks in the two streams

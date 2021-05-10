@@ -844,7 +844,7 @@ Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * v, Value * select_mask
     v = fwCast(fw, v);
     Type * valueTy = v->getType();
     Type * fieldTy = valueTy->getVectorElementType();
-    unsigned field_count = valueTy->getVectorNumElements();
+    unsigned field_count = llvm::cast<llvm::VectorType>(valueTy)->getNumElements();
     Type * maskTy = select_mask->getType();
     if (maskTy->isIntegerTy()) {
         SmallVector<Constant *, 16> elements(field_count);

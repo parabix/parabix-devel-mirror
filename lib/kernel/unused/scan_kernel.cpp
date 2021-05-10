@@ -205,7 +205,7 @@ ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceS
 
 static Value * collapseVector(BuilderRef b, Value * const vec) {
     assert (vec->getType()->isVectorTy());
-    uint32_t count = vec->getType()->getVectorNumElements();
+    uint32_t count = llvm::cast<llvm::VectorType>(vec->getType())->getNumElements();
     Value * accum = b->CreateExtractElement(vec, (uint64_t) 0);
     for (uint32_t i = 1; i < count; ++i) {
         accum = b->CreateOr(accum, b->CreateExtractElement(vec, i));

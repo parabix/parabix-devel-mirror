@@ -802,7 +802,7 @@ unsigned getIntegerBitWidth(const Type * ty) {
         ty = ty->getArrayElementType();
     }
     if (ty->isVectorTy()) {
-        assert (ty->getVectorNumElements() == 0);
+        assert (llvm::cast<llvm::VectorType>(ty)->getNumElements() == 0);
         ty = ty->getVectorElementType();
     }
     return ty->getIntegerBitWidth();

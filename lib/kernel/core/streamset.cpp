@@ -188,7 +188,7 @@ Type * StreamSetBuffer::resolveType(BuilderPtr b, Type * const streamSetType) {
         numElements = type->getArrayNumElements();
         type = type->getArrayElementType();
     }
-    if (LLVM_LIKELY(type->isVectorTy() && type->getVectorNumElements() == 0)) {
+    if (LLVM_LIKELY(type->isVectorTy() && llvm::cast<llvm::VectorType>(type)->getNumElements() == 0)) {
         type = type->getVectorElementType();
         if (LLVM_LIKELY(type->isIntegerTy())) {
             const auto fieldWidth = cast<IntegerType>(type)->getBitWidth();
