@@ -1533,7 +1533,9 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
 
         }
     }
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
+    return IRBuilder<>::CreateMemMove(Dst, AlignType(Align), Src, AlignType(Align), Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+#elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
     return IRBuilder<>::CreateMemMove(Dst, Align, Src, Align, Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 #else
     return IRBuilder<>::CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
@@ -1562,7 +1564,9 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
         Value * const nonOverlapping = CreateOr(srcEndsBeforeDst, dstEndsBeforeSrc);
         CreateAssert(nonOverlapping, "CreateMemCpy: overlapping ranges is undefined");
     }
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
+    return IRBuilder<>::CreateMemCpy(Dst, AlignType(Align), Src, AlignType(Align), Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
+#elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
     return IRBuilder<>::CreateMemCpy(Dst, Align, Src, Align, Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 #else
     return IRBuilder<>::CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
@@ -1581,7 +1585,7 @@ CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsign
             CreateAssertZero(CreateURem(intPtr, align), "CreateMemSet: Ptr is misaligned");
         }
     }
-    return IRBuilder<>::CreateMemSet(Ptr, Val, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+    return IRBuilder<>::CreateMemSet(Ptr, Val, Size, AlignType(Align), isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
 CallInst * CBuilder::CreateMemCmp(Value * Ptr1, Value * Ptr2, Value * Num) {
