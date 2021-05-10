@@ -54,6 +54,12 @@
 #define setReturnDoesNotAlias() setDoesNotAlias(0)
 #endif
 
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
+    typedef unsigned            AlignType;
+#else
+    typedef llvm::Align         AlignType;
+#endif
+
 using namespace llvm;
 
 static int accumulatedFreeCalls = 0;
@@ -1450,7 +1456,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char *
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
-    LI->setAlignment(Align);
+    LI->setAlignment(AlignType(Align));
     return LI;
 }
 
@@ -1463,7 +1469,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine 
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
-    LI->setAlignment(Align);
+    LI->setAlignment(AlignType(Align));
     return LI;
 }
 
@@ -1476,7 +1482,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolat
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
-    LI->setAlignment(Align);
+    LI->setAlignment(AlignType(Align));
     return LI;
 }
 
@@ -1489,7 +1495,7 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
         CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
-    SI->setAlignment(Align);
+    SI->setAlignment(AlignType(Align));
     return SI;
 }
 
