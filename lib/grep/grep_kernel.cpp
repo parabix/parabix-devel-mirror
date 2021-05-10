@@ -29,6 +29,7 @@
 #include <re/alphabet/alphabet.h>
 #include <re/toolchain/toolchain.h>
 #include <re/transforms/re_reverse.h>
+#include <re/transforms/re_transformer.h>
 #include <re/analysis/collect_ccs.h>
 #include <re/transforms/exclude_CC.h>
 #include <re/transforms/re_multiplex.h>
@@ -589,7 +590,7 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     const auto GCB_Sets = re::collectCCs(GCB, cc::Unicode);
     auto GCB_mpx = std::make_shared<cc::MultiplexedAlphabet>("GCB_mpx", GCB_Sets);
-    GCB = transformCCs(GCB_mpx, GCB);
+    GCB = transformCCs(GCB_mpx, GCB, re::NameTransformationMode::TransformDefinition);
     auto GCB_basis = GCB_mpx->getMultiplexedCCs();
     StreamSet * const GCB_Classes = P->CreateStreamSet(GCB_basis.size());
     P->CreateKernelCall<CharClassesKernel>(std::move(GCB_basis), Source, GCB_Classes);

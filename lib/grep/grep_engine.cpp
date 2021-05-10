@@ -497,7 +497,7 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         options->setRE(re);
     } else {
         auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);
-        re = transformCCs(mpx, re, mExternalNames);
+        re = transformCCs(mpx, re);
         options->setRE(re);
         auto mpx_basis = mpx->getMultiplexedCCs();
         StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
