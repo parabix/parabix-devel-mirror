@@ -30,6 +30,10 @@ inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
+
+
+    auto id = out_degree(PipelineInput, mBufferGraph) + in_degree(PipelineOutput, mBufferGraph);
+
     // fill in any known managed buffers
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         const Kernel * const kernelObj = getKernel(kernel);
@@ -42,7 +46,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 const auto streamSet = target(e, mBufferGraph);
                 BufferNode & bn = mBufferGraph[streamSet];
                 // Every managed buffer is considered linear to the pipeline
-                bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
+                bn.Buffer = new ExternalBuffer(id++, b, output.getType(), true, 0);
                 bn.Type |= BufferType::Unowned;
                 if (rate.IsShared) {
                     bn.Type |= BufferType::Shared;
@@ -59,7 +63,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & input = rate.Binding;
-            bn.Buffer = new ExternalBuffer(b, input.getType(), true, 0);
+            bn.Buffer = new ExternalBuffer(id++, b, input.getType(), true, 0);
             bn.Type |= BufferType::Unowned;
         }
     }
@@ -77,7 +81,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                     bn.Type |= BufferType::Shared;
                 }
             } else {
-                bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
+                bn.Buffer = new ExternalBuffer(id++, b, output.getType(), true, 0);
                 bn.Type |= BufferType::Unowned;
             }
         }
@@ -106,13 +110,13 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 // determine this.
                 const auto bufferSize = bn.RequiredCapacity * mNumOfThreads;
                 assert (bufferSize > 0);
-                buffer = new DynamicBuffer(b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
+                buffer = new DynamicBuffer(id++, b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
             } else {
                 auto bufferSize = bn.RequiredCapacity;
                 if (bn.Locality == BufferLocality::PartitionLocal) {
                     bufferSize *= mNumOfThreads;
                 }
-                buffer = new StaticBuffer(b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
+                buffer = new StaticBuffer(id++, b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
             }
             bn.Buffer = buffer;
 

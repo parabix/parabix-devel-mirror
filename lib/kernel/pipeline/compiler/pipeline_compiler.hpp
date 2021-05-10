@@ -300,7 +300,7 @@ public:
     void resetInternalBufferHandles();
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
 
-    void prepareLinearThreadLocalBuffers(BuilderRef b);
+    void prepareLinearThreadLocalOutputBuffers(BuilderRef b);
     Value * getVirtualBaseAddress(BuilderRef b, const BufferPort & rateData, const BufferNode & bn, Value * position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
@@ -599,8 +599,8 @@ protected:
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
     unsigned                                    mNumOfTruncatedInputBuffers = 0;
 
-    unsigned                                    mNumOfLocalInputPortIds = 0;
-    unsigned                                    mNumOfLocalOutputPortIds = 0;
+//    unsigned                                    mNumOfLocalInputPortIds = 0;
+//    unsigned                                    mNumOfLocalOutputPortIds = 0;
 
     PHINode *                                   mZeroExtendBufferPhi = nullptr;
 

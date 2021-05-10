@@ -397,6 +397,7 @@ bool PipelineCompiler::hasAtLeastOneNonGreedyInput() const {
     return false;
 }
 
+#if 0
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyPipelineInputs
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -441,6 +442,7 @@ void PipelineCompiler::identifyLocalPortIds(const unsigned kernelId) {
     assert ("gap in local output port ids?" && (static_cast<int>(outputs.count()) == outputs.find_first_unset()));
 
 }
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex

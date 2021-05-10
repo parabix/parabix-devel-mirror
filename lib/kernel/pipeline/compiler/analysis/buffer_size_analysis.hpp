@@ -539,6 +539,27 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
     END_SCOPED_REGION
 
+//   auto & out = errs();
+
+//    out << "graph \"I\" {\n";
+
+//    for (unsigned i = 0; i < n; ++i) {
+//        const auto j = mapping[i];
+//        if (j != -1U) {
+//            out << "v" << j << " [label=\"" << FirstStreamSet + i << "\"];\n";
+//        }
+//    }
+
+//    for (auto e : make_iterator_range(edges(I))) {
+//        const auto s = source(e, I);
+//        const auto t = target(e, I);
+//        out << "v" << s << " -- v" << t << ";\n";
+//    }
+
+//    out << "}\n\n";
+//    out.flush();
+
+
     BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
                              std::move(I), std::move(allocations), std::move(weight), std::move(remaining), rng);
 
@@ -562,6 +583,28 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
             bn.BufferStart = interval.first;
         }
     }
+
+//    out << "graph \"I2\" {\n";
+
+//    for (unsigned i = 0; i < n; ++i) {
+//        const auto j = mapping[i];
+//        if (j != -1U) {
+
+//            const BufferNode & bn = mBufferGraph[FirstStreamSet + i];
+
+
+//            out << "v" << j << " [label=\"" << FirstStreamSet + i  << " : " << bn.BufferStart << "\"];\n";
+//        }
+//    }
+
+//    for (auto e : make_iterator_range(edges(I))) {
+//        const auto s = source(e, I);
+//        const auto t = target(e, I);
+//        out << "v" << s << " -- v" << t << ";\n";
+//    }
+
+//    out << "}\n\n";
+//    out.flush();
 
     assert (RequiredThreadLocalStreamSetMemory > 0);
 

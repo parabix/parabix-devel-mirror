@@ -185,6 +185,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             } else {
                 addr = mInputVirtualBaseAddressPhi[rt.Port];
             }
+
             addNextArg(b->CreatePointerCast(addr, voidPtrTy));
 
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
@@ -242,7 +243,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         } else if (LLVM_UNLIKELY(managed)) {
             mReturnedOutputVirtualBaseAddressPtr[rt.Port] = addVirtualBaseAddressArg(b, buffer, args);
         } else {
-            addNextArg(b->CreatePointerCast(getVirtualBaseAddress(b, rt, bn, produced), voidPtrTy));
+            Value * const vba = getVirtualBaseAddress(b, rt, bn, produced);
+            addNextArg(b->CreatePointerCast(vba, voidPtrTy));
         }
 
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {

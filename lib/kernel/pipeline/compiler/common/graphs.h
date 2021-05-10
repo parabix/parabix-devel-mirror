@@ -306,8 +306,8 @@ struct BufferPort {
     Rational Minimum;
     Rational Maximum;
 
-    unsigned LocalPortId = 0U;
-    unsigned GlobalPortId = 0U;
+//    unsigned LocalPortId = 0U;
+//    unsigned GlobalPortId = 0U;
 
     // binding attributes
     unsigned Add = 0;

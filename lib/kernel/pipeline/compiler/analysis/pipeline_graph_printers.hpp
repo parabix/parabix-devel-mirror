@@ -231,9 +231,12 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                 break;
         }
 
-        out << "label=\"" << streamSet << "|{";
-
         const StreamSetBuffer * const buffer = bn.Buffer;
+
+        out << "label=\"" << streamSet << " (" << buffer->getId() << ") |{";
+
+
+
         if (buffer == nullptr) {
             out << '?';
         } else {

@@ -71,6 +71,10 @@ public:
         return mLinear;
     }
 
+    unsigned getId() const {
+        return mId;
+    }
+
     unsigned getFieldWidth() const;
 
     size_t getUnderflowCapacity(BuilderPtr b) const;
@@ -140,7 +144,7 @@ protected:
 
     llvm::Value * addOverflow(BuilderPtr b, llvm::Value * const bufferCapacity, llvm::Value * const overflowItems, llvm::Value * const consumedOffset) const;
 
-    StreamSetBuffer(const BufferKind k, BuilderPtr b, llvm::Type * baseType, const size_t overflowBlocks, const size_t underflowSize, const bool linear, const unsigned AddressSpace);
+    StreamSetBuffer(const unsigned id, const BufferKind k, BuilderPtr b, llvm::Type * baseType, const size_t overflowBlocks, const size_t underflowSize, const bool linear, const unsigned AddressSpace);
 
 private:
 
@@ -148,6 +152,7 @@ private:
 
 protected:
 
+    const unsigned                  mId;
     const BufferKind                mBufferKind;
     // Each StreamSetBuffer object is local to the Kernel (or pipeline) object at (pre-JIT) "compile time" but
     // by sharing the same handle will refer to the same stream set at (post-JIT) run time.
@@ -168,7 +173,7 @@ public:
 
     enum Field { BaseAddress, EffectiveCapacity };
 
-    ExternalBuffer(BuilderPtr b, llvm::Type * const type, const bool linear, const unsigned AddressSpace);
+    ExternalBuffer(const unsigned id, BuilderPtr b, llvm::Type * const type, const bool linear, const unsigned AddressSpace);
 
     void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
@@ -229,7 +234,7 @@ public:
 
 protected:
 
-    InternalBuffer(const BufferKind k, BuilderPtr b, llvm::Type * baseType,
+    InternalBuffer(const unsigned id, const BufferKind k, BuilderPtr b, llvm::Type * baseType,
                    const size_t overflowBlocks, const size_t underflowSize,
                    const bool linear, const unsigned AddressSpace);
 
@@ -242,7 +247,7 @@ public:
         return b->getBufferKind() == BufferKind::StaticBuffer;
     }
 
-    StaticBuffer(BuilderPtr b, llvm::Type * const type,
+    StaticBuffer(const unsigned id, BuilderPtr b, llvm::Type * const type,
                  const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
                  const bool linear, const unsigned AddressSpace);
 
@@ -294,7 +299,7 @@ public:
         return b->getBufferKind() == BufferKind::DynamicBuffer;
     }
 
-    DynamicBuffer(BuilderPtr b, llvm::Type * type, const size_t initialCapacity,
+    DynamicBuffer(const unsigned id, BuilderPtr b, llvm::Type * type, const size_t initialCapacity,
                   const size_t overflowSize, const size_t underflowSize,
                   const bool linear, const unsigned AddressSpace);
 

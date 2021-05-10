@@ -98,12 +98,12 @@ void StreamSetBuffer::assertValidStreamIndex(BuilderPtr b, Value * streamIndex) 
 }
 
 Value * StreamSetBuffer::getStreamBlockPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
-    assertValidStreamIndex(b, streamIndex);
+   // assertValidStreamIndex(b, streamIndex);
     return b->CreateInBoundsGEP(baseAddress, {blockIndex, streamIndex});
 }
 
 Value * StreamSetBuffer::getStreamPackPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * blockIndex, Value * const packIndex) const {
-    assertValidStreamIndex(b, streamIndex);
+   // assertValidStreamIndex(b, streamIndex);
     return b->CreateInBoundsGEP(baseAddress, {blockIndex, streamIndex, packIndex});
 }
 
@@ -944,6 +944,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
             Value * const bytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
 
+
             BasicBlock * const copyBack = BasicBlock::Create(C, "copyBack", func);
             BasicBlock * const expandAndCopyBack = BasicBlock::Create(C, "expandAndCopyBack", func);
             BasicBlock * const updateBaseAddress = BasicBlock::Create(C, "updateBaseAddress", func);
@@ -961,6 +962,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
             b->SetInsertPoint(copyBack);
             b->CreateMemCpy(mallocAddress, unreadDataPtr, bytesToCopy, blockSize);
+
             BasicBlock * const copyBackExit = b->GetInsertBlock();
             b->CreateBr(updateBaseAddress);
 
@@ -975,12 +977,12 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             indices[1] = b->getInt32(PriorAddress);
             Value * const priorBufferField = b->CreateInBoundsGEP(handle, indices);
             Value * priorBuffer = b->CreateLoad(priorBufferField);
+
             priorBuffer = b->CreateInBoundsGEP(priorBuffer, b->CreateNeg(underflow));
             b->CreateFree(priorBuffer);
             b->CreateStore(mallocAddress, priorBufferField);
             b->CreateStore(expandedBuffer, mallocAddrField);
             b->CreateMemCpy(expandedBuffer, unreadDataPtr, bytesToCopy, blockSize);
-
             BasicBlock * const expandAndCopyBackExit = b->GetInsertBlock();
             b->CreateBr(updateBaseAddress);
 
@@ -1079,17 +1081,17 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
 // Constructors
 
-ExternalBuffer::ExternalBuffer(BuilderPtr b, Type * const type,
+ExternalBuffer::ExternalBuffer(const unsigned id, BuilderPtr b, Type * const type,
                                const bool linear,
                                const unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExternalBuffer, b, type, 0, 0, linear, AddressSpace) {
+: StreamSetBuffer(id, BufferKind::ExternalBuffer, b, type, 0, 0, linear, AddressSpace) {
 
 }
 
-StaticBuffer::StaticBuffer(BuilderPtr b, Type * const type,
+StaticBuffer::StaticBuffer(const unsigned id, BuilderPtr b, Type * const type,
                            const size_t capacity, const size_t overflowSize, const size_t underflowSize,
                            const bool linear, const unsigned AddressSpace)
-: InternalBuffer(BufferKind::StaticBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
+: InternalBuffer(id, BufferKind::StaticBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
 , mCapacity(capacity) {
     #ifndef NDEBUG
     assert ("static buffer cannot have 0 capacity" && capacity);
@@ -1098,10 +1100,10 @@ StaticBuffer::StaticBuffer(BuilderPtr b, Type * const type,
     #endif
 }
 
-DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
+DynamicBuffer::DynamicBuffer(const unsigned id, BuilderPtr b, Type * const type,
                              const size_t initialCapacity, const size_t overflowSize, const size_t underflowSize,
                              const bool linear, const unsigned AddressSpace)
-: InternalBuffer(BufferKind::DynamicBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
+: InternalBuffer(id, BufferKind::DynamicBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
 , mInitialCapacity(initialCapacity) {
     #ifndef NDEBUG
     assert ("dynamic buffer cannot have 0 initial capacity" && initialCapacity);
@@ -1110,17 +1112,18 @@ DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
     #endif
 }
 
-inline InternalBuffer::InternalBuffer(const BufferKind k, BuilderPtr b, Type * const baseType,
+inline InternalBuffer::InternalBuffer(const unsigned id, const BufferKind k, BuilderPtr b, Type * const baseType,
                                       const size_t overflowSize, const size_t underflowSize,
                                       const bool linear, const unsigned AddressSpace)
-: StreamSetBuffer(k, b, baseType, overflowSize, underflowSize, linear, AddressSpace) {
+: StreamSetBuffer(id, k, b, baseType, overflowSize, underflowSize, linear, AddressSpace) {
 
 }
 
-inline StreamSetBuffer::StreamSetBuffer(const BufferKind k, BuilderPtr b, Type * const baseType,
+inline StreamSetBuffer::StreamSetBuffer(const unsigned id, const BufferKind k, BuilderPtr b, Type * const baseType,
                                         const size_t overflowSize, const size_t underflowSize,
                                         const bool linear, const unsigned AddressSpace)
-: mBufferKind(k)
+: mId(id)
+, mBufferKind(k)
 , mHandle(nullptr)
 , mType(resolveType(b, baseType))
 , mOverflow(overflowSize)

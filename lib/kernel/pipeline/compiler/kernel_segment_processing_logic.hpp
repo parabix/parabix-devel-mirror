@@ -86,7 +86,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     mExhaustedPipelineInputAtExit = mExhaustedInput;
 
     identifyPipelineInputs(mKernelId);
-    identifyLocalPortIds(mKernelId);
+//    identifyLocalPortIds(mKernelId);
 
     const auto kernelRequiresSynchronization = RequiresSynchronization[mKernelId];
 
@@ -164,7 +164,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     readProducedItemCounts(b);
     readConsumedItemCounts(b);
 
-    prepareLinearThreadLocalBuffers(b);
+    prepareLinearThreadLocalOutputBuffers(b);
 
     incrementNumberOfSegmentsCounter(b);
     recordUnconsumedItemCounts(b);

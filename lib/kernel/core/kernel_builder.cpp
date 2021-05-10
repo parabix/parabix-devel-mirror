@@ -4,12 +4,14 @@
 #include <kernel/core/streamset.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/Module.h>
+#include <boost/intrusive/detail/math.hpp>
 
 using namespace llvm;
 
 namespace kernel {
 
 using PortType = Kernel::PortType;
+using boost::intrusive::detail::floor_log2;
 
 #define COMPILER (not_null<KernelCompiler *>(mCompiler))
 
@@ -109,7 +111,7 @@ Value * KernelBuilder::getInputStreamBlockPtr(const StringRef name, Value * cons
     const StreamSetBuffer * const buf = COMPILER->getInputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const processed = getProcessedItemCount(name);
-    Value * blockIndex = CreateLShr(processed, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(processed, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
@@ -120,7 +122,7 @@ Value * KernelBuilder::getInputStreamPackPtr(const StringRef name, Value * const
     const StreamSetBuffer * const buf = COMPILER->getInputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const processed = getProcessedItemCount(name);
-    Value * blockIndex = CreateLShr(processed, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(processed, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
@@ -144,7 +146,7 @@ Value * KernelBuilder::getOutputStreamBlockPtr(const StringRef name, Value * str
     const StreamSetBuffer * const buf = COMPILER->getOutputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const produced = getProducedItemCount(name);
-    Value * blockIndex = CreateLShr(produced, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(produced, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
@@ -155,7 +157,7 @@ Value * KernelBuilder::getOutputStreamPackPtr(const StringRef name, Value * stre
     const StreamSetBuffer * const buf = COMPILER->getOutputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const produced = getProducedItemCount(name);
-    Value * blockIndex = CreateLShr(produced, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(produced, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }

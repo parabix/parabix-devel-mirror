@@ -177,199 +177,10 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     determineIsFinal(b);
     calculateItemCounts(b);
 
-    for (const auto e : make_iterator_range(out_edges(mCurrentPartitionId, mPartitionIOGraph))) {
-        const PartitionIOData & IO = mPartitionIOGraph[e];
-        if (IO.Kernel == mKernelId) {
-            const auto i = target(e, mPartitionIOGraph);
-            assert (i >= PartitionCount);
-            const auto streamSet = FirstStreamSet + i - PartitionCount;
-            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-            ensureSufficientOutputSpace(b, IO.Port, streamSet);
-        }
-    }
-
-    if (mMayLoopToEntry) {
-        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, numOfLinearStrides);
-    } else {
-        mUpdatedNumOfStrides = numOfLinearStrides;
-    }
-
-}
-
-
-#if 0
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief determineNumOfLinearStrides
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
-
-    // If this kernel does not have an explicit do final segment, then we want to know whether this stride will
-    // be the final stride of the kernel. (i.e., that it will be flagged as terminated after executing the kernel
-    // code.) For this to occur, at least one of the inputs must be closed and we must pass all of the data from
-    // that closed input stream to the kernel. It is possible for a stream to be closed but to have more data
-    // left to process (either due to some data being divided across a buffer boundary or because another stream
-    // has less data (relatively speaking) than the closed stream.
-
-    if (LLVM_UNLIKELY(TraceIO)) {
-        mBranchToLoopExit = b->getFalse();
-    }
-
-    // If this kernel is the root of a partition, we'll use the available input to compute how many strides the
-    // kernels within the partition will execute. Otherwise we begin by bounding the kernel by the expected number
-    // of strides w.r.t. its partition's root.
-
-    assert (mKernelIsFinal == nullptr);
-
-    Value * numOfLinearStrides = nullptr;
-
-    if (mMayLoopToEntry && !ExternallySynchronized) {
-        numOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStridesAtLoopEntryPhi);
-    } else {
-        numOfLinearStrides = mMaximumNumOfStrides;
-    }
-
-    SmallVector<unsigned, 8> testedPortIds;
-
-    auto unchecked = [&](const unsigned portId) {
-        for (const auto checked : testedPortIds) {
-            if (checked == portId) {
-                return false;
-            }
-        }
-        testedPortIds.push_back(portId);
-        return true;
-    };
-
-    // If two streams have the same global id then they are guaranteed to have an equivalent
-    // number of items at the start and end of each kernel. When two streams share a local id,
-    // they will have the exact same state within the kernel processing them.
-
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const auto streamSet = source(e, mBufferGraph);
-        const BufferNode & bn = mBufferGraph[streamSet];
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const BufferPort & br = mBufferGraph[e];
-
-        assert (bn.isInternal() || (bn.isNonThreadLocal() && mCheckIO));
-
-        #ifdef CHECK_EVERY_IO_PORT
-        const auto check = true;
-        #else
-        const auto check = mCheckIO && bn.isNonThreadLocal() && unchecked(br.LocalPortId);
-        #endif
-
-        if (check) {
-            checkForSufficientInputData(b, br, streamSet);
-        } else { // ensure the accessible input count dominates all uses
-            getAccessibleInputItems(b, br);
-        }
-    }
-
-    Value * numOfActualInputStrides = numOfLinearStrides;
-
-    const auto prefix = makeKernelName(mKernelId);
-
-     if (mCheckIO || CheckAssertions) {
-
-        Value * numOfInputStrides = numOfLinearStrides;
-
-        testedPortIds.clear();
-
-        for (const auto input : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-            const auto streamSet = source(input, mBufferGraph);
-            const BufferPort & br = mBufferGraph[input];
-            const BufferNode & bn = mBufferGraph[streamSet];
-
-            #ifdef CHECK_EVERY_IO_PORT
-            const auto check = true;
-            #else
-            const auto check = (bn.isNonThreadLocal() || bn.NonLinear) && unchecked(br.LocalPortId);
-            #endif
-
-            if (LLVM_LIKELY(check)) {
-                Value * const strides = getNumOfAccessibleStrides(b, br, numOfInputStrides);
-                numOfInputStrides = b->CreateUMin(numOfInputStrides, strides);
-            }
-            if (LLVM_UNLIKELY(CheckAssertions)) {
-                Value * const strides = getNumOfAccessibleStrides(b, br, numOfActualInputStrides);
-                numOfActualInputStrides = b->CreateUMin(numOfActualInputStrides, strides);
-            }
-        }
-
-        Value * numOfOutputStrides = nullptr;
-
-        testedPortIds.clear();
-
-        ConstantInt * const ZERO = b->getSize(0);
-        for (const auto output : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-            const auto streamSet = target(output, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[streamSet];
-            const BufferPort & br = mBufferGraph[output];
-
-
-            #ifdef CHECK_EVERY_IO_PORT
-            const auto check = true;
-            #else
-            const auto check = (bn.isNonThreadLocal() && bn.NonLinear) && unchecked(br.LocalPortId);
-            #endif
-
-            if (LLVM_LIKELY(check)) {
-                if (numOfOutputStrides == nullptr) {
-                    ConstantInt * const ONE = b->getSize(1);
-                    numOfOutputStrides = b->CreateUMax(numOfInputStrides, ONE);
-                }
-                Value * const strides = getNumOfWritableStrides(b, br, numOfOutputStrides);
-                if (strides) {
-                    Value * const minStrides = b->CreateUMin(numOfOutputStrides, strides);
-                    Value * const isZero = b->CreateICmpEQ(strides, ZERO);
-                    numOfOutputStrides = b->CreateSelect(isZero, numOfOutputStrides, minStrides, "numOfOutputStrides");
-                }
-            }
-        }
-
-
-        if (numOfOutputStrides) {
-            numOfLinearStrides = b->CreateUMin(numOfInputStrides, numOfOutputStrides);
-        } else {
-            numOfLinearStrides = numOfInputStrides;
-        }
-
-    }
-
-    mNumOfLinearStrides = numOfLinearStrides;
-
-    determineIsFinal(b);
-    calculateItemCounts(b);
-
-    for (const auto output : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        ensureSufficientOutputSpace(b, mBufferGraph[output], target(output, mBufferGraph));
-    }
-
-    if (CheckAssertions) {
-
-       Value * numOfActualOutputStrides = nullptr;
-
-       ConstantInt * const ZERO = b->getSize(0);
-       for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-           const BufferPort & br = mBufferGraph[e];
-           if (numOfActualOutputStrides == nullptr) {
-               ConstantInt * const ONE = b->getSize(1);
-               numOfActualOutputStrides = b->CreateUMax(numOfActualInputStrides, ONE);
-           }
-           Value * const strides = getNumOfWritableStrides(b, br, numOfActualOutputStrides);
-           if (strides) {
-               Value * const minStrides = b->CreateUMin(numOfActualOutputStrides, strides);
-               Value * const isZero = b->CreateICmpEQ(strides, ZERO);
-               numOfActualOutputStrides = b->CreateSelect(isZero, numOfActualOutputStrides, minStrides, "numOfActualOutputStrides");
-           }
-       }
-
-       Value * numOfActualLinearStrides = numOfActualInputStrides;
-       if (numOfActualOutputStrides) {
-           numOfActualLinearStrides = b->CreateUMin(numOfActualInputStrides, numOfActualOutputStrides);
-       }
-       Value * const match = b->CreateICmpEQ(numOfLinearStrides, numOfActualLinearStrides);
-       b->CreateAssert(match, "%s was expected to execute %" PRIu64 " strides but can only execute %" PRIu64,
-                       mCurrentKernelName, numOfLinearStrides, numOfActualLinearStrides);
+        const auto streamSet = target(e, mBufferGraph);
+        ensureSufficientOutputSpace(b, br, streamSet);
     }
 
     if (mMayLoopToEntry) {
@@ -378,10 +189,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mUpdatedNumOfStrides = numOfLinearStrides;
     }
 
-    assert (mIsFinal);
-
 }
-#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateItemCounts
@@ -913,11 +721,9 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
 
     const BufferNode & bn = mBufferGraph[streamSet];
 
-    #ifdef PERMIT_BUFFER_MEMORY_REUSE
     if (bn.Locality == BufferLocality::ThreadLocal) {
         return;
     }
-    #endif
 
     if (LLVM_UNLIKELY(bn.isOwned())) {
 

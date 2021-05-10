@@ -854,6 +854,7 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
 
 }
 
+#if 0
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinkedIOPorts
@@ -1012,6 +1013,8 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
     }
 
+
+#if 0
     using LocalPortIdSet = SmallFlatSet<unsigned, 4>;
     using LocalPortIds = flat_map<std::pair<LocalPortIdSet, Rational>, unsigned>;
 
@@ -1131,9 +1134,9 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
         resetLocalPortIds();
     }
-
+#endif
 }
-
+#endif
 
 #if 0
 

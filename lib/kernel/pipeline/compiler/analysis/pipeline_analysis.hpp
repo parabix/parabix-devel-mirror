@@ -20,6 +20,8 @@
 
 #define EXPERIMENTAL_SCHEDULING
 
+#define PRINT_STAGES
+
 #include <boost/graph/connected_components.hpp>
 
 namespace kernel {
@@ -42,7 +44,9 @@ public:
 
 //        P.generateRandomPipelineGraph(b, graphSeed, 50, 70, 10);
 
-//        errs() << "generateInitialPipelineGraph\n";
+        #ifdef PRINT_STAGES
+        errs() << "generateInitialPipelineGraph\n";
+        #endif
 
         P.generateInitialPipelineGraph(b);
 
@@ -50,20 +54,23 @@ public:
 
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
-
-//        errs() << "identifyKernelPartitions\n";
-
+        #ifdef PRINT_STAGES
+        errs() << "identifyKernelPartitions\n";
+        #endif
         auto partitionGraph = P.identifyKernelPartitions();
 
         // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
         // the same sequence. This will help us to partition the graph later and is useful to determine
         // whether we can bypass a region without testing every kernel.
-
-//        errs() << "computeExpectedDataFlowRates\n";
+        #ifdef PRINT_STAGES
+        errs() << "computeExpectedDataFlowRates\n";
+        #endif
 
         P.computeMinimumExpectedDataflow(partitionGraph);
 
-//        errs() << "schedulePartitionedProgram\n";
+        #ifdef PRINT_STAGES
+        errs() << "schedulePartitionedProgram\n";
+        #endif
 
         P.schedulePartitionedProgram(partitionGraph, rng, 1.0, 1);
 
@@ -73,27 +80,34 @@ public:
         // P.printRelationshipGraph(P.mStreamGraph, errs(), "Streams");
         // P.printRelationshipGraph(P.mScalarGraph, errs(), "Scalars");
 
-//        errs() << "generateInitialBufferGraph\n";
+        #ifdef PRINT_STAGES
+        errs() << "generateInitialBufferGraph\n";
+        #endif
 
         P.generateInitialBufferGraph();
 
         P.identifyOutputNodeIds();
 
-//        errs() << "computeMaximumExpectedDataflow\n";
-
-//        #ifdef PRINT_BUFFER_GRAPH
-//        P.printBufferGraph(errs());
-//        #endif
+        #ifdef PRINT_STAGES
+        errs() << "computeMaximumExpectedDataflow\n";
+        #endif
 
         P.computeMaximumExpectedDataflow();
 
-//        errs() << "computeInterPartitionSymbolicRates\n";
+        #ifdef PRINT_STAGES
+        errs() << "computeInterPartitionSymbolicRates\n";
+        #endif
+
 
         P.identifyInterPartitionSymbolicRates();
 
-//        errs() << "determineBufferSize\n";
+        #ifdef PRINT_STAGES
+        errs() << "determineBufferSize\n";
+        #endif
 
         P.determineBufferSize(b);
+
+
 
 //        errs() << "determineBufferLayout\n";
 
@@ -115,11 +129,12 @@ public:
         // Finish annotating the buffer graph       
         P.identifyLinearBuffers();
         P.identifyZeroExtendedStreamSets();
-        P.identifyLocalPortIds();
-        P.identifyLinearBuffers();
+//        P.identifyLocalPortIds();
+
 
         // Make the remaining graphs
         P.makeConsumerGraph();
+
 
 
 
@@ -135,8 +150,6 @@ public:
         #ifdef PRINT_BUFFER_GRAPH
         P.printBufferGraph(errs());
         #endif
-
-     //   exit(-1);
 
         return P;
     }
@@ -307,8 +320,8 @@ public:
     unsigned                        MaxNumOfOutputPorts = 0;
 
 
-    unsigned                        MaxNumOfLocalInputPortIds = 0;
-    unsigned                        MaxNumOfLocalOutputPortIds = 0;
+//    unsigned                        MaxNumOfLocalInputPortIds = 0;
+//    unsigned                        MaxNumOfLocalOutputPortIds = 0;
 
     RelationshipGraph               mStreamGraph;
     RelationshipGraph               mScalarGraph;

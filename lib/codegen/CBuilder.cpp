@@ -26,7 +26,9 @@
 #include <stdio.h>
 #include <boost/format.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <boost/intrusive/detail/math.hpp>
 #include <cxxabi.h>
+using boost::intrusive::detail::floor_log2;
 
 #ifdef HAS_ADDRESS_SANITIZER
 #include <llvm/Analysis/AliasAnalysis.h>
@@ -89,7 +91,7 @@ Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const 
         assert ("CreateUDiv divisor cannot be 0!" && d);
         if (is_power_2(d)) {
             if (d > 1) {
-                return CreateLShr(number, ConstantInt::get(divisor->getType(), std::log2(d)), Name);
+                return CreateLShr(number, ConstantInt::get(divisor->getType(), floor_log2(d)), Name);
             } else {
                 return number;
             }

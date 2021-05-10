@@ -152,6 +152,14 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
 
             buffer->allocateBuffer(b, expectedNumOfStrides);
 
+            #ifdef PRINT_DEBUG_MESSAGES
+            const BufferPort & rd = mBufferGraph[e];
+            const auto prefix = makeBufferName(i, rd.Port);
+            debugPrint(b, prefix + ".inital malloc range = [%" PRIx64 ",%" PRIx64 ")",
+                       buffer->getMallocAddress(b), buffer->getOverflowAddress(b));
+            #endif
+
+
         }
     }
 }
@@ -708,7 +716,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::prepareLinearThreadLocalBuffers(BuilderRef b) {
+void PipelineCompiler::prepareLinearThreadLocalOutputBuffers(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
