@@ -65,7 +65,7 @@ void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
     Module * const m = b->getModule();
 
     simplifyPhiNodes(m);
-    auto pm = make_unique<legacy::PassManager>();   
+    auto pm = std::make_unique<legacy::PassManager>();
     pm->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     pm->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
     pm->run(*m);

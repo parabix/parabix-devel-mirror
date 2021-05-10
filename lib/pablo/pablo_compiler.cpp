@@ -1068,9 +1068,9 @@ Value * PabloCompiler::getPointerToVar(BuilderRef b, const Var * var, Value * in
 inline std::unique_ptr<CarryManager> makeCarryManager() {
     switch (CarryMode) {
         case PabloCarryMode::BitBlock:
-            return make_unique<CarryManager>();
+            return std::make_unique<CarryManager>();
         case PabloCarryMode::Compressed:
-            return make_unique<CompressedCarryManager>();
+            return std::make_unique<CompressedCarryManager>();
     }
     llvm_unreachable("Unknown CarryManager type!");
 }

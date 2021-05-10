@@ -102,7 +102,7 @@ CacheObjectResult ParabixObjectCache::loadCachedObjectFile(BuilderRef b, kernel:
     // Have we already seen this signature before? if so, we can safely assume that the ExecutionEngine
     // will have a compiled module for this kernel when we execute the pipeline.
     const auto signature = kernel->getSignature();
-    const auto f = mKnownSignatures.find(signature);
+    const auto f = mKnownSignatures.find(std::string(signature));
     if (LLVM_UNLIKELY(f != mKnownSignatures.end())) {
         if (LLVM_UNLIKELY(codegen::TraceObjectCache)) {
             const auto moduleId = kernel->makeCacheName(b);
@@ -295,7 +295,7 @@ inline bool ParabixObjectCache::requiresCacheCleanUp() noexcept {
     if (LLVM_UNLIKELY(mStartedCacheCleanupDaemon)) {
         return false;
     }
-    FileLock f(fs::path{mCachePath.str()});
+    FileLock f(fs::path{std::string(mCachePath)});
     if (LLVM_UNLIKELY(f.locked())) {
         return true;
     }

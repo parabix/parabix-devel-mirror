@@ -25,7 +25,7 @@ void BixHash::generatePabloMethod() {
     std::vector<int> bitmix(mHashBits);
     std::iota(bitmix.begin(), bitmix.end(), 0);
     std::mt19937 random_shuffle_engine(mSeed);
-    shuffle (bitmix.begin(), bitmix.end(), random_shuffle_engine);
+    std::shuffle (bitmix.begin(), bitmix.end(), random_shuffle_engine);
     for (unsigned i = 0; i < mHashBits; i++) {
         hash[i] = pb.createXor(basis[i % basis.size()], basis[bitmix[i] % basis.size()]);
     }
@@ -37,7 +37,7 @@ void BixHash::generatePabloMethod() {
     for (unsigned j = 0; j < mHashSteps; j++) {
         unsigned shft = 1<<j;
         // Select bits from prior positions.
-        shuffle (bitmix.begin(), bitmix.end(), random_shuffle_engine);
+        std::shuffle (bitmix.begin(), bitmix.end(), random_shuffle_engine);
         for (unsigned i = 0; i < mHashBits; i++) {
             PabloAST * priorBits = pb.createAdvance(hash[bitmix[i]], shft);
             // Mix in bits from prior positions.

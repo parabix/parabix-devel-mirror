@@ -489,7 +489,7 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
 }
 
 void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::Unicode);
+    std::unique_ptr<GrepKernelOptions> options = std::make_unique<GrepKernelOptions>(&cc::Unicode);
     auto lengths = getLengthRange(re, &cc::Unicode);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
     if (UnicodeSets.empty()) {
@@ -525,7 +525,7 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
 }
 
 void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF8);
+    std::unique_ptr<GrepKernelOptions> options = std::make_unique<GrepKernelOptions>(&cc::UTF8);
     auto lengths = getLengthRange(re, &cc::UTF8);
     options->setSource(Source);
     StreamSet * MatchResults = nullptr;
@@ -1260,7 +1260,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
 
     StreamSet * MatchResults = E->CreateStreamSet();
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF8);
+    std::unique_ptr<GrepKernelOptions> options = std::make_unique<GrepKernelOptions>(&cc::UTF8);
     options->setRE(matchingRE);
     options->setSource(BasisBits);
     options->setResults(MatchResults);
@@ -1342,7 +1342,7 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
     for (unsigned i = 0; i < n; i++) {
         StreamSet * const MatchResults = E->CreateStreamSet();
 
-        auto options = make_unique<GrepKernelOptions>();
+        auto options = std::make_unique<GrepKernelOptions>();
 
         auto r = resolveCaseInsensitiveMode(patterns[i].second, mCaseInsensitive);
         r = re::exclude_CC(r, breakCC);

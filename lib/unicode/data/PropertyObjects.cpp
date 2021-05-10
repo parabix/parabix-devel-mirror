@@ -254,7 +254,7 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
         return mY;
     }
     if (mN.get() == nullptr) {
-        mN = make_unique<UnicodeSet>(~mY);
+        mN = std::make_unique<UnicodeSet>(~mY);
     }
     return *mN;
 }

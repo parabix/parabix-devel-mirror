@@ -32,7 +32,7 @@ namespace pablo {
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<KernelCompiler> PabloKernel::instantiateKernelCompiler(BuilderRef /* b */) const {
-    return llvm::make_unique<PabloCompiler>(const_cast<PabloKernel *>(this));
+    return std::make_unique<PabloCompiler>(const_cast<PabloKernel *>(this));
 }
 
 Var * PabloKernel::getInputStreamVar(const std::string & name) {
