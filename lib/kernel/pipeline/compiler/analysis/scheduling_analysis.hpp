@@ -86,56 +86,32 @@ void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P, random_eng
     // TODO: look into performance problem with
     // bin/icgrep -EnableTernaryOpt -DisableMatchStar '(?g)fodder|simple' ../QA/testfiles/simple1 -colors=always
 
-
-//    executeHarmonySearchTest(std::random_device()());
-
-//    executeHarmonySearchByCSV("./testcases.csv", std::random_device()());
-
-//    exit(-1);
-
-
-//    errs() << "analyzeDataflowWithinPartitions\n";
+    assert (PartitionCount > 2);
 
     const auto t0 = std::chrono::high_resolution_clock::now();
     analyzeDataflowWithinPartitions(P, rng);
+    const auto t1 = std::chrono::high_resolution_clock::now();
+    total_intra_dataflow_analysis_time = (t1 - t0).count();
 
     // The graph itself has edges indicating a dependency between the partitions, annotated by the kernels
     // that are a producer of one of the streamsets that traverses the partitions. Ideally we'll use the
     // trie to score each of the possible orderings based on how close a kernel is to its cross-partition
     // consumers but first we need to determine the order of our partitions.
 
-//    errs() << "analyzeDataflowBetweenPartitions\n";
-
-    const auto t1 = std::chrono::high_resolution_clock::now();
     const auto D = analyzeDataflowBetweenPartitions(P);
-
-
- //   errs() << "makeInterPartitionSchedulingGraph\n";
-
     const auto t2 = std::chrono::high_resolution_clock::now();
-    auto S = makeInterPartitionSchedulingGraph(P, D);
-
-//    errs() << "scheduleProgramGraph\n";
-
+    auto I = makeInterPartitionSchedulingGraph(P, D);
     const auto t3 = std::chrono::high_resolution_clock::now();
-
-
-    total_intra_dataflow_analysis_time = (t1 - t0).count();
     total_inter_dataflow_analysis_time = (t2 - t1).count();
     total_inter_dataflow_scheduling_time = (t3 - t2).count();
-
-    const auto C = scheduleProgramGraph(P, S, D, rng, maxCutRoundsFactor, maxCutPasses);
-
-
-//    errs() << "addSchedulingConstraints\n";
-
-    addSchedulingConstraints(P, C);
+    const auto C = scheduleProgramGraph(P, I, D, rng);
+    addSchedulingConstraints(P, selectScheduleFromDAWG(I.Kernels, C));
 
 }
 
 namespace { // start of anonymous namespace
 
-using random_engine = std::default_random_engine; // TODO: look into xorshift for this
+#if 0
 
 void printDAWG(const OrderingDAWG & G, raw_ostream & out, const StringRef name = "G") {
 
@@ -154,6 +130,8 @@ void printDAWG(const OrderingDAWG & G, raw_ostream & out, const StringRef name =
     out.flush();
 }
 
+#endif
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief postorder_minimize
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -171,9 +149,9 @@ unsigned postorder_minimize(OrderingDAWG & O) {
     // level of each state in the DAWG cannot change w.r.t. the trie, we simplify
     // the original algorithm to avoid using a hash table.
 
-    using Vertex = OrderingDAWG::vertex_descriptor;
+    assert (num_edges(O) > 0);
 
-    std::vector<Vertex> L;
+    using Vertex = OrderingDAWG::vertex_descriptor;
 
     const auto n = num_vertices(O);
 
@@ -204,6 +182,8 @@ unsigned postorder_minimize(OrderingDAWG & O) {
     using SV = SmallVector<std::pair<unsigned, unsigned>, 8>;
 
     std::vector<SV> T;
+
+    std::vector<Vertex> L;
 
     for (;;) {
 
@@ -2306,6 +2286,8 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 
     const auto activePartitions = (PartitionCount - 1);
 
+    assert (activePartitions > 1);
+
     PathGraph H(activePartitions + 2);
 
     flat_set<unsigned> kernels;
@@ -2356,6 +2338,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
         assert (out_degree(i + 1, H) > 0);
     }
 
+
     BEGIN_SCOPED_REGION
     const reverse_traversal ordering{l};
     assert (is_valid_topological_sorting(ordering, H));
@@ -2365,9 +2348,9 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 
     // To find our hamiltonian path later, we need a path from each join
     // in the graph to the other forked paths (including the implicit
-    // "terminal" node.) Compute the post-dominator tree of H then insert
-    // the appropriate edges from the immediate predecessor of each join
-    // to the child of each dominating fork.
+    // "terminal" node.) Determine the anscestors of each node then
+    // link the parent of each join to the child of its associated fork
+    // so long as the child is not an ancestor of the parent.
 
     BEGIN_SCOPED_REGION
 
@@ -2546,6 +2529,12 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 
         filter_trie(0, 1);
 
+        // H will never be 0 in a connected graph with more than 1 partition but
+        // this will cause an infinite loop if it occurs.
+        if (LLVM_LIKELY(num_edges(H) == 0)) {
+            report_fatal_error("Internal error: inter-partition scheduling graph has no cross-partition relationships?");
+        }
+
         postorder_minimize(H);
 
         // Insert the line graph of each partition DAWG between the partition nodes.
@@ -2667,7 +2656,7 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 
     const auto m = (numOfKernelSets + numOfEmptyNodes);
 
-    assert (m > 0);
+    assert (m > 0 || activePartitions == 1);
 
     PartitionOrderingGraph compressedGraph(m);
 
@@ -2704,14 +2693,13 @@ PartitionOrdering PipelineAnalysis::makeInterPartitionSchedulingGraph(PartitionG
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief scheduleProgramGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
-        const PartitionGraph & P,
+OrderingDAWG PipelineAnalysis::scheduleProgramGraph(const PartitionGraph & P,
         const PartitionOrdering & partitionOrdering,
         const PartitionDataflowGraph & D,
-        random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses) const {
+        random_engine & rng) const {
 
     auto & O = partitionOrdering.Graph;
-    auto & kernels = partitionOrdering.Kernels;
+    const auto & kernels = partitionOrdering.Kernels;
 
     assert (PartitionCount > 0);
 
@@ -2783,7 +2771,7 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 
     const auto start = std::chrono::high_resolution_clock::now();
 
-    ProgramSchedulingAnalysis SA(S, O, ProgramScheduleType::RandomWalk, numOfFrontierKernels, maxPathLength, rng, maxCutRoundsFactor, maxCutPasses);
+    ProgramSchedulingAnalysis SA(S, O, ProgramScheduleType::RandomWalk, numOfFrontierKernels, maxPathLength, rng, 1, 1);
 
     SA.runGA();
 
@@ -2806,10 +2794,19 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
 //    errs() << "HS UNIQUE INSERTIONS: " << HS_UniqueInsertions << " of " << HS_InsertionAttempts << "\n";
 
 
-    const auto schedule = SA.getResult();
+    return SA.getResult();
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addSchedulingConstraints
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<unsigned> PipelineAnalysis::selectScheduleFromDAWG(const KernelIdVector & kernels,
+                                                               const OrderingDAWG & schedule) {
 
     // TODO: if we have multiple memory optimal schedules, look for the one that
-    // keeps calls to the same kernel closer
+    // keeps calls to the same kernel closer or permits a better memory layout
+    // w.r.t. sequential memory prefetchers?
 
     std::vector<unsigned> program;
 
@@ -2822,6 +2819,7 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
         const auto e = first_out_edge(position, schedule);
 
         const auto s = schedule[e];
+        assert (s < kernels.size());
         const auto k = kernels[s];
         program.push_back(k);
 
@@ -2835,10 +2833,8 @@ std::vector<unsigned> PipelineAnalysis::scheduleProgramGraph(
         position = next;
     }
 
-    assert (program.size() >= (kernels.size() - 2));
-
-
     return program;
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

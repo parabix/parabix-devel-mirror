@@ -1435,7 +1435,9 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                 assert (node.Kernel == mPipelineKernel);
             }
 
-            bool demarcateOutputs = false;
+
+            const auto kernelObj = node.Kernel;
+            bool demarcateOutputs = (kernelObj == mPipelineKernel);
 
             if (in_degree(i, G) == 0) {
                 if (out_degree(i, G) > 0) {
@@ -1446,7 +1448,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
             }
 
             // Check whether this (internal) kernel could terminate early
-            const auto kernelObj = node.Kernel;
             if (kernelObj != mPipelineKernel) {
                 demarcateOutputs |= kernelObj->canSetTerminateSignal();
                 // TODO: an internally synchronzied kernel with fixed rate I/O can be contained within a partition
@@ -2164,7 +2165,6 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
                 }
             }
 
-            assert ((lca < i) || (lca == i && i == (l - 1)));
             reverseLCA[lca] = i + 1;
         }
     }

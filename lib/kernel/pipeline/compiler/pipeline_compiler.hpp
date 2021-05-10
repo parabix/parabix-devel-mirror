@@ -470,7 +470,7 @@ protected:
     const bool                                  TraceUnconsumedItemCounts;
     const bool                                  TraceProducedItemCounts;
 
-    const Partition                             KernelPartitionId;
+    const KernelIdVector                             KernelPartitionId;
     const std::vector<unsigned>                 MinimumNumOfStrides;
     const std::vector<unsigned>                 MaximumNumOfStrides;
 

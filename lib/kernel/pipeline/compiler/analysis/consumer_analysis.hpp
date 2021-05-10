@@ -32,11 +32,13 @@ void PipelineAnalysis::makeConsumerGraph() {
         if (streamSetNode.Locality != BufferLocality::GloballyShared) {
             continue;
         }
-        assert (out_degree(streamSet, mBufferGraph) > 0);
 
-        const auto partitionId = KernelPartitionId[producer];
+        if (LLVM_UNLIKELY(out_degree(streamSet, mBufferGraph) == 0)) {
+            continue;
+        }
 
         auto lastConsumer = PipelineInput;
+        const auto partitionId = KernelPartitionId[producer];
         auto index = 0U;
 
         // TODO: check gb18030. we can reduce the number of tests by knowing that kernel processes

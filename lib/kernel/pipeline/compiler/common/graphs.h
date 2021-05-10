@@ -399,13 +399,13 @@ ENABLE_ENUM_FLAGS(CountingType)
 template <typename T>
 using OwningVector = std::vector<std::unique_ptr<T>>;
 
-using Partition = std::vector<unsigned>;
+using KernelIdVector = std::vector<unsigned>;
 
 using OrderingDAWG = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 struct PartitionData {
 
-    Partition               Kernels;
+    KernelIdVector          Kernels;
     std::vector<Rational>   Repetitions;
     OrderingDAWG            Orderings;
     Rational                ExpectedRepetitions{0};
@@ -455,7 +455,7 @@ using PartitionOrderingGraph = adjacency_list<hash_setS, vecS, bidirectionalS, s
 
 struct PartitionOrdering {
     PartitionOrderingGraph  Graph;
-    std::vector<unsigned>   Kernels;
+    KernelIdVector          Kernels;
     const unsigned          NumOfKernelSets;
 
     PartitionOrdering(PartitionOrderingGraph && graph, unsigned numOfKernelSets, flat_set<unsigned> && kernels)

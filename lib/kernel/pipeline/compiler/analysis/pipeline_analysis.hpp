@@ -20,7 +20,7 @@
 
 #define EXPERIMENTAL_SCHEDULING
 
-#define PRINT_STAGES
+// #define PRINT_STAGES
 
 #include <boost/graph/connected_components.hpp>
 
@@ -228,8 +228,9 @@ private:
 
     PartitionOrdering makeInterPartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const;
 
-    std::vector<unsigned> scheduleProgramGraph(const PartitionGraph & P, const PartitionOrdering & O, const PartitionDataflowGraph & D, random_engine & rng,
-                                               const double maxCutRoundsFactor, const unsigned maxCutPasses) const;
+    OrderingDAWG scheduleProgramGraph(const PartitionGraph & P, const PartitionOrdering & O, const PartitionDataflowGraph & D, random_engine & rng) const;
+
+    std::vector<unsigned> selectScheduleFromDAWG(const KernelIdVector & kernels, const OrderingDAWG & schedule);
 
     void addSchedulingConstraints(const PartitionGraph & P, const std::vector<unsigned> & program);
 
@@ -326,7 +327,7 @@ public:
     RelationshipGraph               mStreamGraph;
     RelationshipGraph               mScalarGraph;
 
-    Partition                       KernelPartitionId;
+    KernelIdVector                       KernelPartitionId;
 
     std::vector<unsigned>           MinimumNumOfStrides;
     std::vector<unsigned>           MaximumNumOfStrides;

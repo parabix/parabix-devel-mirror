@@ -266,7 +266,7 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
         if (R.empty()) {
             return 0U;
         }
-        const Partition & K = P.Kernels;
+        const KernelIdVector & K = P.Kernels;
         assert (P.Repetitions.size() == K.size());
         const auto k = std::find(K.begin(), K.end(), kernelId);
         assert (k != K.end());
