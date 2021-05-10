@@ -38,7 +38,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         doSegmentRetVal = b->CreateInvoke(doSegment, invokeOk, mRethrowException, args);
         b->SetInsertPoint(invokeOk);
     } else {
-        doSegmentRetVal = b->CreateCall(doSegment, args);
+        doSegmentRetVal = b->createCall(doSegment, args);
     }
     updateCycleCounter(b, mKernelId, beforeKernelCall, CycleCounter::KERNEL_EXECUTION);
 

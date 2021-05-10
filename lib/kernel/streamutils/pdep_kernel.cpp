@@ -291,7 +291,7 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
 #else
                 Value * field = kb->CreateExtractElement(inputStrm, kb->getInt32(i));
 #endif
-                Value * compressed = kb->CreateCall(PDEP_func, {field, mask[i]});
+                Value * compressed = kb->createCall(PDEP_func, {field, mask[i]});
 #ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
                 kb->CreateStore(compressed, kb->CreateGEP(outputPtr, kb->getInt32(i)));
             }

@@ -321,7 +321,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
                 assert (isFromCurrentFunction(b, args[i], false));
             }
 
-            Value * const signal = b->CreateCall(f, args);
+            Value * const signal = b->createCall(f, args);
             Value * const terminatedOnInit = b->CreateICmpNE(signal, unterminated);
 
             if (terminated) {
@@ -369,7 +369,7 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
             if (LLVM_UNLIKELY(f == nullptr)) {
                 report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
             }
-            Value * const handle = b->CreateCall(f, mKernelSharedHandle);
+            Value * const handle = b->createCall(f, mKernelSharedHandle);
             b->CreateStore(handle, getThreadLocalHandlePtr(b, i));
         }
     }
@@ -621,7 +621,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         if (LLVM_LIKELY(mKernel->isStateful())) {
             params.push_back(mKernelSharedHandle);
         }
-        mScalarValue[i] = b->CreateCall(getKernelFinalizeFunction(b), params);
+        mScalarValue[i] = b->createCall(getKernelFinalizeFunction(b), params);
     }
     releaseOwnedBuffers(b, true);
     resetInternalBufferHandles();
@@ -742,7 +742,7 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
             if (LLVM_UNLIKELY(f == nullptr)) {
                 report_fatal_error(mKernel->getName() + " does not to have an finalize method for its threadlocal state");
             }
-            b->CreateCall(f, args);
+            b->createCall(f, args);
         }
     }
     releaseOwnedBuffers(b, false);
