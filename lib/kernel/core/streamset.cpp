@@ -143,7 +143,7 @@ Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Va
     Value * positionInBlock = b->CreateURem(absolutePosition, BLOCK_WIDTH);
     Value * blockPtr = getStreamBlockPtr(b, getBaseAddress(b), streamIndex, blockIndex);
     if (LLVM_UNLIKELY(itemWidth < 8)) {
-        const Rational itemsPerByte{8, itemWidth};
+        const Rational itemsPerByte{8, static_cast<unsigned int>(itemWidth)};
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             b->CreateAssertZero(b->CreateURemRate(absolutePosition, itemsPerByte),
                                 "absolutePosition (%" PRIu64 " * %" PRIu64 "x%" PRIu64 ") must be byte aligned",
