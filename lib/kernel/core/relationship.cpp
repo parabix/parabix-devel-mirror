@@ -20,7 +20,7 @@ unsigned StreamSet::getNumElements() const {
 }
 
 unsigned StreamSet::getFieldWidth() const {
-    return mType->getArrayElementType()->getVectorElementType()->getIntegerBitWidth();
+    return mType->getArrayElementType()->getContainedType(0)->getIntegerBitWidth();
 }
 
 std::string StreamSet::shapeString() {

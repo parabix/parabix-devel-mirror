@@ -671,7 +671,7 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
                 value = b->CreateZExtOrTrunc(value, ty);
             }
         } else if (const PackH * const p = dyn_cast<PackH>(stmt)) {
-            const auto sourceWidth = p->getValue()->getType()->getVectorElementType()->getIntegerBitWidth();
+            const auto sourceWidth = p->getValue()->getType()->getContainedType(0)->getIntegerBitWidth();
             const auto packWidth = p->getFieldWidth()->value();
             assert (sourceWidth == packWidth);
             Value * const base = compileExpression(b, p->getValue(), false);
@@ -691,7 +691,7 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
                 b->CreateStore(P, b->CreateGEP(value, {ZERO, b->getInt32(i)}));
             }
         } else if (const PackL * const p = dyn_cast<PackL>(stmt)) {
-            const auto sourceWidth = p->getValue()->getType()->getVectorElementType()->getIntegerBitWidth();
+            const auto sourceWidth = p->getValue()->getType()->getContainedType(0)->getIntegerBitWidth();
             const auto packWidth = p->getFieldWidth()->value();
             assert (sourceWidth == packWidth);
             Value * const base = compileExpression(b, p->getValue(), false);
@@ -803,7 +803,7 @@ unsigned getIntegerBitWidth(const Type * ty) {
     }
     if (ty->isVectorTy()) {
         assert (llvm::cast<llvm::VectorType>(ty)->getNumElements() == 0);
-        ty = ty->getVectorElementType();
+        ty = ty->getContainedType(0);
     }
     return ty->getIntegerBitWidth();
 }

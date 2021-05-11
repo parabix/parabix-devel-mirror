@@ -131,7 +131,7 @@ bool StreamSetBuffer::isEmptySet() const {
  * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
  */
 Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Value * absolutePosition) const {
-    Type * const itemTy = mBaseType->getArrayElementType()->getVectorElementType();
+    Type * const itemTy = mBaseType->getArrayElementType()->getContainedType(0);
     const auto itemWidth = itemTy->getPrimitiveSizeInBits();
     IntegerType * const sizeTy = b->getSizeTy();
     streamIndex = b->CreateZExt(streamIndex, sizeTy);
@@ -192,7 +192,7 @@ Type * StreamSetBuffer::resolveType(BuilderPtr b, Type * const streamSetType) {
         type = type->getArrayElementType();
     }
     if (LLVM_LIKELY(type->isVectorTy() && llvm::cast<llvm::VectorType>(type)->getNumElements() == 0)) {
-        type = type->getVectorElementType();
+        type = type->getContainedType(0);
         if (LLVM_LIKELY(type->isIntegerTy())) {
             const auto fieldWidth = cast<IntegerType>(type)->getBitWidth();
             type = b->getBitBlockType();
@@ -741,7 +741,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
     const auto streamCount = ty->getArrayNumElements();
     name << streamCount << 'x';
     ty = ty->getArrayElementType();
-    ty = ty->getVectorElementType();
+    ty = ty->getContainedType(0);
     const auto itemWidth = ty->getIntegerBitWidth();
     name << itemWidth << '_' << mAddressSpace;
 

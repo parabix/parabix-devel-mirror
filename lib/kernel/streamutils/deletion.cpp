@@ -252,11 +252,23 @@ void StreamCompressKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * c
     IntegerType * const sizeTy = b->getSizeTy();
     const unsigned numFields = b->getBitBlockWidth() / mCompressedFieldWidth;
     Constant * zeroSplat = Constant::getNullValue(b->fwVectorType(mCompressedFieldWidth));
-    Constant * oneSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, 1));
+    #if LLVM_VERSION_MAJOR < 10
+        Constant * oneSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, 1));
+    #else
+        Constant * oneSplat = ConstantVector::getSplat({numFields, false}, ConstantInt::get(fwTy, 1));
+    #endif
     Constant * CFW = ConstantInt::get(fwTy, mCompressedFieldWidth);
-    Constant * fwSplat = ConstantVector::getSplat(numFields, CFW);
+    #if LLVM_VERSION_MAJOR < 10
+        Constant * fwSplat = ConstantVector::getSplat(numFields, CFW);
+    #else
+        Constant * fwSplat = ConstantVector::getSplat({numFields, false}, CFW);
+    #endif
     Constant * numFieldConst = ConstantInt::get(fwTy, numFields);
-    Constant * fwMaskSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
+    #if LLVM_VERSION_MAJOR < 10
+        Constant * fwMaskSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
+    #else
+        Constant * fwMaskSplat = ConstantVector::getSplat({numFields, false}, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
+    #endif
     Constant * BLOCK_WIDTH = ConstantInt::get(fwTy, b->getBitBlockWidth());
     Constant * BLOCK_MASK = ConstantInt::get(fwTy, b->getBitBlockWidth() - 1);
 

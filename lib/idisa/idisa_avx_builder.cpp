@@ -415,7 +415,11 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::V
             indexes[i] = ConstantInt::get(fieldTy, i);
         }
         Constant * indexVec = ConstantVector::get(indexes);
-        Constant * fieldCountSplat = ConstantVector::getSplat(fieldCount, ConstantInt::get(fieldTy, fieldCount));
+        #if LLVM_VERSION_MAJOR < 10
+            Constant * fieldCountSplat = ConstantVector::getSplat(fieldCount, ConstantInt::get(fieldTy, fieldCount));
+        #else
+             Constant * fieldCountSplat = ConstantVector::getSplat({fieldCount, false}, ConstantInt::get(fieldTy, fieldCount));
+        #endif
         Value * shiftSplat = simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy));
         Value * permuteVec = CreateAdd(indexVec, shiftSplat);
         // Zero out fields that are above the max.
@@ -461,7 +465,11 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_shuffle(unsigned fw, llvm::Value * a, llv
     if (mBitBlockWidth == 256 && fw > 32) {
         const unsigned fieldCount = mBitBlockWidth/fw;
         // Create a table for shuffling with smaller field widths.
-        Constant * idxMask = ConstantVector::getSplat(fieldCount, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        #if LLVM_VERSION_MAJOR < 10
+            Constant * idxMask = llvm::ConstantVector::getSplat(fieldCount, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        #else
+            Constant * idxMask = llvm::ConstantVector::getSplat({fieldCount, false}, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        #endif
         Value * idx = simd_and(index_vector, idxMask);
         unsigned half_fw = fw/2;
         unsigned field_count = mBitBlockWidth/half_fw;
@@ -495,7 +503,11 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
         Type * v1xi32Ty = VectorType::get(getInt32Ty(), 1);
         Type * v8xi32Ty = VectorType::get(getInt32Ty(), 8);
         Type * v8xi1Ty = VectorType::get(getInt1Ty(), 8);
-        Constant * mask0000000Fsplaat = ConstantVector::getSplat(8, ConstantInt::get(getInt32Ty(), 0xF));
+        #if LLVM_VERSION_MAJOR < 10
+            Constant * mask0000000Fsplaat = ConstantVector::getSplat(8, ConstantInt::get(getInt32Ty(), 0xF));
+        #else
+            Constant * mask0000000Fsplaat = ConstantVector::getSplat({8, false}, ConstantInt::get(getInt32Ty(), 0xF));
+        #endif
         Value * PEXT_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pext_32);
         Value * PDEP_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_32);
         Value * const popcount_func = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, getInt32Ty());

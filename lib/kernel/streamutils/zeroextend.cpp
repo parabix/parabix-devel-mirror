@@ -100,7 +100,7 @@ void ZeroExtend::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
 
         VectorType * const inputTy = cast<VectorType>(inputBuffer[0]->getType());
 
-        const auto n = inputTy->getVectorElementType()->getIntegerBitWidth();
+        const auto n = inputTy->getContainedType(0)->getIntegerBitWidth();
         const auto count = blockWidth / n;
 
         const auto halfCount = (count / 2);

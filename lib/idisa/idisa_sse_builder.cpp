@@ -160,7 +160,11 @@ Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * index_v
         // Now create a mask to select between original and exchanged values.
         Constant * xchg[2] = {ConstantInt::get(getInt64Ty(), 1), ConstantInt::get(getInt64Ty(), 0)};
         Value * xchg_vec = ConstantVector::get({xchg, 2});
-        Constant * oneSplat = ConstantVector::getSplat(2, ConstantInt::get(getInt64Ty(), 1));
+        #if LLVM_VERSION_MAJOR < 10
+            Constant * oneSplat = ConstantVector::getSplat(2, ConstantInt::get(getInt64Ty(), 1));
+        #else
+            Constant * oneSplat = ConstantVector::getSplat({2, false}, ConstantInt::get(getInt64Ty(), 1));
+        #endif
         Value * exchange_mask = simd_eq(fw, simd_and(index_vector, oneSplat), xchg_vec);
         Value * rslt = simd_xor(simd_and(changed, exchange_mask), a);
         return rslt;
@@ -241,7 +245,11 @@ llvm::Value * IDISA_SSSE3_Builder::mvmd_shuffle(unsigned fw, llvm::Value * data_
     if (mBitBlockWidth == 128 && fw > 8) {
         // Create a table for shuffling with smaller field widths.
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Constant * idxMask = ConstantVector::getSplat(fieldCount, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        #if LLVM_VERSION_MAJOR < 10
+            Constant * idxMask = ConstantVector::getSplat(fieldCount, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        #else
+            Constant * idxMask = ConstantVector::getSplat({fieldCount, false}, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        #endif
         Value * idx = simd_and(index_vector, idxMask);
         unsigned half_fw = fw/2;
         unsigned field_count = mBitBlockWidth/half_fw;

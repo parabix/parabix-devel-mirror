@@ -795,7 +795,7 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(BuilderRef b, Value * co
             const auto summaryBlocks = ceil_udiv(shiftAmount, blockWidth);
             const auto summarySize = ceil_udiv(summaryBlocks, blockWidth);
             VectorType * const bitBlockTy = b->getBitBlockType();
-            IntegerType * const laneTy = cast<IntegerType>(bitBlockTy->getVectorElementType());
+            IntegerType * const laneTy = cast<IntegerType>(bitBlockTy->getContainedType(0));
             const auto laneWidth = laneTy->getIntegerBitWidth();
 
             assert (summarySize > 0);
