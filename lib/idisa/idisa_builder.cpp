@@ -23,7 +23,8 @@ namespace IDISA {
 unsigned getVectorBitWidth(Value * a) {
     Type * aTy = a->getType();
     if (isa<IntegerType>(aTy)) return aTy->getPrimitiveSizeInBits();
-    return cast<VectorType>(aTy)->getBitWidth();
+    unsigned bitWidth = cast<VectorType>(aTy)->getNumElements() * cast<VectorType>(aTy)->getElementType()->getPrimitiveSizeInBits();
+    return bitWidth;
 }
 
 VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
@@ -305,7 +306,7 @@ Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift, const bool safe) {
     VectorType * const vecTy = fwVectorType(fw);
-    IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
+    IntegerType * const intTy = getIntNTy(vecTy->getNumElements() * vecTy->getElementType()->getPrimitiveSizeInBits());
     Constant * const FIELD_WIDTH = ConstantInt::get(shift->getType(), fw);
 //    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
     shift = CreateMul(shift, FIELD_WIDTH);
@@ -345,7 +346,7 @@ Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shif
 
 Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift, const bool safe) {
     VectorType * const vecTy = fwVectorType(fw);
-    IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
+    IntegerType * const intTy = getIntNTy(vecTy->getNumElements() * vecTy->getElementType()->getPrimitiveSizeInBits());
     Constant * const FIELD_WIDTH = ConstantInt::get(shift->getType(), fw);
 //    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
     shift = CreateMul(shift, FIELD_WIDTH);
