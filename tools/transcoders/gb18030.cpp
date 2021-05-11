@@ -44,7 +44,7 @@ using namespace llvm;
 using namespace codegen;
 using namespace re;
 
-static cl::OptionCategory gb18030Options("gb18030 Options", "Transcoding control options.");
+static llvm::cl::OptionCategory gb18030Options("gb18030 Options", "Transcoding control options.");
 
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(gb18030Options));
 enum class GBerrorMode {Abort, DropBadInput, UseReplacementChar};
