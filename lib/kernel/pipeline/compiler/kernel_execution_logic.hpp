@@ -35,7 +35,14 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (mRethrowException) {
         const auto prefix = makeKernelName(mKernelId);
         BasicBlock * const invokeOk = b->CreateBasicBlock(prefix + "_invokeOk", mKernelCompletionCheck);
-        doSegmentRetVal = b->CreateInvoke(doSegment, invokeOk, mRethrowException, args);
+        #if LLVM_VERSION_MAJOR >= 11
+            //no matching member function for call to 'CreateInvoke'
+            auto *calleePtrType = llvm::cast<llvm::PointerType>(doSegment->getType());
+            auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
+            doSegmentRetVal = b->CreateInvoke(calleeType, doSegment, invokeOk, mRethrowException, args);
+        #else
+            doSegmentRetVal = b->CreateInvoke(doSegment, invokeOk, mRethrowException, args);
+        #endif
         b->SetInsertPoint(invokeOk);
     } else {
         doSegmentRetVal = b->createCall(doSegment, args);
