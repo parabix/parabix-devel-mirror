@@ -46,8 +46,10 @@ void RE_Inspector::inspect(RE * const re) {
 }
 
 void RE_Inspector::inspectName(Name * nm) {
-    RE * const d = nm->getDefinition();
-    if (d) inspect(d);
+    if (mNameMode == NameProcessingMode::ProcessDefinition) {
+        RE * const d = nm->getDefinition();
+        if (d) inspect(d);
+    }
 }
 
 void RE_Inspector::inspectCapture(Capture * c) {
