@@ -431,3 +431,8 @@ inline void ParabixObjectCache::saveCacheSettings() noexcept {
 ParabixObjectCache::ParabixObjectCache() {
     loadCacheSettings();
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
++* @brief destructor
++** ------------------------------------------------------------------------------------------------------------- */
+ParabixObjectCache::~ParabixObjectCache() { }
