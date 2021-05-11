@@ -7,6 +7,10 @@
 #include <objcache/object_cache.h>
 #include <llvm/Support/raw_ostream.h>
 
+#if LLVM_VERSION_MAJOR >= 10
+#include "llvm/Support/Host.h"
+#endif
+
 using namespace kernel;
 
 using RelationshipAllocator = Relationship::Allocator;

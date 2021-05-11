@@ -43,6 +43,9 @@
 #else
 #include <llvm/IR/PassTimingInfo.h>
 #endif
+#if LLVM_VERSION_MAJOR >= 10
+#include "llvm/Support/Host.h"
+#endif
 #ifndef NDEBUG
 #define IN_DEBUG_MODE true
 #else

@@ -9,6 +9,11 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 
+#if LLVM_VERSION_MAJOR >= 10
+#include <llvm/IR/IntrinsicsNVPTX.h>
+#include <llvm/IR/IntrinsicsX86.h>
+#endif
+
 using namespace llvm;
 
 namespace IDISA {

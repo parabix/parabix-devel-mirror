@@ -36,6 +36,8 @@
 #include <sstream>
 #include <llvm/Support/raw_ostream.h>
 
+#include <llvm/Support/CommandLine.h>
+
 using namespace pablo;
 using namespace kernel;
 using namespace llvm;
