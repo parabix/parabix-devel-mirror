@@ -8,7 +8,7 @@ using namespace llvm;
 namespace kernel {
 
 inline VectorType * LLVM_READNONE getStreamTy(LLVMContext & C, const unsigned FieldWidth) {
-    return VectorType::get(IntegerType::getIntNTy(C, FieldWidth), 0);
+    return VectorType::get(IntegerType::getIntNTy(C, FieldWidth), unsigned{0});
 }
 
 inline ArrayType * LLVM_READNONE getStreamSetTy(LLVMContext & C, const unsigned NumElements, const unsigned FieldWidth) {

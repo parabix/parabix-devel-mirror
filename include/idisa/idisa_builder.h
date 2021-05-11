@@ -239,7 +239,7 @@ public:
     }
 
     static llvm::VectorType * LLVM_READNONE getStreamTy(llvm::LLVMContext & C, const unsigned FieldWidth = 1) {
-        return llvm::VectorType::get(llvm::IntegerType::getIntNTy(C, FieldWidth), 0);
+        return llvm::VectorType::get(llvm::IntegerType::getIntNTy(C, FieldWidth), unsigned{0});
     }
 
     static llvm::ArrayType * LLVM_READNONE getStreamSetTy(llvm::LLVMContext & C, const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
