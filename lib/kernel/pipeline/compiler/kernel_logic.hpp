@@ -518,12 +518,8 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mNumOfTruncatedInputBuffers = 0;
 
     mHasZeroExtendedInput = nullptr;
-    mZeroExtendBufferPhi = nullptr;
     mExhaustedPipelineInputPhi = nullptr;
     mExhaustedInputAtJumpPhi = nullptr;
-
-    mKernelIsFinal = nullptr;
-    mKernelIsPenultimate = nullptr;
 
     mKernelInsufficientInput = nullptr;
     mKernelTerminated = nullptr;
@@ -531,6 +527,10 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mKernelInitiallyTerminatedExit = nullptr;
 
     mMaximumNumOfStrides = nullptr;
+    mNumOfLinearStridesPhi = nullptr;
+    mNumOfLinearStrides = nullptr;
+    mFixedRateFactorPhi = nullptr;
+    mFinalPartialStrideFixedRateRemainderPhi = nullptr;
 
     assert (mKernelId >= FirstKernel);
     assert (mKernelId <= LastKernel);
@@ -541,7 +541,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mInitiallyProcessedDeferredItemCount.reset(numOfInputs);
     mAlreadyProcessedPhi.reset(numOfInputs);
     mAlreadyProcessedDeferredPhi.reset(numOfInputs);
-    mInputEpoch.reset(numOfInputs);
     mIsInputZeroExtended.reset(numOfInputs);
     mInputVirtualBaseAddressPhi.reset(numOfInputs);
     mFirstInputStrideLength.reset(numOfInputs);
@@ -551,8 +550,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mProcessedItemCount.reset(numOfInputs);
     mProcessedDeferredItemCountPtr.reset(numOfInputs);
     mProcessedDeferredItemCount.reset(numOfInputs);
-    mInsufficientIOProcessedPhi.reset(numOfInputs);
-    mInsufficientIOProcessedDeferredPhi.reset(numOfInputs);
     mUpdatedProcessedPhi.reset(numOfInputs);
     mUpdatedProcessedDeferredPhi.reset(numOfInputs);
     mFullyProcessedItemCount.reset(numOfInputs);
@@ -571,8 +568,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mProducedDeferredItemCountPtr.reset(numOfOutputs);
     mProducedDeferredItemCount.reset(numOfOutputs);
     mProducedAtTerminationPhi.reset(numOfOutputs);
-    mInsufficientIOProducedPhi.reset(numOfOutputs);
-    mInsufficientIOProducedDeferredPhi.reset(numOfOutputs);
     mUpdatedProducedPhi.reset(numOfOutputs);
     mUpdatedProducedDeferredPhi.reset(numOfOutputs);
     mFullyProducedItemCount.reset(numOfOutputs);

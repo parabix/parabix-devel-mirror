@@ -1437,6 +1437,7 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 
 
             const auto kernelObj = node.Kernel;
+
             bool demarcateOutputs = (kernelObj == mPipelineKernel);
 
             if (in_degree(i, G) == 0) {

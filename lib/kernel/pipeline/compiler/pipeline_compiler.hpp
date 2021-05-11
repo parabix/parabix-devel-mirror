@@ -179,9 +179,9 @@ public:
     void ensureSufficientOutputSpace(BuilderRef b, const BufferPort & port, const unsigned streamSet);
     void updatePHINodesForLoopExit(BuilderRef b);
 
-    void calculateItemCounts(BuilderRef b);
+    Value * calculateItemCounts(BuilderRef b, Value * const numOfLinearStrides);
     Value * anyInputClosed(BuilderRef b);
-    void determineIsFinal(BuilderRef b);
+    void determineIsFinal(BuilderRef b, Value * const numOfLinearStrides);
     Value * hasMoreInput(BuilderRef b);
 
     struct FinalItemCount {
@@ -240,7 +240,6 @@ public:
     Value * calculateNumOfLinearItems(BuilderRef b, const BufferPort &port, Value * const adjustment);
     Value * getAccessibleInputItems(BuilderRef b, const BufferPort & inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const BufferPort & inputPort, Value * const numOfLinearStrides);
-    Value * getNumOfWritableStrides(BuilderRef b, const BufferPort & outputPort, Value * const numOfLinearStrides);
     Value * getWritableOutputItems(BuilderRef b, const BufferPort & outputPort, const bool useOverflow = true);
     Value * addLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount) const;
     Value * subtractLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount);
@@ -470,7 +469,7 @@ protected:
     const bool                                  TraceUnconsumedItemCounts;
     const bool                                  TraceProducedItemCounts;
 
-    const KernelIdVector                             KernelPartitionId;
+    const KernelIdVector                        KernelPartitionId;
     const std::vector<unsigned>                 MinimumNumOfStrides;
     const std::vector<unsigned>                 MaximumNumOfStrides;
 
@@ -489,8 +488,6 @@ protected:
     const Kernel *                              mKernel = nullptr;
     Value *                                     mKernelSharedHandle = nullptr;
     Value *                                     mKernelThreadLocalHandle = nullptr;
-//    Value *                                     mZeroExtendBuffer = nullptr;
-//    Value *                                     mZeroExtendSpace = nullptr;
     Value *                                     mSegNo = nullptr;
     Value *                                     mNextSegNo = nullptr;
     Value *                                     mExhaustedInput = nullptr;
@@ -559,14 +556,11 @@ protected:
     PHINode *                                   mFinalPartialStrideFixedRateRemainderPhi = nullptr;
     PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
-    Value *                                     mKernelIsPenultimate = nullptr;
-    Value *                                     mKernelIsFinal = nullptr;
     PHINode *                                   mTotalNumOfStridesAtLoopExitPhi = nullptr;
     PHINode *                                   mAnyProgressedAtLoopExitPhi = nullptr;
     PHINode *                                   mAnyProgressedAtExitPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
-    PHINode *                                   mExhaustedPipelineInputAtPartitionJumpPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtLoopExitPhi = nullptr;
     Value *                                     mExhaustedPipelineInputAtExit = nullptr;
     PHINode *                                   mExecutedAtLeastOnceAtLoopEntryPhi = nullptr;
@@ -574,9 +568,9 @@ protected:
     PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     PHINode *                                   mTotalNumOfStridesAtExitPhi = nullptr;
-    Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mHasZeroExtendedInput = nullptr;
+    PHINode *                                   mNumOfLinearStridesPhi = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
 
@@ -602,14 +596,11 @@ protected:
 //    unsigned                                    mNumOfLocalInputPortIds = 0;
 //    unsigned                                    mNumOfLocalOutputPortIds = 0;
 
-    PHINode *                                   mZeroExtendBufferPhi = nullptr;
-
     InputPortVector<Value *>                    mInitiallyProcessedItemCount; // *before* entering the kernel
     InputPortVector<Value *>                    mInitiallyProcessedDeferredItemCount;
     InputPortVector<PHINode *>                  mAlreadyProcessedPhi; // entering the segment loop
     InputPortVector<PHINode *>                  mAlreadyProcessedDeferredPhi;
 
-    InputPortVector<Value *>                    mInputEpoch;
     InputPortVector<Value *>                    mIsInputZeroExtended;
     InputPortVector<PHINode *>                  mInputVirtualBaseAddressPhi;
     InputPortVector<Value *>                    mFirstInputStrideLength;
@@ -621,8 +612,6 @@ protected:
     InputPortVector<Value *>                    mProcessedItemCount;
     InputPortVector<Value *>                    mProcessedDeferredItemCountPtr;
     InputPortVector<Value *>                    mProcessedDeferredItemCount;
-    InputPortVector<PHINode *>                  mInsufficientIOProcessedPhi; // exiting insufficient io
-    InputPortVector<PHINode *>                  mInsufficientIOProcessedDeferredPhi;
     InputPortVector<PHINode *>                  mUpdatedProcessedPhi; // exiting the kernel
     InputPortVector<PHINode *>                  mUpdatedProcessedDeferredPhi;
     InputPortVector<Value *>                    mFullyProcessedItemCount; // *after* exiting the kernel
@@ -643,8 +632,6 @@ protected:
     OutputPortVector<Value *>                   mProducedDeferredItemCountPtr;
     OutputPortVector<Value *>                   mProducedDeferredItemCount;
     OutputPortVector<PHINode *>                 mProducedAtTerminationPhi; // exiting after termination
-    OutputPortVector<PHINode *>                 mInsufficientIOProducedPhi; // exiting insufficient io
-    OutputPortVector<PHINode *>                 mInsufficientIOProducedDeferredPhi;
     OutputPortVector<PHINode *>                 mUpdatedProducedPhi; // exiting the kernel
     OutputPortVector<PHINode *>                 mUpdatedProducedDeferredPhi;
     OutputPortVector<PHINode *>                 mFullyProducedItemCount; // *after* exiting the kernel
@@ -758,7 +745,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mInitiallyProcessedDeferredItemCount(P.MaxNumOfInputPorts, mAllocator)
 , mAlreadyProcessedPhi(P.MaxNumOfInputPorts, mAllocator)
 , mAlreadyProcessedDeferredPhi(P.MaxNumOfInputPorts, mAllocator)
-, mInputEpoch(P.MaxNumOfInputPorts, mAllocator)
 , mIsInputZeroExtended(P.MaxNumOfInputPorts, mAllocator)
 , mInputVirtualBaseAddressPhi(P.MaxNumOfInputPorts, mAllocator)
 , mFirstInputStrideLength(P.MaxNumOfInputPorts, mAllocator)
@@ -768,8 +754,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mProcessedItemCount(P.MaxNumOfInputPorts, mAllocator)
 , mProcessedDeferredItemCountPtr(P.MaxNumOfInputPorts, mAllocator)
 , mProcessedDeferredItemCount(P.MaxNumOfInputPorts, mAllocator)
-, mInsufficientIOProcessedPhi(P.MaxNumOfInputPorts, mAllocator)
-, mInsufficientIOProcessedDeferredPhi(P.MaxNumOfInputPorts, mAllocator)
 , mUpdatedProcessedPhi(P.MaxNumOfInputPorts, mAllocator)
 , mUpdatedProcessedDeferredPhi(P.MaxNumOfInputPorts, mAllocator)
 , mFullyProcessedItemCount(P.MaxNumOfInputPorts, mAllocator)
@@ -789,8 +773,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mProducedDeferredItemCountPtr(P.MaxNumOfOutputPorts, mAllocator)
 , mProducedDeferredItemCount(P.MaxNumOfOutputPorts, mAllocator)
 , mProducedAtTerminationPhi(P.MaxNumOfOutputPorts, mAllocator)
-, mInsufficientIOProducedPhi(P.MaxNumOfOutputPorts, mAllocator)
-, mInsufficientIOProducedDeferredPhi(P.MaxNumOfOutputPorts, mAllocator)
 , mUpdatedProducedPhi(P.MaxNumOfOutputPorts, mAllocator)
 , mUpdatedProducedDeferredPhi(P.MaxNumOfOutputPorts, mAllocator)
 , mFullyProducedItemCount(P.MaxNumOfOutputPorts, mAllocator)

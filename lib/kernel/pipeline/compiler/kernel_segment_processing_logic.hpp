@@ -217,8 +217,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     if (kernelRequiresSynchronization) {
         determineNumOfLinearStrides(b);
     } else {
-        determineIsFinal(b);
-        // FIXME: temporary change to minimize changes to PHI nodes
         mUpdatedNumOfStrides = mMaximumNumOfStrides;
     }
 
@@ -409,11 +407,13 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         b->SetInsertPoint(isFinalCheck);
     }
 
-    Value * terminationSignal = mIsFinalInvocationPhi;
-    if (mKernelIsInternallySynchronized) {
+    Value * terminationSignal = nullptr;
+    if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
         Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
         Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
-        terminationSignal = b->CreateSelect(mKernelIsFinal, completed, unterminated);
+        terminationSignal = b->CreateSelect(mFinalPartitionSegment, completed, unterminated);
+    } else {
+        terminationSignal = mIsFinalInvocationPhi;
     }
 
     assert (terminationSignal);
@@ -434,7 +434,9 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         }
         mTotalNumOfStridesAtLoopExitPhi->addIncoming(updatedNumOfStrides, exitBlock);
     }
-    b->CreateUnlikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
+
+    Value * const isFinal = b->CreateIsNotNull(terminationSignal);
+    b->CreateUnlikelyCondBr(isFinal, mKernelTerminated, mKernelLoopExit);
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const auto port = mBufferGraph[e].Port;
@@ -532,15 +534,14 @@ inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b)
         const auto prefix = makeBufferName(mKernelId, outputPort);
         mLinearOutputItemsPhi[outputPort] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyWritable");
     }
-    mFixedRateFactorPhi = nullptr;
     const auto prefix = makeKernelName(mKernelId);
+    mNumOfLinearStridesPhi = b->CreatePHI(sizeTy, 2, prefix + "_numOfLinearStridesPhi");
     if (LLVM_LIKELY(mKernel->hasFixedRateInput())) {
-        mFixedRateFactorPhi = b->CreatePHI(sizeTy, 2, prefix + "_fixedRateFactor");
+        mFixedRateFactorPhi = b->CreatePHI(sizeTy, 2, prefix + "_fixedRateFactorPhi");
     }
     mIsFinalInvocationPhi = b->CreatePHI(sizeTy, 2, prefix + "_isFinalPhi");
-    mFinalPartialStrideFixedRateRemainderPhi = nullptr;
     if (mIsPartitionRoot) {
-        mFinalPartialStrideFixedRateRemainderPhi = b->CreatePHI(sizeTy, 2, prefix + "_partialPartitionStrides");
+        mFinalPartialStrideFixedRateRemainderPhi = b->CreatePHI(sizeTy, 2, prefix + "_partialPartitionStridesPhi");
     }
 }
 
