@@ -2007,7 +2007,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                         fmt % "<any value>";
                                     }
                                 }
-                                __report_failure(name, fmt.str().data(), trace, n);
+
+                                SmallVector<char, 1024> tmp;
+                                raw_svector_ostream out(tmp);
+                                out << "STATIC FAILURE: " << fmt.str();
+                                __report_failure(name, out.str().data(), trace, n);
                                 discoveredStaticFailure = true;
                             } else {
                                 remove = true;

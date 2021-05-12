@@ -86,7 +86,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     mExhaustedPipelineInputAtExit = mExhaustedInput;
 
     identifyPipelineInputs(mKernelId);
-//    identifyLocalPortIds(mKernelId);
 
     const auto kernelRequiresSynchronization = RequiresSynchronization[mKernelId];
 
@@ -94,16 +93,12 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         mIsBounded = isBounded();
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
         const auto nonSourceKernel = in_degree(mKernelId, mBufferGraph) > 0;
-        #ifdef CHECK_EVERY_IO_PORT
-        mCheckIO = nonSourceKernel;
-        #else
-        mCheckIO = nonSourceKernel && (mIsPartitionRoot || mayHaveNonLinearIO(mKernelId)) && hasAtLeastOneNonGreedyInput();
-        #endif
-        mMayLoopToEntry = nonSourceKernel && (mCheckIO || mHasExplicitFinalPartialStride);
+        mCheckInputChannels = nonSourceKernel && (mIsPartitionRoot || mayHaveNonLinearIO(mKernelId));
+        mMayLoopToEntry = nonSourceKernel && hasAtLeastOneNonGreedyInput() && (mCheckInputChannels || mHasExplicitFinalPartialStride);
     } else {
         mHasExplicitFinalPartialStride = false;
         mIsBounded = false;
-        mCheckIO = false;
+        mCheckInputChannels = false;
         mMayLoopToEntry = false;
     }
 
@@ -131,7 +126,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     }
     mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", mNextPartitionEntryPoint);
     mKernelCompletionCheck = b->CreateBasicBlock(prefix + "_normalCompletionCheck", mNextPartitionEntryPoint);
-    if (mCheckIO) {
+    if (mCheckInputChannels) {
         mKernelInsufficientInput = b->CreateBasicBlock(prefix + "_insufficientInput", mNextPartitionEntryPoint);
     }
     if (handleNoUpdateExit) {
@@ -193,7 +188,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     if (canJumpToAnotherPartition) {
         initializeJumpToNextUsefulPartitionPhis(b);
     }
-    if (mCheckIO) {
+    if (mCheckInputChannels) {
         initializeKernelInsufficientIOExitPhis(b);
     }
     initializeKernelTerminatedPhis(b);
@@ -222,7 +217,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     // When tracing blocking I/O, test all I/O streams but do not execute the
     // kernel if any stream is insufficient.
-    if (mCheckIO && TraceIO) {
+    if (mCheckInputChannels && TraceIO) {
         b->CreateUnlikelyCondBr(mBranchToLoopExit, mKernelInsufficientInput, mKernelLoopCall);
         BasicBlock * const exitBlock = b->GetInsertBlock();
         mExhaustedPipelineInputPhi->addIncoming(mExhaustedInput, exitBlock);
@@ -297,7 +292,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// KERNEL INSUFFICIENT IO EXIT
     /// -------------------------------------------------------------------------------------
 
-    if (mCheckIO) {
+    if (mCheckInputChannels) {
         writeInsufficientIOExit(b);
     }
 
@@ -634,24 +629,15 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
 
     ConstantInt * const ZERO = b->getSize(0);
 
-    if (mMayLoopToEntry) {
-
+    if (mCheckInputChannels) {
         assert (mInitialTerminationSignal);
-
         mTerminatedAtLoopExitPhi->addIncoming(mInitialTerminationSignal, exitBlock);
+
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const auto port = mBufferGraph[e].Port;
             mUpdatedProcessedPhi[port]->addIncoming(mAlreadyProcessedPhi[port], exitBlock);
             if (mAlreadyProcessedDeferredPhi[port]) {
                 mUpdatedProcessedDeferredPhi[port]->addIncoming(mAlreadyProcessedDeferredPhi[port], exitBlock);
-            }
-        }
-
-        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-            const auto port = mBufferGraph[e].Port;
-            mUpdatedProducedPhi[port]->addIncoming(mAlreadyProducedPhi[port], exitBlock);
-            if (mAlreadyProducedDeferredPhi[port]) {
-                mUpdatedProducedDeferredPhi[port]->addIncoming(mAlreadyProducedDeferredPhi[port], exitBlock);
             }
         }
 
@@ -668,12 +654,18 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedPipelineInputPhi, exitBlock);
         assert (mAlreadyProgressedPhi);
         mAnyProgressedAtLoopExitPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
+    }
 
-        if (CheckAssertions) {
-            assert (mExecutedAtLeastOnceAtLoopEntryPhi);
-            const auto prefix = makeKernelName(mKernelId);
-            b->CreateAssert(mExecutedAtLeastOnceAtLoopEntryPhi, "%s failed to execute a single stride", mCurrentKernelName);
+    if (mMayLoopToEntry) {
+        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+            const auto port = mBufferGraph[e].Port;
+            mUpdatedProducedPhi[port]->addIncoming(mAlreadyProducedPhi[port], exitBlock);
+            if (mAlreadyProducedDeferredPhi[port]) {
+                mUpdatedProducedDeferredPhi[port]->addIncoming(mAlreadyProducedDeferredPhi[port], exitBlock);
+            }
         }
+
+
     }
 
     b->CreateBr(mKernelLoopExit);

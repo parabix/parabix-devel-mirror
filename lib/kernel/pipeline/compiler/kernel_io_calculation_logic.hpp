@@ -139,40 +139,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         numOfLinearStrides = mMaximumNumOfStrides;
     }
 
-#if 0
-
-    if (mCheckIO) {
-        for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
-            const PartitionIOData & IO = mPartitionIOGraph[e];
-            if (IO.Kernel == mKernelId) {
-                const auto i = source(e, mPartitionIOGraph);
-                assert (i >= PartitionCount);
-                const auto streamSet = FirstStreamSet + i - PartitionCount;
-                assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-                const BufferNode & bn = mBufferGraph[streamSet];
-                if (mIsPartitionRoot || bn.NonLinear) {
-                    checkForSufficientInputData(b, IO.Port, streamSet);
-                }
-            }
-        }
-    }
-
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferPort & br = mBufferGraph[e];
-        getAccessibleInputItems(b, br);
-    }
-
-    if (mCheckIO) {
-        for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
-            const PartitionIOData & IO = mPartitionIOGraph[e];
-            if (IO.Kernel == mKernelId) {
-                Value * const strides = getNumOfAccessibleStrides(b, IO.Port, numOfLinearStrides);
-                numOfLinearStrides = b->CreateUMin(numOfLinearStrides, strides);
-            }
-        }
-    }
-#endif
-
     auto checkInputPort = [&](BufferGraph::edge_descriptor input) {
         if (mIsPartitionRoot) {
             return true;

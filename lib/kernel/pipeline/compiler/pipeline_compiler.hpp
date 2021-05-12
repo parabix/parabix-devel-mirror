@@ -587,7 +587,7 @@ protected:
     bool                                        mHasExplicitFinalPartialStride = false;
     bool                                        mIsPartitionRoot = false;
     bool                                        mMayLoopToEntry = false;
-    bool                                        mCheckIO = false;
+    bool                                        mCheckInputChannels = false;
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
