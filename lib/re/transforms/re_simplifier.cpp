@@ -67,7 +67,7 @@ using ReferenceSet = boost::container::flat_set<std::string>;
 
 struct ReferenceCollector  final : public RE_Inspector {
     ReferenceCollector(ReferenceSet & references)
-    : RE_Inspector(InspectionMode::IgnoreNonUnique), mReferences(references) {}
+    : RE_Inspector(NameProcessingMode::None, InspectionMode::IgnoreNonUnique), mReferences(references) {}
 
     void inspectReference(Reference * r) override {
         auto name = r -> getName();

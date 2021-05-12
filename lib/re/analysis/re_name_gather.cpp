@@ -12,7 +12,7 @@ namespace re {
 struct NameCollector final : public RE_Inspector {
 
     NameCollector(std::set<Name *> & nameSet)
-    : RE_Inspector(InspectionMode::IgnoreNonUnique)
+    : RE_Inspector()
     , mNameSet(nameSet) {
 
     }
