@@ -912,7 +912,7 @@ void PipelineAnalysis::combineDuplicateKernels(BuilderRef b, const Kernels & ker
                 inputs.resize(numOfStreams);
                 scalars.resize(n - numOfStreams);
 
-                KernelId id(kernel->getName(), inputs, scalars);
+                KernelId id(kernel->getName().str(), inputs, scalars);
 
                 const auto f = Ids.emplace(std::move(id), i);
                 if (LLVM_UNLIKELY(!f.second)) {

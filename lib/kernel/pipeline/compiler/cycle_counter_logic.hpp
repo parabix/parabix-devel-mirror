@@ -551,7 +551,7 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         format << "BLOCKED I/O PER SEGMENT:\n\n";
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
-            std::string temp = kernel->getName();
+            std::string temp = kernel->getName().str();
             boost::replace_all(temp, "\"", "\\\"");
             format << ",\"" << i << " " << temp << "\"";
             const auto numOfInputs = in_degree(i, mBufferGraph);
@@ -1191,7 +1191,7 @@ void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
 
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
-            std::string temp = kernel->getName();
+            std::string temp = kernel->getName().str();
             boost::replace_all(temp, "\"", "\\\"");
             format << ",\"" << i << " " << temp << "\"";
         }
@@ -1481,7 +1481,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
 
         const Kernel * const kernel = getKernel(i);
-        std::string kernelName = kernel->getName();
+        std::string kernelName = kernel->getName().str();
         boost::replace_all(kernelName, "\"", "\\\"");
 
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {

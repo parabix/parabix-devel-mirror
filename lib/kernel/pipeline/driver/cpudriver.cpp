@@ -312,14 +312,14 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::None);
     mEngine->addModule(std::move(mainModule));
     mEngine->finalizeObject();
-    auto mainFnPtr = mEngine->getFunctionAddress(main->getName());
+    auto mainFnPtr = mEngine->getFunctionAddress(main->getName().str());
     removeModules(Normal);
     removeModules(Infrequent);
     return reinterpret_cast<void *>(mainFnPtr);
 }
 
 bool CPUDriver::hasExternalFunction(llvm::StringRef functionName) const {
-    return RTDyldMemoryManager::getSymbolAddressInProcess(functionName);
+    return RTDyldMemoryManager::getSymbolAddressInProcess(functionName.str());
 }
 
 CPUDriver::~CPUDriver() {

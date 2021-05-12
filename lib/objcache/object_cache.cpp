@@ -295,7 +295,7 @@ inline bool ParabixObjectCache::requiresCacheCleanUp() noexcept {
     if (LLVM_UNLIKELY(mStartedCacheCleanupDaemon)) {
         return false;
     }
-    FileLock f(fs::path{std::string(mCachePath)});
+    FileLock f(fs::path{mCachePath.c_str()});
     if (LLVM_UNLIKELY(f.locked())) {
         return true;
     }
