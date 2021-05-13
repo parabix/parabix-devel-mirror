@@ -237,8 +237,6 @@ Value * PipelineCompiler::calculateItemCounts(BuilderRef b, Value * const numOfL
 
     getInputVirtualBaseAddresses(b, inputVirtualBaseAddress);
 
-//    assert ("unbounded zero extended input?" && ((mHasZeroExtendedInput == nullptr) || mIsBounded));
-
     Value * nonFinalNumOfLinearStrides = numOfLinearStrides;
 
     if (LLVM_LIKELY(in_degree(mKernelId, mBufferGraph) > 0)) {
@@ -257,7 +255,7 @@ Value * PipelineCompiler::calculateItemCounts(BuilderRef b, Value * const numOfL
         /// -------------------------------------------------------------------------------------
 
         Value * isFinal = nullptr;
-        if (mIsPartitionRoot) {
+        if (mIsPartitionRoot && mMayLoopToEntry) {
             Value * const noMoreStrides = b->CreateICmpEQ(numOfLinearStrides, sz_ZERO);
             isFinal = b->CreateAnd(mFinalPartitionSegment, noMoreStrides);
         } else {
@@ -316,7 +314,7 @@ Value * PipelineCompiler::calculateItemCounts(BuilderRef b, Value * const numOfL
         }
 
         BasicBlock * penultimateSegmentExit = nullptr;
-        if (LLVM_LIKELY(!mIsPartitionRoot)) {
+        if (LLVM_LIKELY(!mIsPartitionRoot && mMayLoopToEntry)) {
             isFinal = b->CreateICmpEQ(numOfFinalLinearStrides, sz_ZERO);
             BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelCheckOutputSpace);
             penultimateSegmentExit = b->GetInsertBlock();
@@ -525,42 +523,21 @@ Value * PipelineCompiler::anyInputClosed(BuilderRef b) {
     return b->CreateIsNotNull(signal);
 }
 
-#if 0
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief determineIsFinal
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::determineIsFinal(BuilderRef b, Value * const numOfLinearStrides) {
-    if (mKernelIsFinal == nullptr) {
-        if (mMayLoopToEntry) {
-            assert (numOfLinearStrides);
-            ConstantInt * const sz_ZERO = b->getSize(0);
-            Value * const noMoreStrides = b->CreateICmpEQ(numOfLinearStrides, sz_ZERO);
-            mKernelIsFinal = b->CreateAnd(mFinalPartitionSegment, noMoreStrides);
-            Value * const hasMoreStrides = b->CreateICmpNE(numOfLinearStrides, sz_ZERO);
-            mKernelIsPenultimate = b->CreateAnd(mFinalPartitionSegment, hasMoreStrides);
-        } else {
-            mKernelIsFinal = mFinalPartitionSegment;
-            mKernelIsPenultimate = nullptr;
-        }
-    }
-}
-#endif
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasMoreInput
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
     assert (mMayLoopToEntry);
 
-    ConstantInt * const i1_TRUE = b->getTrue();
-    Value * notAtSegmentLimit = i1_TRUE;
-
-    if (mMaximumNumOfStrides) {
-        assert (mUpdatedNumOfStrides);
-        notAtSegmentLimit = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
-    }
-
     if (mIsPartitionRoot) {
+
+        ConstantInt * const i1_TRUE = b->getTrue();
+        Value * notAtSegmentLimit = i1_TRUE;
+
+        if (mMaximumNumOfStrides) {
+            assert (mUpdatedNumOfStrides);
+            notAtSegmentLimit = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
+        }
 
         BasicBlock * const lastTestExit = b->CreateBasicBlock("", mKernelLoopExit);
         PHINode * const enoughInputPhi = PHINode::Create(b->getInt1Ty(), 4, "", lastTestExit);
@@ -656,10 +633,9 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
             hasMore = enoughInputPhi;
         }
         return hasMore;
-    } else {        
-        return b->CreateIsNull(mIsFinalInvocationPhi);
+    } else {
+        return b->CreateAnd(mFinalPartitionSegment, b->CreateIsNull(mIsFinalInvocationPhi));
    }
-
 
 }
 

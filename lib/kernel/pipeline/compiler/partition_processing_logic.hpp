@@ -572,9 +572,6 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
         const auto nextPartitionId = mCurrentPartitionId + 1U;
         const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
 
-
-
-
         assert (nextPartitionId <= jumpId);       
         if (LLVM_LIKELY(nextPartitionId != jumpId)) {
 

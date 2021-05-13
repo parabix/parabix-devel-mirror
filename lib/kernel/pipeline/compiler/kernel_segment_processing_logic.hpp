@@ -107,7 +107,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     const auto nextPartitionId = mCurrentPartitionId + 1U;
     const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
     const auto canJumpToAnotherPartition = mIsPartitionRoot && (mIsBounded || nextPartitionId == jumpId);
-    const auto handleNoUpdateExit = mIsPartitionRoot || !canJumpToAnotherPartition;
+    const auto handleNoUpdateExit = mIsPartitionRoot; // || !canJumpToAnotherPartition;
     #else
     const auto canJumpToAnotherPartition = mIsPartitionRoot;
     const auto handleNoUpdateExit = mCheckIO;
@@ -205,8 +205,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
     /// KERNEL LOOP ENTRY
     /// -------------------------------------------------------------------------------------
-
-    #warning fix this to determine the initial (non-linear) number of strides
 
     b->SetInsertPoint(mKernelLoopEntry);
     if (kernelRequiresSynchronization) {
@@ -371,28 +369,28 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
         Value * const loopAgain = hasMoreInput(b);
 
-        BasicBlock * const entryBlock = b->GetInsertBlock();
+        BasicBlock * const exitBlockAfterLoopAgainTest = b->GetInsertBlock();
 
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const auto port = mBufferGraph[e].Port;
-            mAlreadyProcessedPhi[port]->addIncoming(mProcessedItemCount[port], entryBlock);
+            mAlreadyProcessedPhi[port]->addIncoming(mProcessedItemCount[port], exitBlockAfterLoopAgainTest);
             if (mAlreadyProcessedDeferredPhi[port]) {
-                mAlreadyProcessedDeferredPhi[port]->addIncoming(mProcessedDeferredItemCount[port], entryBlock);
+                mAlreadyProcessedDeferredPhi[port]->addIncoming(mProcessedDeferredItemCount[port], exitBlockAfterLoopAgainTest);
             }
         }
 
         for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
             const auto port = mBufferGraph[e].Port;
-            mAlreadyProducedPhi[port]->addIncoming(mProducedItemCount[port], entryBlock);
+            mAlreadyProducedPhi[port]->addIncoming(mProducedItemCount[port], exitBlockAfterLoopAgainTest);
             if (mAlreadyProducedDeferredPhi[port]) {
-                mAlreadyProducedDeferredPhi[port]->addIncoming(mProducedDeferredItemCount[port], entryBlock);
+                mAlreadyProducedDeferredPhi[port]->addIncoming(mProducedDeferredItemCount[port], exitBlockAfterLoopAgainTest);
             }
         }
 
-        mAlreadyProgressedPhi->addIncoming(i1_TRUE, entryBlock);
+        mAlreadyProgressedPhi->addIncoming(i1_TRUE, exitBlockAfterLoopAgainTest);
         if (mMayLoopToEntry) {
-            mExecutedAtLeastOnceAtLoopEntryPhi->addIncoming(i1_TRUE, entryBlock);
-            mCurrentNumOfStridesAtLoopEntryPhi->addIncoming(mUpdatedNumOfStrides, entryBlock);
+            mExecutedAtLeastOnceAtLoopEntryPhi->addIncoming(i1_TRUE, exitBlockAfterLoopAgainTest);
+            mCurrentNumOfStridesAtLoopEntryPhi->addIncoming(mUpdatedNumOfStrides, exitBlockAfterLoopAgainTest);
         }
 
         const auto prefix = makeKernelName(mKernelId);
@@ -664,8 +662,6 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
                 mUpdatedProducedDeferredPhi[port]->addIncoming(mAlreadyProducedDeferredPhi[port], exitBlock);
             }
         }
-
-
     }
 
     b->CreateBr(mKernelLoopExit);
