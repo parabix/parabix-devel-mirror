@@ -227,12 +227,10 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
 
     const auto intType = Z3_mk_int_sort(ctx);
 
+    const auto realType = Z3_mk_real_sort(ctx);
+
     auto constant_real = [&](const Rational & value) {
-        if (value.denominator() == 1) {
-            return Z3_mk_int(ctx, value.numerator(), intType);
-        } else {
-            return Z3_mk_real(ctx, value.numerator(), value.denominator());
-        }
+        return Z3_mk_real(ctx, value.numerator(), value.denominator());
     };
 
     auto maximum = [&](const BufferPort & rate) {
@@ -253,13 +251,19 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
 
     std::vector<Z3_ast> VarList(LastStreamSet + 1);
 
-    const auto ONE = Z3_mk_int(ctx, 1, intType);
-    const auto TWO = Z3_mk_int(ctx, 2, intType);
+    bool useIntNumbers = true;
+
+retry:
+
+    Z3_optimize_push(ctx, solver);
+
+    const auto ONE = constant_real(1);
+    const auto TWO = constant_real(2);
 
     BEGIN_SCOPED_REGION
 
     auto make_partition_vars = [&](const unsigned first, const unsigned last) {
-        auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+        auto rootVar = Z3_mk_fresh_const(ctx, nullptr, useIntNumbers ? intType : realType);
         hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
         hard_assert(Z3_mk_le(ctx, rootVar, TWO));
         for (auto kernel = first; kernel <= last; ++kernel) {
@@ -372,6 +376,15 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
     }
 
     if (LLVM_UNLIKELY(check() == Z3_L_FALSE)) {
+        if (useIntNumbers) {
+            // Earlier versions of Z3 seem to have an issue working out a solution to some problems
+            // when using int-type variables. However, using real numbers generates an "infinite"
+            // number of potential solutions and takes considerably longer to finish. Thus we only
+            // fall back to using rational variables if this test fails.
+            Z3_optimize_pop(ctx, solver);
+            useIntNumbers = false;
+            goto retry;
+        }
         report_fatal_error("Z3 failed to find a solution to the maximum permitted dataflow problem");
     }
 
@@ -388,12 +401,22 @@ void PipelineAnalysis::computeMaximumExpectedDataflow() {
         }
 
         Z3_int64 num, denom;
-        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+        if (LLVM_LIKELY(useIntNumbers)) {
+            if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+            }
+            MaximumNumOfStrides[kernel] = num;
+        } else {
+            if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+            }
+
+            const auto x = MinimumNumOfStrides[kernel];
+            const auto y = ceiling(Rational{num, denom * x});
+            MaximumNumOfStrides[kernel]  = y * x;
         }
 
-        assert (num > 0 && denom == 1);
-        MaximumNumOfStrides[kernel]  = num;
+
     }
     Z3_model_dec_ref(ctx, model);
 
