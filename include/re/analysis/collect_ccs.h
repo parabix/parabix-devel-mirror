@@ -3,15 +3,16 @@
 
 #include <vector>
 #include <set>
+#include <re/analysis/re_inspector.h>
 
 namespace cc { class Alphabet; }
 namespace re {
 
 class RE;
 class CC;
-class Name;
 
-std::vector<CC *> collectCCs(RE * const re, const cc::Alphabet & a, std::set<Name *> external = {});
+std::vector<CC *> collectCCs(RE * const re, const cc::Alphabet & a,
+                             re::NameProcessingMode m = re::NameProcessingMode::None);
 
 }
 #endif
