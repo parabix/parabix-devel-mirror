@@ -32,7 +32,7 @@ namespace UCD {
 
         const static std::vector<unsigned> buffer_offsets = {
         0, 4};
-        const static char string_buffer LLVM_ALIGNAS(64) [256] = u8R"__(i̇
+        const static char string_buffer alignas(64) [256] = u8R"__(i̇
 )__";
 
         const static std::vector<codepoint_t> defined_cps{
@@ -81,7 +81,7 @@ PropertyObject * get_LC_PropertyObject() {  return & LC_ns::property_object; }
         408, 413, 418, 425, 430, 437, 444, 449, 456, 463, 470, 475, 480,
         487, 493, 498, 503, 508, 515, 520, 523, 526, 529, 533, 537, 540,
         543, 548, 553, 558, 563, 568};
-        const static char string_buffer LLVM_ALIGNAS(64) [768] = u8R"__(SS
+        const static char string_buffer alignas(64) [768] = u8R"__(SS
 ʼN
 J̌
 Ϊ́
@@ -239,7 +239,7 @@ PropertyObject * get_UC_PropertyObject() {  return & UC_ns::property_object; }
         92, 99, 105, 110, 115, 122, 129, 136, 141, 148, 155, 162, 167, 172,
         179, 185, 190, 195, 202, 205, 208, 211, 215, 219, 222, 225, 230,
         235, 240, 245, 250};
-        const static char string_buffer LLVM_ALIGNAS(64) [256] = u8R"__(Ss
+        const static char string_buffer alignas(64) [256] = u8R"__(Ss
 ʼN
 J̌
 Ϊ́
