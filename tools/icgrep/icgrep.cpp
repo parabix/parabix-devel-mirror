@@ -31,6 +31,9 @@
 #include <fcntl.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <kernel/pipeline/driver/cpudriver.h>
+#ifdef ENABLE_PAPI
+#include <util/papi_helper.hpp>
+#endif
 
 using namespace llvm;
 
@@ -170,8 +173,17 @@ int main(int argc, char *argv[]) {
     grep->initFileResult(allFiles); // unnecessary copy!
     grep->initREs(REs);
     //llvm::errs() << "Before codegen, codegen::TaskThreads = " << codegen::TaskThreads << ", codegen::SegmentThreads = " << codegen::SegmentThreads << "\n";
+
+    #ifdef ENABLE_PAPI
+    papi::PapiCounter<5> jitExecution{{PAPI_BR_MSP, PAPI_BR_CN, PAPI_L3_TCM, PAPI_TOT_INS, PAPI_TOT_CYC}};
+    // papi::PapiCounter<4> jitExecution{{PAPI_L1_TCM, PAPI_L2_TCM, PAPI_L1_ICM, PAPI_L2_ICM}};
+    jitExecution.start();
+    #endif
     grep->grepCodeGen();
     const bool matchFound = grep->searchAllFiles();
-
+    #ifdef ENABLE_PAPI
+    jitExecution.stop();
+    jitExecution.write(std::cerr);
+    #endif
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
 }

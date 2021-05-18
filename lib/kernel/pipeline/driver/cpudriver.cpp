@@ -116,8 +116,6 @@ CPUDriver::CPUDriver(std::string && moduleName)
     mBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
     mBuilder->setDriver(*this);
     mBuilder->setModule(mMainModule);
-
-
 }
 
 Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {

@@ -316,7 +316,10 @@ void ParabixObjectCache::initiateCacheCleanUp() noexcept {
             char * const janitorPath = const_cast<char *>(janitorFileName.c_str());
             if (execvp(janitorPath, args) < 0) {
                 #ifndef NDEBUG
-                perror("failed to exec cache cleanup deamon");
+                SmallVector<char, 1024> tmp;
+                raw_svector_ostream out(tmp);
+                out << "failed to exec cache cleanup deamon \"" << janitorPath << "\"";
+                perror(reinterpret_cast<const char *>(out.str().bytes().begin()));
                 #endif
                 exit(errno);
             }

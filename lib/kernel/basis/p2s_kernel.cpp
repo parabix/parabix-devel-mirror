@@ -140,9 +140,11 @@ void P2S16Kernel::generateDoBlockMethod(BuilderRef b) {
     Value * hi_input[8];
     unsigned k = 0;
     for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
-        const auto m = getInputStreamSet(i)->getNumElements();
+        const auto & input = getInputStreamSet(i);
+        const auto m = input->getNumElements();
+        const auto & inputName = getInputStreamSetBinding(i).getName();
         for (unsigned j = 0; j < m; j++) {
-            Value * bitBlock = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j));
+            Value * bitBlock = b->loadInputStreamBlock(inputName, b->getInt32(j));
             if (k < 8) {
                 lo_input[k] = bitBlock;
             } else {

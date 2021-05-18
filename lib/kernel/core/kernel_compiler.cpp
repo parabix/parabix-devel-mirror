@@ -1211,7 +1211,34 @@ const BindingMapEntry & KernelCompiler::getBinding(const BindingType type, const
         case BindingType::StreamOutput:
             out << "streamset"; break;
     }
-    out << " named " << name;
+    out << " named \"" << name << "\"\n"
+           "Currently contains:";
+
+
+    auto listAvailableBindings = [&](const Bindings & bindings) {
+        if (LLVM_UNLIKELY(bindings.empty())) {
+            out << "<no bindings>";
+        } else {
+            char joiner = ' ';
+            for (const auto & binding : bindings) {
+                out << joiner << binding.getName();
+                joiner = ',';
+            }
+        }
+        out << '\n';
+    };
+
+    switch (type) {
+        case BindingType::ScalarInput:
+            listAvailableBindings(mInputScalars); break;
+        case BindingType::ScalarOutput:
+            listAvailableBindings(mOutputScalars); break;
+        case BindingType::StreamInput:
+            listAvailableBindings(mInputStreamSets); break;
+        case BindingType::StreamOutput:
+            listAvailableBindings(mOutputStreamSets); break;
+    }
+
     report_fatal_error(out.str());
 }
 
@@ -1240,7 +1267,7 @@ StreamSetPort KernelCompiler::getStreamPort(const StringRef name) const {
 
     SmallVector<char, 256> tmp;
     raw_svector_ostream out(tmp);
-    out << "Kernel " << getName() << " does not contain a streamset named " << name;
+    out << "Kernel " << getName() << " does not contain a streamset named: \"" << name << "\"";
     report_fatal_error(out.str());
 }
 

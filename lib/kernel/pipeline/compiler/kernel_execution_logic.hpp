@@ -376,6 +376,20 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
             } else if (rate.isBounded() || rate.isUnknown()) {
                 assert (mReturnedProducedItemCountPtr[outputPort]);
                 produced = b->CreateLoad(mReturnedProducedItemCountPtr[outputPort]);
+            } else if (rate.isRelative()) {
+                auto getRefPort = [&] () {
+                    const auto refPort = getReference(outputPort);
+                    if (LLVM_LIKELY(refPort.Type == PortType::Input)) {
+                        return getInput(mKernelId, refPort);
+                    } else {
+                        return getOutput(mKernelId, refPort);
+                    }
+                };
+                const BufferPort & ref = mBufferGraph[getRefPort()];
+                if (mProducedDeferredItemCount[ref.Port]) {
+                    mProducedDeferredItemCount[outputPort] = b->CreateMulRational(mProducedDeferredItemCount[ref.Port], rate.getRate());
+                }
+                produced = b->CreateMulRational(mProducedItemCount[ref.Port], rate.getRate());
             } else {
                 SmallVector<char, 256> tmp;
                 raw_svector_ostream out(tmp);

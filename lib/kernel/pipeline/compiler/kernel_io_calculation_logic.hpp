@@ -1403,9 +1403,15 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const BufferPo
     } else if (rate.isPartialSum()) {
         return getPartialSumItemCount(b, port, linearStrides);
     } else if (rate.isRelative()) {
-        const auto refPort = getReference(port.Port);
-        const auto refInput = getInput(mKernelId, refPort);
-        const BufferPort & ref = mBufferGraph[refInput];
+        auto getRefPort = [&] () {
+            const auto refPort = getReference(port.Port);
+            if (LLVM_LIKELY(refPort.Type == PortType::Input)) {
+                return getInput(mKernelId, refPort);
+            } else {
+                return getOutput(mKernelId, refPort);
+            }
+        };
+        const BufferPort & ref = mBufferGraph[getRefPort()];
         Value * const baseCount = calculateNumOfLinearItems(b, ref, linearStrides);
         return b->CreateMulRational(baseCount, rate.getRate());
     }

@@ -238,6 +238,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             return bp;
         };
 
+
+        #warning TODO: replace this with abstracted function
+
         // Evaluate the input/output ordering here and ensure that any reference port is stored first.
         const auto numOfInputs = in_degree(kernel, mStreamGraph);
         const auto numOfOutputs = out_degree(kernel, mStreamGraph);
@@ -281,6 +284,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 }
             }
         }
+
+
+
 
         #ifndef NDEBUG
         RelationshipType prior_out{};
@@ -373,7 +379,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 const auto binding = target(e, mStreamGraph);
                 const RelationshipNode & rn = mStreamGraph[binding];
                 assert (rn.Type == RelationshipNode::IsBinding);
-                const auto f = out_edge(binding, mStreamGraph);
+                const auto f = first_out_edge(binding, mStreamGraph);
                 assert (mStreamGraph[f].Reason != ReasonType::Reference);
                 const auto streamSet = target(f, mStreamGraph);
                 assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);

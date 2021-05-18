@@ -227,8 +227,6 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 IntegerType * const sizeTy = b->getSizeTy();
 
                 const auto blockWidth = b->getBitBlockWidth();
-                Constant * const BLOCK_WIDTH = b->getSize(blockWidth);
-
                 const auto log2BlockWidth = floor_log2(blockWidth);
                 Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
                 Constant * const LOG_2_BLOCK_WIDTH = b->getSize(log2BlockWidth);
