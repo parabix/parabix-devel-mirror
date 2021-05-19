@@ -28,7 +28,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mutex>
+#if BOOST_VERSION < 106600
+#include <boost/uuid/sha1.hpp>
+#else
 #include <boost/uuid/detail/sha1.hpp>
+#endif
 #include <editd/editd_cpu_kernel.h>
 
 #include <toolchain/NVPTXDriver.h>
