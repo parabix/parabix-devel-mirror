@@ -10,7 +10,11 @@ set (icgrep_VERSION_MINOR 6)
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
+if (LLVM_PATH)
+find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_PATH} NO_DEFAULT_PATH)
+else()
 find_package(LLVM REQUIRED CONFIG)
+endif()
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
 
@@ -51,7 +55,7 @@ endif()
 
 # Let's suppose we want to build a JIT compiler with support for
 # binary code (no interpreter):
-set(LLVM_ALL_TARGETS AArch64 AMDGPU ARM BPF Hexagon Mips MSP430 NVPTX PowerPC Sparc SystemZ X86 XCore)
+set(LLVM_ALL_TARGETS X86)
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
 
 # Check if boost has been installed on this system.
