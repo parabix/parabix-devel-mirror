@@ -1,0 +1,6 @@
+/usr/lib/llvm-8/include
+/usr/include/boost/
+/usr/include/
+/usr/
+tools/
+.

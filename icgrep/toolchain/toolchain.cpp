@@ -5,7 +5,8 @@
  */
 
 #include <toolchain/toolchain.h>
-#include <llvm/CodeGen/CommandFlags.h>
+#include <llvm/Support/CommandLine.h>
+//#include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -27,8 +28,8 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
 #ifndef USE_LLVM_3_6
                         clEnumVal(ShowASM, "Print assembly code."),
 #endif
-                        clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
-                        clEnumValEnd), cl::cat(CodeGenOptions));
+                        clEnumVal(SerializeThreads, "Force segment threads to run sequentially.")
+                        ), cl::cat(CodeGenOptions));
 
 static cl::opt<const char *> IROutputFilenameOption("dump-generated-IR-output", cl::init(nullptr),
                                                        cl::desc("output IR filename"), cl::cat(CodeGenOptions));
@@ -73,11 +74,11 @@ static cl::opt<bool, true> EnableAssertsOption("ea", cl::location(EnableAsserts)
 static cl::opt<bool, true> EnableCycleCountOption("ShowKernelCycles", cl::location(EnableCycleCounter), cl::init(false),
                                              cl::desc("Count and report CPU cycles per kernel"), cl::cat(CodeGenOptions));
 
-static cl::opt<bool, true> pipelineParallelOption("enable-pipeline-parallel", cl::location(PipelineParallel), cl::init(false),
-                                                  cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
+//static cl::opt<bool, true> pipelineParallelOption("enable-pipeline-parallel", cl::location(PipelineParallel), cl::init(false),
+//                                                  cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
     
-static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(SegmentPipelineParallel),
-                                                         cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
+//static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(SegmentPipelineParallel),
+//                                                         cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
 
 static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
                                  cl::desc("Run on GPU only."), cl::cat(CodeGenOptions));
@@ -87,9 +88,9 @@ static cl::opt<int, true> GroupNumOption("group-num", cl::location(GroupNum), cl
 
 CodeGenOpt::Level OptLevel;
 
-bool PipelineParallel;
+//bool PipelineParallel;
 
-bool SegmentPipelineParallel;
+//bool SegmentPipelineParallel;
 
 const char * ASMOutputFilename;
 
@@ -122,19 +123,19 @@ bool NVPTX = [](const bool nvptx) {
 
 int GroupNum;
 
-const llvm::Reloc::Model RelocModel = ::RelocModel;
+//const llvm::Reloc::Model RelocModel = ::RelocModel;
 
-const llvm::CodeModel::Model CMModel = ::CMModel;
+//const llvm::CodeModel::Model CMModel = ::CMModel;
 
-const std::string MArch = ::MArch;
+//const std::string MArch = ::MArch;
 
-const std::string RunPass = ::RunPass;
+//const std::string RunPass = ::RunPass;
 
-const llvm::TargetMachine::CodeGenFileType FileType = ::FileType;
+//const llvm::TargetMachine::CodeGenFileType FileType = ::FileType;
 
-const std::string StopAfter = ::StopAfter;
+//const std::string StopAfter = ::StopAfter;
 
-const std::string StartAfter = ::StartAfter;
+//const std::string StartAfter = ::StartAfter;
 
 TargetOptions Options;
 
@@ -146,17 +147,17 @@ bool DebugOptionIsSet(const DebugFlags flag) {
     return DebugOptions.isSet(flag);
 }
 
-std::string getCPUStr() {
-    return ::getCPUStr();
-}
+//std::string getCPUStr() {
+//    return ::getCPUStr();
+//}
 
-std::string getFeaturesStr() {
-    return ::getFeaturesStr();
-}
+//std::string getFeaturesStr() {
+//    return ::getFeaturesStr();
+//}
 
-void setFunctionAttributes(llvm::StringRef CPU, llvm::StringRef Features, llvm::Module &M) {
-    return ::setFunctionAttributes(CPU, Features, M);
-}
+//void setFunctionAttributes(llvm::StringRef CPU, llvm::StringRef Features, llvm::Module &M) {
+//    return ::setFunctionAttributes(CPU, Features, M);
+//}
 
 std::string ProgramName;
 
@@ -176,7 +177,7 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     ObjectCacheDir = ObjectCacheDirOption;
     IROutputFilename = IROutputFilenameOption;
     ObjectCacheDir = ObjectCacheDirOption;
-    Options = InitTargetOptionsFromCodeGenFlags();
+//    Options = InitTargetOptionsFromCodeGenFlags();
     #ifndef USE_LLVM_3_6
     Options.MCOptions.AsmVerbose = AsmVerbose;
     #endif
@@ -196,8 +197,9 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 
 }
 
-void printParabixVersion () {
-    outs() << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
+void printParabixVersion (raw_ostream & outs) {
+//    outs << "Unicode version " << UCD::UnicodeVersion << "\n";
+    outs << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
 }
 
 void AddParabixVersionPrinter() {

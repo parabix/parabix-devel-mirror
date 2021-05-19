@@ -264,7 +264,7 @@ void IDISA_NVPTX20_Builder::CreateBallotFunc(){
     FunctionType * AsmFnTy = FunctionType::get(int32ty, int32ty, false);
     InlineAsm *IA = InlineAsm::get(AsmFnTy, AsmStream, "=r,r", true, false);
     CallInst * result = CreateCall(IA, conv);
-    result->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
+//    result->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
 
     CreateRet(result);
 }

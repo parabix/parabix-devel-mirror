@@ -35,6 +35,9 @@
 #include <boost/interprocess/anonymous_shared_memory.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <iostream>
+#ifdef ENABLE_PAPI
+#include <util/papi_helper.hpp>
+#endif
 
 using namespace pablo;
 using namespace kernel;
@@ -269,7 +272,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     auto & iBuilder = pxDriver.getBuilder();
     Module * mod = iBuilder->getModule();
     const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::ThreadNum+1;
+    const unsigned bufferSegments = codegen::ThreadNum + 1;
 
     assert (iBuilder);
 
@@ -277,7 +280,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     Type * const bitBlockType = iBuilder->getBitBlockType();
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
 
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, iBuilder->getInt32Ty(), outputType, nullptr));
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, iBuilder->getInt32Ty(), outputType));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -286,7 +289,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     Value * const outputStream = &*(args++);
     outputStream->setName("outputStream");
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main));
     
     // File data from mmap
     StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
@@ -328,9 +331,15 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     
     Kernel * p2sk = pxDriver.addKernelInstance(make_unique<P2S16Kernel>(iBuilder));
     
-    Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
-    Value * fName = iBuilder->CreatePointerCast(iBuilder->GetString(outputFile.c_str()), iBuilder->getInt8PtrTy());
-    outK->setInitialArguments({fName});
+    Kernel * outK = nullptr;
+    if (outputFile.empty()) {
+        outK = pxDriver.addKernelInstance(make_unique<StdOutKernel>(iBuilder, 16));
+    }
+    else {
+        outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
+        Value * fName = iBuilder->CreatePointerCast(iBuilder->GetString(outputFile.c_str()), iBuilder->getInt8PtrTy());
+        outK->setInitialArguments({fName});
+    }
         
     // Different choices for the output buffer depending on chosen option.
     StreamSetBuffer * U16out = nullptr;
@@ -362,7 +371,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     Type * const bitBlockType = iBuilder->getBitBlockType();
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
     
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, iBuilder->getInt32Ty(), outputType, nullptr));
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, iBuilder->getInt32Ty(), outputType));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
@@ -371,7 +380,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     Value * const outputStream = &*(args++);
     outputStream->setName("outputStream");
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main));
 
     // File data from mmap
     StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
@@ -404,7 +413,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     Kernel * p2sk = pxDriver.addKernelInstance(make_unique<P2S16KernelWithCompressedOutput>(iBuilder));
   
     Kernel * outK = nullptr;
-    if (outputFile=="") {
+    if (outputFile.empty()) {
         outK = pxDriver.addKernelInstance(make_unique<StdOutKernel>(iBuilder, 16));
     }
     else {
@@ -476,7 +485,15 @@ int main(int argc, char *argv[]) {
         u8u16PipelineGen(pxDriver);
     }
     auto u8u16Function = reinterpret_cast<u8u16FunctionType>(pxDriver.getMain());
+    #ifdef ENABLE_PAPI
+    papi::PapiCounter<6> jitExecution{{PAPI_BR_MSP, PAPI_BR_CN, PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
+    jitExecution.start();
+    #endif
     u8u16(u8u16Function, inputFile);
+    #ifdef ENABLE_PAPI
+    jitExecution.stop();
+    jitExecution.write(std::cerr);
+    #endif
     return 0;
 }
 

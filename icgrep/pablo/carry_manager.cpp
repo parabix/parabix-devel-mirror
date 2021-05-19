@@ -289,7 +289,8 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Value * const capacitySize = iBuilder->CreateMul(capacity, carryStateWidth);
         Value * const newCapacitySize = iBuilder->CreateShl(capacitySize, 1); // x 2
         Value * const newArray = iBuilder->CreateCacheAlignedMalloc(newCapacitySize);
-        iBuilder->CreateMemCpy(newArray, array, capacitySize, iBuilder->getCacheAlignment());
+        const auto a = iBuilder->getCacheAlignment();
+        iBuilder->CreateMemCpy(newArray, a, array, a, capacitySize);
         iBuilder->CreateFree(array);
         iBuilder->CreateStore(newArray, arrayPtr);
         Value * const startNewArrayPtr = iBuilder->CreateGEP(iBuilder->CreatePointerCast(newArray, int8PtrTy), capacitySize);
@@ -301,7 +302,7 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Constant * const additionalSpace = iBuilder->getSize(2 * BlockWidth);
         Value * const newSummarySize = iBuilder->CreateAdd(summarySize, additionalSpace);
         Value * const newSummary = iBuilder->CreateBlockAlignedMalloc(newSummarySize);
-        iBuilder->CreateMemCpy(newSummary, summary, summarySize, BlockWidth);
+        iBuilder->CreateMemCpy(newSummary, BlockWidth, summary, BlockWidth, summarySize);
         iBuilder->CreateFree(summary);
         iBuilder->CreateStore(iBuilder->CreatePointerCast(newSummary, carryPtrTy), summaryPtr);
         Value * const startNewSummaryPtr = iBuilder->CreateGEP(iBuilder->CreatePointerCast(newSummary, int8PtrTy), summarySize);
@@ -975,7 +976,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
         // carry state pointer, and summary pointer struct.
         if (LLVM_UNLIKELY(nonCarryCollapsingMode)) {
             mHasNonCarryCollapsingLoops = true;
-            carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), carryTy->getPointerTo(), nullptr);
+            carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), carryTy->getPointerTo());
             assert (isDynamicallyAllocatedType(carryState));
         }
         cd.setNonCollapsingCarryMode(nonCarryCollapsingMode);

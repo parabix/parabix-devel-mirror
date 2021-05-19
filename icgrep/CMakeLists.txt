@@ -41,13 +41,21 @@ if(ENABLE_CUDA_COMPILE)
   endif(CUDA_FOUND)
 endif()
 
+if (ENABLE_PAPI)
+find_package(PAPI REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PAPI -lpapi")
+include_directories(${PAPI_INCLUDE_DIRS})
+message(STATUS "Found PAPI_INCLUDE_DIRS: ${PAPI_INCLUDE_DIRS}")
+endif()
+
+
 # Let's suppose we want to build a JIT compiler with support for
 # binary code (no interpreter):
-set(LLVM_ALL_TARGETS AArch64 AMDGPU ARM BPF CppBackend Hexagon Mips MSP430 NVPTX PowerPC Sparc SystemZ X86 XCore)
+set(LLVM_ALL_TARGETS AArch64 AMDGPU ARM BPF Hexagon Mips MSP430 NVPTX PowerPC Sparc SystemZ X86 XCore)
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
 
 # Check if boost has been installed on this system.
-set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost 1.46 REQUIRED COMPONENTS system filesystem iostreams)
@@ -112,14 +120,14 @@ add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/l
 add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/icgrep-test/icgrep-test.cpp combine/pugixml/src/pugixml.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 
 
-target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (base64 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (editd UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (array-test PabloADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lz4d PabloADT RegExpCompiler CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB} ${PAPI_LIBRARIES})
+target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB} ${PAPI_LIBRARIES})
+target_link_libraries (base64 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB} ${PAPI_LIBRARIES})
+target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB} ${PAPI_LIBRARIES})
+target_link_libraries (editd UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB} ${PAPI_LIBRARIES})
+target_link_libraries (array-test PabloADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB} ${PAPI_LIBRARIES})
+target_link_libraries (lz4d PabloADT RegExpCompiler CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB} ${PAPI_LIBRARIES})
+target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${PAPI_LIBRARIES})
 
 IF(ENABLE_MULTIPLEXING)
     message(STATUS "Enabling Multiplexing")
@@ -216,10 +224,10 @@ SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 UNSET(HAS_ADDRESS_SANITIZER)
-CHECK_INCLUDE_FILE_CXX("sanitizer/asan_interface.h" HAS_ADDRESS_SANITIZER)
-IF (HAS_ADDRESS_SANITIZER)
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DHAS_ADDRESS_SANITIZER -fsanitize=address")
-ENDIF()
+#CHECK_INCLUDE_FILE_CXX("sanitizer/asan_interface.h" HAS_ADDRESS_SANITIZER)
+#IF (HAS_ADDRESS_SANITIZER)
+#SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DHAS_ADDRESS_SANITIZER -fsanitize=address")
+#ENDIF()
 
 
 add_test(

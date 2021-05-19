@@ -21,6 +21,10 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/ToolOutputFile.h>
 #include <llvm/Target/TargetMachine.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/SROA.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Utils.h>
 
 using namespace llvm;
 
@@ -28,7 +32,7 @@ using StreamSetBuffer = parabix::StreamSetBuffer;
 
 NVPTXDriver::NVPTXDriver(std::string && moduleName)
 : Driver(std::move(moduleName)) {
-
+#if 0
     InitializeAllTargets();
     InitializeAllTargetMCs();
     InitializeAllAsmPrinters();
@@ -47,6 +51,7 @@ NVPTXDriver::NVPTXDriver(std::string && moduleName)
     iBuilder.reset(IDISA::GetIDISA_GPU_Builder(*mContext));
     iBuilder->setModule(mMainModule);
     iBuilder->CreateBaseFunctions();
+#endif
 }
 
 void NVPTXDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
@@ -95,7 +100,7 @@ Function * NVPTXDriver::addLinkFunction(Module *, llvm::StringRef, FunctionType 
 
 
 static int llvm2ptx(Module * M, std::string PTXFilename) {
-
+#if 0
     std::unique_ptr<MIRParser> MIR;
     Triple TheTriple(M->getTargetTriple());
 
@@ -121,7 +126,7 @@ static int llvm2ptx(Module * M, std::string PTXFilename) {
     // Figure out where we are going to send the output.
     std::error_code EC;
     sys::fs::OpenFlags OpenFlags = sys::fs::F_None | sys::fs::F_Text;
-    std::unique_ptr<tool_output_file> Out = llvm::make_unique<tool_output_file>(PTXFilename, EC, OpenFlags);
+    auto Out = llvm::make_unique<tool_output_file>(PTXFilename, EC, OpenFlags);
     if (EC) {
         errs() << EC.message() << '\n';
         return 1;
@@ -190,12 +195,12 @@ static int llvm2ptx(Module * M, std::string PTXFilename) {
     }
     // Declare success.
     Out->keep();
-
+#endif
     return 0;
 }
 
 void NVPTXDriver::finalizeObject() {
-
+#if 0
     legacy::PassManager PM;
     PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
     PM.add(createReassociatePass());             //Reassociate expressions.
@@ -226,6 +231,7 @@ void NVPTXDriver::finalizeObject() {
     const auto PTXFilename = mMainModule->getModuleIdentifier() + ".ptx";
 
     llvm2ptx(mMainModule, PTXFilename);
+#endif
 }
 
 void * NVPTXDriver::getMain() {

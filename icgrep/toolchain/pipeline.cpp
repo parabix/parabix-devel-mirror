@@ -60,7 +60,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         structTypes.push_back(instance[i]->getType());
     }
     StructType * const sharedStructType = StructType::get(m->getContext(), structTypes);
-    StructType * const threadStructType = StructType::get(sharedStructType->getPointerTo(), sizeTy, nullptr);
+    StructType * const threadStructType = StructType::get(sharedStructType->getPointerTo(), sizeTy);
 
     Function * const threadFunc = makeThreadFunction(iBuilder, "segment");
 
@@ -72,7 +72,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
      // Create the basic blocks for the thread function.
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
     iBuilder->SetInsertPoint(entryBlock);
-    Value * const input = &threadFunc->getArgumentList().front();
+    auto input = threadFunc->arg_begin();
     Value * const threadStruct = iBuilder->CreatePointerCast(input, threadStructType->getPointerTo());
     Value * const sharedStatePtr = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
     for (unsigned k = 0; k < n; ++k) {
@@ -131,8 +131,8 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         if (kernel->hasNoTerminateAttribute()) {
             iBuilder->CreateCondBr(ready, segmentLoopBody, segmentYield);
         } else { // If the kernel was terminated in a previous segment then the pipeline is done.
-            BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Completed", threadFunc, 0);
-            BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Exit", threadFunc, 0);
+            BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Completed", threadFunc);
+            BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Exit", threadFunc);
             iBuilder->CreateCondBr(ready, completionTest, segmentYield);
 
             iBuilder->SetInsertPoint(completionTest);
@@ -256,6 +256,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     AllocaInst * const sharedStruct = iBuilder->CreateCacheAlignedAlloca(sharedStructType);
     for (unsigned i = 0; i < n; ++i) {
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        iBuilder->CreateAssert(kernels[i]->getInstance(), "kernel handle cannot be null");
         iBuilder->CreateStore(kernels[i]->getInstance(), ptr);
     }
 
@@ -301,7 +302,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     
 }
 
-
+#if 0
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateParallelPipeline
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -399,8 +400,7 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
         BasicBlock * exitThreadBlock = BasicBlock::Create(iBuilder->getContext(), "exitThread", threadFunc);
 
         iBuilder->SetInsertPoint(entryBlock);
-
-        Value * sharedStruct = iBuilder->CreateBitCast(&threadFunc->getArgumentList().front(), sharedStructType->getPointerTo());
+        Value * sharedStruct = iBuilder->CreateBitCast(threadFunc->arg_begin(), sharedStructType->getPointerTo());
 
         for (unsigned k = 0; k < n; k++) {
             Value * const ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
@@ -502,6 +502,7 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
         iBuilder->CreatePThreadJoinCall(threadId, status);
     }
 }
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generatePipelineLoop

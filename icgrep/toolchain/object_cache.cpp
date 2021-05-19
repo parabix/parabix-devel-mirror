@@ -196,12 +196,8 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
 inline ParabixObjectCache::Path ParabixObjectCache::getDefaultPath() {
     // $HOME/.cache/parabix/
     Path cachePath;
-    #ifndef USE_LLVM_3_6
-    sys::path::user_cache_directory(cachePath, "parabix");
-    #else
     sys::path::home_directory(cachePath);
-    sys::path::append(cachePath, ".cache", "parabix");
-    #endif
+    sys::path::append(cachePath, ".cache", "parabix-linda");
     return cachePath;
 }
 

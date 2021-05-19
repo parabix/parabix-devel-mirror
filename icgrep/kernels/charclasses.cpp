@@ -4,7 +4,7 @@
  */
 
 #include "charclasses.h"
-#include <boost/uuid/sha1.hpp>
+#include <boost/uuid/detail/sha1.hpp>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>

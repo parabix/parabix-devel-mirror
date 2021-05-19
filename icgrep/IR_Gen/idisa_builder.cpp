@@ -11,7 +11,7 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/IR/TypeBuilder.h>
+#include "TypeBuilder.h"
 #include <toolchain/toolchain.h>
 
 using namespace llvm;

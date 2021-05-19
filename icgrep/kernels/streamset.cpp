@@ -176,7 +176,7 @@ void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const iBuilder, Val
     }
     const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
     Value * blockCopyBytes = iBuilder->CreateMul(blocksToCopy, iBuilder->getSize(iBuilder->getBitBlockWidth() * numStreams * fieldWidth/8));
-    iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), blockCopyBytes, alignment);
+    iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), alignment, iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), alignment, blockCopyBytes);
 }
 
 void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy) const {
@@ -191,14 +191,14 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuild
     if (numStreams == 1) {
         Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth));
         Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));
-        iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, int8PtrTy), iBuilder->CreateBitCast(sourceBlockPtr, int8PtrTy), copyBytes, alignment);
+        iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, int8PtrTy), alignment, iBuilder->CreateBitCast(sourceBlockPtr, int8PtrTy), alignment, copyBytes);
     } else {
         Value * blocksToCopy = iBuilder->CreateUDiv(itemsToCopy, blockSize);
         Value * partialItems = iBuilder->CreateURem(itemsToCopy, blockSize);
         Value * partialBlockTargetPtr = iBuilder->CreateGEP(targetBlockPtr, blocksToCopy);
         Value * partialBlockSourcePtr = iBuilder->CreateGEP(sourceBlockPtr, blocksToCopy);
         Value * blockCopyBytes = iBuilder->CreateMul(blocksToCopy, iBuilder->getSize(iBuilder->getBitBlockWidth() * numStreams * fieldWidth/8));
-        iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, int8PtrTy), iBuilder->CreateBitCast(sourceBlockPtr, int8PtrTy), blockCopyBytes, alignment);
+        iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, int8PtrTy), alignment, iBuilder->CreateBitCast(sourceBlockPtr, int8PtrTy), alignment, blockCopyBytes);
         Value * partialCopyBitsPerStream = iBuilder->CreateMul(partialItems, iBuilder->getSize(fieldWidth));
         Value * partialCopyBytesPerStream = iBuilder->CreateLShr(iBuilder->CreateAdd(partialCopyBitsPerStream, iBuilder->getSize(7)), iBuilder->getSize(3));
         for (unsigned strm = 0; strm < numStreams; strm++) {
@@ -206,7 +206,7 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuild
             Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
             strmTargetPtr = iBuilder->CreateBitCast(strmTargetPtr, int8PtrTy);
             strmSourcePtr = iBuilder->CreateBitCast(strmSourcePtr, int8PtrTy);
-            iBuilder->CreateMemMove(strmTargetPtr, strmSourcePtr, partialCopyBytesPerStream, alignment);
+            iBuilder->CreateMemMove(strmTargetPtr, alignment, strmSourcePtr, alignment, partialCopyBytesPerStream);
         }
     }
 }
@@ -367,7 +367,7 @@ void SwizzledCopybackBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const
     iBuilder->SetInsertPoint(wholeBlockCopy);
     const unsigned alignment = iBuilder->getBitBlockWidth() / 8;
     Value * copyLength = iBuilder->CreateSub(iBuilder->CreatePtrToInt(partialBlockTargetPtr, intAddrTy), iBuilder->CreatePtrToInt(targetBlockPtr, intAddrTy));
-    iBuilder->CreateMemMove(iBuilder->CreatePointerCast(targetBlockPtr, int8PtrTy), iBuilder->CreatePointerCast(sourceBlockPtr, int8PtrTy), copyLength, alignment);
+    iBuilder->CreateMemMove(iBuilder->CreatePointerCast(targetBlockPtr, int8PtrTy), alignment, iBuilder->CreatePointerCast(sourceBlockPtr, int8PtrTy), alignment, copyLength);
     iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(partialItems, iBuilder->getSize(0)), partialBlockCopy, copyDone);
     iBuilder->SetInsertPoint(partialBlockCopy);
     Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth * swizzleFactor));
@@ -375,7 +375,7 @@ void SwizzledCopybackBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const
     for (unsigned strm = 0; strm < numStreams; strm += swizzleFactor) {
         Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
         Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
-        iBuilder->CreateMemMove(iBuilder->CreatePointerCast(strmTargetPtr, int8PtrTy), iBuilder->CreatePointerCast(strmSourcePtr, int8PtrTy), copyBytes, alignment);
+        iBuilder->CreateMemMove(iBuilder->CreatePointerCast(strmTargetPtr, int8PtrTy), alignment, iBuilder->CreatePointerCast(strmSourcePtr, int8PtrTy), alignment, copyBytes);
     }
     iBuilder->CreateBr(copyDone);
 
@@ -487,7 +487,7 @@ std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(IDISA::IDI
             Value * srcPtr = iBuilder->CreateGEP(streamSet, srcOffset);
             Value * destOffset = iBuilder->CreateMul(newCapacity, offset);
             Value * destPtr = iBuilder->CreateGEP(newStreamSet, destOffset);
-            iBuilder->CreateMemCpy(destPtr, srcPtr, iBuilder->CreateMul(capacity, vectorWidth), alignment);
+            iBuilder->CreateMemCpy(destPtr, alignment, srcPtr, alignment, iBuilder->CreateMul(capacity, vectorWidth));
             Value * destZeroOffset = iBuilder->CreateAdd(destOffset, capacity);
             Value * destZeroPtr = iBuilder->CreateGEP(newStreamSet, destZeroOffset);
             iBuilder->CreateMemZero(destZeroPtr, diffCapacity, alignment);
@@ -558,7 +558,7 @@ Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * cons
 }
 
 SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned MemoryAddressSpace, unsigned StructAddressSpace)
-: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), b->getSizeTy(), nullptr), 0, StructAddressSpace) {
+: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), b->getSizeTy()), 0, StructAddressSpace) {
     mUniqueID = "B";
     if (MemoryAddressSpace != 0 || StructAddressSpace != 0) {
         mUniqueID += "@" + std::to_string(MemoryAddressSpace) + ":" + std::to_string(StructAddressSpace);
@@ -683,7 +683,7 @@ void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> &
 DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t initialCapacity, size_t overflow, unsigned swizzle, unsigned addrSpace)
 : StreamSetBuffer(BufferKind::DynamicBuffer, type, resolveStreamSetType(b, type), initialCapacity, addrSpace)
 , mBufferStructType(StructType::get(resolveStreamSetType(b, type)->getPointerTo(addrSpace), 
-                                    b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), nullptr))
+                                    b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy()))
 , mSwizzleFactor(swizzle)
 , mOverflowBlocks(overflow)
 {
@@ -750,7 +750,7 @@ StructType * resolveExpandableStreamSetType(const std::unique_ptr<kernel::Kernel
             if (fieldWidth != 1) {
                 type = ArrayType::get(type, fieldWidth);
             }
-            return StructType::get(b->getSizeTy(), type->getPointerTo(), nullptr);
+            return StructType::get(b->getSizeTy(), type->getPointerTo());
         }
     }
     std::string tmp;

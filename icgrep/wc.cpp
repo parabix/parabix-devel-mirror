@@ -40,8 +40,8 @@ static cl::list<CountOptions> wcOptions(
   cl::values(clEnumValN(LineOption, "l", "Report the number of lines in each input file."),
              clEnumValN(WordOption, "w", "Report the number of words in each input file."),
              clEnumValN(CharOption, "m", "Report the number of characters in each input file (override -c)."),
-             clEnumValN(ByteOption, "c", "Report the number of bytes in each input file (override -m)."),
-             clEnumValEnd), cl::cat(wcFlags), cl::Grouping);
+             clEnumValN(ByteOption, "c", "Report the number of bytes in each input file (override -m).")
+             ), cl::cat(wcFlags), cl::Grouping);
                                                  
 
 
@@ -162,7 +162,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main));
 
     StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 

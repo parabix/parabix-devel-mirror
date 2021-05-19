@@ -8,7 +8,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/TypeBuilder.h>
+#include "TypeBuilder.h"
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
@@ -88,7 +88,7 @@ Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) 
         IntegerType * int32Ty = getInt32Ty();
         PointerType * int8PtrTy = getInt8PtrTy();
         openFn = cast<Function>(m->getOrInsertFunction("open",
-                                                         int32Ty, int8PtrTy, int32Ty, int32Ty, nullptr));
+                                                         int32Ty, int8PtrTy, int32Ty, int32Ty));
     }
     return CreateCall(openFn, {filename, oflag, mode});
 }
@@ -101,9 +101,8 @@ Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * n
     if (write == nullptr) {
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
-        write = cast<Function>(m->getOrInsertFunction("write",
-                                                        AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
-                                                        sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
+        write = cast<Function>(m->getOrInsertFunction("write", sizeTy, int32Ty, voidPtrTy, sizeTy));
+        write->addAttribute(2U, Attribute::NoAlias);
     }
     buf = CreatePointerCast(buf, voidPtrTy);
     return CreateCall(write, {fileDescriptor, buf, nbyte});
@@ -116,9 +115,8 @@ Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nb
     if (readFn == nullptr) {
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
-        readFn = cast<Function>(m->getOrInsertFunction("read",
-                                                         AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
-                                                         sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
+        readFn = cast<Function>(m->getOrInsertFunction("read", sizeTy, int32Ty, voidPtrTy, sizeTy));
+        readFn->addAttribute(2U, Attribute::NoAlias);
     }
     buf = CreatePointerCast(buf, voidPtrTy);
     return CreateCall(readFn, {fileDescriptor, buf, nbyte});
@@ -150,7 +148,7 @@ Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
     Module * const m = getModule();
     Function * mkstempFn = m->getFunction("mkstemp");
     if (mkstempFn == nullptr) {
-        mkstempFn = cast<Function>(m->getOrInsertFunction("mkstemp", getInt32Ty(), getInt8PtrTy(), nullptr));
+        mkstempFn = cast<Function>(m->getOrInsertFunction("mkstemp", getInt32Ty(), getInt8PtrTy()));
     }
     return CreateCall(mkstempFn, ftemplate);
 }
@@ -159,7 +157,7 @@ Value * CBuilder::CreateStrlenCall(Value * str) {
     Module * const m = getModule();
     Function * strlenFn = m->getFunction("strlen");
     if (strlenFn == nullptr) {
-        strlenFn = cast<Function>(m->getOrInsertFunction("strlen", getSizeTy(), getInt8PtrTy(), nullptr));
+        strlenFn = cast<Function>(m->getOrInsertFunction("strlen", getSizeTy(), getInt8PtrTy()));
     }
     return CreateCall(strlenFn, str);
 }
@@ -286,7 +284,7 @@ Value * CBuilder::CreateMalloc(Value * size) {
         FunctionType * fty = FunctionType::get(voidPtrTy, {sizeTy}, false);
         f = Function::Create(fty, Function::ExternalLinkage, "malloc", m);
         f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(0);
+        f->addAttribute(0, llvm::Attribute::AttrKind::NoAlias);
     }
     size = CreateZExtOrTrunc(size, sizeTy);
     CallInst * const ptr = CreateCall(f, size);
@@ -326,7 +324,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
             f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
             f->setCallingConv(CallingConv::C);
-            f->setDoesNotAlias(0);
+            f->addAttribute(0, llvm::Attribute::AttrKind::NoAlias);
         }
         ptr = CreateCall(f, {align, size});
     } else if (hasPosixMemalign()) {
@@ -335,8 +333,8 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             FunctionType * const fty = FunctionType::get(getInt32Ty(), {voidPtrTy->getPointerTo(), sizeTy, sizeTy}, false);
             f = Function::Create(fty, Function::ExternalLinkage, "posix_memalign", m);
             f->setCallingConv(CallingConv::C);
-            f->setDoesNotAlias(0);
-            f->setDoesNotAlias(1);
+            f->addAttribute(0, llvm::Attribute::AttrKind::NoAlias);
+            f->addAttribute(1, llvm::Attribute::AttrKind::NoAlias);
         }
         Value * handle = CreateAlloca(voidPtrTy);
         CallInst * success = CreateCall(f, {handle, align, size});
@@ -369,8 +367,8 @@ Value * CBuilder::CreateRealloc(Value * const ptr, Value * const size) {
         FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false);
         f = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
         f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(0);
-        f->setDoesNotAlias(1);
+        f->addAttribute(0, llvm::Attribute::AttrKind::NoAlias);
+        f->addAttribute(1, llvm::Attribute::AttrKind::NoAlias);
     }
     CallInst * const ci = CreateCall(f, {CreatePointerCast(ptr, voidPtrTy), CreateZExtOrTrunc(size, sizeTy)});
     return CreatePointerCast(ci, ptr->getType());
@@ -520,7 +518,8 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
         }
     } else { // no OS mremap support
         ptr = CreateAnonymousMMap(newSize);
-        CreateMemCpy(ptr, addr, oldSize, getpagesize());
+        const auto pageSize = getpagesize();
+        CreateMemCpy(ptr, pageSize, addr, pageSize, oldSize);
         CreateMUnmap(addr, oldSize);
     }
     return ptr;
@@ -849,7 +848,7 @@ void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage)
             FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
             function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
             function->setDoesNotThrow();
-            function->setDoesNotAlias(2);
+            function->addAttribute(2, llvm::Attribute::AttrKind::NoAlias);
             BasicBlock * const entry = BasicBlock::Create(getContext(), "", function);
             BasicBlock * const failure = BasicBlock::Create(getContext(), "", function);
             BasicBlock * const success = BasicBlock::Create(getContext(), "", function);
@@ -1046,8 +1045,8 @@ Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * fu
         if (LLVM_UNLIKELY(isPoisoned == nullptr)) { \
             isPoisoned = Function::Create(FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false), Function::ExternalLinkage, "__asan_region_is_poisoned", m); \
             isPoisoned->setCallingConv(CallingConv::C); \
-            isPoisoned->setDoesNotAlias(0); \
-            isPoisoned->setDoesNotAlias(1); \
+            isPoisoned->addAttribute(0, llvm::Attribute::AttrKind::NoAlias); \
+            isPoisoned->addAttribute(1, llvm::Attribute::AttrKind::NoAlias); \
         } \
         Value * const addr = CreatePointerCast(Ptr, voidPtrTy); \
         ConstantInt * const size = ConstantInt::get(sizeTy, Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8); \

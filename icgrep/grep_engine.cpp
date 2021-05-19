@@ -467,9 +467,9 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
 
     kernel::Kernel * sourceK = nullptr;
     
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty, nullptr));
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty));
     mainFunc->setCallingConv(CallingConv::C);
-    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc));
     auto args = mainFunc->arg_begin();
 
     Value * const fileDescriptor = &*(args++);

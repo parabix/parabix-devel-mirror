@@ -32,8 +32,8 @@ static cl::bits<PabloDebugFlags>
 DebugOptions(cl::values(clEnumVal(ShowPablo, "Print generated Pablo code"),
                         clEnumVal(ShowOptimizedPablo, "Print optimizeed Pablo code"),
                         clEnumVal(VerifyPablo, "Run the Pablo verifier"),
-                        clEnumVal(DumpTrace, "Generate dynamic traces of executed Pablo assignments."),
-                        clEnumValEnd), cl::cat(PabloOptions));
+                        clEnumVal(DumpTrace, "Generate dynamic traces of executed Pablo assignments.")
+                        ), cl::cat(PabloOptions));
     
 static cl::opt<std::string> PabloOutputFilename("print-pablo-output", cl::init(""), cl::desc("output Pablo filename"), cl::cat(PabloOptions));
 static cl::opt<bool> Flatten("flatten-if", cl::init(false), cl::desc("Flatten all the Ifs in the Pablo AST"), cl::cat(PabloOptions));
@@ -43,8 +43,8 @@ static cl::bits<PabloCompilationFlags>
                                          clEnumVal(DisableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
                                          clEnumVal(EnableDistribution, "Apply distribution law optimization."),
 
-                                         clEnumVal(EnableSchedulingPrePass, "Pablo Statement Scheduling Pre-Pass"),
-                                         clEnumValEnd), cl::cat(PabloOptions));
+                                         clEnumVal(EnableSchedulingPrePass, "Pablo Statement Scheduling Pre-Pass")
+                                         ), cl::cat(PabloOptions));
 
 bool DebugOptionIsSet(PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
     

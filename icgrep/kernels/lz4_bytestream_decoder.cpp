@@ -70,14 +70,14 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<Ker
     Value * remainingBuffer = iBuilder->CreateSub(bufferSize, bufferOffset);
     Value * copyLength1 = selectMin(iBuilder, remainingBuffer, literalLength);
     iBuilder->CreateMemCpy(
-            iBuilder->CreateGEP(outputBufferBasePtr, bufferOffset),
-            iBuilder->CreateGEP(inputBufferBasePtr, literalStart),
-            copyLength1, 1);    // no alignment guaranteed
+            iBuilder->CreateGEP(outputBufferBasePtr, bufferOffset), 1,
+            iBuilder->CreateGEP(inputBufferBasePtr, literalStart), 1,
+            copyLength1);    // no alignment guaranteed
     // Potential wrap around.
     iBuilder->CreateMemCpy(
-            outputBufferBasePtr,
-            iBuilder->CreateGEP(inputBufferBasePtr, iBuilder->CreateAdd(literalStart, copyLength1)),
-            iBuilder->CreateSub(literalLength, copyLength1), 8);        // Buffer start is aligned.
+            outputBufferBasePtr, 8,
+            iBuilder->CreateGEP(inputBufferBasePtr, iBuilder->CreateAdd(literalStart, copyLength1)), 8,
+            iBuilder->CreateSub(literalLength, copyLength1));        // Buffer start is aligned.
     outputItems = iBuilder->CreateAdd(outputItems, literalLength);
 
     // =================================================

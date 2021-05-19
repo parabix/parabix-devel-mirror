@@ -12,7 +12,8 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/Bitcode/ReaderWriter.h>
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <kernels/streamset.h>
 #include <sstream>
@@ -174,7 +175,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
         addScalar(binding.type, binding.name);
     }
 
-    Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
+    Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo())->getPointerTo();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_SUFFIX);
     }
@@ -273,7 +274,7 @@ std::string Kernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &
         generateKernel(idb);
         std::string signature;
         raw_string_ostream OS(signature);
-        WriteBitcodeToFile(getModule(), OS);
+        WriteBitcodeToFile(*getModule(), OS);
         return signature;
     } else {
         return getModule()->getModuleIdentifier();
@@ -411,7 +412,7 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & idb) {
     IntegerType * const sizeTy = idb->getSizeTy();
     PointerType * const sizePtrTy = sizeTy->getPointerTo();
     PointerType * const sizePtrPtrTy = sizePtrTy->getPointerTo();
-    StructType * const consumerTy = StructType::get(sizeTy, sizePtrPtrTy, nullptr);
+    StructType * const consumerTy = StructType::get(sizeTy, sizePtrPtrTy);
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
         const auto output = mStreamSetOutputBuffers[i];
         const auto & consumers = output->getConsumers();
@@ -564,9 +565,10 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + DO_BLOCK_SUFFIX, idb->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
-        mCurrentMethod->setDoesNotCapture(1);
+        //mCurrentMethod->setDoesNotCapture(1);
         auto args = mCurrentMethod->arg_begin();
         args->setName("self");
+        args->addAttr(Attribute::AttrKind::NoCapture);
         setInstance(&*args);
         availableItemCount.reserve(mAvailableItemCount.size());
         while (++args != mCurrentMethod->arg_end()) {
@@ -657,8 +659,9 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + FINAL_BLOCK_SUFFIX, idb->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
-        mCurrentMethod->setDoesNotCapture(1);
+//        mCurrentMethod->setDoesNotCapture(1);
         auto args = mCurrentMethod->arg_begin();
+        args->addAttr(llvm::Attribute::AttrKind::NoCapture);
         args->setName("self");
         setInstance(&*args);
         remainingItems = &*(++args);

@@ -37,7 +37,7 @@ void KernelBuilder::setScalarField(const std::string & fieldName, Value * value)
 
 Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) {
     Value * const ptr = getScalarField(name + Kernel::BUFFER_PTR_SUFFIX);
-    CreateAssert(ptr, name + " cannot be null!");
+    CreateAssert(ptr, "getStreamSetBufferPtr: " + name + " cannot be null!");
     return ptr;
 }
 
@@ -261,7 +261,7 @@ void KernelBuilder::setCapacity(const std::string & name, Value * c) {
     
 CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) {
     Function * const doSegment = mKernel->getDoSegmentFunction(getModule());
-    assert (doSegment->getArgumentList().size() == args.size());
+    assert (doSegment->arg_size() == args.size());
     return CreateCall(doSegment, args);
 }
 

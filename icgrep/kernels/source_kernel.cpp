@@ -248,7 +248,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     if (mCodeUnitWidth != 8) {
         target = kb->CreatePointerCast(buffer, i8PtrTy);
     }
-    kb->CreateMemCpy(target, source, toCopy, 1);
+    kb->CreateMemCpy(target, 1, source, 1, toCopy);
     kb->CreateBr(calculateLogicalAddress);
     
     // Otherwise, allocate a buffer with twice the capacity and copy the unconsumed data back into it
@@ -257,7 +257,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * const expandedBytes = mCodeUnitWidth == 8 ? expandedCapacity : kb->CreateMul(expandedCapacity, codeUnitBytes);
     Value * const expandedBuffer = kb->CreatePointerCast(kb->CreateCacheAlignedMalloc(expandedBytes), codeUnitPtrTy);
     target = mCodeUnitWidth == 8 ? expandedBuffer : kb->CreatePointerCast(expandedBuffer, i8PtrTy);
-    kb->CreateMemCpy(target, source, toCopy, 1);
+    kb->CreateMemCpy(target, 1, source, 1, toCopy);
     kb->CreateFree(buffer);
     kb->setScalarField("buffer", expandedBuffer);
     kb->setScalarField("capacity", expandedCapacity);

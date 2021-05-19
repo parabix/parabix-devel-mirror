@@ -4,7 +4,7 @@
  */
 
 #include "grep_kernel.h"
-#include <boost/uuid/sha1.hpp>
+#include <boost/uuid/detail/sha1.hpp>
 #include <re/printer_re.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>

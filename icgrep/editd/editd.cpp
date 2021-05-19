@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mutex>
-#include <boost/uuid/sha1.hpp>
+#include <boost/uuid/detail/sha1.hpp>
 #include <editd/editd_cpu_kernel.h>
 
 #include <toolchain/NVPTXDriver.h>
@@ -245,7 +245,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
 
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy));
     main->setCallingConv(CallingConv::C);
     auto args = main->arg_begin();
     Value * const inputStream = &*(args++);
@@ -313,7 +313,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
 
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty, outputType));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -356,7 +356,7 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
 
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -421,7 +421,7 @@ void editdIndexPatternPipeline(ParabixDriver & pxDriver, unsigned patternLen) {
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
 
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, patternPtrTy, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, patternPtrTy));
     main->setCallingConv(CallingConv::C);
     auto args = main->arg_begin();
     Value * const inputStream = &*(args++);
@@ -467,7 +467,7 @@ typedef void (*multiEditdFunctionType)(const int fd);
 typedef void (*editdIndexFunctionType)(char * byte_data, size_t filesize, const char * pattern);
 
 static char * chStream;
-static size_t size;
+static size_t currentFileSize;
 
 size_t file_size(const int fd) {
     struct stat st;
@@ -484,8 +484,8 @@ char * preprocess(preprocessFunctionType fn_ptr) {
         std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
         exit(-1);
     }
-    size = file_size(fd);
-    int ret = posix_memalign((void**)&chStream, 32, size);
+    currentFileSize = file_size(fd);
+    int ret = posix_memalign((void**)&chStream, 32, currentFileSize);
     if (ret) {
         std::cerr << "Cannot allocate memory for output.\n";
         exit(-2);
@@ -514,7 +514,7 @@ void * DoEditd(void *)
         ParabixDriver pxDriver("editd");
         editdPipeline(pxDriver, pattGroups[groupIdx]);
         auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
-        editd(editd_ptr, chStream, size);
+        editd(editd_ptr, chStream, currentFileSize);
 
         count_mutex.lock();
         groupIdx = groupCount;
@@ -541,7 +541,7 @@ void editdGPUCodeGen(unsigned patternLen){
     Type * const outputTy = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 1);
     Type * const stridesTy = PointerType::get(int32ty, 1);
 
-    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputTy, inputSizeTy, patternPtrTy, outputTy, stridesTy, nullptr));
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputTy, inputSizeTy, patternPtrTy, outputTy, stridesTy));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -560,7 +560,7 @@ void editdGPUCodeGen(unsigned patternLen){
 
     Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
     Value * tid = iBuilder->CreateCall(tidFunc);
-    Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
+    Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty));
     Value * bid = iBuilder->CreateCall(bidFunc);
 
     Value * inputThreadPtr = iBuilder->CreateGEP(inputStream, tid);
@@ -604,7 +604,7 @@ void mergeGPUCodeGen(){
     Type * const resultTy = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 1);
     Type * const stridesTy = PointerType::get(int32ty, 1);
 
-    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, resultTy, stridesTy, nullptr));
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, resultTy, stridesTy));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -622,7 +622,7 @@ void mergeGPUCodeGen(){
 
     Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
     Value * tid = iBuilder->CreateCall(tidFunc);
-    Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
+    Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty));
     Value * bid = iBuilder->CreateCall(bidFunc);
 
     Value * strides = iBuilder->CreateLoad(stridesPtr);
@@ -668,7 +668,7 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     Type * const voidTy = Type::getVoidTy(M->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 0);
 
-    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputType, size_ty, nullptr));
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputType, size_ty));
     main->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
     Function::arg_iterator args = main->arg_begin();
@@ -759,7 +759,7 @@ int main(int argc, char *argv[]) {
         ParabixDriver pxDriver("editd");
         editdPipeline(pxDriver, pattVector);
         auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
-        editd(editd_ptr, chStream, size);
+        editd(editd_ptr, chStream, currentFileSize);
         std::cout << "total matches is " << matchList.size() << std::endl;
     }
     else{
@@ -774,7 +774,7 @@ int main(int argc, char *argv[]) {
                     for (int j=0; j<groupSize; j++){
                         pattern += pattVector[i+j];
                     }
-                    editd_ptr(chStream, size, pattern.c_str());
+                    editd_ptr(chStream, currentFileSize, pattern.c_str());
                 }
             }
             else {
@@ -783,7 +783,7 @@ int main(int argc, char *argv[]) {
                     ParabixDriver pxDriver("editd");
                     editdPipeline(pxDriver, pattGroups[i]);
                     auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
-                    editd(editd_ptr, chStream, size);
+                    editd(editd_ptr, chStream, currentFileSize);
                 }
             }
         }

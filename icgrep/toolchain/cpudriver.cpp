@@ -1,7 +1,9 @@
 #include "cpudriver.h"
 
 #include <IR_Gen/idisa_target.h>
+#include <llvm/Support/DynamicLibrary.h>           // for LoadLibraryPermanently
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
+#include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGen
@@ -24,6 +26,10 @@
 #else
 #define IN_DEBUG_MODE false
 #endif
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/SROA.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Utils.h>
 
 using namespace llvm;
 using Kernel = kernel::Kernel;
@@ -38,7 +44,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
+    llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
 
     PassRegistry * Registry = PassRegistry::getPassRegistry();
     initializeCore(*Registry);
@@ -48,10 +54,13 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     std::string errMessage;
     EngineBuilder builder{std::unique_ptr<Module>(mMainModule)};
     builder.setErrorStr(&errMessage);
-    builder.setUseOrcMCJITReplacement(true);
-    builder.setTargetOptions(codegen::Options);
+    builder.setEngineKind(EngineKind::JIT);
+    llvm::TargetOptions target_Options;
+    target_Options.MCOptions.AsmVerbose = true;
+    builder.setTargetOptions(target_Options);
     builder.setVerifyModules(false);
     builder.setOptLevel(codegen::OptLevel);
+
 
     StringMap<bool> HostCPUFeatures;
     if (sys::getHostCPUFeatures(HostCPUFeatures)) {
@@ -63,11 +72,17 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
         builder.setMAttrs(attrs);
     }
 
+    mTarget = builder.selectTarget();
+    if (mTarget == nullptr) {
+        throw std::runtime_error("Could not selectTarget");
+    }
+
     mEngine = builder.create();
     if (mEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
-    mTarget = builder.selectTarget();
+
+
     if (LLVM_LIKELY(codegen::EnableObjectCache)) {
         if (codegen::ObjectCacheDir) {
             mCache = new ParabixObjectCache(codegen::ObjectCacheDir);
@@ -76,7 +91,15 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
         }
         mEngine->setObjectCache(mCache);
     }
-    mMainModule->setTargetTriple(mTarget->getTargetTriple().getTriple());
+    mEngine->DisableSymbolSearching(false);
+    mEngine->DisableLazyCompilation(true);
+    mEngine->DisableGVCompilation(true);
+
+
+    auto triple = mTarget->getTargetTriple().getTriple();
+    const DataLayout DL(mTarget->createDataLayout());
+    mMainModule->setTargetTriple(triple);
+    mMainModule->setDataLayout(DL);
 
     iBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
     iBuilder->setDriver(this);
@@ -114,13 +137,13 @@ void ParabixDriver::generatePipelineIR() {
     for (const auto & k : mPipeline) {
         k->initializeInstance(iBuilder);
     }
-    if (codegen::PipelineParallel) {
-        generateParallelPipeline(iBuilder, mPipeline);
-    } else if (codegen::SegmentPipelineParallel) {
-        generateSegmentParallelPipeline(iBuilder, mPipeline);
-    } else {
+
+    if (codegen::ThreadNum == 1) {
         generatePipelineLoop(iBuilder, mPipeline);
+    } else {
+        generateSegmentParallelPipeline(iBuilder, mPipeline);
     }
+
     for (const auto & k : mPipeline) {
         k->finalizeInstance(iBuilder);
     }
@@ -183,7 +206,8 @@ void ParabixDriver::finalizeObject() {
         } else {
             ASMOutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
         }
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, nullptr, TargetMachine::CGFT_AssemblyFile))) {
             report_fatal_error("LLVM error: could not add emit assembly pass");
         }
     }
@@ -227,7 +251,9 @@ bool ParabixDriver::hasExternalFunction(llvm::StringRef functionName) const {
 }
 
 void * ParabixDriver::getMain() {
-    return mEngine->getPointerToNamedFunction("Main");
+    void * mainFunc = mEngine->getPointerToNamedFunction("Main");
+    assert (mainFunc);
+    return mainFunc;
 }
 
 ParabixDriver::~ParabixDriver() {

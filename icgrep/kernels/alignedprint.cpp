@@ -127,7 +127,7 @@ void PrintStreamSet::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> 
 
         Value * outputName = iBuilder->GetString(name.c_str());
         ConstantInt * const length = iBuilder->getInt32(name.length());
-        iBuilder->CreateMemCpy(output, outputName, length, 1);
+        iBuilder->CreateMemCpy(output, 1, outputName, 1, length);
         iBuilder->CreateMemSet(iBuilder->CreateGEP(output, iBuilder->getInt32(name.length())), iBuilder->getInt8(' '), iBuilder->getInt32(mNameWidth - name.length()), 1);
         iBuilder->CreateStore(iBuilder->getInt8(10), iBuilder->CreateGEP(output, iBuilder->getInt32(iBuilder->getBitBlockWidth() + mNameWidth)));
 

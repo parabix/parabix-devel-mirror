@@ -48,14 +48,14 @@ void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuil
     Constant * suffixPlusNullLength = iBuilder->getSize(7);
     Value * tmpFileNamePtr = iBuilder->CreatePointerCast(iBuilder->CreateMalloc(iBuilder->CreateAdd(fileNameLength, suffixPlusNullLength)), iBuilder->getInt8PtrTy());
     iBuilder->setScalarField("tmpFileName", tmpFileNamePtr);
-    iBuilder->CreateMemCpy(tmpFileNamePtr, fileName, fileNameLength, 1);
+    iBuilder->CreateMemCpy(tmpFileNamePtr, 1, fileName, 1, fileNameLength);
 #ifdef BACKUP_OLDFILE
     iBuilder->CreateMemCpy(iBuilder->CreateGEP(tmpFileNamePtr, fileNameLength), iBuilder->GetString(".saved"), suffixPlusNullLength, 1);
     iBuilder->CreateRenameCall(fileName, tmpFileNamePtr);
 #else
     iBuilder->CreateUnlinkCall(fileName);
 #endif
-    iBuilder->CreateMemCpy(iBuilder->CreateGEP(tmpFileNamePtr, fileNameLength), iBuilder->GetString("XXXXXX"), suffixPlusNullLength, 1);
+    iBuilder->CreateMemCpy(iBuilder->CreateGEP(tmpFileNamePtr, fileNameLength), 1, iBuilder->GetString("XXXXXX"), 1, suffixPlusNullLength);
     Value * fileDes = iBuilder->CreateMkstempCall(tmpFileNamePtr);
     iBuilder->setScalarField("fileDes", fileDes);
     Value * failure = iBuilder->CreateICmpEQ(fileDes, iBuilder->getInt32(-1));
@@ -83,8 +83,9 @@ void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iB
     Value * bytePtr = iBuilder->CreatePointerCast(codeUnitBuffer, i8PtrTy);
     
     iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(iBuilder->getBitBlockWidth())), closeFile, fileOutExit);
-    
+//    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(iBuilder->getBitBlockWidth())), closeFile, fileOutExit);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(getKernelStride())), closeFile, fileOutExit);
+
     iBuilder->SetInsertPoint(closeFile);
     iBuilder->CreateCloseCall(fileDes);
     Value * newFileNamePtr = iBuilder->getScalarField("fileName");
