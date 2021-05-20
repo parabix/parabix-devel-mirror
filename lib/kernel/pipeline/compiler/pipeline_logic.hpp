@@ -91,6 +91,9 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     addBufferHandlesToPipelineKernel(b, PipelineInput);
     addConsumerKernelProperties(b, PipelineInput);
     addPipelinePriorItemCountProperties(b);
+    #ifdef ENABLE_PAPI
+    addPAPIEventCounterPipelineProperties(b);
+    #endif
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         // Is this the start of a new partition?
@@ -103,6 +106,9 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
         addCycleCounterProperties(b, i, isRoot);
+        #ifdef ENABLE_PAPI
+        addPAPIEventCounterKernelProperties(b, i);
+        #endif
         addProducedItemCountDeltaProperties(b, i);
         addUnconsumedItemCountProperties(b, i);
         addFamilyKernelProperties(b, i);
@@ -392,12 +398,18 @@ inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
     verifyBufferRelationships();
     mScalarValue.reset(FirstKernel, LastScalar);
     readPipelineIOItemCounts(b);
+    #ifdef ENABLE_PAPI
+    initializePAPI(b);
+    #endif
     if (mNumOfThreads == 1) {
         generateSingleThreadKernelMethod(b);
     } else {
         generateMultiThreadKernelMethod(b);
     }
     resetInternalBufferHandles();
+    #ifdef ENABLE_PAPI
+    shutdownPAPI(b);
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -519,6 +531,9 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     #else
     Value * const threadStruct = b->CreatePointerCast(threadStructArg, threadStructTy);
     #endif
+    #ifdef ENABLE_PAPI
+    registerPAPIThread(b);
+    #endif
     assert (isFromCurrentFunction(b, threadStruct));
     readThreadStuctObject(b, threadStruct);
     assert (isFromCurrentFunction(b, getHandle()));
@@ -539,6 +554,9 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     BasicBlock * const exitFunction = b->CreateBasicBlock("ExitProcessFunction");
     b->CreateCondBr(isProcessThread(b, threadStruct), exitFunction, exitThread);
     b->SetInsertPoint(exitThread);
+    #ifdef ENABLE_PAPI
+    unregisterPAPIThread(b);
+    #endif
     b->CreatePThreadExitCall(nullVoidPtrVal);
     b->CreateBr(exitFunction);
     b->SetInsertPoint(exitFunction);

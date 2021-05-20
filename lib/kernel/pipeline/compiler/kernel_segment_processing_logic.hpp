@@ -37,6 +37,10 @@ void PipelineCompiler::start(BuilderRef b) {
     debugPrint(b, prefix + " +++ IS FINAL %" PRIu8 "+++", mIsFinal);
     #endif
 
+    #ifdef ENABLE_PAPI
+    createEventSetAndStartPAPI(b);
+    #endif
+
     if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
         mExpectedNumOfStridesMultiplier = b->getScalarField(EXPECTED_NUM_OF_STRIDES_MULTIPLIER);
         mThreadLocalStreamSetBaseAddress = b->getScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY);
@@ -350,6 +354,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     }
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
+    #ifdef ENABLE_PAPI
+    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
+    #endif
 
     if (LLVM_UNLIKELY(CheckAssertions)) {        
         verifyPostInvocationTerminationSignal(b);
@@ -834,6 +841,11 @@ void PipelineCompiler::end(BuilderRef b) {
     }
     debugClose(b);
     #endif
+
+    #ifdef ENABLE_PAPI
+    stopPAPIAndDestroyEventSet(b);
+    #endif
+
     if (LLVM_UNLIKELY(canSetTerminateSignal())) {
         Constant * const unterminated = b->getSize(KernelBuilder::TerminationCode::None);
         Constant * const terminated = b->getSize(KernelBuilder::TerminationCode::Terminated);

@@ -9,8 +9,11 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
+#if BOOST_VERSION < 106600
+#include <boost/uuid/sha1.hpp>
+#else
 #include <boost/uuid/detail/sha1.hpp>
-
+#endif
 using namespace llvm;
 using namespace boost;
 

@@ -29,7 +29,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mKernelSharedHandle, CBuilder::Protect::WRITE);
     }
-
+    #ifdef ENABLE_PAPI
+    readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE);
+    #endif
     Value * const beforeKernelCall = startCycleCounter(b);
     Value * doSegmentRetVal = nullptr;
     if (mRethrowException) {
@@ -41,6 +43,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         doSegmentRetVal = b->CreateCall(doSegment, args);
     }
     updateCycleCounter(b, mKernelId, beforeKernelCall, CycleCounter::KERNEL_EXECUTION);
+    #ifdef ENABLE_PAPI
+    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPIKernelCounter::PAPI_KERNEL_EXECUTION);
+    #endif
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugResume(b);

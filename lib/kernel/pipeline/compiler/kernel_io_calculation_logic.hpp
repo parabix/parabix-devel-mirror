@@ -773,9 +773,11 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
         b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
 
         b->SetInsertPoint(expandBuffer);
-        Value * const cycleCounterAccumulator = getBufferExpansionCycleCounter(b);
+        #ifdef ENABLE_PAPI
+        readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE);
+        #endif
         Value * cycleCounterStart = nullptr;
-        if (cycleCounterAccumulator) {
+        if (LLVM_UNLIKELY(EnableCycleCounter)) {
             cycleCounterStart = b->CreateReadCycleCounter();
         }
 
@@ -790,12 +792,10 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
         buffer->reserveCapacity(b, produced, consumed, required);
 
         recordBufferExpansionHistory(b, outputPort, buffer);
-        if (cycleCounterAccumulator) {
-            Value * const cycleCounterEnd = b->CreateReadCycleCounter();
-            Value * const duration = b->CreateSub(cycleCounterEnd, cycleCounterStart);
-            Value * const accum = b->CreateAdd(b->CreateLoad(cycleCounterAccumulator), duration);
-            b->CreateStore(accum, cycleCounterAccumulator);
-        }
+        updateCycleCounter(b, mKernelId, cycleCounterStart, BUFFER_EXPANSION);
+        #ifdef ENABLE_PAPI
+        recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPI_BUFFER_MANAGEMENT);
+        #endif
 
         auto & afterExpansion = mWritableOutputItems[outputPort.Number];
         afterExpansion[WITH_OVERFLOW] = nullptr;

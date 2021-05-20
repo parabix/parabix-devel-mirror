@@ -48,10 +48,15 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
     b->SetInsertPoint(entry);
     mCurrentPartitionId = -1U;
     setActiveKernel(b, FirstKernel, true);
-
+    #ifdef ENABLE_PAPI
+    readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START);
+    #endif
     mKernelStartTime = startCycleCounter(b);
     acquireSynchronizationLock(b, FirstKernel);
     updateCycleCounter(b, FirstKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
+    #ifdef ENABLE_PAPI
+    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_SYNCHRONIZATION);
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -597,7 +602,9 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
             phiOutPartitionStatusFlags(b, nextPartitionId, true, mKernelInitiallyTerminated);
 
             updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
-
+            #ifdef ENABLE_PAPI
+            recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
+            #endif
             b->CreateBr(mNextPartitionEntryPoint);
 
         } else {
@@ -657,6 +664,9 @@ void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     #endif
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
+    #ifdef ENABLE_PAPI
+    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
+    #endif
 
     b->CreateBr(mPartitionEntryPoint[nextPartitionId]);
 }
@@ -672,9 +682,15 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
     const auto nextKernel = mKernelId + 1U;
     if (LLVM_LIKELY(nextKernel < PipelineOutput)) {
+        #ifdef ENABLE_PAPI
+        readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START);
+        #endif
         mKernelStartTime = startCycleCounter(b);
         acquireSynchronizationLock(b, nextKernel);
         updateCycleCounter(b, nextKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
+        #ifdef ENABLE_PAPI
+        recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_SYNCHRONIZATION);
+        #endif
     }
 
     const auto nextPartitionId = KernelPartitionId[nextKernel];

@@ -632,10 +632,10 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
 
     b->SetInsertPoint(copyStart);
-
+    #ifdef ENABLE_PAPI
+    readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE);
+    #endif
     Value * const beforeCopy = startCycleCounter(b);
-
-  //  Value * const bytesToCopy = b->CreateMul(bytesPerStream, numOfStreams);
 
     Value * source =  buffer->getOverflowAddress(b);
     Value * target = nullptr;
@@ -669,7 +669,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     if (copyLoop) {
 
         BasicBlock * recordCopyCycleCount = nullptr;
-        if (EnableCycleCounter) {
+        if (EnableCycleCounter || EnablePAPICounters) {
             recordCopyCycleCount = b->CreateBasicBlock(prefix + "RecordCycleCount", copyExit);
         }
 
@@ -693,9 +693,12 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
         BasicBlock * const loopExit = EnableCycleCounter ? recordCopyCycleCount : copyExit;
         b->CreateCondBr(done, loopExit, copyLoop);
 
-        if (EnableCycleCounter) {
+        if (EnableCycleCounter || EnablePAPICounters) {
             b->SetInsertPoint(recordCopyCycleCount);
             updateCycleCounter(b, mKernelId, beforeCopy, CycleCounter::BUFFER_COPY);
+            #ifdef ENABLE_PAPI
+            recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPIKernelCounter::PAPI_BUFFER_MANAGEMENT);
+            #endif
             b->CreateBr(copyExit);
         }
 
@@ -703,8 +706,11 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
 
         Value * const totalBytesToCopy = b->CreateMul(bytesToCopy, numOfStreams);
         b->CreateMemCpy(target, source, totalBytesToCopy, bitsToCopy / 8);
-        if (EnableCycleCounter) {
+        if (EnableCycleCounter || EnablePAPICounters) {
             updateCycleCounter(b, mKernelId, beforeCopy, CycleCounter::BUFFER_COPY);
+            #ifdef ENABLE_PAPI
+            recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPIKernelCounter::PAPI_BUFFER_MANAGEMENT);
+            #endif
         }
         b->CreateBr(copyExit);
 

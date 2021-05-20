@@ -21,6 +21,9 @@ using boost::container::flat_map;
 using boost::intrusive::detail::floor_log2;
 using namespace llvm;
 
+
+// TODO: merge Cycle counter and PAPI?
+
 namespace kernel {
 
 enum CycleCounter {
@@ -31,9 +34,24 @@ enum CycleCounter {
   , KERNEL_EXECUTION
   , TOTAL_TIME
   // ------------------
-  , NUM_OF_STORED_COUNTERS
+  , NUM_OF_CYCLE_COUNTERS
 };
 
+#ifdef ENABLE_PAPI
+enum PAPIMeasurement {
+  PAPI_KERNEL_START
+  , PAPI_KERNEL_BEFORE
+  , PAPI_KERNEL_AFTER
+  // ------------------
+  , PAPI_MEASUREMENTS_PER_KERNEL
+};
+enum PAPIKernelCounter {
+  PAPI_KERNEL_SYNCHRONIZATION
+  , PAPI_BUFFER_MANAGEMENT
+  , PAPI_KERNEL_EXECUTION
+  , PAPI_KERNEL_TOTAL
+};
+#endif
 
 const static std::string BASE_THREAD_LOCAL_STREAMSET_MEMORY = "BLSM";
 
@@ -59,6 +77,10 @@ const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string DEBUG_CONSUMED_ITEM_COUNT_SUFFIX = ".DCON";
 
 const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
+#ifdef ENABLE_PAPI
+const static std::string STATISTICS_PAPI_COUNT_ARRAY_SUFFIX = ".PCS";
+const static std::string STATISTICS_GLOBAL_PAPI_COUNT_ARRAY = "!PCS";
+#endif
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
 const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".SBY";
 const static std::string STATISTICS_BLOCKING_IO_HISTORY_SUFFIX = ".SHY";
@@ -320,7 +342,6 @@ public:
 
 
     void initializeBufferExpansionHistory(BuilderRef b) const;
-    Value * getBufferExpansionCycleCounter(BuilderRef b) const;
     void recordBufferExpansionHistory(BuilderRef b, const StreamSetPort outputPort, const StreamSetBuffer * const buffer) const;
     void printOptionalBufferExpansionHistory(BuilderRef b);
 
@@ -376,6 +397,23 @@ public:
 
     Value * getThreadLocalHandlePtr(BuilderRef b, const unsigned kernelIndex) const;
 
+// papi instrumentation functions
+#ifdef ENABLE_PAPI
+    void convertPAPIEventNamesToCodes();
+    void addPAPIEventCounterPipelineProperties(BuilderRef b);
+    void addPAPIEventCounterKernelProperties(BuilderRef b, const unsigned kernel);
+    void initializePAPI(BuilderRef b) const;
+    void registerPAPIThread(BuilderRef b) const;
+    void createEventSetAndStartPAPI(BuilderRef b);
+    Value * readPAPIMeasurement(BuilderRef b, PAPIMeasurement counter);
+    void recordPAPIKernelMeasurement(BuilderRef b, PAPIMeasurement from, PAPIKernelCounter sumTo);
+    void unregisterPAPIThread(BuilderRef b) const;
+    void stopPAPIAndDestroyEventSet(BuilderRef b);
+    void shutdownPAPI(BuilderRef b) const;
+
+    void checkPAPIRetValAndExitOnError(BuilderRef b, StringRef source, const int expected, Value * const retVal) const;
+
+#endif
 // debug message functions
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -465,6 +503,11 @@ protected:
     const bool                                  PipelineHasTerminationSignal;
     const bool                                  HasZeroExtendedStream;
     const bool                                  EnableCycleCounter;
+    #ifdef ENABLE_PAPI
+    const bool                                  EnablePAPICounters;
+    #else
+    constexpr static bool                       EnablePAPICounters = false;
+    #endif
     const bool                                  TraceIO;
     const bool                                  TraceUnconsumedItemCounts;
     const bool                                  TraceProducedItemCounts;
@@ -639,7 +682,15 @@ protected:
     // cycle counter state
     Value *                                     mKernelStartTime = nullptr;
     FixedVector<PHINode *>                      mPartitionStartTimePhi;
-    std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
+    std::array<Value *, NUM_OF_CYCLE_COUNTERS>  mCycleCounters;
+
+    // papi counter state
+    #ifdef ENABLE_PAPI
+    SmallVector<int, 8>                         PAPIEventList;
+    Value *                                     PAPIEventSet = nullptr;
+    Value *                                     PAPIEventSetVal = nullptr;
+    Value *                                     PAPIReadMeasurementArray = nullptr;
+    #endif
 
     // debug state
     Value *                                     mThreadId = nullptr;
@@ -706,6 +757,9 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
 , HasZeroExtendedStream(P.HasZeroExtendedStream)
 , EnableCycleCounter(DebugOptionIsSet(codegen::EnableCycleCounter))
+#ifdef ENABLE_PAPI
+, EnablePAPICounters(codegen::PapiCounterOptions != codegen::OmittedOption)
+#endif
 , TraceIO(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))
 , TraceUnconsumedItemCounts(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))
 , TraceProducedItemCounts(DebugOptionIsSet(codegen::TraceProducedItemCounts))
@@ -785,7 +839,9 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mInternalBindings(std::move(P.mInternalBindings))
 , mInternalBuffers(std::move(P.mInternalBuffers))
 {
-
+    #ifdef ENABLE_PAPI
+    convertPAPIEventNamesToCodes();
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -849,5 +905,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "debug_messages.hpp"
 #include "codegen/buffer_manipulation_logic.hpp"
 #include "pipeline_optimization_logic.hpp"
+#include "papi_instrumentation_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

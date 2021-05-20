@@ -39,7 +39,7 @@ StdOutKernel::StdOutKernel(BuilderRef b, StreamSet *codeUnitBuffer)
 // output & scalars
 , {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitBuffer->getFieldWidth()) {
-    setStride(codegen::SegmentSize);
+    setStride((8 * BUFSIZ) / mCodeUnitWidth);
     addAttribute(SideEffecting());
 }
 
@@ -142,7 +142,7 @@ FileSink::FileSink(BuilderRef b, Scalar * outputFileName, StreamSet * codeUnitBu
 {InternalScalar{b->getInt8PtrTy(), "temporaryFileName"},
  InternalScalar{b->getInt32Ty(), "fileDescriptor"}})
 , mCodeUnitWidth(codeUnitBuffer->getFieldWidth()) {
-    setStride(codegen::SegmentSize);
+    setStride((8 * BUFSIZ) / mCodeUnitWidth);
     addAttribute(SideEffecting());
 }
 
