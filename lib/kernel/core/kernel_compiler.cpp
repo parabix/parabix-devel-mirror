@@ -1113,6 +1113,7 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeOptions o
             case ScalarType::ThreadLocal:
                 if (options == InitializeOptions::SkipThreadLocal) continue;
                 assert (threadLocalIndex < threadLocalCount);
+                assert (mThreadLocalHandle);
                 indices[1] = b->getInt32(threadLocalIndex++);
                 scalar = b->CreateInBoundsGEP(mThreadLocalHandle, indices);
                 break;

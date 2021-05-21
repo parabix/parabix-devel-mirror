@@ -47,9 +47,13 @@ enum PAPIMeasurement {
 };
 enum PAPIKernelCounter {
   PAPI_KERNEL_SYNCHRONIZATION
-  , PAPI_BUFFER_MANAGEMENT
+  , PAPI_PARTITION_JUMP_SYNCHRONIZATION
+  , PAPI_BUFFER_EXPANSION
+  , PAPI_BUFFER_COPY
   , PAPI_KERNEL_EXECUTION
   , PAPI_KERNEL_TOTAL
+  // ------------------
+  , NUM_OF_PAPI_COUNTERS
 };
 #endif
 
@@ -80,6 +84,7 @@ const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
 #ifdef ENABLE_PAPI
 const static std::string STATISTICS_PAPI_COUNT_ARRAY_SUFFIX = ".PCS";
 const static std::string STATISTICS_GLOBAL_PAPI_COUNT_ARRAY = "!PCS";
+const static std::string STATISTICS_THREAD_LOCAL_PAPI_COUNT_ARRAY = "tPCS";
 #endif
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
 const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".SBY";
@@ -400,8 +405,9 @@ public:
 // papi instrumentation functions
 #ifdef ENABLE_PAPI
     void convertPAPIEventNamesToCodes();
+    static void linkPAPILibrary(BuilderRef b);
     void addPAPIEventCounterPipelineProperties(BuilderRef b);
-    void addPAPIEventCounterKernelProperties(BuilderRef b, const unsigned kernel);
+    void addPAPIEventCounterKernelProperties(BuilderRef b, const unsigned kernel, const bool isRoot);
     void initializePAPI(BuilderRef b) const;
     void registerPAPIThread(BuilderRef b) const;
     void createEventSetAndStartPAPI(BuilderRef b);
@@ -410,7 +416,8 @@ public:
     void unregisterPAPIThread(BuilderRef b) const;
     void stopPAPIAndDestroyEventSet(BuilderRef b);
     void shutdownPAPI(BuilderRef b) const;
-
+    void accumulateFinalPAPICounters(BuilderRef b);
+    void printPAPIReportIfRequested(BuilderRef b);
     void checkPAPIRetValAndExitOnError(BuilderRef b, StringRef source, const int expected, Value * const retVal) const;
 
 #endif
@@ -679,6 +686,7 @@ protected:
     OutputPortVector<PHINode *>                 mUpdatedProducedDeferredPhi;
     OutputPortVector<PHINode *>                 mFullyProducedItemCount; // *after* exiting the kernel
 
+
     // cycle counter state
     Value *                                     mKernelStartTime = nullptr;
     FixedVector<PHINode *>                      mPartitionStartTimePhi;
@@ -758,7 +766,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , HasZeroExtendedStream(P.HasZeroExtendedStream)
 , EnableCycleCounter(DebugOptionIsSet(codegen::EnableCycleCounter))
 #ifdef ENABLE_PAPI
-, EnablePAPICounters(codegen::PapiCounterOptions != codegen::OmittedOption)
+, EnablePAPICounters(codegen::PapiCounterOptions.compare(codegen::OmittedOption) != 0)
 #endif
 , TraceIO(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))
 , TraceUnconsumedItemCounts(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))

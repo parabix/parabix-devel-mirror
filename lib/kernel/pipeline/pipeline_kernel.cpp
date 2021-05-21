@@ -94,6 +94,11 @@ void PipelineKernel::linkExternalMethods(BuilderRef b) {
     for (const CallBinding & call : mCallBindings) {
         call.Callee = b->LinkFunction(call.Name, call.Type, call.FunctionPointer);
     }
+    #ifdef ENABLE_PAPI
+    if (LLVM_UNLIKELY(codegen::PapiCounterOptions.compare(codegen::OmittedOption) != 0)) {
+        PipelineCompiler::linkPAPILibrary(b);
+    }
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

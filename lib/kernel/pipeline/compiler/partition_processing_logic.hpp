@@ -552,9 +552,15 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
     const auto toAcquire = std::min(std::max(lastConsumer, firstKernelInTargetPartition), LastKernel);
 
     // TODO: experiment with a mutex lock here.
+    #ifdef ENABLE_PAPI
+    readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE);
+    #endif
     Value * const startTime = startCycleCounter(b);
     acquireSynchronizationLock(b, toAcquire);
     updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
+    #ifdef ENABLE_PAPI
+    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPI_PARTITION_JUMP_SYNCHRONIZATION);
+    #endif
     for (auto kernel = mKernelId; kernel < firstKernelInTargetPartition; ++kernel) {
         assert (KernelPartitionId[kernel] < partitionId);
         releaseSynchronizationLock(b, kernel);

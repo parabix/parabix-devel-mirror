@@ -91,9 +91,6 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     addBufferHandlesToPipelineKernel(b, PipelineInput);
     addConsumerKernelProperties(b, PipelineInput);
     addPipelinePriorItemCountProperties(b);
-    #ifdef ENABLE_PAPI
-    addPAPIEventCounterPipelineProperties(b);
-    #endif
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         // Is this the start of a new partition?
@@ -107,14 +104,15 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addConsumerKernelProperties(b, i);
         addCycleCounterProperties(b, i, isRoot);
         #ifdef ENABLE_PAPI
-        addPAPIEventCounterKernelProperties(b, i);
+        addPAPIEventCounterKernelProperties(b, i, isRoot);
         #endif
         addProducedItemCountDeltaProperties(b, i);
         addUnconsumedItemCountProperties(b, i);
         addFamilyKernelProperties(b, i);
     }
-
-
+    #ifdef ENABLE_PAPI
+    addPAPIEventCounterPipelineProperties(b);
+    #endif
 
 }
 
@@ -269,6 +267,12 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     // TODO: if we detect a fatal error at init, we should not execute
     // the pipeline loop.
 
+    #ifdef ENABLE_PAPI
+    if (!ExternallySynchronized) {
+        initializePAPI(b);
+    }
+    #endif
+
     mScalarValue.reset(FirstKernel, LastScalar);
 
     initializeKernelAssertions(b);
@@ -398,18 +402,12 @@ inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
     verifyBufferRelationships();
     mScalarValue.reset(FirstKernel, LastScalar);
     readPipelineIOItemCounts(b);
-    #ifdef ENABLE_PAPI
-    initializePAPI(b);
-    #endif
     if (mNumOfThreads == 1) {
         generateSingleThreadKernelMethod(b);
     } else {
         generateMultiThreadKernelMethod(b);
     }
     resetInternalBufferHandles();
-    #ifdef ENABLE_PAPI
-    shutdownPAPI(b);
-    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -577,7 +575,6 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         Value * threadId = b->CreateLoad(threadIdPtr[i]);
         b->CreatePThreadJoinCall(threadId, status);
     }
-
     if (mTarget->hasThreadLocal()) {
         const auto n = mTarget->isStateful() ? 2 : 1;
         SmallVector<Value *, 2> args(n);
@@ -627,6 +624,9 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         mSegNo = b->CreateUMax(mSegNo, segNo);
     }
     printOptionalCycleCounter(b);
+    #ifdef ENABLE_PAPI
+    printPAPIReportIfRequested(b);
+    #endif
     printOptionalBlockingIOStatistics(b);
     printOptionalBlockedIOPerSegment(b);
     printOptionalBufferExpansionHistory(b);
@@ -643,6 +643,11 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     }
     releaseOwnedBuffers(b, true);
     resetInternalBufferHandles();
+    #ifdef ENABLE_PAPI
+    if (!ExternallySynchronized) {
+        shutdownPAPI(b);
+    }
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -745,7 +750,6 @@ inline Value * PipelineCompiler::isProcessThread(BuilderRef b, Value * const thr
  * @brief generateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
-
     assert (mTarget->hasThreadLocal());
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = getKernel(i);
@@ -764,14 +768,16 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
             b->CreateCall(f, args);
         }
     }
+    #ifdef ENABLE_PAPI
+    accumulateFinalPAPICounters(b);
+    #endif
     releaseOwnedBuffers(b, false);
     // Since all of the nested kernels thread local state is contained within
     // this pipeline thread's thread local state, freeing the pipeline's will
     // also free the inner kernels.
     #ifdef PERMIT_BUFFER_MEMORY_REUSE
     if (LLVM_LIKELY(RequiredThreadLocalStreamSetMemory > 0)) {
-        Value * const addr = b->getScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY);
-        b->CreateFree(addr);
+        b->CreateFree(b->getScalarField(BASE_THREAD_LOCAL_STREAMSET_MEMORY));
     }
     #endif
     b->CreateFree(getThreadLocalHandle());

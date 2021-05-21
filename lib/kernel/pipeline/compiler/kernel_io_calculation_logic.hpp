@@ -794,7 +794,7 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPor
         recordBufferExpansionHistory(b, outputPort, buffer);
         updateCycleCounter(b, mKernelId, cycleCounterStart, BUFFER_EXPANSION);
         #ifdef ENABLE_PAPI
-        recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPI_BUFFER_MANAGEMENT);
+        recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPI_BUFFER_EXPANSION);
         #endif
 
         auto & afterExpansion = mWritableOutputItems[outputPort.Number];

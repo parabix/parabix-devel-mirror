@@ -64,8 +64,9 @@ static cl::opt<std::string, true> UnoptimizedIROutputOption("ShowUnoptimizedIR",
 
 #ifdef ENABLE_PAPI
 std::string PapiCounterOptions = OmittedOption;
-static cl::opt<std::string, true> clPapiCounterOptions("PapiCounters", cl::location(ShowUnoptimizedIROption), cl::ValueOptional,
-                                                         cl::desc("comma delimited list of PAPI event names (run papi_avail for options)"), cl::value_desc("comma delimited list"), cl::cat(CodeGenOptions));
+static cl::opt<std::string, true> clPapiCounterOptions("PapiCounters", cl::location(PapiCounterOptions), cl::ValueOptional,
+                                                       cl::desc("comma delimited list of PAPI event names (run papi_avail for options)"),
+                                                       cl::value_desc("comma delimited list"), cl::cat(CodeGenOptions));
 #endif
 
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
