@@ -22,7 +22,10 @@
 #include <llvm/IR/IntrinsicsX86.h>
 #endif
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 namespace kernel {
 
@@ -70,13 +73,8 @@ void StreamExpandKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * con
     Constant * const ZERO = b->getSize(0);
     Constant * BLOCK_WIDTH = ConstantInt::get(sizeTy, b->getBitBlockWidth());
     Constant * FIELD_WIDTH = ConstantInt::get(sizeTy, mFieldWidth);
-    #if LLVM_VERSION_MAJOR < 10
-        Constant * fwSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth));
-        Constant * fw_sub1Splat = ConstantVector::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth - 1));
-    #else
-        Constant * fwSplat = ConstantVector::getSplat({numFields, false}, ConstantInt::get(fieldWidthTy, mFieldWidth));
-        Constant * fw_sub1Splat = ConstantVector::getSplat({numFields, false}, ConstantInt::get(fieldWidthTy, mFieldWidth - 1));
-    #endif
+    Constant * fwSplat = llvm_version::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth));
+    Constant * fw_sub1Splat = llvm_version::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth - 1));
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * expandLoop = b->CreateBasicBlock("expandLoop");
     BasicBlock * expansionDone = b->CreateBasicBlock("expansionDone");

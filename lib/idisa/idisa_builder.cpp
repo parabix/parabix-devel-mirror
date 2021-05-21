@@ -16,7 +16,10 @@
 #include <toolchain/toolchain.h>
 #include <unistd.h>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 namespace IDISA {
 
@@ -79,39 +82,23 @@ CallInst * IDISA_Builder::CallPrintRegister(StringRef name, Value * const value,
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
-    #if LLVM_VERSION_MAJOR < 10
-        return ConstantVector::getSplat(mBitBlockWidth/fw, Constant::getIntegerValue(getIntNTy(fw), APInt::getHighBitsSet(fw, fw/2)));
-    #else
-        return ConstantVector::getSplat({mBitBlockWidth/fw, false}, Constant::getIntegerValue(getIntNTy(fw), APInt::getHighBitsSet(fw, fw/2)));
-    #endif
+    return llvm_version::getSplat(mBitBlockWidth/fw, Constant::getIntegerValue(getIntNTy(fw), APInt::getHighBitsSet(fw, fw/2)));
 }
 
 Constant * IDISA_Builder::simd_lomask(unsigned fw) {
-    #if LLVM_VERSION_MAJOR < 10
-        return ConstantVector::getSplat(mBitBlockWidth/fw, Constant::getIntegerValue(getIntNTy(fw), APInt::getLowBitsSet(fw, fw/2)));
-    #else
-        return ConstantVector::getSplat({mBitBlockWidth/fw, false}, Constant::getIntegerValue(getIntNTy(fw), APInt::getLowBitsSet(fw, fw/2)));
-    #endif
+    return llvm_version::getSplat(mBitBlockWidth/fw, Constant::getIntegerValue(getIntNTy(fw), APInt::getLowBitsSet(fw, fw/2)));
 }
 
 Value * IDISA_Builder::simd_select_hi(unsigned fw, Value * a) {
     const unsigned vectorWidth = getVectorBitWidth(a);
     Constant * maskField = Constant::getIntegerValue(getIntNTy(fw), APInt::getHighBitsSet(fw, fw/2));
-    #if LLVM_VERSION_MAJOR < 10
-        return simd_and(a, ConstantVector::getSplat(vectorWidth/fw, maskField));
-    #else
-        return simd_and(a, ConstantVector::getSplat({vectorWidth/fw, false}, maskField));
-    #endif
+    return simd_and(a, llvm_version::getSplat(vectorWidth/fw, maskField));
 }
 
 Value * IDISA_Builder::simd_select_lo(unsigned fw, Value * a) {
     const unsigned vectorWidth = getVectorBitWidth(a);
     Constant * maskField = Constant::getIntegerValue(getIntNTy(fw), APInt::getLowBitsSet(fw, fw/2));
-    #if LLVM_VERSION_MAJOR < 10
-        return simd_and(a, ConstantVector::getSplat(vectorWidth/fw, maskField));
-    #else
-        return simd_and(a, ConstantVector::getSplat({vectorWidth/fw, false}, maskField));
-    #endif
+    return simd_and(a, llvm_version::getSplat(vectorWidth/fw, maskField));
 }
 
 Constant * IDISA_Builder::getConstantVectorSequence(unsigned fw, unsigned first, unsigned last, unsigned by) {
@@ -848,11 +835,7 @@ Value * IDISA_Builder::mvmd_shuffle(unsigned fw, Value * table, Value * index_ve
 Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1, Value * index_vector) {
     //  Use two shuffles, with selection by the bit value within the shuffle_table.
     const auto field_count = mBitBlockWidth/fw;
-    #if LLVM_VERSION_MAJOR < 10
-        Constant * selectorSplat = ConstantVector::getSplat(field_count, ConstantInt::get(getIntNTy(fw), field_count));
-    #else
-        Constant * selectorSplat = ConstantVector::getSplat({field_count, false}, ConstantInt::get(getIntNTy(fw), field_count));
-    #endif
+    Constant * selectorSplat = llvm_version::getSplat(field_count, ConstantInt::get(getIntNTy(fw), field_count));
     Value * selectMask = simd_eq(fw, simd_and(index_vector, selectorSplat), selectorSplat);
     Value * idx = simd_and(index_vector, simd_not(selectorSplat));
     Value * rslt= simd_or(simd_and(mvmd_shuffle(fw, table0, idx), simd_not(selectMask)), simd_and(mvmd_shuffle(fw, table1, idx), selectMask));
@@ -876,21 +859,13 @@ Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * v, Value * select_mask
         select_mask = simd_eq(fw, simd_and(simd_fill(fw, select_mask), seq), seq);
     }
     Value * selected = simd_and(v, select_mask);
-    #if LLVM_VERSION_MAJOR < 10
-        Constant * oneSplat = ConstantVector::getSplat(field_count, ConstantInt::get(fieldTy, 1));
-    #else
-        Constant * oneSplat = ConstantVector::getSplat({field_count, false}, ConstantInt::get(fieldTy, 1));
-    #endif
+    Constant * oneSplat = llvm_version::getSplat(field_count, ConstantInt::get(fieldTy, 1));
     Value * deletion_counts = simd_add(fw, oneSplat, select_mask);
     Value * deletion_totals = hsimd_partial_sum(fw, deletion_counts);
     unsigned fields = getVectorBitWidth(v)/fw;
     unsigned shift_amt = 1;
     while (shift_amt < fields) {
-        #if LLVM_VERSION_MAJOR < 10
-            Value * shift_splat = ConstantVector::getSplat(field_count, ConstantInt::get(fieldTy, shift_amt));
-        #else
-            Value * shift_splat = ConstantVector::getSplat({field_count, false}, ConstantInt::get(fieldTy, shift_amt));
-        #endif
+        Value * shift_splat = llvm_version::getSplat(field_count, ConstantInt::get(fieldTy, shift_amt));
         Value * shift_select = simd_and(deletion_totals, shift_splat);
         Value * shift_mask = simd_eq(fw, shift_select, shift_splat);
         Value * to_shift = simd_and(shift_mask, selected);

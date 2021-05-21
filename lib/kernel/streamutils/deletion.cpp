@@ -18,7 +18,10 @@
 #include <llvm/IR/IntrinsicsX86.h>
 #endif
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 inline size_t ceil_udiv(const size_t n, const size_t m) {
     return (n + m - 1) / m;
@@ -257,23 +260,11 @@ void StreamCompressKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * c
     IntegerType * const sizeTy = b->getSizeTy();
     const unsigned numFields = b->getBitBlockWidth() / mCompressedFieldWidth;
     Constant * zeroSplat = Constant::getNullValue(b->fwVectorType(mCompressedFieldWidth));
-    #if LLVM_VERSION_MAJOR < 10
-        Constant * oneSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, 1));
-    #else
-        Constant * oneSplat = ConstantVector::getSplat({numFields, false}, ConstantInt::get(fwTy, 1));
-    #endif
+    Constant * oneSplat = llvm_version::getSplat(numFields, ConstantInt::get(fwTy, 1));
     Constant * CFW = ConstantInt::get(fwTy, mCompressedFieldWidth);
-    #if LLVM_VERSION_MAJOR < 10
-        Constant * fwSplat = ConstantVector::getSplat(numFields, CFW);
-    #else
-        Constant * fwSplat = ConstantVector::getSplat({numFields, false}, CFW);
-    #endif
+    Constant * fwSplat = llvm_version::getSplat(numFields, CFW);
     Constant * numFieldConst = ConstantInt::get(fwTy, numFields);
-    #if LLVM_VERSION_MAJOR < 10
-        Constant * fwMaskSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
-    #else
-        Constant * fwMaskSplat = ConstantVector::getSplat({numFields, false}, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
-    #endif
+    Constant * fwMaskSplat = llvm_version::getSplat(numFields, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
     Constant * BLOCK_WIDTH = ConstantInt::get(fwTy, b->getBitBlockWidth());
     Constant * BLOCK_MASK = ConstantInt::get(fwTy, b->getBitBlockWidth() - 1);
 

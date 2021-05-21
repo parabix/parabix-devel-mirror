@@ -13,4 +13,5 @@ DEPS
     kernel.io
     kernel.pipeline
     kernel.util
+    LLVMVersion
 )

@@ -18,4 +18,5 @@ DEPS
     pablo
     re.cc
     kernel.pipeline
+    LLVMVersion
 )
