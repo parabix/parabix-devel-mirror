@@ -72,7 +72,26 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLLVM_VERSION_INTEGER=${LLVM_VERSION_IN
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLLVM_VERSION_major=${LLVM_VERSION_MAJOR} -DLLVM_VERSION_MINOR=${LLVM_VERSION_MINOR}")
 message(STATUS "LLVM Version Integer: ${LLVM_VERSION_INTEGER}")
 
+set (llvm_patch_version "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
+set (llvm_minor_version "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.x")
+set (llvm_major_version "${LLVM_VERSION_MAJOR}.x.x")
 
+set (full_llvm_version ${llvm_patch_version})
+
+if (EXISTS ${CMAKE_CURRENT_LIST_DIR}/LLVMVersion/${llvm_patch_version})
+  set (LLVM_VERSION_DIR ${llvm_patch_version})
+
+elseif(EXISTS ${CMAKE_CURRENT_LIST_DIR}/LLVMVersion/${llvm_minor_version})
+  set (LLVM_VERSION_DIR ${llvm_minor_version})
+
+elseif(EXISTS ${CMAKE_CURRENT_LIST_DIR}/LLVMVersion/${llvm_major_version})
+  set (LLVM_VERSION_DIR ${llvm_major_version})
+
+else()
+  message(FATAL_ERROR "LLVM-${full_llvm_version} is not supported")
+endif()
+
+include_directories(LLVMVersion/${LLVM_VERSION_DIR})
 
 ###   Import Dependency: Boost   ###
 
@@ -110,6 +129,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCXX_STANDARD=${CMAKE_CXX_STANDARD}")
 
 # Add include directories.
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+#include_directories(${CMAKE_CURRENT_SOURCE_DIR}/LLVMVersion/${LLVM_VERSION_DIR})
 
 # Place compiled executables in build/bin.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
@@ -340,6 +360,9 @@ endif()
 
 # Kernel Tests
 add_subdirectory(tests)
+
+# LLVM compatibility layer
+add_subdirectory(LLVMVersion/${LLVM_VERSION_DIR})
 
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")
