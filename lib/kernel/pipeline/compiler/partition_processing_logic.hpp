@@ -49,13 +49,13 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
     mCurrentPartitionId = -1U;
     setActiveKernel(b, FirstKernel, true);
     #ifdef ENABLE_PAPI
-    readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START);
+    readPAPIMeasurement(b, PAPIReadInitialMeasurementArray);
     #endif
     mKernelStartTime = startCycleCounter(b);
     acquireSynchronizationLock(b, FirstKernel);
     updateCycleCounter(b, FirstKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
     #ifdef ENABLE_PAPI
-    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_SYNCHRONIZATION);
+    accumPAPIMeasurementWithoutReset(b, PAPIReadInitialMeasurementArray, PAPIKernelCounter::PAPI_KERNEL_SYNCHRONIZATION);
     #endif
 }
 
@@ -553,13 +553,13 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
 
     // TODO: experiment with a mutex lock here.
     #ifdef ENABLE_PAPI
-    readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE);
+    readPAPIMeasurement(b, PAPIReadBeforeMeasurementArray);
     #endif
     Value * const startTime = startCycleCounter(b);
     acquireSynchronizationLock(b, toAcquire);
     updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
     #ifdef ENABLE_PAPI
-    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPI_PARTITION_JUMP_SYNCHRONIZATION);
+    accumPAPIMeasurementWithoutReset(b, PAPIReadBeforeMeasurementArray, PAPI_PARTITION_JUMP_SYNCHRONIZATION);
     #endif
     for (auto kernel = mKernelId; kernel < firstKernelInTargetPartition; ++kernel) {
         assert (KernelPartitionId[kernel] < partitionId);
@@ -609,24 +609,25 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
             updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
             #ifdef ENABLE_PAPI
-            recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
+            accumPAPIMeasurementWithoutReset(b, PAPIReadInitialMeasurementArray, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
             #endif
-            b->CreateBr(mNextPartitionEntryPoint);
 
+             b->CreateBr(mNextPartitionEntryPoint);
         } else {
             mKernelInitiallyTerminatedExit = b->GetInsertBlock();
-            b->CreateBr(mKernelJumpToNextUsefulPartition);
             if (mExhaustedInputAtJumpPhi) {
                 mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
             }
+             b->CreateBr(mKernelJumpToNextUsefulPartition);
         }
+
+
 
     } else { // if (!mIsPartitionRoot) {
 
         mKernelInitiallyTerminatedExit = b->GetInsertBlock();
         updateKernelExitPhisAfterInitiallyTerminated(b);
         b->CreateBr(mKernelExit);
-
     }
 
 }
@@ -671,7 +672,7 @@ void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
     #ifdef ENABLE_PAPI
-    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
+    accumPAPIMeasurementWithoutReset(b, PAPIReadInitialMeasurementArray, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
     #endif
 
     b->CreateBr(mPartitionEntryPoint[nextPartitionId]);
@@ -689,13 +690,13 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
     const auto nextKernel = mKernelId + 1U;
     if (LLVM_LIKELY(nextKernel < PipelineOutput)) {
         #ifdef ENABLE_PAPI
-        readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START);
+        readPAPIMeasurement(b, PAPIReadInitialMeasurementArray);
         #endif
         mKernelStartTime = startCycleCounter(b);
         acquireSynchronizationLock(b, nextKernel);
         updateCycleCounter(b, nextKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
         #ifdef ENABLE_PAPI
-        recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_SYNCHRONIZATION);
+        accumPAPIMeasurementWithoutReset(b, PAPIReadInitialMeasurementArray, PAPIKernelCounter::PAPI_KERNEL_SYNCHRONIZATION);
         #endif
     }
 

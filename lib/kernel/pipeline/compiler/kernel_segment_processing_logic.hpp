@@ -355,7 +355,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
     #ifdef ENABLE_PAPI
-    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_START, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
+    accumPAPIMeasurementWithoutReset(b, PAPIReadInitialMeasurementArray, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
     #endif
 
     if (LLVM_UNLIKELY(CheckAssertions)) {        
@@ -853,9 +853,8 @@ void PipelineCompiler::end(BuilderRef b) {
         b->setTerminationSignal(retVal);
     }
 
-   // b->GetInsertBlock()->getParent()->print(errs());
-   mExpectedNumOfStridesMultiplier = nullptr;
-   mThreadLocalStreamSetBaseAddress = nullptr;
+    mExpectedNumOfStridesMultiplier = nullptr;
+    mThreadLocalStreamSetBaseAddress = nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

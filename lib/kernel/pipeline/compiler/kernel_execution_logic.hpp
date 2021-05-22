@@ -30,7 +30,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         b->CreateMProtect(mKernelSharedHandle, CBuilder::Protect::WRITE);
     }
     #ifdef ENABLE_PAPI
-    readPAPIMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE);
+    readPAPIMeasurement(b, PAPIReadBeforeMeasurementArray);
     #endif
     Value * const beforeKernelCall = startCycleCounter(b);
     Value * doSegmentRetVal = nullptr;
@@ -44,7 +44,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     }
     updateCycleCounter(b, mKernelId, beforeKernelCall, CycleCounter::KERNEL_EXECUTION);
     #ifdef ENABLE_PAPI
-    recordPAPIKernelMeasurement(b, PAPIMeasurement::PAPI_KERNEL_BEFORE, PAPIKernelCounter::PAPI_KERNEL_EXECUTION);
+    accumPAPIMeasurementWithoutReset(b, PAPIReadBeforeMeasurementArray, PAPIKernelCounter::PAPI_KERNEL_EXECUTION);
     #endif
 
     #ifdef PRINT_DEBUG_MESSAGES

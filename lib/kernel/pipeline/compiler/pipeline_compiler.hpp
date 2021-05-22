@@ -38,13 +38,6 @@ enum CycleCounter {
 };
 
 #ifdef ENABLE_PAPI
-enum PAPIMeasurement {
-  PAPI_KERNEL_START
-  , PAPI_KERNEL_BEFORE
-  , PAPI_KERNEL_AFTER
-  // ------------------
-  , PAPI_MEASUREMENTS_PER_KERNEL
-};
 enum PAPIKernelCounter {
   PAPI_KERNEL_SYNCHRONIZATION
   , PAPI_PARTITION_JUMP_SYNCHRONIZATION
@@ -411,8 +404,8 @@ public:
     void initializePAPI(BuilderRef b) const;
     void registerPAPIThread(BuilderRef b) const;
     void createEventSetAndStartPAPI(BuilderRef b);
-    Value * readPAPIMeasurement(BuilderRef b, PAPIMeasurement counter);
-    void recordPAPIKernelMeasurement(BuilderRef b, PAPIMeasurement from, PAPIKernelCounter sumTo);
+    void readPAPIMeasurement(BuilderRef b, Value * const measurementArray) const;
+    void accumPAPIMeasurementWithoutReset(BuilderRef b, Value * const beforeMeasurement, PAPIKernelCounter measurementType) const;
     void unregisterPAPIThread(BuilderRef b) const;
     void stopPAPIAndDestroyEventSet(BuilderRef b);
     void shutdownPAPI(BuilderRef b) const;
@@ -643,9 +636,6 @@ protected:
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
     unsigned                                    mNumOfTruncatedInputBuffers = 0;
 
-//    unsigned                                    mNumOfLocalInputPortIds = 0;
-//    unsigned                                    mNumOfLocalOutputPortIds = 0;
-
     InputPortVector<Value *>                    mInitiallyProcessedItemCount; // *before* entering the kernel
     InputPortVector<Value *>                    mInitiallyProcessedDeferredItemCount;
     InputPortVector<PHINode *>                  mAlreadyProcessedPhi; // entering the segment loop
@@ -690,14 +680,16 @@ protected:
     // cycle counter state
     Value *                                     mKernelStartTime = nullptr;
     FixedVector<PHINode *>                      mPartitionStartTimePhi;
-    std::array<Value *, NUM_OF_CYCLE_COUNTERS>  mCycleCounters;
+    FixedArray<Value *, NUM_OF_CYCLE_COUNTERS>  mCycleCounters;
 
     // papi counter state
     #ifdef ENABLE_PAPI
     SmallVector<int, 8>                         PAPIEventList;
     Value *                                     PAPIEventSet = nullptr;
     Value *                                     PAPIEventSetVal = nullptr;
-    Value *                                     PAPIReadMeasurementArray = nullptr;
+    Value *                                     PAPIReadInitialMeasurementArray = nullptr;
+    Value *                                     PAPIReadBeforeMeasurementArray = nullptr;
+    Value *                                     PAPIReadAfterMeasurementArray = nullptr;
     #endif
 
     // debug state

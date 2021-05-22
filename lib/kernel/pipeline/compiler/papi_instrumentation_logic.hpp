@@ -14,7 +14,7 @@
 
 namespace kernel {
 
-using papi_counter_t = long_long;
+using papi_counter_t = unsigned long_long;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief convertPAPIEventNamesToCodes
@@ -67,6 +67,8 @@ void PipelineCompiler::convertPAPIEventNamesToCodes() {
             raw_svector_ostream out(tmp);
             out << "PAPI Add Events Error: ";
             out << PAPI_strerror(rvalCreateEventSet < PAPI_OK ? rvalCreateEventSet : PAPI_EINVAL);
+            out << "\n"
+                   "Check papi_avail for available options.";
             report_fatal_error(out.str());
         }
 
@@ -82,8 +84,8 @@ void PipelineCompiler::addPAPIEventCounterPipelineProperties(BuilderRef b) {
 
     if (LLVM_UNLIKELY(EnablePAPICounters)) {
         IntegerType * const papiCounterTy = TypeBuilder<papi_counter_t, false>::get(b->getContext());
-        const auto n = PAPIEventList.size();
-        ArrayType * const papiEventListCountersTy = ArrayType::get(papiCounterTy, n);
+        const auto numOfEvents = PAPIEventList.size();
+        ArrayType * const papiEventCounterTotalTy = ArrayType::get(papiCounterTy, numOfEvents);
 
         // TODO: make a better method than this for accumulating the final thread local counts.
         // We can't share a global scalar that isn't guarded by synchronization but could pass
@@ -94,9 +96,9 @@ void PipelineCompiler::addPAPIEventCounterPipelineProperties(BuilderRef b) {
         // a design. The following choice to use a global accumulator in the thread local
         // destructor can easily be converted to doing this.
 
-        mTarget->addInternalScalar(papiEventListCountersTy, STATISTICS_GLOBAL_PAPI_COUNT_ARRAY, 0);
+        mTarget->addInternalScalar(papiEventCounterTotalTy, STATISTICS_GLOBAL_PAPI_COUNT_ARRAY, 0);
         if (mNumOfThreads > 1) {
-            mTarget->addThreadLocalScalar(papiEventListCountersTy, STATISTICS_THREAD_LOCAL_PAPI_COUNT_ARRAY, 0);
+            mTarget->addThreadLocalScalar(papiEventCounterTotalTy, STATISTICS_THREAD_LOCAL_PAPI_COUNT_ARRAY, 0);
         }
     }
 }
@@ -104,11 +106,11 @@ void PipelineCompiler::addPAPIEventCounterPipelineProperties(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addPAPIEventCounterKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addPAPIEventCounterKernelProperties(BuilderRef b, const unsigned kernel, const bool isRoot) {
+void PipelineCompiler::addPAPIEventCounterKernelProperties(BuilderRef b, const unsigned kernel, const bool /* isRoot */) {
     if (LLVM_UNLIKELY(EnablePAPICounters)) {
         IntegerType * const papiCounterTy = TypeBuilder<papi_counter_t, false>::get(b->getContext());
-        const auto n = PAPIEventList.size();
-        ArrayType * const papiEventListCountersTy = ArrayType::get(papiCounterTy, n);
+        const auto numOfEvents = PAPIEventList.size();
+        ArrayType * const papiEventListCountersTy = ArrayType::get(papiCounterTy, numOfEvents);
         ArrayType * const papiDataTy = ArrayType::get(papiEventListCountersTy, NUM_OF_PAPI_COUNTERS);
         const auto prefix = makeKernelName(kernel) + STATISTICS_PAPI_COUNT_ARRAY_SUFFIX;
         mTarget->addInternalScalar(papiDataTy, prefix, kernel);
@@ -209,9 +211,17 @@ void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
         // All counters are implicitly set to zero before counting.
 
         IntegerType * const papiCounterTy = TypeBuilder<papi_counter_t, false>::get(b->getContext());
+        PointerType * const papiCounterPtrTy = papiCounterTy->getPointerTo();
         ArrayType * const papiEventListCountersTy = ArrayType::get(papiCounterTy, n);
 
-        PAPIReadMeasurementArray = b->CreateAllocaAtEntryPoint(papiEventListCountersTy, b->getInt32(PAPI_MEASUREMENTS_PER_KERNEL));
+        auto makeCounterList = [&]() {
+            return b->CreatePointerCast(b->CreateAllocaAtEntryPoint(papiEventListCountersTy), papiCounterPtrTy);
+        };
+
+        PAPIReadInitialMeasurementArray = makeCounterList();
+        PAPIReadBeforeMeasurementArray = makeCounterList();
+        PAPIReadAfterMeasurementArray = makeCounterList();
+
     }
 }
 
@@ -219,68 +229,60 @@ void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readPAPIEventsIntoArray
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::readPAPIMeasurement(BuilderRef b, PAPIMeasurement counter) {
-    Value * measurementArray = nullptr;
+void PipelineCompiler::readPAPIMeasurement(BuilderRef b, Value * const measurementArray) const {
     if (LLVM_UNLIKELY(EnablePAPICounters)) {
         Module * const m = b->getModule();
-
-        FixedArray<Value *, 2> offset;
-        offset[0] = b->getInt32(0);
-        offset[1] = b->getInt32((unsigned)counter);
-        measurementArray = b->CreateGEP(PAPIReadMeasurementArray, offset);
-
-        Function * const PAPIReadFn = m->getFunction("PAPI_read");
-
+        Function * const PAPIReadFn = m->getFunction("PAPI_read"); assert (PAPIReadFn);
         FixedArray<Value *, 2> args;
         args[0] = PAPIEventSetVal;
         args[1] = measurementArray;
-        // TODO: should probably check the error msg here
-        // Value * const readRetVal =
+        // TODO: should probably check the error code here but if we do get an error,
+        // what can we avoid contaminating the results but also inform the user something
+        // went wrong?
         b->CreateCall(PAPIReadFn, args);
     }
-    return measurementArray;
 }
 
 
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief recordPAPIKernelMeasurementDiff
+ * @brief accumPAPIMeasurementWithoutReset
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::recordPAPIKernelMeasurement(BuilderRef b, PAPIMeasurement from, PAPIKernelCounter sumTo) {
+void PipelineCompiler::accumPAPIMeasurementWithoutReset(BuilderRef b, Value * const beforeMeasurement, PAPIKernelCounter measurementType) const {
     if (LLVM_UNLIKELY(EnablePAPICounters)) {
-        Value * const after = readPAPIMeasurement(b, PAPI_KERNEL_AFTER);
 
-        FixedArray<Value *, 2> selected;
-        selected[0] = b->getInt32(0);
-        selected[1] = b->getInt32((unsigned)from);
-        Value * const before = b->CreateGEP(PAPIReadMeasurementArray, selected);
+        readPAPIMeasurement(b, PAPIReadAfterMeasurementArray);
+
         const auto prefix = makeKernelName(mKernelId) + STATISTICS_PAPI_COUNT_ARRAY_SUFFIX;
-
         Value * const baseCounter = b->getScalarFieldPtr(prefix);
 
-        FixedArray<Value *, 3> update;
-        update[0] = b->getInt32(0);
-        update[1] = b->getInt32((unsigned)sumTo);
+        ConstantInt * const ZERO = b->getInt32(0);
 
-         // TODO: this could be vectorized but would require storing the counters as vectortypes.
+        FixedArray<Value *, 3> update;
+        update[0] = ZERO;
+        update[1] = b->getInt32((unsigned)measurementType);
+
+        // TODO: this could be vectorized but would require storing the counters as vectortypes.
+        // The cost of moving the values from general to SIMD registers might become a factor.
+        // Does LLVM consider this when adding vectortypes?
         const auto n = PAPIEventList.size();
         for (unsigned i = 0; i < n; ++i) {
             Value * const offset = b->getInt32(i);
-            Value * const beforeVal = b->CreateLoad(b->CreateGEP(before, offset), "beforeVal");
-            b->CallPrintInt("beforeVal", beforeVal);
-            Value * const afterVal = b->CreateLoad(b->CreateGEP(after, offset), "afterVal");
-            b->CallPrintInt("afterVal", afterVal);
+            Value * const beforeVal = b->CreateLoad(b->CreateGEP(beforeMeasurement, offset), "beforeVal");
+            Value * const afterVal = b->CreateLoad(b->CreateGEP(PAPIReadAfterMeasurementArray, offset), "afterVal");
+            if (LLVM_UNLIKELY(CheckAssertions)) {
+                b->CreateAssert(b->CreateICmpULE(beforeVal, afterVal), "non-monotonic papi counter?");
+            }
             Value * const diff = b->CreateSub(afterVal, beforeVal);
-
             update[2] = offset;
-
             Value * const ptr = b->CreateGEP(baseCounter, update);
+            Value * const updatedVal = b->CreateAdd(b->CreateLoad(ptr), diff);
 
-            Value * const updated = b->CreateAdd(b->CreateLoad(ptr), diff);
-            b->CallPrintInt("updated", updated);
+//            b->CallPrintInt("uPtr." + std::to_string(mKernelId) + "." + std::to_string(measurementType) + "." + std::to_string(i), ptr);
+//            b->CallPrintInt("uVal." + std::to_string(mKernelId) + "." + std::to_string(measurementType) + "." + std::to_string(i), updatedVal);
 
-            b->CreateStore(b->CreateAdd(b->CreateLoad(ptr), diff), ptr);
+            b->CreateStore(updatedVal, ptr);
 
         }
     }
@@ -308,12 +310,15 @@ void PipelineCompiler::stopPAPIAndDestroyEventSet(BuilderRef b) {
             finalEventReads = b->getScalarFieldPtr(STATISTICS_GLOBAL_PAPI_COUNT_ARRAY);
         }
 
-        PointerType * const counterPtrTy = TypeBuilder<papi_counter_t *, false>::get(b->getContext());
+        PointerType * const counterPtrTy = TypeBuilder<papi_counter_t, false>::get(b->getContext())->getPointerTo();
+
+        finalEventReads = b->CreatePointerCast(finalEventReads, counterPtrTy);
+
         Function * const PAPIStopFn = m->getFunction("PAPI_stop");
 
         FixedArray<Value *, 2> stopArgs;
         stopArgs[0] = PAPIEventSetVal;
-        stopArgs[1] = b->CreatePointerCast(finalEventReads, counterPtrTy);
+        stopArgs[1] = finalEventReads;
         Value * const stopRetVal = b->CreateCall(PAPIStopFn, stopArgs);
         checkPAPIRetValAndExitOnError(b,  "PAPI_stop", PAPI_OK, stopRetVal);
 
@@ -329,7 +334,6 @@ void PipelineCompiler::stopPAPIAndDestroyEventSet(BuilderRef b) {
         Function * const PAPIDestroyEventsetFn = m->getFunction("PAPI_destroy_eventset");
         Value * const destroyRetVal = b->CreateCall(PAPIDestroyEventsetFn, args);
         checkPAPIRetValAndExitOnError(b,  "PAPI_destroy_eventset", PAPI_OK, destroyRetVal);
-
     }
 }
 
@@ -339,17 +343,17 @@ void PipelineCompiler::stopPAPIAndDestroyEventSet(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::accumulateFinalPAPICounters(BuilderRef b) {
     if (LLVM_UNLIKELY(EnablePAPICounters && mNumOfThreads > 1)) {
-        Value * const localFinalEventReads = b->getScalarFieldPtr(STATISTICS_THREAD_LOCAL_PAPI_COUNT_ARRAY);
-        Value * const globalFinalEventReads = b->getScalarFieldPtr(STATISTICS_GLOBAL_PAPI_COUNT_ARRAY);
+
+        PointerType * const counterPtrTy = TypeBuilder<papi_counter_t, false>::get(b->getContext())->getPointerTo();
+
+        Value * const localFinalEventReads = b->CreatePointerCast(b->getScalarFieldPtr(STATISTICS_THREAD_LOCAL_PAPI_COUNT_ARRAY), counterPtrTy);
+        Value * const globalFinalEventReads = b->CreatePointerCast(b->getScalarFieldPtr(STATISTICS_GLOBAL_PAPI_COUNT_ARRAY), counterPtrTy);
         const auto n = PAPIEventList.size();
-        FixedArray<Value *, 2> offset;
-        offset[0] = b->getInt32(0);
         for (unsigned i = 0; i < n; ++i) {
-            offset[1] = b->getInt32(i);
+            Value * const offset = b->getInt32(i);
             Value * const val = b->CreateLoad(b->CreateGEP(localFinalEventReads, offset));
             Value * const ptr = b->CreateGEP(globalFinalEventReads, offset);
             Value * const updated = b->CreateAdd(val, b->CreateLoad(ptr));
-            b->CallPrintInt("papi" + std::to_string(i), updated);
             b->CreateStore(updated, ptr);
         }
     }
@@ -429,18 +433,11 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
 
     auto & out = errs();
 
-    out << "numOfKernels=" << numOfKernels << "\n";
-
-    out << "numOfEvents=" << numOfEvents << "\n";
-
-
     size_t maxNameLength = 4;
     for (unsigned i = 0; i < numOfKernels; ++i) {
         const auto len = std::strlen(kernelNames[i]);
         maxNameLength = std::max(maxNameLength, len);
     }
-
-    errs() << "maxNameLength=" << maxNameLength << "\n";
 
     size_t maxEventLength = 8;
     char eventName[PAPI_MAX_STR_LEN + 1];
@@ -450,8 +447,6 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
             maxEventLength = std::max(maxEventLength, std::strlen(eventName));
         }
     }
-
-    errs() << "maxEventLength=" << maxEventLength << "\n";
 
     papi_counter_t maxCounter = 5;
     for (unsigned i = 0; i != numOfEvents; i++) {
@@ -464,30 +459,36 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
         n *= static_cast<papi_counter_t>(10);
         ++maxCounterLength;
     }
+    maxCounterLength = std::max(maxCounterLength, 7UL);
     END_SCOPED_REGION
-
-    errs() << "maxCounterLength=" << maxCounterLength << "\n";
-
 
     out << "PAPI REPORT\n\n"
            "  # "  // kernel #
            "NAME"; // kernel Name
     assert (maxNameLength > 4);
-    out.indent(maxNameLength);
+    out.indent(maxNameLength - 3);
 
-    out << " EVENT";
+    out << "EVENT";
     assert (maxEventLength > 5);
-    out.indent(maxEventLength - 5);
+    out.indent(maxEventLength - 4);
 
-    out << "| SYNC " // kernel synchronization %,
+    out << "| SYNC  " // kernel synchronization %,
            " PART " // partition synchronization %,
            " EXPD " // buffer expansion %,
            " COPY " // look ahead + copy back + look behind %,
            " PIPE " // pipeline overhead %,
            " EXEC " // execution %,
-           "| VALUE \n"; // total kernel value.
+           "| VALUE"; // total kernel value.
+    out.indent(maxCounterLength - 6);
+    out << " (%)\n";
 
+//    PAPI_KERNEL_SYNCHRONIZATION
+//    , PAPI_PARTITION_JUMP_SYNCHRONIZATION
+//    , PAPI_BUFFER_EXPANSION
+//    , PAPI_BUFFER_COPY
 
+//    , PAPI_KERNEL_EXECUTION
+//    , PAPI_KERNEL_TOTAL
 
 
     std::string kernelNameFmt;
@@ -502,55 +503,80 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
     BEGIN_SCOPED_REGION
     raw_string_ostream formatter(eventNameFmt);
     formatter << "%-" << maxEventLength << "s" // event name
-                 "|";
+                 " |";
     END_SCOPED_REGION
 
 
     std::string valueFmt;
     BEGIN_SCOPED_REGION
     raw_string_ostream formatter(valueFmt);
-    formatter << "| %-" << maxCounterLength << PRIuMAX " (%5.2f)\n";
+    formatter << " | %" << maxCounterLength << PRIuMAX " (%5.2f)\n";
     END_SCOPED_REGION
 
-    for (unsigned i = 0, counter = 0; i < numOfKernels; ++i) {
+    // data is in [kernels][counters][events] ordering
 
-        for (unsigned j = 0; j < numOfEvents; ++j, ++counter) {
+    #define GET_POS(kernel, event, counter) \
+        ((kernel * NUM_OF_PAPI_COUNTERS + (counter)) * numOfEvents + event)
 
+    // std::vector<papi_counter_t> measurementSubtotals(numOfEvents * NUM_OF_PAPI_COUNTERS, 0UL);
 
-
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        for (unsigned j = 0; j < numOfEvents; ++j) {
             if (j == 0) {
                 out << llvm::format(kernelNameFmt.data(), i + 1, kernelNames[i]);
-                // out << (boost::format(kernelNameFmt.data()) % (i + 1) % kernelNames[i]).str();
             } else {
-                out.indent(maxNameLength);
+                out.indent(maxNameLength + 5);
             }
 
-            const auto rval = PAPI_event_code_to_name(eventCode[i], eventName);
+            const auto rval = PAPI_event_code_to_name(eventCode[j], eventName);
             if (LLVM_LIKELY(rval == PAPI_OK)) {
                 out << llvm::format(eventNameFmt.data(), (char*)eventName);
             } else {
-                out.write_hex(eventCode[i]);
+                out.write_hex(eventCode[j]);
             }
 
-            const long double subtotal = values[counter + PAPI_KERNEL_TOTAL];
-            for (unsigned k = 0; k < PAPI_KERNEL_TOTAL; ++k, ++counter) {
-//                const long double val = values[counter];
-//                const double ratio = (double)(val / subtotal) * 100.0;
-//                out << llvm::format(" %5.2f", ratio);
+            const auto subtotal = values[GET_POS(i, j, PAPI_KERNEL_TOTAL)];
+            const long double fsubtotal = subtotal;
 
-                out << llvm::format(" %" PRIu64, values[counter]);
+            for (unsigned k = 0; k < PAPI_KERNEL_EXECUTION; ++k) {
+                const long double val = values[GET_POS(i, j, k)];
+                const auto r = (val / fsubtotal);
+                out << llvm::format(" %5.2f", ((double)(r)) * 100.0);
             }
 
-//            const long double total = totals[j];
-//            const double ratio = (double)(subtotal / total) * 100.0;
+            BEGIN_SCOPED_REGION
+            papi_counter_t sum = 0;
+            for (unsigned k = 0; k < PAPI_KERNEL_TOTAL; ++k) {
+                sum += values[GET_POS(i, j, k)];
+            }
+            const papi_counter_t other = (sum < subtotal) ? subtotal - sum : 0.0;
+            const long double fother = other;
+            const auto r = (fother / fsubtotal);
+            assert (0.0L <= r && r <= 1.0L);
+            out << llvm::format(" %5.2f", (double)(r) * 100.0);
+            END_SCOPED_REGION
 
-            out << llvm::format(" %" PRIu64 "\n", values[counter]);
+            BEGIN_SCOPED_REGION
+            const long double val = values[GET_POS(i, j, PAPI_KERNEL_EXECUTION)];
+            const auto r = (val / fsubtotal);
+            assert (0.0L <= r && r <= 1.0L);
+            out << llvm::format(" %5.2f", (double)(r) * 100.0);
+            END_SCOPED_REGION
 
-//            out << llvm::format(valueFmt.data(), values[counter], ratio);
+            BEGIN_SCOPED_REGION
+            const long double ftotal = totals[j];
+            const auto r = (fsubtotal / ftotal);
+            assert (0.0L <= r && r <= 1.0L);
+            const double ratio = (double)(r) * 100.0;
+            out << llvm::format(valueFmt.data(), subtotal, ratio);
+            END_SCOPED_REGION
 
         }
-
     }
+
+    #undef GET_POS
+
+    out << '\n';
 
 }
 
@@ -570,12 +596,12 @@ void PipelineCompiler::printPAPIReportIfRequested(BuilderRef b) {
 
         ConstantInt * const ZERO = b->getInt32(0);
 
-        const auto m = LastKernel - FirstKernel + 1U;
+        const auto numOfKernels = LastKernel - FirstKernel + 1U;
 
         auto toGlobal = [&](ArrayRef<Constant *> array, Type * const type, size_t size) {
             ArrayType * const arTy = ArrayType::get(type, size);
             Constant * const ar = ConstantArray::get(arTy, array);
-            Module & mod = *b->getModule();
+            Module & mod = *b->getModule();            
             GlobalVariable * const gv = new GlobalVariable(mod, arTy, true, GlobalValue::PrivateLinkage, ar);
             FixedArray<Value *, 2> tmp;
             tmp[0] = ZERO;
@@ -585,40 +611,41 @@ void PipelineCompiler::printPAPIReportIfRequested(BuilderRef b) {
 
         PointerType * const int8PtrTy = b->getInt8PtrTy();
 
-        Value * const arrayOfKernelNames = toGlobal(kernelNames, int8PtrTy, m);
+        Value * const arrayOfKernelNames = toGlobal(kernelNames, int8PtrTy, numOfKernels);
 
-        PointerType * const counterPtrTy = TypeBuilder<papi_counter_t *, false>::get(b->getContext());
+        PointerType * const counterPtrTy = TypeBuilder<papi_counter_t, false>::get(b->getContext())->getPointerTo();
 
         IntegerType * const intTy = TypeBuilder<int, false>::get(b->getContext());
 
-        const auto n = PAPIEventList.size();
+        const auto numOfEvents = PAPIEventList.size();
         SmallVector<Constant *, 8> eventCodes;
-        for (unsigned i = 0; i < n; ++i) {
+        for (unsigned i = 0; i < numOfEvents; ++i) {
             eventCodes.push_back(ConstantInt::get(intTy, PAPIEventList[i]));
         }
-        Value * const arrayOfEventCodes = toGlobal(eventCodes, intTy, n);
+        Value * const arrayOfEventCodes = toGlobal(eventCodes, intTy, numOfEvents);
 
-        constexpr auto BYTES_PER_COUNTER = sizeof(papi_counter_t) * NUM_OF_PAPI_COUNTERS;
-        Constant * const counterArraySize =  b->getSize(m * n * BYTES_PER_COUNTER);
+        const auto BYTES_PER_KERNEL_COUNTER_GROUP = numOfEvents * sizeof(papi_counter_t) * NUM_OF_PAPI_COUNTERS;
+        Constant * const requiredSpace =  b->getSize(numOfKernels * BYTES_PER_KERNEL_COUNTER_GROUP);
 
-        Value * const values = b->CreatePointerCast(b->CreateAlignedMalloc(counterArraySize, sizeof(papi_counter_t)), int8PtrTy);
-        Constant * const kernelArraySize = b->getSize(n * BYTES_PER_COUNTER);
-        for (auto i = FirstKernel; i <= LastKernel; ++i) {
-            const auto prefix = makeKernelName(i) + STATISTICS_PAPI_COUNT_ARRAY_SUFFIX;
-            Value * const baseCounter = b->getScalarFieldPtr(prefix);
+        Value * const values = b->CreatePointerCast(b->CreateAlignedMalloc(requiredSpace, sizeof(papi_counter_t)), int8PtrTy);
+        Constant * const bytesPerKernelGroup = b->getSize(BYTES_PER_KERNEL_COUNTER_GROUP);
 
-
-            Constant * const kernelOutputOffset = b->getSize((i - FirstKernel) * n * BYTES_PER_COUNTER);
+        FixedArray<Value *, 3> indices;
+        indices[0] = ZERO;
+        for (size_t i = FirstKernel, offset = 0; i <= LastKernel; ++i) {
+            Value * const baseCounter = b->getScalarFieldPtr(makeKernelName(i) + STATISTICS_PAPI_COUNT_ARRAY_SUFFIX);
+            Constant * const kernelOutputOffset = b->getSize(offset);
             Value * const ptr = b->CreateGEP(values, kernelOutputOffset);
-            b->CreateMemCpy(ptr, baseCounter, kernelArraySize, sizeof(papi_counter_t));
+            b->CreateMemCpy(ptr, baseCounter, bytesPerKernelGroup, sizeof(papi_counter_t));
+            offset += BYTES_PER_KERNEL_COUNTER_GROUP;
         }
 
         Value * const totals = b->getScalarFieldPtr(STATISTICS_GLOBAL_PAPI_COUNT_ARRAY);
 
         FixedArray<Value *, 6> args;
-        args[0] = ConstantInt::get(intTy, m);
+        args[0] = ConstantInt::get(intTy, numOfKernels);
         args[1] = arrayOfKernelNames;
-        args[2] = ConstantInt::get(intTy, n);
+        args[2] = ConstantInt::get(intTy, numOfEvents);
         args[3] = arrayOfEventCodes;
         args[4] = b->CreatePointerCast(values, counterPtrTy);
         args[5] = b->CreatePointerCast(totals, counterPtrTy);

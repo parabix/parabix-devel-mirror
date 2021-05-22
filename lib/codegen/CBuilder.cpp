@@ -372,6 +372,7 @@ CallInst * CBuilder::CallPrintInt(StringRef name, Value * const value, const STD
             num = CreateZExt(value, int64Ty);
         }
     } else {
+        assert (!"CallPrintInt was given a non-integer/non-pointer value.");
         report_fatal_error("CallPrintInt was given a non-integer/non-pointer value.");
     }
     assert (num->getType()->isIntegerTy() && num->getType()->getIntegerBitWidth() == 64);
