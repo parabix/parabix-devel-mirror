@@ -29,6 +29,8 @@
 
 #define ENABLE_GRAPH_TESTING_FUNCTIONS
 
+// #define USE_FIXED_SEGMENT_NUMBER_INCREMENTS
+
 // #define USE_LOOKBEHIND_FOR_LAST_VALUE // must match pipeline/internal/popcount_kernel.h
 
 #endif // PIPELINE_KERNEL_COMPILER_CONFIG_H

@@ -879,6 +879,8 @@ Value * CBuilder::CreateRemoveCall(Value * path) {
     return CreateCall(removeFunc, {path});
 }
 
+#if 0
+
 Type * CBuilder::getPThreadTy() {
     return IntegerType::get(getContext(), sizeof(pthread_t) * 8);
 }
@@ -953,6 +955,8 @@ Value * CBuilder::CreatePThreadSelf() {
     }
     return CreateCall(pthreadSelfFunc);
 }
+
+#endif
 
 extern "C"
 BOOST_NOINLINE

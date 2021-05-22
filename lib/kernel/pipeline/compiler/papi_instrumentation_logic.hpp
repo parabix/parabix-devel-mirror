@@ -472,15 +472,16 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
     assert (maxEventLength > 5);
     out.indent(maxEventLength - 4);
 
-    out << "| SYNC  " // kernel synchronization %,
-           " PART " // partition synchronization %,
-           " EXPD " // buffer expansion %,
-           " COPY " // look ahead + copy back + look behind %,
-           " PIPE " // pipeline overhead %,
-           " EXEC " // execution %,
-           "| VALUE"; // total kernel value.
-    out.indent(maxCounterLength - 6);
-    out << " (%)\n";
+    out << "|   SYNC " // kernel synchronization %,
+           "  PART " // partition synchronization %,
+           "  EXPD " // buffer expansion %,
+           "  COPY " // look ahead + copy back + look behind %,
+           "  PIPE " // pipeline overhead %,
+           "  EXEC " // execution %,
+           "|"; // total kernel value.
+    out.indent(maxCounterLength - 4);
+
+    out << "VALUE       %\n";
 
 //    PAPI_KERNEL_SYNCHRONIZATION
 //    , PAPI_PARTITION_JUMP_SYNCHRONIZATION
@@ -510,7 +511,7 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
     std::string valueFmt;
     BEGIN_SCOPED_REGION
     raw_string_ostream formatter(valueFmt);
-    formatter << " | %" << maxCounterLength << PRIuMAX " (%5.2f)\n";
+    formatter << " | %" << maxCounterLength << PRIuMAX "  %6.2f\n";
     END_SCOPED_REGION
 
     // data is in [kernels][counters][events] ordering
@@ -540,8 +541,10 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
 
             for (unsigned k = 0; k < PAPI_KERNEL_EXECUTION; ++k) {
                 const long double val = values[GET_POS(i, j, k)];
+                assert (val < subtotal);
                 const auto r = (val / fsubtotal);
-                out << llvm::format(" %5.2f", ((double)(r)) * 100.0);
+                assert (0.0L <= r && r <= 1.0L);
+                out << llvm::format(" %6.2f", ((double)(r)) * 100.0);
             }
 
             BEGIN_SCOPED_REGION
@@ -553,14 +556,14 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
             const long double fother = other;
             const auto r = (fother / fsubtotal);
             assert (0.0L <= r && r <= 1.0L);
-            out << llvm::format(" %5.2f", (double)(r) * 100.0);
+            out << llvm::format(" %6.2f", (double)(r) * 100.0);
             END_SCOPED_REGION
 
             BEGIN_SCOPED_REGION
             const long double val = values[GET_POS(i, j, PAPI_KERNEL_EXECUTION)];
             const auto r = (val / fsubtotal);
             assert (0.0L <= r && r <= 1.0L);
-            out << llvm::format(" %5.2f", (double)(r) * 100.0);
+            out << llvm::format(" %6.2f", (double)(r) * 100.0);
             END_SCOPED_REGION
 
             BEGIN_SCOPED_REGION
@@ -674,8 +677,6 @@ void PipelineCompiler::linkPAPILibrary(BuilderRef b) {
     b->LinkFunction("PAPI_destroy_eventset", PAPI_destroy_eventset);
     b->LinkFunction("PAPI_shutdown", PAPI_shutdown);
     b->LinkFunction("PAPI_strerror", PAPI_strerror);
-
-    b->LinkFunction("pthread_self", pthread_self); // <- this should be defaulted in by the pipeline
 
     b->LinkFunction("__print_pipeline_PAPI_report", __print_pipeline_PAPI_report);
 }

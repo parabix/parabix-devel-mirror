@@ -244,26 +244,6 @@ public:
 
     llvm::Value * CreateMProtect(llvm::Value * addr, llvm::Value * size, const Protect protect);
 
-    //  Posix thread (pthread.h) functions.
-    //
-    llvm::Type * getPThreadTy();
-
-    //  Create a call to:  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
-    //                    void *(*start_routine)(void*), void *arg);
-    llvm::Value * CreatePThreadCreateCall(llvm::Value * const thread, llvm::Value * const attr, llvm::Function * const start_routine, llvm::Value * const arg);
-
-    //  Create a call to:  int pthread_yield(void);
-    llvm::Value * CreatePThreadYield();
-
-    //  Create a call to:  void pthread_exit(void *value_ptr);
-    llvm::Value * CreatePThreadExitCall(llvm::Value * const value_ptr);
-
-    //  Create a call to:  int pthread_join(pthread_t thread, void **value_ptr);
-    llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * const value_ptr);
-
-    //  Create a call to:  int pthread_self(void);
-    llvm::Value * CreatePThreadSelf();
-
     enum class STD_FD {
         STD_IN = STDIN_FILENO
         , STD_OUT = STDOUT_FILENO

@@ -2,6 +2,8 @@
 #define PIPELINE_LOGIC_HPP
 
 #include "pipeline_compiler.hpp"
+#include <pthread.h>
+#include <sched.h>
 
 namespace kernel {
 
@@ -65,9 +67,11 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
 
     IntegerType * const sizeTy = b->getSizeTy();
 
+    #ifndef USE_FIXED_SEGMENT_NUMBER_INCREMENTS
     if (!ExternallySynchronized) {
         mTarget->addInternalScalar(sizeTy, NEXT_LOGICAL_SEGMENT_NUMBER, 0);
     }
+    #endif
 
     mTarget->addInternalScalar(sizeTy, EXPECTED_NUM_OF_STRIDES_MULTIPLIER, 0);
 
@@ -435,11 +439,30 @@ inline StringRef concat(StringRef A, StringRef B, SmallVector<char, 256> & tmp) 
 
 enum : unsigned {
     PIPELINE_PARAMS
-    , PROCESS_THREAD_ID
+    #ifdef USE_FIXED_SEGMENT_NUMBER_INCREMENTS
+    , INITIAL_SEGMENT_NUMBER
+    #endif
+    , PROCESS_THREAD_ID    
     , TERMINATION_SIGNAL
     // -------------------
     , THREAD_STRUCT_SIZE
 };
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief __pipeline_pthread_create_with_cpu_affinity
+ ** ------------------------------------------------------------------------------------------------------------- */
+namespace {
+
+void __pipeline_pthread_create_with_cpu_affinity(pthread_t * pthread, void *(*start_routine)(void *), void * arg, const unsigned cpu) {
+    cpu_set_t cpu_set;
+    CPU_ZERO(&cpu_set);
+    CPU_SET(cpu, &cpu_set);
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpu_set);
+    pthread_create(pthread, &attr, start_routine, arg);
+}
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiThreadKernelMethod
@@ -455,12 +478,13 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     Module * const m = b->getModule();
     PointerType * const voidPtrTy = b->getVoidPtrTy();
     ConstantInt * const ZERO = b->getInt32(0);
+
     Constant * const nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
 
     SmallVector<char, 256> tmp;
     const auto threadName = concat(mTarget->getName(), "_DoSegmentThread", tmp);
 
-    FunctionType * const threadFuncType = FunctionType::get(b->getVoidTy(), {voidPtrTy}, false);
+    FunctionType * const threadFuncType = FunctionType::get(voidPtrTy, {voidPtrTy}, false);
     Function * const threadFunc = Function::Create(threadFuncType, Function::InternalLinkage, threadName, m);
     threadFunc->setCallingConv(CallingConv::C);
     auto threadStructArg = threadFunc->arg_begin();
@@ -477,13 +501,22 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // use the process thread to handle the initial segment function after spawning
     // (n - 1) threads to handle the subsequent offsets
     const auto additionalThreads = mNumOfThreads - 1U;
-    Type * const pthreadsTy = ArrayType::get(b->getPThreadTy(), additionalThreads);
+
+    Function * const pthreadSelfFn = m->getFunction("pthread_self");
+    Function * const pthreadCreateFn = m->getFunction("__pipeline_pthread_create_with_cpu_affinity");
+    Function * const pthreadExitFn = m->getFunction("pthread_exit");
+    Function * const pthreadJoinFn = m->getFunction("pthread_join");
+
+    Type * const pThreadTy = pthreadSelfFn->getReturnType();
+
+    Type * const pthreadsTy = ArrayType::get(pThreadTy, additionalThreads);
     AllocaInst * const pthreads = b->CreateCacheAlignedAlloca(pthreadsTy);
     SmallVector<Value *, 8> threadIdPtr(additionalThreads);
     SmallVector<Value *, 8> threadState(additionalThreads);
     SmallVector<Value *, 8> threadLocal(additionalThreads);
 
-    Value * const processThreadId = b->CreatePThreadSelf();
+    Value * const processThreadId = b->CreateCall(pthreadSelfFn);
+
 
     for (unsigned i = 0; i != additionalThreads; ++i) {
         if (mTarget->hasThreadLocal()) {
@@ -505,13 +538,20 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         indices[0] = ZERO;
         indices[1] = b->getInt32(i);
         threadIdPtr[i] = b->CreateInBoundsGEP(pthreads, indices);
-        b->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState[i]);
+
+        FixedArray<Value *, 4> pthreadCreateArgs;
+        pthreadCreateArgs[0] = threadIdPtr[i];
+        pthreadCreateArgs[1] = threadFunc;
+        pthreadCreateArgs[2] = b->CreatePointerCast(threadState[i], voidPtrTy);
+        pthreadCreateArgs[3] = b->getInt32(i + 1);
+
+        b->CreateCall(pthreadCreateFn, pthreadCreateArgs);
     }
 
 
     // execute the process thread
     assert (isFromCurrentFunction(b, initialThreadLocal));
-    Value * const pty_ZERO = Constant::getNullValue(b->getPThreadTy());
+    Value * const pty_ZERO = Constant::getNullValue(pThreadTy);
     Value * const processState = constructThreadStructObject(b, pty_ZERO, initialThreadLocal);
     b->CreateCall(threadFunc, b->CreatePointerCast(processState, voidPtrTy));
 
@@ -555,10 +595,10 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     #ifdef ENABLE_PAPI
     unregisterPAPIThread(b);
     #endif
-    b->CreatePThreadExitCall(nullVoidPtrVal);
+    b->CreateCall(pthreadExitFn, nullVoidPtrVal);
     b->CreateBr(exitFunction);
     b->SetInsertPoint(exitFunction);
-    b->CreateRetVoid();
+    b->CreateRet(nullVoidPtrVal);
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE PIPELINE DRIVER CONTINUED
@@ -571,9 +611,13 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
 
     // wait for all other threads to complete
     AllocaInst * const status = b->CreateAlloca(voidPtrTy);
+
+    FixedArray<Value *, 2> pthreadJoinArgs;
     for (unsigned i = 0; i != additionalThreads; ++i) {
         Value * threadId = b->CreateLoad(threadIdPtr[i]);
-        b->CreatePThreadJoinCall(threadId, status);
+        pthreadJoinArgs[0] = threadId;
+        pthreadJoinArgs[1] = status;
+        b->CreateCall(pthreadJoinFn, pthreadJoinArgs);
     }
     if (mTarget->hasThreadLocal()) {
         const auto n = mTarget->isStateful() ? 2 : 1;
@@ -663,7 +707,8 @@ inline StructType * PipelineCompiler::getThreadStuctType(BuilderRef b) const {
     // They get automatically set by reading in the appropriate params.
 
     fields[PIPELINE_PARAMS] = StructType::get(C, mTarget->getDoSegmentFields(b));
-    fields[PROCESS_THREAD_ID] = b->getPThreadTy();
+    Function * const pthreadSelfFn = b->getModule()->getFunction("pthread_self");
+    fields[PROCESS_THREAD_ID] = pthreadSelfFn->getReturnType();
     if (LLVM_LIKELY(PipelineHasTerminationSignal)) {
         fields[TERMINATION_SIGNAL] = b->getSizeTy();
     } else {
@@ -799,6 +844,18 @@ Value * PipelineCompiler::readTerminationSignalFromLocalState(BuilderRef b, Valu
     return signal;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief linkPThreadLibrary
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::linkPThreadLibrary(BuilderRef b) {
+    b->LinkFunction("pthread_self", pthread_self);
+   // b->LinkFunction("pthread_setaffinity_np", pthread_setaffinity_np);
+   // b->LinkFunction("pthread_create", pthread_create);
+    b->LinkFunction("pthread_join", pthread_join);
+    b->LinkFunction("pthread_exit", pthread_exit);
+
+    b->LinkFunction("__pipeline_pthread_create_with_cpu_affinity", __pipeline_pthread_create_with_cpu_affinity);
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyBufferRelationships

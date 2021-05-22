@@ -14,11 +14,9 @@ class MMapSourceKernel final : public SegmentOrientedKernel {
     friend class FDSourceKernel;
 public:
     MMapSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream);
-    void linkExternalMethods(BuilderRef b) override {
-        mFileSizeFunction = linkFileSizeMethod(b);
-    }
+    void linkExternalMethods(BuilderRef b) override;
     void generateInitializeMethod(BuilderRef b) override {
-        generateInitializeMethod(mFileSizeFunction, mCodeUnitWidth, mStride, b);
+        generateInitializeMethod(mCodeUnitWidth, mStride, b);
     }
     void generateDoSegmentMethod(BuilderRef b) override {
         generateDoSegmentMethod(mCodeUnitWidth, mStride, b);
@@ -27,13 +25,12 @@ public:
         freeBuffer(b, mCodeUnitWidth);
     }
 protected:
-    static llvm::Function * linkFileSizeMethod(BuilderRef b);
-    static void generateInitializeMethod(llvm::Function * fileSize, const unsigned codeUnitWidth, const unsigned stride, BuilderRef b);
+    static void generatLinkExternalFunctions(BuilderRef b);
+    static void generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b);
     static void generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b);
     static void freeBuffer(BuilderRef b, const unsigned codeUnitWidth);
 protected:
     const unsigned mCodeUnitWidth;
-    llvm::Function * mFileSizeFunction;
 };
 
 class ReadSourceKernel final : public SegmentOrientedKernel {
@@ -67,7 +64,6 @@ public:
     void generateFinalizeMethod(BuilderRef b) override;
 protected:
     const unsigned mCodeUnitWidth;
-    llvm::Function * mFileSizeFunction;
 };
 
 class MemorySourceKernel final : public SegmentOrientedKernel {

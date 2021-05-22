@@ -121,6 +121,11 @@ public:
     std::vector<Value *> getFinalOutputScalars(BuilderRef b) override;
     void runOptimizationPasses(BuilderRef b);
 
+    static void linkPThreadLibrary(BuilderRef b);
+    #ifdef ENABLE_PAPI
+    static void linkPAPILibrary(BuilderRef b);
+    #endif
+
 private:
 
     PipelineCompiler(PipelineKernel * const pipelineKernel, PipelineAnalysis && P);
@@ -398,7 +403,6 @@ public:
 // papi instrumentation functions
 #ifdef ENABLE_PAPI
     void convertPAPIEventNamesToCodes();
-    static void linkPAPILibrary(BuilderRef b);
     void addPAPIEventCounterPipelineProperties(BuilderRef b);
     void addPAPIEventCounterKernelProperties(BuilderRef b, const unsigned kernel, const bool isRoot);
     void initializePAPI(BuilderRef b) const;

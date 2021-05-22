@@ -88,6 +88,7 @@ void PipelineKernel::generateAllocateThreadLocalInternalStreamSetsMethod(Builder
  * @brief linkExternalMethods
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::linkExternalMethods(BuilderRef b) {
+    PipelineCompiler::linkPThreadLibrary(b);
     for (const auto & k : mKernels) {
         k->linkExternalMethods(b);
     }
