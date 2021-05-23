@@ -3,12 +3,15 @@
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/DerivedTypes.h>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 namespace kernel {
 
 inline VectorType * LLVM_READNONE getStreamTy(LLVMContext & C, const unsigned FieldWidth) {
-    return VectorType::get(IntegerType::getIntNTy(C, FieldWidth), unsigned{0});
+    return llvm_version::getVectorType(IntegerType::getIntNTy(C, FieldWidth), unsigned{0});
 }
 
 inline ArrayType * LLVM_READNONE getStreamSetTy(LLVMContext & C, const unsigned NumElements, const unsigned FieldWidth) {

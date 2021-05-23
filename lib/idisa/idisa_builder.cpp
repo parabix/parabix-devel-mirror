@@ -31,12 +31,12 @@ unsigned getVectorBitWidth(Value * a) {
 }
 
 VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
-    return VectorType::get(getIntNTy(fw), mBitBlockWidth / fw);
+    return llvm_version::getVectorType(getIntNTy(fw), mBitBlockWidth / fw);
 }
 
 Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
     unsigned vecWidth = getVectorBitWidth(a);
-    return CreateBitCast(a, VectorType::get(getIntNTy(fw), vecWidth / fw));
+    return CreateBitCast(a, llvm_version::getVectorType(getIntNTy(fw), vecWidth / fw));
 }
 
 void IDISA_Builder::UnsupportedFieldWidthError(const unsigned fw, std::string op_name) {
@@ -64,7 +64,7 @@ CallInst * IDISA_Builder::CallPrintRegister(StringRef name, Value * const value,
         name->setName("name");
         Value * value = &*arg;
         value->setName("value");
-        Type * const byteVectorType = VectorType::get(getInt8Ty(), (mBitBlockWidth / 8));
+        Type * const byteVectorType = llvm_version::getVectorType(getInt8Ty(), (mBitBlockWidth / 8));
         value = builder.CreateBitCast(value, byteVectorType);
 
         std::vector<Value *> args;
@@ -132,9 +132,9 @@ Value * IDISA_Builder::CreateDoubleVector(Value * lo, Value * hi) {
 Value * IDISA_Builder::simd_fill(unsigned fw, Value * a) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "simd_fill");
     const unsigned field_count = mBitBlockWidth/fw;
-    Type * singleFieldVecTy = VectorType::get(getIntNTy(fw), 1);
+    Type * singleFieldVecTy = llvm_version::getVectorType(getIntNTy(fw), 1);
     Value * aVec = CreateBitCast(CreateZExtOrTrunc(a, getIntNTy(fw)), singleFieldVecTy);
-    return CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
+    return CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(llvm_version::getVectorType(getInt32Ty(), field_count)));
 }
 
 Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
@@ -666,9 +666,9 @@ Value * IDISA_Builder::esimd_bitspread(unsigned fw, Value * bitmask) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "bitspread");
     const auto field_count = mBitBlockWidth / fw;
     Type * field_type = getIntNTy(fw);
-    Value * spread_field = CreateBitCast(CreateZExtOrTrunc(bitmask, field_type), VectorType::get(getIntNTy(fw), 1));
-    Value * undefVec = UndefValue::get(VectorType::get(getIntNTy(fw), 1));
-    Value * broadcast = CreateShuffleVector(spread_field, undefVec, Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
+    Value * spread_field = CreateBitCast(CreateZExtOrTrunc(bitmask, field_type), llvm_version::getVectorType(getIntNTy(fw), 1));
+    Value * undefVec = UndefValue::get(llvm_version::getVectorType(getIntNTy(fw), 1));
+    Value * broadcast = CreateShuffleVector(spread_field, undefVec, Constant::getNullValue(llvm_version::getVectorType(getInt32Ty(), field_count)));
     SmallVector<Constant *, 16> bitSel(field_count);
     SmallVector<Constant *, 16> bitShift(field_count);
     for (unsigned i = 0; i < field_count; i++) {
@@ -960,7 +960,7 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
     Value * const extracted_bits = simd_pext(bitWidth, strm, index_strm);
     Value * const ix_popcounts = simd_popcount(bitWidth, index_strm);
     const auto n = getBitBlockWidth() / bitWidth;
-    VectorType * const vecTy = VectorType::get(getSizeTy(), n);
+    VectorType * const vecTy = llvm_version::getVectorType(getSizeTy(), n);
 
     Value * carryOut = nullptr;
     Value * result = UndefValue::get(vecTy);
@@ -1131,7 +1131,7 @@ IDISA_Builder::IDISA_Builder(LLVMContext & C, unsigned nativeVectorWidth, unsign
 , mNativeBitBlockWidth(nativeVectorWidth)
 , mBitBlockWidth(vectorWidth)
 , mLaneWidth(laneWidth)
-, mBitBlockType(VectorType::get(IntegerType::get(C, mLaneWidth), vectorWidth / mLaneWidth))
+, mBitBlockType(llvm_version::getVectorType(IntegerType::get(C, mLaneWidth), vectorWidth / mLaneWidth))
 , mZeroInitializer(Constant::getNullValue(mBitBlockType))
 , mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
 , mPrintRegisterFunction(nullptr) {

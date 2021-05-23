@@ -4,7 +4,10 @@
 #include <kernel/core/streamset.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 namespace kernel {
 
@@ -59,10 +62,10 @@ void ZeroExtend::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
 
     Value * const ZERO = b->getSize(0);
 
-    VectorType * const inputTy = VectorType::get(b->getIntNTy(inputFieldWidth), inputVectorSize);
+    VectorType * const inputTy = llvm_version::getVectorType(b->getIntNTy(inputFieldWidth), inputVectorSize);
     PointerType * const inputPtrTy = inputTy->getPointerTo();
 
-    VectorType * const outputTy = VectorType::get(b->getIntNTy(outputFieldWidth), outputVectorSize);
+    VectorType * const outputTy = llvm_version::getVectorType(b->getIntNTy(outputFieldWidth), outputVectorSize);
     PointerType * const outputPtrTy = outputTy->getPointerTo();
 
     Value * const processed = b->getProcessedItemCount(input.getName());
@@ -117,7 +120,7 @@ void ZeroExtend::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
         }
         Constant * const UPPER_MASK = ConstantVector::get(upperHalf);
 
-        VectorType * const outputTy = VectorType::get(b->getIntNTy(n * 2), halfCount);
+        VectorType * const outputTy = llvm_version::getVectorType(b->getIntNTy(n * 2), halfCount);
 
         Constant * const ZEROES = ConstantVector::getNullValue(inputTy);
         for (unsigned i = 0; i < inputBuffer.size(); ++i) {

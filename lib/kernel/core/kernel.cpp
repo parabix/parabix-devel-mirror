@@ -11,8 +11,11 @@
 #include <llvm/Support/Format.h>
 #include <util/sha1.hpp>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
 using namespace boost;
+using namespace llvm_version;
 
 namespace kernel {
 

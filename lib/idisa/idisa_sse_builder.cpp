@@ -57,7 +57,7 @@ Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     if (getVectorBitWidth(a) == SSE_width) {
         if (fw == 64) {
             Value * signmask_f64func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_movmsk_pd);
-            Type * bitBlock_f64type = VectorType::get(getDoubleTy(), mBitBlockWidth/64);
+            Type * bitBlock_f64type = llvm_version::getVectorType(getDoubleTy(), mBitBlockWidth/64);
             Value * a_as_pd = CreateBitCast(a, bitBlock_f64type);
             return createCall(signmask_f64func, a_as_pd);
         }
@@ -88,7 +88,7 @@ Value * IDISA_SSE_Builder::hsimd_signmask(const unsigned fw, Value * a) {
     // SSE special cases using Intrinsic::x86_sse_movmsk_ps (fw=32 only)
     if (fw == 32) {
         Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse_movmsk_ps);
-        Type * bitBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/32);
+        Type * bitBlock_f32type = llvm_version::getVectorType(getFloatTy(), mBitBlockWidth/32);
         Value * a_as_ps = CreateBitCast(a, bitBlock_f32type);
         if (getVectorBitWidth(a) == SSE_width) {
             return createCall(signmask_f32func, a_as_ps);
