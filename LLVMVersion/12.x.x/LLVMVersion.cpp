@@ -10,16 +10,16 @@ using namespace llvm;
 namespace llvm_version {
 
 Constant * getSplat(const unsigned fieldCount, Constant *Elt) {
-  return ConstantVector::getSplat({fieldCount, false}, Elt);
+  return ConstantVector::getSplat(ElementCount::get(fieldCount, false), Elt);
 }
 
 VectorType * getVectorType(Type *ElementType, unsigned NumElements) {
   //use FixedVectorType by default
-  return VectorType::get(ElementType, {NumElements, false});
+  return VectorType::get(ElementType, ElementCount::get(NumElements, false));
 }
 
 StructType * getTypeByName(Module *M, StringRef Name) {
-  return M->getTypeByName(Name);
+  return StructType::getTypeByName(M->getContext(), Name);
 }
 
 }

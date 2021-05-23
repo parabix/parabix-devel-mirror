@@ -22,4 +22,5 @@ SRC
     streamset.cpp
 DEPS
     idisa
+    LLVMVersion
 )
