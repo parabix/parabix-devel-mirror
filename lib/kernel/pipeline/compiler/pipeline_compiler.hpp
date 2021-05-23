@@ -58,8 +58,9 @@ const static std::string ZERO_EXTENDED_BUFFER = "ZeB";
 const static std::string ZERO_EXTENDED_SPACE = "ZeS";
 
 const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
-
+#ifndef USE_FIXED_SEGMENT_NUMBER_INCREMENTS
 const static std::string NEXT_LOGICAL_SEGMENT_NUMBER = "@NLSN";
+#endif
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 
 const static std::string DEBUG_FD = ".DFd";
@@ -152,7 +153,7 @@ public:
 // internal pipeline functions
 
     LLVM_READNONE StructType * getThreadStuctType(BuilderRef b) const;
-    Value * constructThreadStructObject(BuilderRef b, Value * const threadId, Value * const threadLocal);
+    Value * constructThreadStructObject(BuilderRef b, Value * const threadId, Value * const threadLocal, const unsigned threadNum);
     void readThreadStuctObject(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
@@ -384,6 +385,7 @@ public:
 // synchronization functions
 
     void identifyAllInternallySynchronizedKernels();
+    void readFirstSegmentNumber(BuilderRef b);
     void obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock);
     void incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId);
@@ -408,8 +410,8 @@ public:
     void initializePAPI(BuilderRef b) const;
     void registerPAPIThread(BuilderRef b) const;
     void createEventSetAndStartPAPI(BuilderRef b);
-    void readPAPIMeasurement(BuilderRef b, Value * const measurementArray) const;
-    void accumPAPIMeasurementWithoutReset(BuilderRef b, Value * const beforeMeasurement, PAPIKernelCounter measurementType) const;
+    void readPAPIMeasurement(BuilderRef b, const unsigned kernelId, Value * const measurementArray) const;
+    void accumPAPIMeasurementWithoutReset(BuilderRef b, Value * const beforeMeasurement, const unsigned kernelId, const PAPIKernelCounter measurementType) const;
     void unregisterPAPIThread(BuilderRef b) const;
     void stopPAPIAndDestroyEventSet(BuilderRef b);
     void shutdownPAPI(BuilderRef b) const;
@@ -683,6 +685,7 @@ protected:
 
     // cycle counter state
     Value *                                     mKernelStartTime = nullptr;
+    Value *                                     mAcquireAndReleaseStartTime = nullptr;
     FixedVector<PHINode *>                      mPartitionStartTimePhi;
     FixedArray<Value *, NUM_OF_CYCLE_COUNTERS>  mCycleCounters;
 
@@ -694,6 +697,9 @@ protected:
     Value *                                     PAPIReadInitialMeasurementArray = nullptr;
     Value *                                     PAPIReadBeforeMeasurementArray = nullptr;
     Value *                                     PAPIReadAfterMeasurementArray = nullptr;
+    #ifndef NDEBUG
+    unsigned                                    PAPIKernelIdOfInitialRead = 0;
+    #endif
     #endif
 
     // debug state

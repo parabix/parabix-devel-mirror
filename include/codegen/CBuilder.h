@@ -215,15 +215,7 @@ public:
 
     llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
 
-    enum Advice {
-        ADVICE_NORMAL
-        , ADVICE_RANDOM
-        , ADVICE_SEQUENTIAL
-        , ADVICE_WILLNEED
-        , ADVICE_DONTNEED
-    };
-
-    llvm::Value * CreateMAdvise(llvm::Value * addr, llvm::Value * length, Advice advice);
+    llvm::Value * CreateMAdvise(llvm::Value * addr, llvm::Value * length, const int advice);
 
     llvm::Value * CreateMMap(llvm::Value * const addr, llvm::Value * size, llvm::Value * const prot, llvm::Value * const flags, llvm::Value * const fd, llvm::Value * const offset);
 

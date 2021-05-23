@@ -16,6 +16,12 @@ namespace kernel {
 
 using papi_counter_t = unsigned long_long;
 
+namespace {
+constexpr auto add_perf_events_failure_message =
+   "Check papi_avail for available options or enter sysctl -w kernel.perf_event_paranoid=0\n"
+   "to reenable cpu event tracing at the kernel level.";
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief convertPAPIEventNamesToCodes
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -67,8 +73,7 @@ void PipelineCompiler::convertPAPIEventNamesToCodes() {
             raw_svector_ostream out(tmp);
             out << "PAPI Add Events Error: ";
             out << PAPI_strerror(rvalCreateEventSet < PAPI_OK ? rvalCreateEventSet : PAPI_EINVAL);
-            out << "\n"
-                   "Check papi_avail for available options.";
+            out << "\n" << add_perf_events_failure_message;
             report_fatal_error(out.str());
         }
 
@@ -209,7 +214,6 @@ void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
 
         // PAPI_start starts counting all of the hardware events contained in the previously defined EventSet.
         // All counters are implicitly set to zero before counting.
-
         IntegerType * const papiCounterTy = TypeBuilder<papi_counter_t, false>::get(b->getContext());
         PointerType * const papiCounterPtrTy = papiCounterTy->getPointerTo();
         ArrayType * const papiEventListCountersTy = ArrayType::get(papiCounterTy, n);
@@ -221,15 +225,13 @@ void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
         PAPIReadInitialMeasurementArray = makeCounterList();
         PAPIReadBeforeMeasurementArray = makeCounterList();
         PAPIReadAfterMeasurementArray = makeCounterList();
-
     }
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readPAPIEventsIntoArray
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::readPAPIMeasurement(BuilderRef b, Value * const measurementArray) const {
+void PipelineCompiler::readPAPIMeasurement(BuilderRef b, const unsigned /* kernelId */, Value * const measurementArray) const {
     if (LLVM_UNLIKELY(EnablePAPICounters)) {
         Module * const m = b->getModule();
         Function * const PAPIReadFn = m->getFunction("PAPI_read"); assert (PAPIReadFn);
@@ -243,18 +245,16 @@ void PipelineCompiler::readPAPIMeasurement(BuilderRef b, Value * const measureme
     }
 }
 
-
-
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief accumPAPIMeasurementWithoutReset
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::accumPAPIMeasurementWithoutReset(BuilderRef b, Value * const beforeMeasurement, PAPIKernelCounter measurementType) const {
+void PipelineCompiler::accumPAPIMeasurementWithoutReset(BuilderRef b, Value * const beforeMeasurement,
+                                                        const unsigned kernelId, const PAPIKernelCounter measurementType) const {
     if (LLVM_UNLIKELY(EnablePAPICounters)) {
 
-        readPAPIMeasurement(b, PAPIReadAfterMeasurementArray);
+        readPAPIMeasurement(b, kernelId, PAPIReadAfterMeasurementArray);
 
-        const auto prefix = makeKernelName(mKernelId) + STATISTICS_PAPI_COUNT_ARRAY_SUFFIX;
+        const auto prefix = makeKernelName(kernelId) + STATISTICS_PAPI_COUNT_ARRAY_SUFFIX;
         Value * const baseCounter = b->getScalarFieldPtr(prefix);
 
         ConstantInt * const ZERO = b->getInt32(0);
@@ -278,10 +278,6 @@ void PipelineCompiler::accumPAPIMeasurementWithoutReset(BuilderRef b, Value * co
             update[2] = offset;
             Value * const ptr = b->CreateGEP(baseCounter, update);
             Value * const updatedVal = b->CreateAdd(b->CreateLoad(ptr), diff);
-
-//            b->CallPrintInt("uPtr." + std::to_string(mKernelId) + "." + std::to_string(measurementType) + "." + std::to_string(i), ptr);
-//            b->CallPrintInt("uVal." + std::to_string(mKernelId) + "." + std::to_string(measurementType) + "." + std::to_string(i), updatedVal);
-
             b->CreateStore(updatedVal, ptr);
 
         }
@@ -478,10 +474,11 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
            "  COPY " // look ahead + copy back + look behind %,
            "  PIPE " // pipeline overhead %,
            "  EXEC " // execution %,
-           "|"; // total kernel value.
-    out.indent(maxCounterLength - 4);
-
-    out << "VALUE       %\n";
+           "|";
+    out.indent(maxCounterLength - 7);
+    out << "SUBTOTAL"; // total kernel value.
+    out.indent(7);
+    out << "%\n";
 
 //    PAPI_KERNEL_SYNCHRONIZATION
 //    , PAPI_PARTITION_JUMP_SYNCHRONIZATION
@@ -519,7 +516,10 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
     #define GET_POS(kernel, event, counter) \
         ((kernel * NUM_OF_PAPI_COUNTERS + (counter)) * numOfEvents + event)
 
-    // std::vector<papi_counter_t> measurementSubtotals(numOfEvents * NUM_OF_PAPI_COUNTERS, 0UL);
+
+
+
+    std::vector<papi_counter_t> other_subtotals{numOfEvents};
 
     for (unsigned i = 0; i < numOfKernels; ++i) {
         for (unsigned j = 0; j < numOfEvents; ++j) {
@@ -540,7 +540,8 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
             const long double fsubtotal = subtotal;
 
             for (unsigned k = 0; k < PAPI_KERNEL_EXECUTION; ++k) {
-                const long double val = values[GET_POS(i, j, k)];
+                const auto v = values[GET_POS(i, j, k)];
+                const long double val = v;
                 assert (val < subtotal);
                 const auto r = (val / fsubtotal);
                 assert (0.0L <= r && r <= 1.0L);
@@ -552,7 +553,9 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
             for (unsigned k = 0; k < PAPI_KERNEL_TOTAL; ++k) {
                 sum += values[GET_POS(i, j, k)];
             }
-            const papi_counter_t other = (sum < subtotal) ? subtotal - sum : 0.0;
+            assert (sum < subtotal);
+            const papi_counter_t other = subtotal - sum;
+            other_subtotals[j] += other;
             const long double fother = other;
             const auto r = (fother / fsubtotal);
             assert (0.0L <= r && r <= 1.0L);
@@ -560,7 +563,8 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
             END_SCOPED_REGION
 
             BEGIN_SCOPED_REGION
-            const long double val = values[GET_POS(i, j, PAPI_KERNEL_EXECUTION)];
+            const auto v = values[GET_POS(i, j, PAPI_KERNEL_EXECUTION)];
+            const long double val = v;
             const auto r = (val / fsubtotal);
             assert (0.0L <= r && r <= 1.0L);
             out << llvm::format(" %6.2f", (double)(r) * 100.0);
@@ -575,6 +579,69 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
             END_SCOPED_REGION
 
         }
+    }
+
+
+
+    for (unsigned j = 0; j < numOfEvents; ++j) {
+
+        out << '\n';
+
+        if (j == 0) {
+            out.indent(4);
+            out << "TOTAL";
+            out.indent(maxNameLength - 5 + 1);
+        } else {
+            out.indent(4 + maxNameLength + 5 + 1);
+        }
+
+        const auto rval = PAPI_event_code_to_name(eventCode[j], eventName);
+        if (LLVM_LIKELY(rval == PAPI_OK)) {
+            out << llvm::format(eventNameFmt.data(), (char*)eventName);
+        } else {
+            out.write_hex(eventCode[j]);
+        }
+
+        const long double ftotal = totals[j];
+        for (unsigned k = 0; k < PAPI_KERNEL_EXECUTION; ++k) {
+            papi_counter_t subtotal = 0;
+            for (unsigned i = 0; i < numOfKernels; ++i) {
+                subtotal += values[GET_POS(i, j, k)];
+            }
+            const long double fsubtotal = subtotal;
+            const auto r = (fsubtotal / ftotal);
+            assert (0.0L <= r && r <= 1.0L);
+            out << llvm::format(" %6.2f", (double)(r) * 100.0);
+        }
+
+        BEGIN_SCOPED_REGION
+        const long double fsubtotal = other_subtotals[j];
+        const auto r = (fsubtotal / ftotal);
+        assert (0.0L <= r && r <= 1.0L);
+        out << llvm::format(" %6.2f", (double)(r) * 100.0);
+        END_SCOPED_REGION
+
+        BEGIN_SCOPED_REGION
+        papi_counter_t subtotal = 0;
+        for (unsigned i = 0; i < numOfKernels; ++i) {
+            subtotal += values[GET_POS(i, j, PAPI_KERNEL_EXECUTION)];
+        }
+        const long double fsubtotal = subtotal;
+        const auto r = (fsubtotal / ftotal);
+        assert (0.0L <= r && r <= 1.0L);
+        out << llvm::format(" %6.2f", (double)(r) * 100.0);
+        END_SCOPED_REGION
+
+        BEGIN_SCOPED_REGION
+        papi_counter_t subtotal = 0;
+        for (unsigned i = 0; i < numOfKernels; ++i) {
+            subtotal += values[GET_POS(i, j, PAPI_KERNEL_TOTAL)];
+        }
+        const long double fsubtotal = subtotal;
+        const auto r = (fsubtotal / ftotal);
+        assert (0.0L <= r && r <= 1.0L);
+        out << llvm::format(valueFmt.data(), subtotal, (double)(r) * 100.0);
+        END_SCOPED_REGION
     }
 
     #undef GET_POS

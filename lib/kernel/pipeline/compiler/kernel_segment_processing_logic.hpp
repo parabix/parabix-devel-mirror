@@ -55,7 +55,7 @@ void PipelineCompiler::start(BuilderRef b) {
 
     mKernel = nullptr;
     mKernelId = 0;
-
+    readFirstSegmentNumber(b);
     BasicBlock * const entryBlock = b->GetInsertBlock();
     b->CreateBr(mPipelineLoop);
 
@@ -355,7 +355,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
     #ifdef ENABLE_PAPI
-    accumPAPIMeasurementWithoutReset(b, PAPIReadInitialMeasurementArray, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
+    accumPAPIMeasurementWithoutReset(b, PAPIReadInitialMeasurementArray, mKernelId, PAPIKernelCounter::PAPI_KERNEL_TOTAL);
     #endif
 
     if (LLVM_UNLIKELY(CheckAssertions)) {        
@@ -402,7 +402,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
         const auto prefix = makeKernelName(mKernelId);
         BasicBlock * const isFinalCheck = b->CreateBasicBlock(prefix + "_isFinalCheck", mKernelTerminated);
-        b->CreateCondBr(loopAgain, mKernelLoopEntry, isFinalCheck);
+        b->CreateUnlikelyCondBr(loopAgain, mKernelLoopEntry, isFinalCheck);
 
         b->SetInsertPoint(isFinalCheck);
     }

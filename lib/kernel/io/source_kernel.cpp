@@ -100,10 +100,9 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     // avoid calling madvise unless an actual page table change could occur
     b->CreateLikelyCondBr(b->CreateIsNotNull(unnecessaryBytes), dropPages, checkRemaining);
-
     b->SetInsertPoint(dropPages);
     // instruct the OS that it can safely drop any fully consumed pages
-    b->CreateMAdvise(readableBuffer, unnecessaryBytes, CBuilder::ADVICE_DONTNEED);
+    b->CreateMAdvise(readableBuffer, unnecessaryBytes, MADV_DONTNEED);
     b->CreateBr(checkRemaining);
 
     // determine whether or not we've exhausted the "safe" region of the file buffer
@@ -111,7 +110,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const producedItems = b->getProducedItemCount("sourceBuffer");
     Value * const nextProducedItems = b->CreateAdd(producedItems, STRIDE_ITEMS);
     Value * const newBuffer = b->getRawOutputPointer("sourceBuffer", producedItems);
-    b->CreateMAdvise(newBuffer, STRIDE_ITEMS, CBuilder::ADVICE_WILLNEED);
+    b->CreateMAdvise(newBuffer, STRIDE_ITEMS, MADV_SEQUENTIAL | MADV_WILLNEED);
     Value * const fileItems = b->getScalarField("fileItems");
     Value * const lastPage = b->CreateICmpULE(fileItems, nextProducedItems);
     b->CreateUnlikelyCondBr(lastPage, setTermination, exit);
