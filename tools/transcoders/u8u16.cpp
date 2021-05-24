@@ -429,20 +429,20 @@ int main(int argc, char *argv[]) {
         u8u16Function = generatePipeline(pxDriver, byteNumbering);
     }
     const int fd = open(inputFile.c_str(), O_RDONLY);
-    #ifdef ENABLE_PAPI
-    papi::PapiCounter<6> jitExecution{{PAPI_BR_MSP, PAPI_BR_CN, PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
-    jitExecution.start();
-    #endif
+//    #ifdef ENABLE_PAPI
+//    papi::PapiCounter<6> jitExecution{{PAPI_BR_MSP, PAPI_BR_CN, PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
+//    jitExecution.start();
+//    #endif
     if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
     } else {
         u8u16Function(fd, outputFile.c_str());
         close(fd);
     }
-    #ifdef ENABLE_PAPI
-    jitExecution.stop();
-    jitExecution.write(std::cerr);
-    #endif
+//    #ifdef ENABLE_PAPI
+//    jitExecution.stop();
+//    jitExecution.write(std::cerr);
+//    #endif
     return 0;
 }
 

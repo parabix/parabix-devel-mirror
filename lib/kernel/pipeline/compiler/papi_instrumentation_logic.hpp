@@ -458,8 +458,10 @@ void __print_pipeline_PAPI_report(const unsigned numOfKernels, const char ** ker
     maxCounterLength = std::max(maxCounterLength, 7UL);
     END_SCOPED_REGION
 
-    out << "PAPI REPORT\n\n"
-           "  # "  // kernel #
+    out << "PAPI REPORT\n";
+    out.indent(4 + maxNameLength + 1 + maxEventLength + 3 + (4 * 7) + 2);
+    out << "INS+\n";
+    out << "  # "  // kernel #
            "NAME"; // kernel Name
     assert (maxNameLength > 4);
     out.indent(maxNameLength - 3);

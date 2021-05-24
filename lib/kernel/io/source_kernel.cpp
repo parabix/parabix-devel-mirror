@@ -54,6 +54,7 @@ void MMapSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
     Value * const fileBuffer = b->CreatePointerCast(b->CreateFileSourceMMap(fd, fileSize), codeUnitPtrTy);
     b->setScalarField("buffer", fileBuffer);
     b->setBaseAddress("sourceBuffer", fileBuffer);
+    b->CreateMAdvise(fileBuffer, fileSize, MADV_SEQUENTIAL | MADV_WILLNEED);
     Value * fileItems = fileSize;
     if (LLVM_UNLIKELY(codeUnitWidth > 8)) {
         fileItems = b->CreateUDiv(fileSize, b->getSize(codeUnitWidth / 8));
@@ -110,7 +111,6 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const producedItems = b->getProducedItemCount("sourceBuffer");
     Value * const nextProducedItems = b->CreateAdd(producedItems, STRIDE_ITEMS);
     Value * const newBuffer = b->getRawOutputPointer("sourceBuffer", producedItems);
-    b->CreateMAdvise(newBuffer, STRIDE_ITEMS, MADV_SEQUENTIAL | MADV_WILLNEED);
     Value * const fileItems = b->getScalarField("fileItems");
     Value * const lastPage = b->CreateICmpULE(fileItems, nextProducedItems);
     b->CreateUnlikelyCondBr(lastPage, setTermination, exit);
