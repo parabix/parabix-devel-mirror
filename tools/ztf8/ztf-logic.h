@@ -95,6 +95,22 @@ protected:
     void generatePabloMethod() override;
 };
 
+// Parse encodable ZTF words or symbols from plaintext or ciphertext.
+// Generate n phraseRuns streams for all the possible n-word sequences.
+// symbol sequence continuation bits are marked with 1 bits.
+// Each 0 bit represents a start of a new symbol.
+class ZTF_Phrases : public pablo::PabloKernel {
+public:
+    ZTF_Phrases(BuilderRef kb,
+                StreamSet * basisBits,
+                unsigned numSyms,
+                StreamSet * wordChar,
+                StreamSet * phraseRuns);
+protected:
+    void generatePabloMethod() override;
+    unsigned mNumSyms;
+};
+
 // Given parsed symbol runs, produce a stream marking end positions only.
 class ZTF_SymbolEnds : public pablo::PabloKernel {
 public:

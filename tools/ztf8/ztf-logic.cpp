@@ -211,6 +211,73 @@ void ZTF_Symbols::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("symbolRuns"), pb.getInteger(0)), runs);
 }
 
+ZTF_Phrases::ZTF_Phrases(BuilderRef kb,
+                StreamSet * basisBits,
+                unsigned numSyms,
+                StreamSet * wordChar,
+                StreamSet * phraseRuns)
+: PabloKernel(kb, "ZTF_Phrases",
+            {Binding{"basisBits", basisBits, FixedRate(1), LookAhead(1)},
+             Binding{"wordChar", wordChar, FixedRate(1), LookAhead(3)}},
+            {Binding{"phraseRuns", phraseRuns}}), mNumSyms(numSyms) { }
+
+void ZTF_Phrases::generatePabloMethod() {
+    pablo::PabloBuilder pb(getEntryScope());
+    std::vector<PabloAST *> basis = getInputStreamSet("basisBits");
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
+    pablo::PabloAST * wordChar = getInputStreamSet("wordChar")[0];
+    Var * phraseRunsVar = getOutputStreamVar("phraseRuns");
+
+    // Find start bytes of word characters.
+    PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
+    PabloAST * prefix2 = ccc.compileCC(re::makeCC(0xC2, 0xDF));
+    PabloAST * prefix3 = ccc.compileCC(re::makeCC(0xE0, 0xEF));
+    PabloAST * prefix4 = ccc.compileCC(re::makeCC(0xF0, 0xF4));
+    PabloAST * wc1 = pb.createAnd(ASCII, wordChar);
+    wc1 = pb.createOr(wc1, pb.createAnd(prefix2, pb.createLookahead(wordChar, 1)));
+    wc1 = pb.createOr(wc1, pb.createAnd(prefix3, pb.createLookahead(wordChar, 2)));
+    wc1 = pb.createOr(wc1, pb.createAnd(prefix4, pb.createLookahead(wordChar, 3)));
+    //
+    // ZTF Code symbols
+    PabloAST * anyPfx = ccc.compileCC(re::makeCC(0xC0, 0xFF));
+    PabloAST * anyPfx4 = ccc.compileCC(re::makeCC(0xF9, 0xFF));
+    PabloAST * anysfx = ccc.compileCC(re::makeCC(0x00, 0xFF));
+    PabloAST * ZTF_sym = pb.createAnd(pb.createAdvance(anyPfx, 1), ASCII);
+    ZTF_sym = pb.createOr(ZTF_sym, pb.createAnd(pb.createAdvance(anyPfx, 2), ASCII));
+    // ZTF Code symbols with prefix in range 0xF9-0xFF can have any suffix to be considered valid codeword
+    ZTF_sym = pb.createOr(ZTF_sym, pb.createAnd(pb.createAdvance(anyPfx4, 1), anysfx));
+    ZTF_sym = pb.createOr(ZTF_sym, pb.createAnd(pb.createAdvance(anyPfx4, 2), anysfx));
+    ZTF_sym = pb.createOr(ZTF_sym, pb.createAnd(pb.createAdvance(anyPfx4, 3), anysfx));
+
+    PabloAST * ZTF_prefix = pb.createAnd(anyPfx, pb.createNot(pb.createLookahead(basis[7], 1)));
+    // Consider prefix of 4-byte codewords as ZTF_prefix
+    ZTF_prefix = pb.createOr(ZTF_prefix, anyPfx4);
+    // Filter out ZTF code symbols from word characters.
+    wc1 = pb.createAnd(wc1, pb.createNot(ZTF_sym));
+    //
+    PabloAST * wordStart = pb.createAnd(pb.createNot(pb.createAdvance(wordChar, 1)), wc1, "wordStart");
+    // Nulls, Linefeeds and ZTF_symbols are also treated as symbol starts.
+    PabloAST * LF = ccc.compileCC(re::makeByte(0x0A));
+    PabloAST * Null = ccc.compileCC(re::makeByte(0x0));
+    PabloAST * fileStart = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
+    PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr3(LF, Null, fileStart));
+
+    // The next character after a ZTF symbol or a line feed also starts a new symbol.
+    symStart = pb.createOr(symStart, pb.createAdvance(pb.createOr(ZTF_sym, LF), 1), "symStart");
+    //
+    // runs are the bytes after a start symbol until the next symStart byte.
+    pablo::PabloAST * runs = pb.createInFile(pb.createNot(symStart));
+
+    PabloAST * phraseStart = pb.createEveryNth(pb.createNot(runs), pb.getInteger(mNumSyms));
+    for (unsigned i = 0; i < mNumSyms; i++) {
+        PabloAST * ZTF_phrases = pb.createInFile(pb.createNot(phraseStart));
+        pb.createAssign(pb.createExtract(phraseRunsVar, pb.getInteger(i)), ZTF_phrases);
+        phraseStart = pb.createIndexedAdvance(phraseStart, pb.createNot(runs), 1);
+    }
+}
+
+
+
 ZTF_SymbolEncoder::ZTF_SymbolEncoder(BuilderRef b,
                       EncodingInfo & encodingScheme,
                       StreamSet * const basis,

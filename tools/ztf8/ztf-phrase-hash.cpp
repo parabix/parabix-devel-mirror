@@ -60,6 +60,7 @@ static cl::OptionCategory ztfHashOptions("ztfHash Options", "ZTF-Hash options.")
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(ztfHashOptions));
 static cl::opt<bool> Decompression("d", cl::desc("Decompress from ZTF-Runs to UTF-8."), cl::cat(ztfHashOptions), cl::init(false));
 static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::aliasopt(Decompression));
+static cl::opt<int> WordLen("length", cl::desc("Length of words."), cl::init(2));
 
 typedef void (*ztfHashFunctionType)(uint32_t fd);
 
@@ -83,12 +84,14 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * WordChars = P->CreateStreamSet(1);
     P->CreateKernelCall<WordMarkKernel>(u8basis, WordChars);
 
-    //StreamSet * PhraseMarks = P->CreateStreamSet(1);
-    //P->CreateKernelCall<PhraseMarker>(WordChars, PhraseMarks);
-    //P->CreateKernelCall<DebugDisplayKernel>("PhraseMarks", PhraseMarks);
+    StreamSet * phraseRuns = P->CreateStreamSet(WordLen);
+    P->CreateKernelCall<ZTF_Phrases>(u8basis, WordLen, WordChars, phraseRuns);
+    //P->CreateKernelCall<DebugDisplayKernel>("phraseRuns", phraseRuns);
 
+    std::vector<StreamSet *> allPhraseRuns = {phraseRuns};
     return reinterpret_cast<ztfHashFunctionType>(P->compile());
 }
+
 
 ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     auto & b = driver.getBuilder();
