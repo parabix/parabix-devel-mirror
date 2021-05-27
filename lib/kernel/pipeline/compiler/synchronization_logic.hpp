@@ -48,19 +48,36 @@ void PipelineCompiler::identifyAllInternallySynchronizedKernels() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readFirstSegmentNumber
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readFirstSegmentNumber(BuilderRef b) {
+    if (ExternallySynchronized) {
+        mSegNo = b->getExternalSegNo(); assert (mSegNo);
+    }
+    else if (mNumOfThreads == 1) {
+        mSegNo = b->getSize(0);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief obtainCurrentSegmentNumber
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock) {
     ConstantInt * const ONE = b->getSize(1);
-    if (ExternallySynchronized) {
-        mSegNo = b->getExternalSegNo(); assert (mSegNo);
-    } else if (LLVM_LIKELY(mNumOfThreads > 1)) {
-        Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_NUMBER);
-        mSegNo = b->CreateAtomicFetchAndAdd(ONE, segNoPtr);
-    } else {
-        PHINode * const segNo = b->CreatePHI(b->getSizeTy(), 2);
-        segNo->addIncoming(b->getSize(0), entryBlock);
-        mSegNo = segNo;
+    if (!ExternallySynchronized) {
+        #ifndef USE_FIXED_SEGMENT_NUMBER_INCREMENTS
+        if (LLVM_LIKELY(mNumOfThreads > 1)) {
+            Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_NUMBER);
+            mSegNo = b->CreateAtomicFetchAndAdd(ONE, segNoPtr);
+        } else {
+        #endif
+            assert (mSegNo);
+            PHINode * const segNo = b->CreatePHI(mSegNo->getType(), 2);
+            segNo->addIncoming(mSegNo, entryBlock);
+            mSegNo = segNo;
+        #ifndef USE_FIXED_SEGMENT_NUMBER_INCREMENTS
+        }
+        #endif
     }
     mNextSegNo = b->CreateAdd(mSegNo, ONE);
 }
@@ -68,11 +85,20 @@ void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * con
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief incrementCurrentSegNo
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::incrementCurrentSegNo(BuilderRef /* b */, BasicBlock * const exitBlock) {
+void PipelineCompiler::incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock) {
+    #ifdef USE_FIXED_SEGMENT_NUMBER_INCREMENTS
+    if (LLVM_LIKELY(ExternallySynchronized)) {
+        return;
+    }
+    assert (mNumOfThreads > 0);
+    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(mNumOfThreads));
+    cast<PHINode>(mSegNo)->addIncoming(nextSegNo, exitBlock);
+    #else
     if (LLVM_LIKELY(ExternallySynchronized || mNumOfThreads > 1)) {
         return;
     }
     cast<PHINode>(mSegNo)->addIncoming(mNextSegNo, exitBlock);
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

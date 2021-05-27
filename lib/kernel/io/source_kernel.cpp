@@ -31,11 +31,11 @@ namespace kernel {
 
 /// MMAP SOURCE KERNEL
 
-Function * MMapSourceKernel::linkFileSizeMethod(BuilderRef b) {
-    return b->LinkFunction("file_size", file_size);
+void MMapSourceKernel::generatLinkExternalFunctions(BuilderRef b) {
+    b->LinkFunction("file_size", file_size);
 }
 
-void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod, const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
+void MMapSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
 
     BasicBlock * const emptyFile = b->CreateBasicBlock("emptyFile");
     BasicBlock * const nonEmptyFile = b->CreateBasicBlock("NonEmptyFile");
@@ -46,15 +46,15 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     Value * const fd = b->getScalarField("fileDescriptor");
     PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
     b->setScalarField("ancillaryBuffer", ConstantPointerNull::get(codeUnitPtrTy));
-    assert (fileSizeMethod);
-    Value * fileSize = b->CreateZExtOrTrunc(b->CreateCall(fileSizeMethod, fd), sizeTy);
+    Function * const fileSizeFn = b->getModule()->getFunction("file_size"); assert (fileSizeFn);
+    Value * fileSize = b->CreateZExtOrTrunc(b->CreateCall(fileSizeFn, fd), sizeTy);
     b->CreateLikelyCondBr(b->CreateIsNotNull(fileSize), nonEmptyFile, emptyFile);
 
     b->SetInsertPoint(nonEmptyFile);
     Value * const fileBuffer = b->CreatePointerCast(b->CreateFileSourceMMap(fd, fileSize), codeUnitPtrTy);
     b->setScalarField("buffer", fileBuffer);
     b->setBaseAddress("sourceBuffer", fileBuffer);
-    b->CreateMAdvise(fileBuffer, fileSize, CBuilder::ADVICE_WILLNEED);
+    b->CreateMAdvise(fileBuffer, fileSize, MADV_SEQUENTIAL | MADV_WILLNEED);
     Value * fileItems = fileSize;
     if (LLVM_UNLIKELY(codeUnitWidth > 8)) {
         fileItems = b->CreateUDiv(fileSize, b->getSize(codeUnitWidth / 8));
@@ -101,16 +101,16 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     // avoid calling madvise unless an actual page table change could occur
     b->CreateLikelyCondBr(b->CreateIsNotNull(unnecessaryBytes), dropPages, checkRemaining);
-
     b->SetInsertPoint(dropPages);
     // instruct the OS that it can safely drop any fully consumed pages
-    b->CreateMAdvise(readableBuffer, unnecessaryBytes, CBuilder::ADVICE_DONTNEED);
+    b->CreateMAdvise(readableBuffer, unnecessaryBytes, MADV_DONTNEED);
     b->CreateBr(checkRemaining);
 
     // determine whether or not we've exhausted the "safe" region of the file buffer
     b->SetInsertPoint(checkRemaining);
     Value * const producedItems = b->getProducedItemCount("sourceBuffer");
     Value * const nextProducedItems = b->CreateAdd(producedItems, STRIDE_ITEMS);
+    Value * const newBuffer = b->getRawOutputPointer("sourceBuffer", producedItems);
     Value * const fileItems = b->getScalarField("fileItems");
     Value * const lastPage = b->CreateICmpULE(fileItems, nextProducedItems);
     b->CreateUnlikelyCondBr(lastPage, setTermination, exit);
@@ -152,6 +152,10 @@ void MMapSourceKernel::freeBuffer(BuilderRef b, const unsigned codeUnitWidth) {
     Constant * const CODE_UNIT_BYTES = b->getSize(codeUnitWidth / 8);
     Value * const fileSize = b->CreateMul(fileItems, CODE_UNIT_BYTES);
     b->CreateMUnmap(b->getScalarField("buffer"), fileSize);
+}
+
+void MMapSourceKernel::linkExternalMethods(BuilderRef b) {
+    MMapSourceKernel::generatLinkExternalFunctions(b);
 }
 
 /// READ SOURCE KERNEL
@@ -319,10 +323,6 @@ void ReadSourceKernel::freeBuffer(BuilderRef b) {
 
 /// Hybrid MMap/Read source kernel
 
-void FDSourceKernel::linkExternalMethods(BuilderRef b) {
-    mFileSizeFunction = MMapSourceKernel::linkFileSizeMethod(b);
-}
-
 void FDSourceKernel::generateFinalizeMethod(BuilderRef b) {
     BasicBlock * finalizeRead = b->CreateBasicBlock("finalizeRead");
     BasicBlock * finalizeMMap = b->CreateBasicBlock("finalizeMMap");
@@ -356,12 +356,14 @@ void FDSourceKernel::generateInitializeMethod(BuilderRef b) {
 
     b->SetInsertPoint(checkFileSize);
     // If the fileSize is 0, we may have a virtual file such as /proc/cpuinfo
-    Value * const fileSize = b->CreateCall(mFileSizeFunction, fd);
+    Function * const fileSizeFn = b->getModule()->getFunction("file_size");
+    assert (fileSizeFn);
+    Value * const fileSize = b->CreateCall(fileSizeFn, fd);
     Value * const emptyFile = b->CreateIsNull(fileSize);
     b->CreateUnlikelyCondBr(emptyFile, initializeRead, initializeMMap);
 
     b->SetInsertPoint(initializeMMap);
-    MMapSourceKernel::generateInitializeMethod(mFileSizeFunction, mCodeUnitWidth, mStride, b);
+    MMapSourceKernel::generateInitializeMethod(mCodeUnitWidth, mStride, b);
     b->CreateBr(initializeDone);
 
     b->SetInsertPoint(initializeRead);
@@ -477,7 +479,9 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
     b->SetInsertPoint(exit);
 }
 
-
+void FDSourceKernel::linkExternalMethods(BuilderRef b) {
+    MMapSourceKernel::generatLinkExternalFunctions(b);
+}
 
 void MemorySourceKernel::generateFinalizeMethod(BuilderRef b) {
     b->CreateFree(b->getScalarField("ancillaryBuffer"));
@@ -496,8 +500,7 @@ MMapSourceKernel::MMapSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * 
 ,{Binding{b->getSizeTy(), "fileItems"}}
 // internal scalars
 ,{})
-, mCodeUnitWidth(outputStream->getFieldWidth())
-, mFileSizeFunction(nullptr) {
+, mCodeUnitWidth(outputStream->getFieldWidth()) {
     PointerType * const codeUnitPtrTy = b->getIntNTy(mCodeUnitWidth)->getPointerTo();
     addInternalScalar(codeUnitPtrTy, "buffer");
     addInternalScalar(codeUnitPtrTy, "ancillaryBuffer");
@@ -541,8 +544,7 @@ FDSourceKernel::FDSourceKernel(BuilderRef b, Scalar * const useMMap, Scalar * co
 ,{Binding{b->getSizeTy(), "fileItems"}}
 // internal scalars
 ,{})
-, mCodeUnitWidth(outputStream->getFieldWidth())
-, mFileSizeFunction(nullptr) {
+, mCodeUnitWidth(outputStream->getFieldWidth()) {
     PointerType * const codeUnitPtrTy = b->getIntNTy(mCodeUnitWidth)->getPointerTo();
     addInternalScalar(codeUnitPtrTy, "buffer");
     addInternalScalar(codeUnitPtrTy, "ancillaryBuffer");

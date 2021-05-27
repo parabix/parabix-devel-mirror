@@ -29,7 +29,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mKernelSharedHandle, CBuilder::Protect::WRITE);
     }
-
+    #ifdef ENABLE_PAPI
+    readPAPIMeasurement(b, mKernelId, PAPIReadBeforeMeasurementArray);
+    #endif
     Value * const beforeKernelCall = startCycleCounter(b);
     Value * doSegmentRetVal = nullptr;
     if (mRethrowException) {
@@ -41,6 +43,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         doSegmentRetVal = b->CreateCall(doSegment, args);
     }
     updateCycleCounter(b, mKernelId, beforeKernelCall, CycleCounter::KERNEL_EXECUTION);
+    #ifdef ENABLE_PAPI
+    accumPAPIMeasurementWithoutReset(b, PAPIReadBeforeMeasurementArray, mKernelId, PAPIKernelCounter::PAPI_KERNEL_EXECUTION);
+    #endif
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugResume(b);
@@ -118,13 +123,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeKernelName(mKernelId);
     #endif
-
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocation);
+    #endif
     const auto greedy = mKernel->isGreedy();
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
         }
-        addNextArg(b->CreateIsNotNull(mFinalPartitionSegment));
+        addNextArg(b->CreateIsNotNull(mIsFinalInvocation));
     } else {
         addNextArg(mNumOfLinearStrides);
         #ifdef PRINT_DEBUG_MESSAGES

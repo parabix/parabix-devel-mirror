@@ -21,6 +21,9 @@ using boost::container::flat_map;
 using boost::intrusive::detail::floor_log2;
 using namespace llvm;
 
+
+// TODO: merge Cycle counter and PAPI?
+
 namespace kernel {
 
 enum CycleCounter {
@@ -31,9 +34,21 @@ enum CycleCounter {
   , KERNEL_EXECUTION
   , TOTAL_TIME
   // ------------------
-  , NUM_OF_STORED_COUNTERS
+  , NUM_OF_CYCLE_COUNTERS
 };
 
+#ifdef ENABLE_PAPI
+enum PAPIKernelCounter {
+  PAPI_KERNEL_SYNCHRONIZATION
+  , PAPI_PARTITION_JUMP_SYNCHRONIZATION
+  , PAPI_BUFFER_EXPANSION
+  , PAPI_BUFFER_COPY
+  , PAPI_KERNEL_EXECUTION
+  , PAPI_KERNEL_TOTAL
+  // ------------------
+  , NUM_OF_PAPI_COUNTERS
+};
+#endif
 
 const static std::string BASE_THREAD_LOCAL_STREAMSET_MEMORY = "BLSM";
 
@@ -43,8 +58,9 @@ const static std::string ZERO_EXTENDED_BUFFER = "ZeB";
 const static std::string ZERO_EXTENDED_SPACE = "ZeS";
 
 const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
-
+#ifndef USE_FIXED_SEGMENT_NUMBER_INCREMENTS
 const static std::string NEXT_LOGICAL_SEGMENT_NUMBER = "@NLSN";
+#endif
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 
 const static std::string DEBUG_FD = ".DFd";
@@ -59,6 +75,11 @@ const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string DEBUG_CONSUMED_ITEM_COUNT_SUFFIX = ".DCON";
 
 const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
+#ifdef ENABLE_PAPI
+const static std::string STATISTICS_PAPI_COUNT_ARRAY_SUFFIX = ".PCS";
+const static std::string STATISTICS_GLOBAL_PAPI_COUNT_ARRAY = "!PCS";
+const static std::string STATISTICS_THREAD_LOCAL_PAPI_COUNT_ARRAY = "tPCS";
+#endif
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
 const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".SBY";
 const static std::string STATISTICS_BLOCKING_IO_HISTORY_SUFFIX = ".SHY";
@@ -101,6 +122,11 @@ public:
     std::vector<Value *> getFinalOutputScalars(BuilderRef b) override;
     void runOptimizationPasses(BuilderRef b);
 
+    static void linkPThreadLibrary(BuilderRef b);
+    #ifdef ENABLE_PAPI
+    static void linkPAPILibrary(BuilderRef b);
+    #endif
+
 private:
 
     PipelineCompiler(PipelineKernel * const pipelineKernel, PipelineAnalysis && P);
@@ -127,7 +153,7 @@ public:
 // internal pipeline functions
 
     LLVM_READNONE StructType * getThreadStuctType(BuilderRef b) const;
-    Value * constructThreadStructObject(BuilderRef b, Value * const threadId, Value * const threadLocal);
+    Value * constructThreadStructObject(BuilderRef b, Value * const threadId, Value * const threadLocal, const unsigned threadNum);
     void readThreadStuctObject(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
@@ -179,8 +205,13 @@ public:
     void ensureSufficientOutputSpace(BuilderRef b, const BufferPort & port, const unsigned streamSet);
     void updatePHINodesForLoopExit(BuilderRef b);
 
-    Value * calculateItemCounts(BuilderRef b, Value * const numOfLinearStrides);
-    Value * anyInputClosed(BuilderRef b);
+    Value * calculateTransferableItemCounts(BuilderRef b, Value * const numOfLinearStrides);
+
+    enum class InputExhaustionReturnType {
+        Conjunction, Disjunction
+    };
+
+    Value * checkIfInputIsExhausted(BuilderRef b, InputExhaustionReturnType returnValType);
     void determineIsFinal(BuilderRef b, Value * const numOfLinearStrides);
     Value * hasMoreInput(BuilderRef b);
 
@@ -236,7 +267,7 @@ public:
 
     Value * getInputStrideLength(BuilderRef b, const BufferPort &inputPort);
     Value * getOutputStrideLength(BuilderRef b, const BufferPort &outputPort);
-    Value * calculateStrideLength(BuilderRef b, const BufferPort & port);
+    Value * calculateStrideLength(BuilderRef b, const BufferPort & port, Value * const previouslyTransferred, Value * const strideIndex);
     Value * calculateNumOfLinearItems(BuilderRef b, const BufferPort &port, Value * const adjustment);
     Value * getAccessibleInputItems(BuilderRef b, const BufferPort & inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const BufferPort & inputPort, Value * const numOfLinearStrides);
@@ -250,7 +281,7 @@ public:
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
     void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
 
-    Value * getPartialSumItemCount(BuilderRef b, const BufferPort &port, Value * const offset = nullptr) const;
+    Value * getPartialSumItemCount(BuilderRef b, const BufferPort &port, Value * const previouslyTransferred, Value * const offset) const;
     Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const BufferPort &port, Value * const numOfLinearStrides);
 
 // termination codegen functions
@@ -320,7 +351,6 @@ public:
 
 
     void initializeBufferExpansionHistory(BuilderRef b) const;
-    Value * getBufferExpansionCycleCounter(BuilderRef b) const;
     void recordBufferExpansionHistory(BuilderRef b, const StreamSetPort outputPort, const StreamSetBuffer * const buffer) const;
     void printOptionalBufferExpansionHistory(BuilderRef b);
 
@@ -360,6 +390,7 @@ public:
 // synchronization functions
 
     void identifyAllInternallySynchronizedKernels();
+    void readFirstSegmentNumber(BuilderRef b);
     void obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock);
     void incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId);
@@ -376,6 +407,24 @@ public:
 
     Value * getThreadLocalHandlePtr(BuilderRef b, const unsigned kernelIndex) const;
 
+// papi instrumentation functions
+#ifdef ENABLE_PAPI
+    void convertPAPIEventNamesToCodes();
+    void addPAPIEventCounterPipelineProperties(BuilderRef b);
+    void addPAPIEventCounterKernelProperties(BuilderRef b, const unsigned kernel, const bool isRoot);
+    void initializePAPI(BuilderRef b) const;
+    void registerPAPIThread(BuilderRef b) const;
+    void createEventSetAndStartPAPI(BuilderRef b);
+    void readPAPIMeasurement(BuilderRef b, const unsigned kernelId, Value * const measurementArray) const;
+    void accumPAPIMeasurementWithoutReset(BuilderRef b, Value * const beforeMeasurement, const unsigned kernelId, const PAPIKernelCounter measurementType) const;
+    void unregisterPAPIThread(BuilderRef b) const;
+    void stopPAPIAndDestroyEventSet(BuilderRef b);
+    void shutdownPAPI(BuilderRef b) const;
+    void accumulateFinalPAPICounters(BuilderRef b);
+    void printPAPIReportIfRequested(BuilderRef b);
+    void checkPAPIRetValAndExitOnError(BuilderRef b, StringRef source, const int expected, Value * const retVal) const;
+
+#endif
 // debug message functions
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -465,12 +514,17 @@ protected:
     const bool                                  PipelineHasTerminationSignal;
     const bool                                  HasZeroExtendedStream;
     const bool                                  EnableCycleCounter;
+    #ifdef ENABLE_PAPI
+    const bool                                  EnablePAPICounters;
+    #else
+    constexpr static bool                       EnablePAPICounters = false;
+    #endif
     const bool                                  TraceIO;
     const bool                                  TraceUnconsumedItemCounts;
     const bool                                  TraceProducedItemCounts;
 
     const KernelIdVector                        KernelPartitionId;
-    const std::vector<unsigned>                 MinimumNumOfStrides;
+    const std::vector<unsigned>                 StrideStepLength;
     const std::vector<unsigned>                 MaximumNumOfStrides;
 
     const RelationshipGraph                     mStreamGraph;
@@ -532,12 +586,13 @@ protected:
 
     Rational                                    mPartitionStrideRateScalingFactor;
 
-    Value *                                     mPartitionSegmentLength = nullptr;
     Value *                                     mFinalPartitionSegment = nullptr;
+    PHINode *                                   mFinalPartitionSegmentAtLoopExitPhi = nullptr;
+    PHINode *                                   mFinalPartitionSegmentAtExitPhi = nullptr;
+    PHINode *                                   mFinalPartialStrideFixedRateRemainderPhi = nullptr;
 
     Value *                                     mNumOfPartitionStrides = nullptr;
 
-    Value *                                     mPartitionRootTerminationSignal = nullptr;
     BasicBlock *                                mCurrentPartitionEntryGuard = nullptr;
     BasicBlock *                                mNextPartitionEntryPoint = nullptr;
     FixedVector<Value *>                        mPartitionTerminationSignal;
@@ -553,7 +608,6 @@ protected:
     Value *                                     mInitialTerminationSignal = nullptr;
     Value *                                     mInitiallyTerminated = nullptr;
     Value *                                     mMaximumNumOfStrides = nullptr;
-    PHINode *                                   mFinalPartialStrideFixedRateRemainderPhi = nullptr;
     PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
     PHINode *                                   mTotalNumOfStridesAtLoopExitPhi = nullptr;
@@ -573,6 +627,8 @@ protected:
     PHINode *                                   mNumOfLinearStridesPhi = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
+    Value *                                     mIsFinalInvocation = nullptr;
+    Value *                                     mAnyClosed = nullptr;
 
     BitVector                                   mHasPipelineInput;
 
@@ -592,9 +648,6 @@ protected:
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
     unsigned                                    mNumOfTruncatedInputBuffers = 0;
-
-//    unsigned                                    mNumOfLocalInputPortIds = 0;
-//    unsigned                                    mNumOfLocalOutputPortIds = 0;
 
     InputPortVector<Value *>                    mInitiallyProcessedItemCount; // *before* entering the kernel
     InputPortVector<Value *>                    mInitiallyProcessedDeferredItemCount;
@@ -636,10 +689,22 @@ protected:
     OutputPortVector<PHINode *>                 mUpdatedProducedDeferredPhi;
     OutputPortVector<PHINode *>                 mFullyProducedItemCount; // *after* exiting the kernel
 
+
     // cycle counter state
     Value *                                     mKernelStartTime = nullptr;
+    Value *                                     mAcquireAndReleaseStartTime = nullptr;
     FixedVector<PHINode *>                      mPartitionStartTimePhi;
-    std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
+    FixedArray<Value *, NUM_OF_CYCLE_COUNTERS>  mCycleCounters;
+
+    // papi counter state
+    #ifdef ENABLE_PAPI
+    SmallVector<int, 8>                         PAPIEventList;
+    Value *                                     PAPIEventSet = nullptr;
+    Value *                                     PAPIEventSetVal = nullptr;
+    Value *                                     PAPIReadInitialMeasurementArray = nullptr;
+    Value *                                     PAPIReadBeforeMeasurementArray = nullptr;
+    Value *                                     PAPIReadAfterMeasurementArray = nullptr;
+    #endif
 
     // debug state
     Value *                                     mThreadId = nullptr;
@@ -706,12 +771,15 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
 , HasZeroExtendedStream(P.HasZeroExtendedStream)
 , EnableCycleCounter(DebugOptionIsSet(codegen::EnableCycleCounter))
+#ifdef ENABLE_PAPI
+, EnablePAPICounters(codegen::PapiCounterOptions.compare(codegen::OmittedOption) != 0)
+#endif
 , TraceIO(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))
 , TraceUnconsumedItemCounts(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))
 , TraceProducedItemCounts(DebugOptionIsSet(codegen::TraceProducedItemCounts))
 
 , KernelPartitionId(std::move(P.KernelPartitionId))
-, MinimumNumOfStrides(std::move(P.MinimumNumOfStrides))
+, StrideStepLength(std::move(P.MinimumNumOfStrides))
 , MaximumNumOfStrides(std::move(P.MaximumNumOfStrides))
 
 , mStreamGraph(std::move(P.mStreamGraph))
@@ -785,7 +853,9 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mInternalBindings(std::move(P.mInternalBindings))
 , mInternalBuffers(std::move(P.mInternalBuffers))
 {
-
+    #ifdef ENABLE_PAPI
+    convertPAPIEventNamesToCodes();
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -849,5 +919,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "debug_messages.hpp"
 #include "codegen/buffer_manipulation_logic.hpp"
 #include "pipeline_optimization_logic.hpp"
+#include "papi_instrumentation_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

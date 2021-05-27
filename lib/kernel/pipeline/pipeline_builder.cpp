@@ -325,14 +325,17 @@ Kernel * PipelineBuilder::makeKernel() {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
         out << "+SS";
     }
-
+    #ifdef ENABLE_PAPI
+    if (LLVM_UNLIKELY(codegen::PapiCounterOptions != codegen::OmittedOption)) {
+        out << "+PAPI:" << codegen::PapiCounterOptions;
+    }
+    #endif
     for (unsigned i = 0; i < numOfKernels; ++i) {
         out << "_K" << mKernels[i]->getFamilyName();
     }
     for (unsigned i = 0; i < numOfCalls; ++i) {
         out << "_C" << mCallBindings[i].Name;
     }
-
     const auto firstRelationship = pipelineOutput + 1;
     const auto lastRelationship = num_vertices(G);
 

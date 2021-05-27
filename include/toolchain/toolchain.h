@@ -55,6 +55,9 @@ extern std::string ShowUnoptimizedIROption;
 extern std::string ShowIROption;
 extern std::string TraceOption;
 extern std::string CCCOption;
+#ifdef ENABLE_PAPI
+extern std::string PapiCounterOptions;
+#endif
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
 extern std::string ShowASMOption;
 #endif

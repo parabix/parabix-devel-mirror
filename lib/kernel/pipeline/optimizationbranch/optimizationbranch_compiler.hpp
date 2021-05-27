@@ -525,11 +525,11 @@ inline const RelationshipRef & getConditionRef(const RelationshipGraph & G) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef b) {
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    if (codegen::SegmentThreads > 1) {
-        mThreadId = b->CreatePThreadSelf();
-    }
-    #endif
+//    #ifdef PRINT_DEBUG_MESSAGES
+//    if (codegen::SegmentThreads > 1) {
+//        mThreadId = b->CreatePThreadSelf();
+//    }
+//    #endif
 
     findBranchDemarcations(b);
     // Two threads could be simultaneously calculating the spans and the later one

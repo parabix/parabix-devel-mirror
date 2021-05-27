@@ -172,7 +172,6 @@ inline void CPUDriver::preparePassManager() {
         }
         mPassManager->add(createPrintModulePass(*mIROutputStream));
     }
-    mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
     mPassManager->add(createSROAPass());                       // Promote elements of aggregate allocas whose addresses are not taken to registers.
@@ -182,7 +181,7 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
     mPassManager->add(createReassociatePass());                // Canonicalizes commutative expressions
     mPassManager->add(createGVNPass());                        // Global value numbering redundant expression elimination pass
-    mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
+    mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes    
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         mPassManager->add(createRemoveRedundantAssertionsPass());
     }
@@ -229,6 +228,7 @@ void CPUDriver::generateUncachedKernels() {
             kernel->generateKernel(mBuilder);
             Module * const module = kernel->getModule(); assert (module);
             module->setTargetTriple(mMainModule->getTargetTriple());
+            module->setDataLayout(mMainModule->getDataLayout());
             mPassManager->run(*module);
             mCachedKernel.emplace_back(kernel.release());
         }
@@ -281,8 +281,8 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     };
 
     // compile any uncompiled kernels
-    addModules(Infrequent, CodeGenOpt::None);
-    addModules(Normal, codegen::BackEndOptLevel);
+    addModules(Infrequent, codegen::BackEndOptLevel);
+    addModules(Normal, CodeGenOpt::Default);
 
     // write/declare the "main" method
     auto mainModule = make_unique<Module>("main", *mContext);

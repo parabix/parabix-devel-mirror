@@ -143,6 +143,8 @@ void PipelineAnalysis::generateInitialBufferGraph() {
         const RelationshipNode & node = mStreamGraph[kernel];
         const Kernel * const kernelObj = node.Kernel; assert (kernelObj);
 
+        unsigned numOfZeroBoundGreedyInputs = 0;
+
         auto makeBufferPort = [&](const RelationshipType port,
                                   const RelationshipNode & bindingNode,
                                   const unsigned streamSet) -> BufferPort {
@@ -163,6 +165,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 const auto e = in_edge(streamSet, mBufferGraph);
                 const BufferPort & producerBr = mBufferGraph[e];
                 ub = std::max(lb, producerBr.Maximum);
+                if (lb.numerator() == 0) {
+                    numOfZeroBoundGreedyInputs++;
+                }
             } else {
                 const auto strideLength = kernelObj->getStride();
                 if (LLVM_UNLIKELY(rate.isRelative())) {
@@ -387,7 +392,20 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 add_edge(kernel, streamSet, makeBufferPort(port, rn, streamSet), mBufferGraph);
             }
         }
+
+        // If this kernel is not a source kernel but all inputs have a zero lower bound, it doesnot have
+        // explicit termination condition. Report an error if this is the case.
+
+        if (LLVM_UNLIKELY(numOfZeroBoundGreedyInputs > 0 && numOfZeroBoundGreedyInputs == in_degree(kernel, mBufferGraph))) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << kernelObj->getName() << " must have at least one input port with a non-zero lowerbound"
+                   " to have an explicit termination condition.";
+            report_fatal_error(out.str());
+        }
+
     }
+
 
 
 }

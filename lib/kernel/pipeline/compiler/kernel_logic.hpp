@@ -521,6 +521,8 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mExhaustedPipelineInputPhi = nullptr;
     mExhaustedInputAtJumpPhi = nullptr;
 
+    mAnyClosed = nullptr;
+
     mKernelInsufficientInput = nullptr;
     mKernelTerminated = nullptr;
     mKernelInitiallyTerminated = nullptr;
@@ -531,6 +533,8 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mNumOfLinearStrides = nullptr;
     mFixedRateFactorPhi = nullptr;
     mFinalPartialStrideFixedRateRemainderPhi = nullptr;
+    mIsFinalInvocationPhi = nullptr;
+    mIsFinalInvocation = nullptr;
 
     assert (mKernelId >= FirstKernel);
     assert (mKernelId <= LastKernel);

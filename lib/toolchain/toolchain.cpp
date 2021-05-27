@@ -62,12 +62,18 @@ std::string ShowUnoptimizedIROption = OmittedOption;
 static cl::opt<std::string, true> UnoptimizedIROutputOption("ShowUnoptimizedIR", cl::location(ShowUnoptimizedIROption), cl::ValueOptional,
                                                          cl::desc("Print generated LLVM IR to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
 
+#ifdef ENABLE_PAPI
+std::string PapiCounterOptions = OmittedOption;
+static cl::opt<std::string, true> clPapiCounterOptions("PapiCounters", cl::location(PapiCounterOptions), cl::ValueOptional,
+                                                       cl::desc("comma delimited list of PAPI event names (run papi_avail for options)"),
+                                                       cl::value_desc("comma delimited list"), cl::cat(CodeGenOptions));
+#endif
+
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
 std::string ShowASMOption = OmittedOption;
 static cl::opt<std::string, true> ASMOutputFilenameOption("ShowASM", cl::location(ShowASMOption), cl::ValueOptional,
                                                          cl::desc("Print generated assembly code to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
 #endif
-
 
 // Enable Debug Options to be specified on the command line
 static cl::opt<CodeGenOpt::Level, true>

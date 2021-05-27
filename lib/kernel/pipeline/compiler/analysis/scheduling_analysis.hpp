@@ -65,14 +65,6 @@ constexpr static double HAMILTONIAN_PATH_ACO_TAU_MIN = HAMILTONIAN_PATH_EPSILON_
 
 constexpr static double HAMILTONIAN_PATH_ACO_TAU_MAX = HAMILTONIAN_PATH_DELTA_WEIGHT;
 
-static size_t fitness_hs_time = 0;
-static size_t fitness_time = 0;
-static size_t repair_time = 0;
-static size_t total_ga_time = 0;
-
-static size_t total_intra_dataflow_analysis_time = 0;
-static size_t total_inter_dataflow_analysis_time = 0;
-static size_t total_inter_dataflow_scheduling_time = 0;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyzeDataflowWithinPartitions
@@ -88,10 +80,7 @@ void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P, random_eng
 
     assert (PartitionCount > 2);
 
-    const auto t0 = std::chrono::high_resolution_clock::now();
     analyzeDataflowWithinPartitions(P, rng);
-    const auto t1 = std::chrono::high_resolution_clock::now();
-    total_intra_dataflow_analysis_time = (t1 - t0).count();
 
     // The graph itself has edges indicating a dependency between the partitions, annotated by the kernels
     // that are a producer of one of the streamsets that traverses the partitions. Ideally we'll use the
@@ -99,11 +88,7 @@ void PipelineAnalysis::schedulePartitionedProgram(PartitionGraph & P, random_eng
     // consumers but first we need to determine the order of our partitions.
 
     const auto D = analyzeDataflowBetweenPartitions(P);
-    const auto t2 = std::chrono::high_resolution_clock::now();
     auto I = makeInterPartitionSchedulingGraph(P, D);
-    const auto t3 = std::chrono::high_resolution_clock::now();
-    total_inter_dataflow_analysis_time = (t2 - t1).count();
-    total_inter_dataflow_scheduling_time = (t3 - t2).count();
     const auto C = scheduleProgramGraph(P, I, D, rng);
     addSchedulingConstraints(P, selectScheduleFromDAWG(I.Kernels, C));
 
@@ -746,10 +731,6 @@ is_bipartite_graph:
         // to apply a weighted max-cut to it to transform G_I into one by discarding
         // any "uncut" edges.
 
-
-
-        const auto start = std::chrono::high_resolution_clock::now();
-
         const auto numOfEdges = num_edges(I);
         assert (numOfEdges > 0);
 
@@ -807,9 +788,6 @@ is_bipartite_graph:
                 return true;
             }
         }, I);
-
-        const auto end = std::chrono::high_resolution_clock::now();
-        fitness_hs_time += (end - start).count();
 
         return calculateChomaticNumber(candidate, residualWeights, residualGraph);
 
@@ -1543,27 +1521,21 @@ struct ProgramSchedulingAnalysisWorker final : public SchedulingAnalysisWorker {
      * @brief repair
      ** ------------------------------------------------------------------------------------------------------------- */
     void repair(Candidate & candidate) override {
-        const auto start = std::chrono::high_resolution_clock::now();
         if (mode == ProgramScheduleType::FirstTopologicalOrdering) {
             first_valid_schedule(candidate);
         } else if (mode == ProgramScheduleType::NearestTopologicalOrdering) {
             nearest_valid_schedule(candidate);
         }
-        const auto end = std::chrono::high_resolution_clock::now();
-        repair_time += (end - start).count();
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief fitness
      ** ------------------------------------------------------------------------------------------------------------- */
     size_t fitness(const Candidate & candidate) override {
-        const auto start = std::chrono::high_resolution_clock::now();
         auto result = std::numeric_limits<size_t>::max();
         if (mode != ProgramScheduleType::RandomWalk || is_valid_hamiltonian_path(candidate)) {
             result = analyzer.analyze(candidate);
         }
-        const auto end = std::chrono::high_resolution_clock::now();
-        fitness_time += (end - start).count();
         FitnessDepth.push_back(analyzer.Depth);
         return result;
     }
@@ -2764,35 +2736,10 @@ OrderingDAWG PipelineAnalysis::scheduleProgramGraph(const PartitionGraph & P,
 
     // ProgramScheduleType::NearestTopologicalOrdering
 
-    fitness_hs_time = 0;
-    fitness_time = 0;
-    repair_time = 0;
-    total_ga_time = 0;
-
-    const auto start = std::chrono::high_resolution_clock::now();
 
     ProgramSchedulingAnalysis SA(S, O, ProgramScheduleType::RandomWalk, numOfFrontierKernels, maxPathLength, rng, 1, 1);
 
     SA.runGA();
-
-    const auto end = std::chrono::high_resolution_clock::now();
-    total_ga_time = (end - start).count();
-
-//    errs() << "," << numOfFrontierKernels << "," << numOfStreamSets
-//           << ',' << total_intra_dataflow_analysis_time << ',' << total_inter_dataflow_analysis_time << ',' << total_inter_dataflow_scheduling_time
-//           << "," << total_ga_time << "," << fitness_time << "," << fitness_hs_time << ",";
-
-////    errs() << "REPAIR TIME:     " << repair_time << "\n"
-////              "FITNESS TIME:    " << fitness_time << "\n"
-////              "FITNESS HS TIME: " << fitness_hs_time << "\n"
-////              "TOTAL GA TIME:   " << total_ga_time << "\n";
-
-//    SA.report();
-
-//    errs() << "," << SA.getBestFitnessValue() << "\n";
-
-//    errs() << "HS UNIQUE INSERTIONS: " << HS_UniqueInsertions << " of " << HS_InsertionAttempts << "\n";
-
 
     return SA.getResult();
 

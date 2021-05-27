@@ -455,7 +455,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
 
                 Type * const type = StreamSetBuffer::resolveType(b, outputRate.getType());
-                #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
+                #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(11, 0, 0)
                 const auto typeSize = DL.getTypeAllocSize(type);
                 #else
                 const auto typeSize = DL.getTypeAllocSize(type).getFixedSize();
