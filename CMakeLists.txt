@@ -110,11 +110,11 @@ endif()
 
 ###   Project Configuration   ###
 
-# Require that compilers support all features of C11 and C++11.
+# Require that compilers support all features of C14 and C++14.
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 # Define `CXX_STANDARD` to enable conditional compilation based on standard version.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCXX_STANDARD=${CMAKE_CXX_STANDARD}")
@@ -411,10 +411,10 @@ add_test(
   WORKING_DIRECTORY ${QA_DIR}/gb18030
   COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=1")
 
-add_test(
-  NAME gb18030_multithreaded_test
-  WORKING_DIRECTORY ${QA_DIR}/gb18030
-  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
+#add_test(
+#  NAME gb18030_multithreaded_test
+#  WORKING_DIRECTORY ${QA_DIR}/gb18030
+#  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
 
 
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
@@ -464,7 +464,7 @@ add_custom_target (abc_test
 
 add_custom_target (check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test kernel-test-suite)
+    DEPENDS icgrep u8u16 u32u8 base64 editd gb18030 idisa_test kernel-test-suite)
 
 add_custom_target (perf_icgrep
     COMMAND python2 perf.py icgrep

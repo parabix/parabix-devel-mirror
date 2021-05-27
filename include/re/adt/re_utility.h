@@ -12,14 +12,11 @@ namespace re { class RE; class Name;}
 namespace re {
 
 RE * makeComplement(RE * s);
+RE * makeZerowidthComplement(RE * s);
 RE * makeWordBoundary();
 RE * makeWordNonBoundary();
 RE * makeWordBegin();
 RE * makeWordEnd();
-Name * makeDigitSet();
-Name * makeAlphaNumeric();
-Name * makeWhitespaceSet();
-Name * makeWordSet();
 RE * makeUnicodeBreak();
 
 }

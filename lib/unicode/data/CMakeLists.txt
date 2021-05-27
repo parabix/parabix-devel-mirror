@@ -10,7 +10,6 @@ SRC
     BidiBrackets.cpp
     BidiMirroring.cpp
     Blocks.cpp
-    CaseFoldLogic.cpp
     CaseFolding.cpp
     CompatibilityProperties.cpp
     CompositionExclusions.cpp

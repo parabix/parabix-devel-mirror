@@ -117,9 +117,9 @@ void WordCountKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (CountWords || CountChars) {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("countable"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("countable"));
     } else {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     }
     
     PabloAST * u8final = nullptr;

@@ -17,9 +17,9 @@ namespace cc {
 Parabix_CC_Compiler_Builder::Parabix_CC_Compiler_Builder(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet)
 : CC_Compiler(scope) {
     if (LLVM_LIKELY(codegen::CCCOption.compare("binary") == 0)) {
-        ccc = make_unique<Parabix_CC_Compiler>(scope, basisBitSet);
+        ccc = std::make_unique<Parabix_CC_Compiler>(scope, basisBitSet);
     } else if (LLVM_LIKELY(codegen::CCCOption.compare("ternary") == 0)) {
-        ccc = make_unique<Parabix_Ternary_CC_Compiler>(scope, basisBitSet);
+        ccc = std::make_unique<Parabix_Ternary_CC_Compiler>(scope, basisBitSet);
     } else {
         llvm::report_fatal_error("Specified character class compiler is not valid");
     }

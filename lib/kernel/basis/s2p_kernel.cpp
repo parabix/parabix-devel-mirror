@@ -297,7 +297,9 @@ BitPairsKernel::BitPairsKernel(BuilderRef b,
                                StreamSet * const bitPairs)
 : MultiBlockKernel(b, "BitPairs"
 , {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
-                   , {Binding{"bitPairs", bitPairs, FixedRate(), RoundUpTo(b->getBitBlockWidth())}}, {}, {}, {}) {}
+                   , {Binding{"bitPairs", bitPairs, FixedRate(), RoundUpTo(2 * b->getBitBlockWidth())}}, {}, {}, {}) {
+    setStride(2 * b->getBitBlockWidth());
+}
 
 void BitQuadsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
     BasicBlock * entry = b->GetInsertBlock();
@@ -332,7 +334,9 @@ BitQuadsKernel::BitQuadsKernel(BuilderRef b,
                                StreamSet * const bitQuads)
 : MultiBlockKernel(b, "BitQuads"
 , {Binding{"bitPairs", bitPairs, FixedRate(), Principal()}}
-                   , {Binding{"bitQuads", bitQuads}}, {}, {}, {}) {}
+                   , {Binding{"bitQuads", bitQuads, FixedRate(), RoundUpTo(2 * b->getBitBlockWidth())}}, {}, {}, {}) {
+    setStride(2 * b->getBitBlockWidth());
+}
 
 void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
     BasicBlock * entry = b->GetInsertBlock();
