@@ -5,6 +5,17 @@
 #include <pthread.h>
 #include <sched.h>
 
+#if BOOST_OS_MACOS
+namespace llvm {
+template<> class TypeBuilder<pthread_t, false> {
+public:
+  static Type *get(LLVMContext& C) {
+    return IntegerType::get(C, sizeof(pthread_t) * 8);
+  }
+};
+}
+#endif
+
 namespace kernel {
 
 // NOTE: the following is a workaround for an LLVM bug for 32-bit VMs on 64-bit architectures.
@@ -449,8 +460,28 @@ enum : unsigned {
 };
 
 
+
 namespace {
 
+#if BOOST_OS_MACOS
+
+// TODO: look into thread affinity for osx
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief __pipeline_pin_process_thread_to_current_core_and_return_cpuid
+ ** ------------------------------------------------------------------------------------------------------------- */
+int __pipeline_pin_process_thread_to_current_core_and_return_cpuid() {
+    return 0;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief __pipeline_pthread_create_with_cpu_affinity
+ ** ------------------------------------------------------------------------------------------------------------- */
+void __pipeline_pthread_create_with_cpu_affinity(pthread_t * pthread, void *(*start_routine)(void *), void * arg, int /* cpu */) {
+    pthread_create(pthread, nullptr, start_routine, arg);
+}
+
+#elif BOOST_OS_LINUX
 static cpu_set_t __avail_cpu_set;
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -491,6 +522,7 @@ void __pipeline_pthread_create_with_cpu_affinity(pthread_t * pthread, void *(*st
         }
     }
 }
+#endif
 
 }
 
@@ -900,7 +932,14 @@ void PipelineCompiler::linkPThreadLibrary(BuilderRef b) {
    // b->LinkFunction("pthread_setaffinity_np", pthread_setaffinity_np);
    // b->LinkFunction("pthread_create", pthread_create);
     b->LinkFunction("pthread_join", pthread_join);
-    b->LinkFunction("pthread_exit", pthread_exit);
+    BEGIN_SCOPED_REGION
+    // pthread_exit seems difficult to resolve in MacOS? manually doing it here but should be looked into
+    FixedArray<Type *, 1> args;
+    args[0] = b->getVoidPtrTy();
+    FunctionType * pthreadExitFnTy = FunctionType::get(b->getVoidTy(), args, false);
+    b->LinkFunction("pthread_exit", pthreadExitFnTy, (void*)pthread_exit); // ->addAttribute(0, llvm::Attribute::AttrKind::NoReturn);
+    END_SCOPED_REGION
+
 
     b->LinkFunction("__pipeline_pin_process_thread_to_current_core_and_return_cpuid",
                     __pipeline_pin_process_thread_to_current_core_and_return_cpuid);

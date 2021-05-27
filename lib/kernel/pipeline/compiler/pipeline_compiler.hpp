@@ -205,8 +205,13 @@ public:
     void ensureSufficientOutputSpace(BuilderRef b, const BufferPort & port, const unsigned streamSet);
     void updatePHINodesForLoopExit(BuilderRef b);
 
-    Value * calculateItemCounts(BuilderRef b, Value * const numOfLinearStrides);
-    Value * anyInputClosed(BuilderRef b);
+    Value * calculateTransferableItemCounts(BuilderRef b, Value * const numOfLinearStrides);
+
+    enum class InputExhaustionReturnType {
+        Conjunction, Disjunction
+    };
+
+    Value * checkIfInputIsExhausted(BuilderRef b, InputExhaustionReturnType returnValType);
     void determineIsFinal(BuilderRef b, Value * const numOfLinearStrides);
     Value * hasMoreInput(BuilderRef b);
 
@@ -262,7 +267,7 @@ public:
 
     Value * getInputStrideLength(BuilderRef b, const BufferPort &inputPort);
     Value * getOutputStrideLength(BuilderRef b, const BufferPort &outputPort);
-    Value * calculateStrideLength(BuilderRef b, const BufferPort & port);
+    Value * calculateStrideLength(BuilderRef b, const BufferPort & port, Value * const previouslyTransferred, Value * const strideIndex);
     Value * calculateNumOfLinearItems(BuilderRef b, const BufferPort &port, Value * const adjustment);
     Value * getAccessibleInputItems(BuilderRef b, const BufferPort & inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const BufferPort & inputPort, Value * const numOfLinearStrides);
@@ -276,7 +281,7 @@ public:
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
     void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
 
-    Value * getPartialSumItemCount(BuilderRef b, const BufferPort &port, Value * const offset = nullptr) const;
+    Value * getPartialSumItemCount(BuilderRef b, const BufferPort &port, Value * const previouslyTransferred, Value * const offset) const;
     Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const BufferPort &port, Value * const numOfLinearStrides);
 
 // termination codegen functions
@@ -519,7 +524,7 @@ protected:
     const bool                                  TraceProducedItemCounts;
 
     const KernelIdVector                        KernelPartitionId;
-    const std::vector<unsigned>                 MinimumNumOfStrides;
+    const std::vector<unsigned>                 StrideStepLength;
     const std::vector<unsigned>                 MaximumNumOfStrides;
 
     const RelationshipGraph                     mStreamGraph;
@@ -581,12 +586,13 @@ protected:
 
     Rational                                    mPartitionStrideRateScalingFactor;
 
-    Value *                                     mPartitionSegmentLength = nullptr;
     Value *                                     mFinalPartitionSegment = nullptr;
+    PHINode *                                   mFinalPartitionSegmentAtLoopExitPhi = nullptr;
+    PHINode *                                   mFinalPartitionSegmentAtExitPhi = nullptr;
+    PHINode *                                   mFinalPartialStrideFixedRateRemainderPhi = nullptr;
 
     Value *                                     mNumOfPartitionStrides = nullptr;
 
-    Value *                                     mPartitionRootTerminationSignal = nullptr;
     BasicBlock *                                mCurrentPartitionEntryGuard = nullptr;
     BasicBlock *                                mNextPartitionEntryPoint = nullptr;
     FixedVector<Value *>                        mPartitionTerminationSignal;
@@ -602,7 +608,6 @@ protected:
     Value *                                     mInitialTerminationSignal = nullptr;
     Value *                                     mInitiallyTerminated = nullptr;
     Value *                                     mMaximumNumOfStrides = nullptr;
-    PHINode *                                   mFinalPartialStrideFixedRateRemainderPhi = nullptr;
     PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
     PHINode *                                   mTotalNumOfStridesAtLoopExitPhi = nullptr;
@@ -622,6 +627,8 @@ protected:
     PHINode *                                   mNumOfLinearStridesPhi = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
+    Value *                                     mIsFinalInvocation = nullptr;
+    Value *                                     mAnyClosed = nullptr;
 
     BitVector                                   mHasPipelineInput;
 
@@ -697,9 +704,6 @@ protected:
     Value *                                     PAPIReadInitialMeasurementArray = nullptr;
     Value *                                     PAPIReadBeforeMeasurementArray = nullptr;
     Value *                                     PAPIReadAfterMeasurementArray = nullptr;
-    #ifndef NDEBUG
-    unsigned                                    PAPIKernelIdOfInitialRead = 0;
-    #endif
     #endif
 
     // debug state
@@ -775,7 +779,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , TraceProducedItemCounts(DebugOptionIsSet(codegen::TraceProducedItemCounts))
 
 , KernelPartitionId(std::move(P.KernelPartitionId))
-, MinimumNumOfStrides(std::move(P.MinimumNumOfStrides))
+, StrideStepLength(std::move(P.MinimumNumOfStrides))
 , MaximumNumOfStrides(std::move(P.MaximumNumOfStrides))
 
 , mStreamGraph(std::move(P.mStreamGraph))

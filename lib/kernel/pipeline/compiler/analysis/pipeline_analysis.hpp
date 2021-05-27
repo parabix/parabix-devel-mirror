@@ -94,6 +94,8 @@ public:
 
         P.computeMaximumExpectedDataflow();
 
+        P.computeMinimumStrideLengthForConsistentDataflow();
+
         #ifdef PRINT_STAGES
         errs() << "computeInterPartitionSymbolicRates\n";
         #endif
@@ -117,7 +119,7 @@ public:
 
         P.markInterPartitionStreamSetsAsGloballyShared(); // linkedPartitions
 
-        P.makePartitionIOGraph();
+//        P.makePartitionIOGraph();
 
 //        errs() << "identifyTerminationChecks\n";
 
@@ -263,6 +265,8 @@ private:
 
     void identifyInterPartitionSymbolicRates();
 
+    void computeMinimumStrideLengthForConsistentDataflow();
+
     // zero extension analysis function
 
     void identifyZeroExtendedStreamSets();
@@ -327,7 +331,7 @@ public:
     RelationshipGraph               mStreamGraph;
     RelationshipGraph               mScalarGraph;
 
-    KernelIdVector                       KernelPartitionId;
+    KernelIdVector                  KernelPartitionId;
 
     std::vector<unsigned>           MinimumNumOfStrides;
     std::vector<unsigned>           MaximumNumOfStrides;

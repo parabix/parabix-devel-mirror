@@ -123,13 +123,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeKernelName(mKernelId);
     #endif
-
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocation);
+    #endif
     const auto greedy = mKernel->isGreedy();
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
         }
-        addNextArg(b->CreateIsNotNull(mFinalPartitionSegment));
+        addNextArg(b->CreateIsNotNull(mIsFinalInvocation));
     } else {
         addNextArg(mNumOfLinearStrides);
         #ifdef PRINT_DEBUG_MESSAGES

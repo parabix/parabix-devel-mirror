@@ -15,7 +15,8 @@ namespace kernel {
 
 void PipelineCompiler::debugInit(BuilderRef b) {
     if (codegen::SegmentThreads > 1) {
-        mThreadId = b->CreatePThreadSelf();
+        Function * const pthreadSelfFn = b->getModule()->getFunction("pthread_self");
+        mThreadId = b->CreateCall(pthreadSelfFn);
     } else {
         mThreadId = nullptr;
     }

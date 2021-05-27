@@ -109,9 +109,9 @@ void PipelineCompiler::identifyPartitionKernelRange() {
  * @brief determinePartitionStrideRateScalingFactor
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determinePartitionStrideRateScalingFactor() {
-    auto max = MinimumNumOfStrides[FirstKernelInPartition];
+    auto max = MaximumNumOfStrides[FirstKernelInPartition];
     for (auto i = FirstKernelInPartition + 1U; i <= LastKernelInPartition; ++i) {
-        max = std::max(MinimumNumOfStrides[i], max);
+        max = std::max(MaximumNumOfStrides[i], max);
     }
     // If a kernel within this partition has a min/max stride value that is greater
     // than the min/max stride of the partition root then when the root kernel
@@ -119,196 +119,7 @@ void PipelineCompiler::determinePartitionStrideRateScalingFactor() {
     // kernel executes N full strides and a final block. To accomidate this
     // possibility, the partition root scales the num of partition strides
     // full+partial strides by to the following ratio:
-    mPartitionStrideRateScalingFactor = Rational{max, MinimumNumOfStrides[FirstKernelInPartition]};
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief writePartitionEntryIOGuard
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writePartitionEntryIOGuard(BuilderRef b) {
-    b->SetInsertPoint(mCurrentPartitionEntryGuard);
-    Value * const processPartition = calculatePartitionSegmentLength(b);
-    detemineMaximumNumberOfStrides(b);
-    b->CreateLikelyCondBr(processPartition, mKernelLoopEntry, mKernelJumpToNextUsefulPartition);
-
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-    if (mExhaustedInputAtJumpPhi) {
-        mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief calculatePartitionSegmentLength
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::calculatePartitionSegmentLength(BuilderRef b) {
-
-    const auto minFirst = MinimumNumOfStrides[FirstKernelInPartition];
-    const auto maxFirst = MaximumNumOfStrides[FirstKernelInPartition];
-    assert ((maxFirst % minFirst) == 0);
-    const auto maxNumOfStrides = maxFirst / minFirst;
-    assert (mKernelId == FirstKernelInPartition);
-    Value * maxPartitionStrides = b->CreateMul(mExpectedNumOfStridesMultiplier, b->getSize(maxNumOfStrides));
-
-    Value * availSegmentLength = maxPartitionStrides;
-    Value * allInputExhausted = nullptr;
-
-//    Value * pendingPipelineHalt = nullptr;
-
-
-    Constant * const sz_ZERO = b->getSize(0);
-//    Constant * const sz_ONE = b->getSize(1);
-
-    Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
-//    Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
-//    Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
-
-    for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionIOGraph))) {
-
-        const auto i = source(e, mPartitionIOGraph);
-        assert (i >= PartitionCount);
-        const auto streamSet = FirstStreamSet + i - PartitionCount;
-        assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-
-        const PartitionIOData & IO = mPartitionIOGraph[e];
-
-        assert (FirstKernelInPartition <= IO.Kernel && IO.Kernel <= LastKernelInPartition);
-        assert (maxNumOfStrides == (MaximumNumOfStrides[IO.Kernel] / MinimumNumOfStrides[IO.Kernel]));
-
-        if (IO.Kernel != mKernelId) {
-            setActiveKernel(b, IO.Kernel, true);
-        }
-
-        const BufferPort & port = IO.Port;
-        assert (port.Port.Type == PortType::Input);
-
-        Value * const avail = subtractLookahead(b, port, mLocallyAvailableItems[streamSet]);
-        Value * segmentLength = nullptr;
-        const Binding & binding = port.Binding;
-
-        const ProcessingRate & rate = binding.getRate();
-
-        if (LLVM_UNLIKELY(rate.getKind() == RateId::PartialSum)) {
-            const auto ref = getReference(IO.Kernel, port.Port);
-            assert (ref.Type == PortType::Input);
-            const StreamSetBuffer * const buffer = getInputBuffer(IO.Kernel, ref);
-
-            ConstantInt * const baseNumOfStrides = b->getSize(MinimumNumOfStrides[IO.Kernel]);
-            Value * const stepFactor = b->CreateMul(mExpectedNumOfStridesMultiplier, baseNumOfStrides);
-
-            Constant * const sz_ONE = b->getSize(1);
-
-            const auto partialSumPrefix = makeBufferName(IO.Kernel, ref);
-            Value * partialSumSteps = sz_ZERO;
-            Value * const basePartialSumOffset = b->getScalarField(partialSumPrefix + ITEM_COUNT_SUFFIX);
-            for (unsigned i = 0; i < maxNumOfStrides; ++i) {
-
-                Value * const withinBounds = b->CreateICmpULT(b->getSize(i), availSegmentLength);
-                Value * const attemptedOffset = b->CreateSub(b->CreateMul(stepFactor, b->getSize(i + 1)), sz_ONE);
-                Value * const offset = b->CreateSelect(withinBounds, attemptedOffset, sz_ZERO);
-
-                Value * const position = b->CreateAdd(basePartialSumOffset, offset);
-                Value * const requiredPtr = buffer->getRawItemPointer(b, sz_ZERO, position);
-                Value * const required = b->CreateLoad(requiredPtr);
-
-                // NOTE: because PartialSums are monotonically non-decreasing, required is compared against
-                // all available instead of the unprocessed item count.
-                Value * const hasEnough = b->CreateICmpUGE(avail, required);
-                Value * const sufficent = b->CreateZExt(b->CreateAnd(hasEnough, withinBounds), b->getSizeTy());
-                partialSumSteps = b->CreateAdd(partialSumSteps, sufficent);
-            }
-
-            segmentLength = b->CreateMul(mExpectedNumOfStridesMultiplier, partialSumSteps);
-
-        } else {
-
-            const auto prefix = makeBufferName(IO.Kernel, port.Port);
-            Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-            Value * const unprocessed = b->CreateSub(avail, processed);
-
-            switch (rate.getKind()) {
-                case RateId::Fixed:
-                case RateId::Bounded:
-                    BEGIN_SCOPED_REGION
-                    Value * const strideLength = calculateStrideLength(b, port);
-                    ConstantInt * const baseNumOfStrides = b->getSize(MinimumNumOfStrides[IO.Kernel]);
-                    Value * const numOfStrides = b->CreateMul(mExpectedNumOfStridesMultiplier, baseNumOfStrides);
-                    Value * const segmentSize = b->CreateMul(strideLength, numOfStrides);
-                    segmentLength = b->CreateUDiv(unprocessed, segmentSize);
-                    END_SCOPED_REGION
-                    break;
-                case RateId::Greedy:
-                    BEGIN_SCOPED_REGION
-
-                    // check deferred item count!
-
-                    Value * const required = b->getSize(floor(rate.getLowerBound()));
-                    Value * const sufficient = b->CreateZExt(b->CreateICmpUGE(unprocessed, required), b->getSizeTy());
-                    segmentLength = b->CreateMul(sufficient, maxPartitionStrides);
-                    END_SCOPED_REGION
-                    break;
-                case RateId::Relative:
-                    report_fatal_error("Relative rates should not be used to calculate partition segment length");
-                default:
-                    break;
-            }
-        }
-
-        const auto producer = parent(streamSet, mBufferGraph);
-        const auto partitionId = KernelPartitionId[producer];
-        Value * const signal = mPartitionTerminationSignal[partitionId]; assert (signal);
-        Value * const closed = b->CreateICmpNE(signal, unterminated);
-
-        Value * exhausted = closed;
-        if (LLVM_UNLIKELY(rate.getKind() != RateId::Greedy)) {
-            exhausted = b->CreateAnd(closed, b->CreateICmpULT(segmentLength, maxPartitionStrides));
-        }
-
-        if (allInputExhausted) {
-            allInputExhausted = b->CreateAnd(allInputExhausted, exhausted);
-        } else {
-            allInputExhausted = exhausted;
-        }
-
-//        if (kernelCanTerminateAbnormally(producer)) {
-//            Value * const fatalTermination = b->CreateICmpEQ(signal, fatal);
-//            if (pendingPipelineHalt) {
-//                pendingPipelineHalt = b->CreateOr(pendingPipelineHalt, fatalTermination);
-//            } else {
-//                pendingPipelineHalt = fatalTermination;
-//            }
-//        }
-
-        Value * const selector = b->CreateICmpULT(segmentLength, availSegmentLength);
-        availSegmentLength = b->CreateSelect(selector, segmentLength, availSegmentLength);
-    }
-
-    setActiveKernel(b, FirstKernelInPartition, true);
-
-    Value * result = nullptr;
-    if (allInputExhausted) {
-        Value * finalSegment = allInputExhausted;
-//        if (pendingPipelineHalt) {
-//            finalSegment = b->CreateOr(allInputExhausted, pendingPipelineHalt);
-//        }
-
-        // Since the pipeline root will calculate exactly how many strides to perform during
-        // the final invocation, we pass maxPartitionStrides instead of the calculated number
-        // since its value will likely truncate the last segment.
-
-        mPartitionSegmentLength = b->CreateSelect(finalSegment, maxPartitionStrides, availSegmentLength);
-        mFinalPartitionSegment = finalSegment;
-        Value * const hasFullSegment = b->CreateICmpNE(availSegmentLength, sz_ZERO);
-        result = b->CreateOr(mFinalPartitionSegment, hasFullSegment);
-    } else {
-        mPartitionSegmentLength = maxPartitionStrides;
-        mFinalPartitionSegment = b->getFalse();
-        result = b->getTrue();
-    }
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, " PartitionSegmentLength=%" PRIu64 ", FinalPartitionSegment=%" PRIu8, mPartitionSegmentLength, mFinalPartitionSegment);
-    #endif
-    return result;
+    mPartitionStrideRateScalingFactor = Rational{max, MaximumNumOfStrides[FirstKernelInPartition]};
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -390,8 +201,9 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                     b->SetInsertPoint(entryPoint, entryPoint->begin());
                     PHINode * const phi = b->CreatePHI(b->getSizeTy(), 3);
                     assert ((mKernelInitiallyTerminatedExit == nullptr) ^ (mKernelInitiallyTerminated != nullptr));
-                    assert (mCurrentPartitionEntryGuard);
-                    phi->addIncoming(initiallyProduced, mCurrentPartitionEntryGuard);
+                    if (mKernelInsufficientInput) {
+                        phi->addIncoming(initiallyProduced, mKernelInsufficientInput);
+                    }
                     if (mKernelInitiallyTerminatedExit) {
                         phi->addIncoming(initiallyProduced, mKernelInitiallyTerminatedExit);
                     }
