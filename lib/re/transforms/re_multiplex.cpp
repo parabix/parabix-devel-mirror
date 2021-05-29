@@ -14,23 +14,15 @@ namespace re {
 
 struct CC_multiplexer final : public RE_Transformer {
 public:
-    CC_multiplexer(const cc::MultiplexedAlphabet * mpx, std::set<Name *> externalNames) :
-        RE_Transformer("Multiplex_" + mpx->getName()),
-        mMultiplexedAlphabet(mpx), mExternalNames(externalNames) {}
+    CC_multiplexer(const cc::MultiplexedAlphabet * mpx, NameTransformationMode mode) :
+        RE_Transformer("Multiplex_" + mpx->getName(), mode),
+        mMultiplexedAlphabet(mpx) {}
     RE * transformCC(CC * cc) override {
         if (cc->getAlphabet() == mMultiplexedAlphabet->getSourceAlphabet()) {
             return mMultiplexedAlphabet->transformCC(cc);
         }
         return cc;
     };
-    RE * transformName(Name * name) override {
-        if (mExternalNames.count(name) > 0) return name;
-        if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-            RE * xfrm = transform(name->getDefinition());
-            return xfrm;
-        }
-        return name;
-    }
     RE * transformPropertyExpression(PropertyExpression * pe) override {
         if (LLVM_LIKELY(pe->getResolvedRE() != nullptr)) {
             RE * xfrm = transform(pe->getResolvedRE());
@@ -40,11 +32,10 @@ public:
     }
 private:
     const cc::MultiplexedAlphabet * const mMultiplexedAlphabet;
-    std::set<Name *> mExternalNames;
 };
 
-RE * transformCCs(const cc::MultiplexedAlphabet * const mpx, RE * re, std::set<Name *> externalNames) {
-    return CC_multiplexer(mpx, externalNames).transformRE(re);
+RE * transformCCs(const cc::MultiplexedAlphabet * const mpx, RE * re, NameTransformationMode mode) {
+    return CC_multiplexer(mpx, mode).transformRE(re);
 }
 
 }

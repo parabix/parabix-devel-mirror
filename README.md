@@ -14,7 +14,7 @@ Parabix includes a set of built-in [tools](https://cs-git-research.cs.surrey.sfu
 To build Parabix, you need a development environment that meets a few requirements.
 
 -  Standard C++ development tools including git, C++, etc.
--  A modern C++ compiler supporting at least C++ 11.
+-  A modern C++ compiler supporting at least C++ 14.
 -  The [`cmake`](https://cmake.org/download/) build system version 2.8 or better.
 -  [`Boost`](https://www.boost.org/users/download/) libraries version `1.61` or better.
 -  [`Z3`](https://github.com/Z3Prover/z3) Theorem Prover.

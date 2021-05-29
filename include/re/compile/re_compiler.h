@@ -78,6 +78,27 @@ class RE_Compiler {
         pablo::PabloAST * mStream;
     };
 
+    //
+    // The regular expression compiler may include one or more externally
+    // defined Names.   Each name has a length, expressed in terms of the
+    // matching units defined by the index stream, and may also have a
+    // nonzero offset.   Note that external names that correspond to Unicode
+    // boundaries or other zero-width assertions will have a length of 0.
+    //
+    class ExternalStream {
+    public:
+        ExternalStream(Marker m, unsigned lgth = 1) :
+            mMarker(m), mLength(lgth) {}
+        ExternalStream & operator = (const ExternalStream &) = default;
+        unsigned length() {return mLength;}
+        Marker & marker() {return mMarker;}
+    private:
+        Marker mMarker;
+        unsigned mLength;
+    };
+
+    void addPrecompiled(std::string externalName, ExternalStream s);
+
     RE_Compiler(pablo::PabloBlock * scope,
                 const cc::Alphabet * codeUnitAlphabet = &cc::UTF8);
 
@@ -103,8 +124,6 @@ class RE_Compiler {
         addAlphabet(a.get(), basis_set);
     }
     
-    void addPrecompiled(std::string precompiledName, Marker precompiled);
-
     Marker compileRE(RE * re);
     
     Marker compileRE(RE * re, Marker initialMarkers);
@@ -113,26 +132,7 @@ class RE_Compiler {
     
 private:
 
-    struct NameMap {
-        NameMap(NameMap * parent = nullptr) : mParent(parent), mMap() {}
-        bool get(const Name * name, Marker & marker) const {
-            auto f = mMap.find(name);
-            if (f == mMap.end()) {
-                return mParent ? mParent->get(name, marker) : false;
-            } else {
-                marker = f->second;
-                return true;
-            }
-        }
-        void add(const Name * const name, Marker marker) {
-            mMap.emplace(name, std::move(marker));
-        }
-        NameMap * getParent() const { return mParent; }
-    private:
-        NameMap * const mParent;
-        boost::container::flat_map<const Name *, Marker> mMap;
-    };
-
+    using ExternalNameMap = std::map<std::string, ExternalStream>;
 
     Marker compile(RE * re, pablo::PabloBuilder & pb);
     Marker compile(RE * re, Marker initialMarkers, pablo::PabloBuilder & pb);
@@ -172,9 +172,7 @@ private:
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
-    NameMap *                                       mCompiledName;
-    NameMap                                         mBaseMap;
-    std::map<std::string, pablo::PabloAST *>        mExternalNameMap;
+    ExternalNameMap                                 mExternalNameMap;
 };
 
 }

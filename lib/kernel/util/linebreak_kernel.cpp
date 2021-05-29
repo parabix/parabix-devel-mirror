@@ -79,9 +79,9 @@ void UnixLinesKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<CC_Compiler> ccc;
     if (getInputStreamSet("basis").size() == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     if (mNullMode == NullCharMode::Abort) {
         pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
@@ -126,9 +126,9 @@ void LineFeedKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<CC_Compiler> ccc;
     if (mNumOfStreams == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
@@ -183,9 +183,9 @@ void UnicodeLinesKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<CC_Compiler> ccc;
     if (getInputStreamSet("basis").size() == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     if (mNullMode == NullCharMode::Abort) {
         pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
@@ -318,9 +318,9 @@ void NullDelimiterKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<CC_Compiler> ccc;
     if (getInputStreamSet("Source").size() == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     PabloAST * NUL = ccc->compileCC("NUL", makeByte(0x0), pb);
     if (mEOFmode == UnterminatedLineAtEOF::Add1) {

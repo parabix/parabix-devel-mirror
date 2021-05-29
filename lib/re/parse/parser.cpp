@@ -13,7 +13,6 @@
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/ADT/STLExtras.h> // for make_unique
 #include <re/parse/parser_helper.h>
 #include <re/parse/PCRE_parser.h>
 #include <re/parse/ERE_parser.h>
@@ -22,6 +21,7 @@
 #include <re/parse/Prosite_parser.h>
 #include <re/parse/fixed_string_parser.h>
 #include <re/adt/adt.h>
+#include <re/adt/re_utility.h>
 #include <re/adt/printer_re.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/RadicalSets.h>
@@ -36,25 +36,25 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     std::unique_ptr<RE_Parser> parser = nullptr;
     switch (syntax) {
         case RE_Syntax::PCRE:
-            parser = make_unique<PCRE_Parser>(regular_expression);
+            parser = std::make_unique<PCRE_Parser>(regular_expression);
             break;
         case RE_Syntax::ERE:
-            parser = make_unique<ERE_Parser>(regular_expression);
+            parser = std::make_unique<ERE_Parser>(regular_expression);
             break;
         case RE_Syntax::BRE:
-            parser = make_unique<BRE_Parser>(regular_expression);
+            parser = std::make_unique<BRE_Parser>(regular_expression);
             break;
         case RE_Syntax::FileGLOB:
-            parser = make_unique<FileGLOB_Parser>(regular_expression);
+            parser = std::make_unique<FileGLOB_Parser>(regular_expression);
             break;
         case RE_Syntax::GitGLOB:
-            parser = make_unique<FileGLOB_Parser>(regular_expression, GLOB_kind::GIT);
+            parser = std::make_unique<FileGLOB_Parser>(regular_expression, GLOB_kind::GIT);
             break;
         case RE_Syntax ::PROSITE:
-            parser = make_unique<RE_Parser_PROSITE>(regular_expression);
+            parser = std::make_unique<RE_Parser_PROSITE>(regular_expression);
             break;
         default:
-            parser = make_unique<FixedStringParser>(regular_expression);
+            parser = std::make_unique<FixedStringParser>(regular_expression);
             break;
     }
     parser->fByteMode = ByteMode;
@@ -376,13 +376,13 @@ RE * RE_Parser::parseEscapedSet() {
             }
             return complemented ? makeZerowidthComplement(re) : re;
         case 'd':
-            re = createName("\\d");
+            re = makePropertyExpression("digit");
             return complemented ? makeComplement(re) : re;
         case 's':
-            re = createName("\\s");
+            re = makePropertyExpression("whitespace");
             return complemented ? makeComplement(re) : re;
         case 'w':
-            re = createName("\\w");
+            re = makePropertyExpression("word");
             return complemented ? makeComplement(re) : re;
         case 'q':
             require('{');
@@ -547,12 +547,10 @@ RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
                 }
                 ++mCursor;
             }
-            //return createName(prop, std::string(val_start, mCursor.pos()));
             return makePropertyExpression(k, prop, op, std::string(val_start, mCursor.pos()));
         }
     }
     return makePropertyExpression(k, prop);
-    //return createName(prop);
 }
 
 RE * RE_Parser::parseNamePatternExpression(){
@@ -770,57 +768,6 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
 
 CC * RE_Parser::createCC(const codepoint_t cp) {
     return makeCC(cp);
-}
-
-RE * RE_Parser::makeComplement(RE * s) {
-  return makeDiff(makeAny(), s);
-}
-
-RE * RE_Parser::makeZerowidthComplement(RE * s) {
-    return makeDiff(makeSeq({}), s);
-}
-
-RE * RE_Parser::makeWordBoundary() {
-    Name * wordC = makeWordSet();
-    return makeReBoundary(wordC);
-}
-
-RE * RE_Parser::makeWordNonBoundary() {
-    Name * wordC = makeWordSet();
-    return makeReNonBoundary(wordC);
-}
-
-inline RE * RE_Parser::makeReBoundary(RE * re) {
-    return makeBoundaryAssertion(re);
-}
-inline RE * RE_Parser::makeReNonBoundary(RE * re) {
-    return makeNegativeBoundaryAssertion(re);
-}
-
-RE * RE_Parser::makeWordBegin() {
-    Name * wordC = makeWordSet();
-    return makeNegativeLookBehindAssertion(wordC);
-}
-
-RE * RE_Parser::makeWordEnd() {
-    Name * wordC = makeWordSet();
-    return makeNegativeLookAheadAssertion(wordC);
-}
-
-Name * RE_Parser::makeDigitSet() {
-    return createName("nd");
-}
-
-Name * RE_Parser::makeAlphaNumeric() {
-    return createName("alnum");
-}
-
-Name * RE_Parser::makeWhitespaceSet() {
-    return createName("whitespace");
-}
-
-Name * RE_Parser::makeWordSet() {
-    return createName("word");
 }
 
 Name * RE_Parser::createName(std::string value) {
