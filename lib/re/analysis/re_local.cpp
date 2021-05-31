@@ -38,6 +38,8 @@ const CC * first(const RE * re) {
         }
     } else if (const CC * cc = dyn_cast<CC>(re)) {
         return cc;
+    } else if (isa<Any>(re)) {
+        return makeCC(0, UCD::UNICODE_MAX);
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         const CC * cc = nullptr;
         for (auto & si : *seq) {
@@ -80,6 +82,8 @@ const CC * final(const RE * re) {
         }
     } else if (const CC * cc = dyn_cast<CC>(re)) {
         return cc;
+    } else if (isa<Any>(re)) {
+        return makeCC(0, UCD::UNICODE_MAX);
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         const CC * cc = nullptr;
         for (auto & si : boost::adaptors::reverse(*seq)) {

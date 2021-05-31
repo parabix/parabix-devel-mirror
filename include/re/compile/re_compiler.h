@@ -139,6 +139,7 @@ private:
 
     Marker process(RE * re, Marker marker, pablo::PabloBuilder & pb);
     Marker compileName(Name * name, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileAny(Marker marker, pablo::PabloBuilder & pb);
     Marker compileCC(CC * cc, Marker marker, pablo::PabloBuilder & pb);
     Marker compileSeq(Seq * seq, Marker marker, pablo::PabloBuilder & pb);
     Marker compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, int matchLenSoFar, Marker marker, pablo::PabloBuilder & pb);

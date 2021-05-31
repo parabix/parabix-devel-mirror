@@ -21,12 +21,13 @@ namespace re {
 class GCB_Any_Free_Validator final : public RE_Validator {
 public:
     GCB_Any_Free_Validator() : RE_Validator(""), mAnySeen(false), mGCBseen(false) {}
+    bool validateAny(const Any * a) override {
+        if (mGCBseen) return false;
+        mAnySeen = true;
+        return true;
+    }
     bool validateName(const Name * n) override {
         std::string nm = n->getName();
-        if (nm == ".") {
-            if (mGCBseen) return false;
-            mAnySeen = true;
-        }
         if (nm == "\\b{g}") {
             if (mAnySeen) return false;
             mGCBseen = true;
@@ -84,7 +85,7 @@ RE * firstSym(RE * re) {
         } else {
             llvm::report_fatal_error("firstSym: unresolved property expression");
         }
-    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
+    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re) || isa<Any>(re)) {
         return re;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         CC * cc = makeCC();
@@ -130,7 +131,7 @@ RE * finalSym(RE * re) {
         } else {
             llvm::report_fatal_error("firstSym: unresolved property expression");
         }
-    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
+    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re) || isa<Any>(re)) {
         return re;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         CC * cc = makeCC();
@@ -278,6 +279,30 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
                 return ContextMatchCursor{nextContext, makeSeq()};
             }
             return ContextMatchCursor{nextContext, intersectCC(contextCC, cc)};
+        }
+        return ContextMatchCursor{nextContext, re};
+    } else if (isa<Any>(re)) {
+        RE_Context nextContext = cursor.ctxt;
+        RE * item = cursor.ctxt.currentItem();
+        if (isa<Start>(item) || isa<End>(item)) {
+            return ContextMatchCursor{cursor.ctxt, makeAlt()};
+        }
+        if (!nonEmpty(item)) {
+            return ContextMatchCursor{RE_Context{nullptr, nullptr, 0}, re};
+        }
+        RE * contextSym = nullptr;
+        if (kind == Assertion::Kind::LookBehind) {
+            contextSym = finalSym(item);
+            nextContext = cursor.ctxt.priorCCorNull();
+        } else {
+            contextSym = firstSym(item);
+            nextContext = cursor.ctxt.followingCCorNull();
+        }
+        if (CC * contextCC = dyn_cast<CC>(contextSym)) {
+            if (isEmptySeq(cursor.rslt)) {
+                return ContextMatchCursor{nextContext, makeSeq()};
+            }
+            return ContextMatchCursor{nextContext, contextCC};
         }
         return ContextMatchCursor{nextContext, re};
     } else if (isa<Start>(re)) {

@@ -113,9 +113,20 @@ Marker RE_Compiler::process(RE * const re, Marker marker, PabloBuilder & pb) {
     } else if (isa<CC>(re)) {
         // CCs may be passed through the toolchain directly to the compiler.
         return compileCC(cast<CC>(re), marker, pb);
+    } else if (isa<Any>(re)) {
+        // CCs may be passed through the toolchain directly to the compiler.
+        return compileAny(marker, pb);
     } else {
         UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
     }
+}
+
+Marker RE_Compiler::compileAny(Marker marker, PabloBuilder & pb) {
+    PabloAST * nextPos = marker.stream();
+    if (marker.offset() == 0) {
+        nextPos = pb.createIndexedAdvance(nextPos, mIndexStream, 1);
+    }
+    return Marker(nextPos);
 }
 
 Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
@@ -286,13 +297,15 @@ Marker RE_Compiler::compileAssertion(Assertion * const a, Marker marker, PabloBu
 inline bool alignedUnicodeLength(const RE * const lh, const RE * const rh) {
     const auto lhl = getLengthRange(lh, &cc::Unicode);
     const auto rhl = getLengthRange(rh, &cc::Unicode);
+    //llvm::errs() << "lhl: (" << lhl.first << ", " << lhl.second << ")\n";
+    //llvm::errs() << "rhl: (" << rhl.first << ", " << rhl.second << ")\n";
     return (lhl.first == lhl.second && lhl.first == rhl.first && lhl.second == rhl.second);
 }
 
 Marker RE_Compiler::compileDiff(Diff * diff, Marker marker, PabloBuilder & pb) {
     RE * const lh = diff->getLH();
     RE * const rh = diff->getRH();
-    if (alignedUnicodeLength(lh, rh)) {
+    if (true) {
         Marker t1 = process(lh, marker, pb);
         Marker t2 = process(rh, marker, pb);
         AlignMarkers(t1, t2, pb);
