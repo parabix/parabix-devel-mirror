@@ -79,6 +79,8 @@ static bool lessThan(const Capture * const lh, const Capture * const rh) {
 static bool lessThan(const Reference * const lh, const Reference * const rh) {
     if (lh->getName() != rh->getName()) {
         return lh->getName() < rh->getName();
+    } else if (lh->getInstance() != rh->getInstance()) {
+        return lh->getInstance() < rh->getInstance();
     } else if (lh->getCapture() == nullptr) {
         return rh->getCapture() != nullptr;
     } else if (rh->getCapture() == nullptr) {

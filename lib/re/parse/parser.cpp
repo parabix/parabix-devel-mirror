@@ -257,7 +257,7 @@ RE * RE_Parser::parse_capture_body() {
     mCaptureGroupCount++;
     std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
     RE * const capture  = makeCapture(captureName, captured);
-    mCaptureMap.emplace(captureName, capture);
+    mCaptureMap.emplace(captureName, std::make_pair(capture, 0));
     return capture;
 }
     
@@ -266,7 +266,12 @@ RE * RE_Parser::parse_back_reference() {
     std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
     auto f = mCaptureMap.find(backref);
     if (f != mCaptureMap.end()) {
-        return makeReference(backref, f->second);
+        RE * captured = f->second.first;
+        unsigned instanceCount = f->second.second;
+        llvm::errs() << "instanceCount:" << instanceCount << "\n";
+        RE * ref = makeReference(backref, captured, instanceCount);
+        f->second = std::make_pair(captured, instanceCount+1);
+        return ref;
     }
     else {
         ParseFailure("Back reference " + backref + " without prior capture group.");
