@@ -213,20 +213,18 @@ void ZTF_Symbols::generatePabloMethod() {
 
 ZTF_Phrases::ZTF_Phrases(BuilderRef kb,
                 StreamSet * basisBits,
-                unsigned numSyms,
                 StreamSet * wordChar,
                 StreamSet * phraseRuns)
 : PabloKernel(kb, "ZTF_Phrases",
             {Binding{"basisBits", basisBits, FixedRate(1), LookAhead(1)},
              Binding{"wordChar", wordChar, FixedRate(1), LookAhead(3)}},
-            {Binding{"phraseRuns", phraseRuns}}), mNumSyms(numSyms) { }
+            {Binding{"phraseRuns", phraseRuns}}) { }
 
 void ZTF_Phrases::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("basisBits");
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
     pablo::PabloAST * wordChar = getInputStreamSet("wordChar")[0];
-    Var * phraseRunsVar = getOutputStreamVar("phraseRuns");
 
     // Find start bytes of word characters.
     PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
@@ -267,16 +265,27 @@ void ZTF_Phrases::generatePabloMethod() {
     //
     // runs are the bytes after a start symbol until the next symStart byte.
     pablo::PabloAST * runs = pb.createInFile(pb.createNot(symStart));
-
-    PabloAST * phraseStart = pb.createEveryNth(pb.createNot(runs), pb.getInteger(mNumSyms));
-    for (unsigned i = 0; i < mNumSyms; i++) {
-        PabloAST * ZTF_phrases = pb.createInFile(pb.createNot(phraseStart));
-        pb.createAssign(pb.createExtract(phraseRunsVar, pb.getInteger(i)), ZTF_phrases);
-        phraseStart = pb.createIndexedAdvance(phraseStart, pb.createNot(runs), 1);
-    }
+    pb.createAssign(pb.createExtract(getOutputStreamVar("phraseRuns"), pb.getInteger(0)), runs);
 }
 
+PhraseRunSeq::PhraseRunSeq(BuilderRef kb,
+                 StreamSet * phraseRuns,
+                 StreamSet * phraseRunSeq,
+                 unsigned numSyms,
+                 unsigned seqNum)
+: pablo::PabloKernel(kb, "PhraseRunSeq" + std::to_string(numSyms) + "seq" + std::to_string(seqNum),
+                        {Binding{"phraseRuns", phraseRuns, FixedRate(1), LookAhead(1)}},
+                        {Binding{"phraseRunSeq", phraseRunSeq}}), mNumSyms(numSyms),  mSeqNum(seqNum) { }
 
+void PhraseRunSeq::generatePabloMethod() {
+    llvm::errs() << "mSeqNum " << mSeqNum << "\n";
+    PabloBuilder pb(getEntryScope());
+    PabloAST * runs = getInputStreamSet("phraseRuns")[0];
+    PabloAST * phraseStart = pb.createEveryNth(pb.createNot(runs), pb.getInteger(mNumSyms));
+    phraseStart = pb.createIndexedAdvance(phraseStart, pb.createNot(runs), mSeqNum);
+    PabloAST * ZTF_phrases = pb.createInFile(pb.createNot(phraseStart));
+    pb.createAssign(pb.createExtract(getOutputStreamVar("phraseRunSeq"), pb.getInteger(0)), ZTF_phrases);
+}
 
 ZTF_SymbolEncoder::ZTF_SymbolEncoder(BuilderRef b,
                       EncodingInfo & encodingScheme,

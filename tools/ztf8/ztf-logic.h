@@ -95,20 +95,33 @@ protected:
     void generatePabloMethod() override;
 };
 
-// Parse encodable ZTF words or symbols from plaintext or ciphertext.
-// Generate n phraseRuns streams for all the possible n-word sequences.
-// symbol sequence continuation bits are marked with 1 bits.
-// Each 0 bit represents a start of a new symbol.
+// Modifed ZTF_Symbols: handles multi-byte ciphertext.
+// Modified suffix ranges for codeword with prefix range 0xF8-0xFF
 class ZTF_Phrases : public pablo::PabloKernel {
 public:
     ZTF_Phrases(BuilderRef kb,
                 StreamSet * basisBits,
-                unsigned numSyms,
                 StreamSet * wordChar,
                 StreamSet * phraseRuns);
 protected:
     void generatePabloMethod() override;
+};
+
+// Generate i-th phraseRunSeq stream with n-syms for the given phraseRuns.
+// Start position of first n-sym sequence is indicated by the seqNum.
+// symbol sequence continuation bits are marked with 1 bits.
+// Each 0 bit represents a start of a new symbol.
+class PhraseRunSeq : public pablo::PabloKernel {
+public:
+    PhraseRunSeq(BuilderRef kb,
+                 StreamSet * phraseRuns,
+                 StreamSet * phraseRunSeq,
+                 unsigned numSyms,
+                 unsigned seqNum);
+protected:
+    void generatePabloMethod() override;
     unsigned mNumSyms;
+    unsigned mSeqNum;
 };
 
 // Given parsed symbol runs, produce a stream marking end positions only.
