@@ -4,4 +4,7 @@ NAME
 SRC
   LLVMVersion.cpp
   LLVMVersion.h
+DEPS
+  toolchain
+  codegen
 )

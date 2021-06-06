@@ -1,0 +1,53 @@
+#include "LLVMVersion.h"
+
+#include <codegen/CBuilder.h>
+
+#include <llvm/IR/Constants.h>
+#include <llvm/Support/Alignment.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/TypeSize.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Metadata.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/ADT/APInt.h>
+
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
+    typedef unsigned            AlignType;
+#else
+    typedef llvm::Align         AlignType;
+#endif
+
+using namespace llvm;
+
+namespace llvm_version {
+
+  Constant * getSplat(const unsigned fieldCount, Constant *Elt) {
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(12, 0, 0)
+      return ConstantVector::getSplat(ElementCount::get(fieldCount, false), Elt);
+    #else
+      return ConstantVector::getSplat({fieldCount, false}, Elt);
+    #endif
+  }
+
+  VectorType * getVectorType(Type *ElementType, unsigned NumElements) {
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(12, 0, 0)
+      return VectorType::get(ElementType, ElementCount::get(NumElements, false));
+    #else
+      return VectorType::get(ElementType, {NumElements, false});
+    #endif
+  }
+
+  StructType * getTypeByName(Module *M, StringRef Name) {
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(12, 0, 0)
+      return StructType::getTypeByName(M->getContext(), Name);
+    #else
+      return M->getTypeByName(Name);
+    #endif
+  }
+
+}
