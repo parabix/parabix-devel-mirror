@@ -164,25 +164,7 @@ inline void CPUDriver::preparePassManager() {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         mPassManager->add(createRemoveRedundantAssertionsPass());
     }
-    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
-    if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
-        if (!codegen::ShowASMOption.empty()) {
-            std::error_code error;
-            mASMOutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
-        } else {
-            mASMOutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
-        }
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, CGFT_AssemblyFile))) {
-#elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, llvm::LLVMTargetMachine::CGFT_AssemblyFile))) {
-#else
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
-#endif
-            report_fatal_error("LLVM error: could not add emit assembly pass");
-        }
-    }
-    #endif
+    llvm_version::checkAddPassesToEmitFile(mTarget, mPassManager, mASMOutputStream);
 }
 
 void CPUDriver::generateUncachedKernels() {

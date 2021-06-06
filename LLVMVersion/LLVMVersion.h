@@ -61,5 +61,6 @@ llvm::StructType * getTypeByName(llvm::Module *M, llvm::StringRef Name);
 llvm::CallInst * CreateCall(llvm::Value *callee, llvm::ArrayRef< llvm::Value * > args, const llvm::Twine & Name = "");
 llvm::InvokeInst * CreateInvoke(llvm::Value * const doSegment, llvm::BasicBlock * const invokeOk, llvm::BasicBlock * mRethrowException,  llvm::ArrayRef< llvm::Value * > args);
 llvm::CallInst * CreateMemMove(void * data, llvm::Value * Dst, llvm::Value * Src, llvm::Value *Size, unsigned Align, bool isVolatile, llvm::MDNode *TBAATag, llvm::MDNode *ScopeTag, llvm::MDNode *NoAliasTag);
+void checkAddPassesToEmitFile(llvm::TargetMachine * mTarget, std::unique_ptr<llvm::legacy::PassManager> const & mPassManager, std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream);
 
 } // namespace llvm_version

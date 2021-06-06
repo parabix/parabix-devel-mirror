@@ -50,4 +50,25 @@ namespace llvm_version {
     #endif
   }
 
+  void checkAddPassesToEmitFile(TargetMachine * mTarget, std::unique_ptr<legacy::PassManager> const & mPassManager, std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream) {
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
+      if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
+        if (!codegen::ShowASMOption.empty()) {
+            std::error_code error;
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, llvm::sys::fs::OpenFlags::F_None);
+        } else {
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+        }
+        #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
+            if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, CGFT_AssemblyFile))) {
+        #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+            if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, llvm::LLVMTargetMachine::CGFT_AssemblyFile))) {
+        #else
+            if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+        #endif
+            report_fatal_error("LLVM error: could not add emit assembly pass");
+      }
+    }
+    #endif
+  }
 }
