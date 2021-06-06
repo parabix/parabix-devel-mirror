@@ -13,11 +13,6 @@
 #include <kernel/pipeline/driver/driver.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 
-#if LLVM_VERSION_MAJOR >= 10
-#include <llvm/IR/IntrinsicsNVPTX.h>
-#include <llvm/IR/IntrinsicsX86.h>
-#endif
-
 #include "LLVMVersion.h"
 
 using namespace llvm;

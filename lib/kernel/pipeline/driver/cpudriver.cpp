@@ -19,33 +19,13 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <llvm/Transforms/Utils/Cloning.h>
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
-#include <llvm/Transforms/Scalar/GVN.h>
-#endif
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
-#include <llvm/Transforms/Scalar/SROA.h>
-#endif
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-#include <llvm/Transforms/InstCombine/InstCombine.h>
-#include <llvm/Transforms/Utils.h>
-#endif
 #include <objcache/object_cache.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/IR/Verifier.h>
 #include "llvm/IR/Mangler.h"
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
-#include <llvm/ExecutionEngine/MCJIT.h>
-#endif
 #include <llvm/ADT/Statistic.h>
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(8, 0, 0)
-#include <llvm/IR/LegacyPassManager.h>
-#else
-#include <llvm/IR/PassTimingInfo.h>
-#endif
-#if LLVM_VERSION_MAJOR >= 10
-#include "llvm/Support/Host.h"
-#endif
+
 #ifndef NDEBUG
 #define IN_DEBUG_MODE true
 #else

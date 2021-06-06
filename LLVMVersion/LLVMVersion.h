@@ -4,6 +4,31 @@
 
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/LegacyPassManager.h>
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
+#include <llvm/Transforms/Scalar/GVN.h>
+#endif
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
+#include <llvm/Transforms/Scalar/SROA.h>
+#endif
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Utils.h>
+#endif
+
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+#include <llvm/ExecutionEngine/MCJIT.h>
+#endif
+
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(8, 0, 0)
+#include <llvm/IR/LegacyPassManager.h>
+#else
+#include <llvm/IR/PassTimingInfo.h>
+#endif
+#if LLVM_VERSION_MAJOR >= 10
+#include <llvm/Support/Host.h>
+#include <llvm/IR/IntrinsicsNVPTX.h>
+#include <llvm/IR/IntrinsicsX86.h>
+#endif
 
 namespace llvm {
 
