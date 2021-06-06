@@ -54,12 +54,6 @@
 #define setReturnDoesNotAlias() setDoesNotAlias(0)
 #endif
 
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
-    typedef unsigned            AlignType;
-#else
-    typedef llvm::Align         AlignType;
-#endif
-
 using namespace llvm;
 
 static int accumulatedFreeCalls = 0;
