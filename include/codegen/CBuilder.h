@@ -20,11 +20,7 @@
 #endif
 #include <util/not_null.h>
 
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
-    typedef unsigned            AlignType;
-#else
-    typedef llvm::Align         AlignType;
-#endif
+#include "LLVMVersion.h"
 
 namespace kernel { class KernelBuilder; }
 namespace llvm { class Function; }
@@ -141,7 +137,7 @@ public:
 
     llvm::AllocaInst * CreateAlignedAlloca(llvm::Type * const Ty, const unsigned alignment, llvm::Value * const ArraySize = nullptr) {
         llvm::AllocaInst * const alloc = CreateAlloca(Ty, ArraySize);
-        alloc->setAlignment(AlignType(alignment));
+        alloc->setAlignment(llvm_version::AlignType(alignment));
         return alloc;
     }
 

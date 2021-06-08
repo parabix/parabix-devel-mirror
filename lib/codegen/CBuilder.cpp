@@ -1450,7 +1450,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char *
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
-    LI->setAlignment(AlignType(Align));
+    LI->setAlignment(llvm_version::AlignType(Align));
     return LI;
 }
 
@@ -1463,7 +1463,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine 
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
-    LI->setAlignment(AlignType(Align));
+    LI->setAlignment(llvm_version::AlignType(Align));
     return LI;
 }
 
@@ -1476,7 +1476,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolat
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
-    LI->setAlignment(AlignType(Align));
+    LI->setAlignment(llvm_version::AlignType(Align));
     return LI;
 }
 
@@ -1489,7 +1489,7 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
         CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
-    SI->setAlignment(AlignType(Align));
+    SI->setAlignment(llvm_version::AlignType(Align));
     return SI;
 }
 
@@ -1528,7 +1528,7 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
         }
     }
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
-    return IRBuilder<>::CreateMemMove(Dst, AlignType(Align), Src, AlignType(Align), Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+    return IRBuilder<>::CreateMemMove(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
     return IRBuilder<>::CreateMemMove(Dst, Align, Src, Align, Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 #else
@@ -1559,7 +1559,7 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
         CreateAssert(nonOverlapping, "CreateMemCpy: overlapping ranges is undefined");
     }
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
-    return IRBuilder<>::CreateMemCpy(Dst, AlignType(Align), Src, AlignType(Align), Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
+    return IRBuilder<>::CreateMemCpy(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
     return IRBuilder<>::CreateMemCpy(Dst, Align, Src, Align, Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 #else
@@ -1579,7 +1579,7 @@ CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsign
             CreateAssertZero(CreateURem(intPtr, align), "CreateMemSet: Ptr is misaligned");
         }
     }
-    return IRBuilder<>::CreateMemSet(Ptr, Val, Size, AlignType(Align), isVolatile, TBAATag, ScopeTag, NoAliasTag);
+    return IRBuilder<>::CreateMemSet(Ptr, Val, Size, llvm_version::AlignType(Align), isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
 CallInst * CBuilder::CreateMemCmp(Value * Ptr1, Value * Ptr2, Value * Num) {

@@ -16,12 +16,6 @@
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/ADT/APInt.h>
 
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
-    typedef unsigned            AlignType;
-#else
-    typedef llvm::Align         AlignType;
-#endif
-
 using namespace llvm;
 
 namespace llvm_version {

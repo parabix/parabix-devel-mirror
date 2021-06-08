@@ -55,6 +55,12 @@ class ArrayRef;
 
 namespace llvm_version {
 
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(10, 0, 0)
+    typedef unsigned            AlignType;
+#else
+    typedef llvm::Align         AlignType;
+#endif
+
 llvm::Constant * getSplat(const unsigned fieldCount, llvm::Constant *Elt);
 llvm::VectorType * getVectorType(llvm::Type *ElementType, unsigned NumElements);
 llvm::StructType * getTypeByName(llvm::Module *M, llvm::StringRef Name);
