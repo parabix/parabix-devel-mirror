@@ -39,8 +39,8 @@ using Marker = RE_Compiler::Marker;
 
 
 class RE_Block_Compiler {
-    public:
-    
+public:
+
     RE_Block_Compiler(RE_Compiler & main, PabloBuilder & pb);
     RE_Block_Compiler(RE_Block_Compiler * parent, PabloBuilder & pb);
     Marker process(RE * re, Marker marker);
@@ -71,15 +71,17 @@ private:
     Marker compileStart(Marker marker);
     Marker compileEnd(Marker marker);
 
+    PabloAST * getCompiledCC(CC * cc);
+
     Marker AdvanceMarker(Marker marker, const unsigned newpos);
     Marker AdvanceMarker(Marker marker, const unsigned newpos, PabloBuilder & pb);
     void AlignMarkers(Marker & m1, Marker & m2);
-    
-private:
 
-    RE_Compiler &           mMain;
-    RE_Block_Compiler *     mParent;
-    PabloBuilder &          mPB;
+private:
+    RE_Compiler &               mMain;
+    RE_Block_Compiler *         mParent;
+    PabloBuilder &              mPB;
+    std::map<CC *, PabloAST *>  mLocallyCompiledCCs;
 };
 
 inline Marker RE_Block_Compiler::compile(RE * const re) {
@@ -139,14 +141,24 @@ Marker RE_Block_Compiler::compileCC(CC * const cc, Marker marker) {
     }
     PabloAST * nextPos = marker.stream();
     const cc::Alphabet * a = cc->getAlphabet();
+    if (marker.offset() == 0) {
+        if (a == &cc::Byte) {
+            nextPos = mPB.createAdvance(nextPos, 1);
+        } else {
+            nextPos = mPB.createIndexedAdvance(nextPos, mMain.mIndexStream, 1);
+        }
+    }
+    PabloAST * precompiled = getCompiledCC(cc);
+    if (precompiled) {
+        return Marker(mPB.createAnd(nextPos, precompiled));
+    }
     unsigned i = 0;
     while (i < mMain.mAlphabets.size() && (a != mMain.mAlphabets[i])) i++;
     if (i < mMain.mAlphabets.size()) {
         //llvm::errs() << "Found alphabet: " << i << ", " << mMain.mAlphabets[i]->getName() << "\n";
-        if (marker.offset() == 0) {
-            nextPos = mPB.createIndexedAdvance(nextPos, mMain.mIndexStream, 1);
-        }
-        return Marker(mPB.createAnd(nextPos, mMain.mAlphabetCompilers[i]->compileCC(cc)));
+        PabloAST * ccStrm = mMain.mAlphabetCompilers[i]->compileCC(cc);
+        mLocallyCompiledCCs.emplace(cc, ccStrm);
+        return Marker(mPB.createAnd(nextPos, ccStrm));
     }
     if (mMain.mIndexingTransformer && (a == mMain.mIndexingTransformer->getIndexingAlphabet())) {
         //llvm::errs() << "Found indexing alphabet: " << i << ", " << mMain.mIndexingTransformer->getIndexingAlphabet()->getName() << "\n";
@@ -156,21 +168,18 @@ Marker RE_Block_Compiler::compileCC(CC * const cc, Marker marker) {
         if (i < mMain.mAlphabets.size()) {
             RE_Compiler code_unit_compiler(mPB.getPabloBlock(), mMain.mIndexingTransformer->getEncodingAlphabet());
             code_unit_compiler.addAlphabet(encodingAlphabet, mMain.mBasisSets[i]);
-            Marker ccm = code_unit_compiler.compileRE(mMain.mIndexingTransformer->transformRE(cc));
-            if (marker.offset() == 0) {
-                nextPos = mPB.createIndexedAdvance(nextPos, mMain.mIndexStream, 1);
-            }
-            return Marker(mPB.createAnd(nextPos, ccm.stream(), cc->canonicalName()));
+            PabloAST * ccStrm = code_unit_compiler.compileRE(mMain.mIndexingTransformer->transformRE(cc)).stream();
+            mLocallyCompiledCCs.emplace(cc, ccStrm);
+            return Marker(mPB.createAnd(nextPos, ccStrm, cc->canonicalName()));
         } else {
             llvm::report_fatal_error("EncodingAlphabet " + encodingAlphabet->getName() + " not registered!\n");
         }
     }
     if (a == &cc::Byte) {
         //llvm::errs() << "Using alphabet 0: for Byte\n";
-        if (marker.offset() == 0) {
-            nextPos = mPB.createAdvance(nextPos, 1);
-        }
-        return Marker(mPB.createAnd(nextPos, mMain.mAlphabetCompilers[0]->compileCC(cc)));
+        PabloAST * ccStrm = mMain.mAlphabetCompilers[0]->compileCC(cc);
+        mLocallyCompiledCCs.emplace(cc, ccStrm);
+        return Marker(mPB.createAnd(nextPos, ccStrm));
     }
     llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, codeUnitAlphabet = " + mMain.mCodeUnitAlphabet->getName() + "\n in compiling RE: " + Printer_RE::PrintRE(cc) + "\n");
 }
@@ -684,6 +693,18 @@ inline void RE_Block_Compiler::AlignMarkers(Marker & m1, Marker & m2) {
     } else if (m2.offset() < m1.offset()) {
         m2 = AdvanceMarker(m2, m1.offset());
     }
+}
+
+PabloAST * RE_Block_Compiler::getCompiledCC(CC * cc) {
+    if (mParent) {
+        PabloAST * compiled = mParent->getCompiledCC(cc);
+        if (compiled) return compiled;
+    }
+    auto f = mLocallyCompiledCCs.find(cc);
+    if (f != mLocallyCompiledCCs.end()) {
+        return f->second;
+    }
+    return nullptr;
 }
 
 RE_Block_Compiler::RE_Block_Compiler(RE_Compiler & main, PabloBuilder & pb)
