@@ -21,7 +21,10 @@ namespace pablo { class Var; }
 
 namespace re {
 
+class RE_Block_Compiler;
+
 class RE_Compiler {
+    friend class RE_Block_Compiler;
     public:
 
 /*   The regular expression compiler works in terms of two fundamental bit stream
@@ -127,43 +130,11 @@ class RE_Compiler {
     Marker compileRE(RE * re);
     
     Marker compileRE(RE * re, Marker initialMarkers);
-    
+        
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
-    
-private:
 
+private:
     using ExternalNameMap = std::map<std::string, ExternalStream>;
-
-    Marker compile(RE * re, pablo::PabloBuilder & pb);
-    Marker compile(RE * re, Marker initialMarkers, pablo::PabloBuilder & pb);
-
-    Marker process(RE * re, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileName(Name * name, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileAny(Marker marker, pablo::PabloBuilder & pb);
-    Marker compileCC(CC * cc, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileSeq(Seq * seq, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, int matchLenSoFar, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileAlt(Alt * alt, Marker base, pablo::PabloBuilder & pb);
-    Marker compileAssertion(Assertion * a, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileRep(int LB, int UB, RE * repeated, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileDiff(Diff * diff, Marker marker, pablo::PabloBuilder & cg);
-    Marker compileIntersect(Intersect * x, Marker marker, pablo::PabloBuilder & cg);
-    pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated_j, int j, int repeat_count, const int match_length, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
-    pablo::PabloAST * reachable(pablo::PabloAST * repeated, int length, int repeat_count, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
-    static bool isFixedLength(RE * regexp);
-    Marker expandLowerBound(RE * repeated,  int lb, Marker marker, int ifGroupSize, pablo::PabloBuilder & pb);
-    Marker processUnboundedRep(RE * repeated, Marker marker, pablo::PabloBuilder & pb);
-    Marker expandUpperBound(RE * repeated, int ub, Marker marker, int ifGroupSize,  pablo::PabloBuilder & pb);
-
-    Marker compileName(Name * name, pablo::PabloBuilder & pb);
-    Marker compileStart(Marker marker, pablo::PabloBuilder & pb);
-    Marker compileEnd(Marker marker, pablo::PabloBuilder & pb);
-
-    Marker AdvanceMarker(Marker marker, const unsigned newpos, pablo::PabloBuilder & pb);
-    void AlignMarkers(Marker & m1, Marker & m2, pablo::PabloBuilder & pb);
-    
-private:
-
     pablo::PabloBlock * const                       mEntryScope;
     const cc::Alphabet *                            mCodeUnitAlphabet;
     EncodingTransformer *                           mIndexingTransformer;
