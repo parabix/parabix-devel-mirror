@@ -104,7 +104,7 @@ struct LengthGroupParameters {
         SUBTABLE_SIZE(b->getSize((1UL << groupInfo.hash_bits) * groupInfo.hi)),
         HASH_BITS(b->getSize(groupInfo.hash_bits)),
         EXTENDED_BITS(b->getSize(std::max((groupInfo.hash_bits + groupInfo.length_extension_bits), ((groupInfo.encoding_bytes - 1U) * 7U)))),
-        HASH_MASK(b->getSize((1UL << groupInfo.hash_bits) - 1UL)),
+        HASH_MASK(b->getSize((1UL << ((groupInfo.hash_bits >> 1UL) * groupInfo.encoding_bytes)) - 1UL)),
         ENC_BYTES(b->getSize(groupInfo.encoding_bytes)),
         MAX_INDEX(b->getSize(groupInfo.encoding_bytes - 1UL)),
         PREFIX_BASE(b->getSize(groupInfo.prefix_base)),
