@@ -97,6 +97,7 @@ public:
                            StreamSet * const byteData,
                            StreamSet * compressionMask,
                            StreamSet * encodedBytes,
+                           StreamSet * compSymSeq,
                            unsigned strideBlocks = 8);
 private:
     void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
