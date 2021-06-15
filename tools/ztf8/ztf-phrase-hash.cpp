@@ -84,11 +84,72 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * WordChars = P->CreateStreamSet(1);
     P->CreateKernelCall<WordMarkKernel>(u8basis, WordChars);
 
-    StreamSet * phraseRuns = P->CreateStreamSet(WordLen);
-    P->CreateKernelCall<ZTF_Phrases>(u8basis, WordLen, WordChars, phraseRuns);
+    StreamSet * phraseRuns = P->CreateStreamSet(1);
+    P->CreateKernelCall<ZTF_Phrases>(u8basis, WordChars, phraseRuns);
     //P->CreateKernelCall<DebugDisplayKernel>("phraseRuns", phraseRuns);
 
-    std::vector<StreamSet *> allPhraseRuns = {phraseRuns};
+    std::vector<StreamSet *> allPhraseRuns;
+    std::vector<StreamSet *> allRunIndex;
+    std::vector<StreamSet *> allOverflow;
+    std::vector<StreamSet *> allHashValues;
+    for (unsigned i = 0; i < WordLen; i++) {
+        StreamSet * phraseSeq = P->CreateStreamSet(1);
+        P->CreateKernelCall<PhraseRunSeq>(phraseRuns, phraseSeq, WordLen, i);
+        //P->CreateKernelCall<DebugDisplayKernel>("phraseSeq", phraseSeq);
+        allPhraseRuns.push_back(phraseSeq);
+        StreamSet * const runIndex = P->CreateStreamSet(5);
+        StreamSet * const overflow = P->CreateStreamSet(1);
+        P->CreateKernelCall<RunIndex>(phraseSeq, runIndex, overflow);
+        allRunIndex.push_back(runIndex);
+        allOverflow.push_back(overflow);
+        //P->CreateKernelCall<DebugDisplayKernel>("runIndex", runIndex);
+        StreamSet * const bixHashes = P->CreateStreamSet(encodingScheme1.MAX_HASH_BITS);
+        P->CreateKernelCall<BixHash>(u8basis, phraseSeq, bixHashes);
+        //P->CreateKernelCall<DebugDisplayKernel>("bixHashes", bixHashes);
+        std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
+        StreamSet * const hashValues = P->CreateStreamSet(1, 16);
+        P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
+        allHashValues.push_back(hashValues);
+        //P->CreateKernelCall<DebugDisplayKernel>("hashValues", hashValues);
+    }
+
+    StreamSet * u8bytes = codeUnitStream;
+    std::vector<StreamSet *> extractionMasks;
+    for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
+        std::vector<StreamSet *> allGroupMarks;
+        // get the groupMarks streams marking all phrases of length l such that groupInfo.lo < l < groupInfo.hi
+        // for each of the q phraseSeq streams
+        for ( unsigned ii = 0; ii < WordLen; ii++) {
+            //unsigned ii = 0;
+            StreamSet * groupMarks = P->CreateStreamSet(1);
+            P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, allPhraseRuns[ii], allRunIndex[ii], allOverflow[ii], groupMarks);
+            //P->CreateKernelCall<DebugDisplayKernel>("groupMarks", groupMarks);
+            allGroupMarks.push_back(groupMarks);
+        }
+        StreamSet * extractionMask = P->CreateStreamSet(1);
+        StreamSet * input_bytes = u8bytes;
+        StreamSet * output_bytes = P->CreateStreamSet(1, 8);
+        StreamSet * compSymSeq = P->CreateStreamSet(1);
+
+        // TODO: inlcude length based phrase compression
+        P->CreateKernelCall<PhraseCompression>(encodingScheme1, i, allGroupMarks, allHashValues, input_bytes,  extractionMask, output_bytes, compSymSeq);
+        //P->CreateKernelCall<DebugDisplayKernel>("extractionMask", extractionMask);
+        //P->CreateKernelCall<DebugDisplayKernel>("compSymSeq", compSymSeq);
+        extractionMasks.push_back(extractionMask);
+        u8bytes = output_bytes;
+    }
+
+    StreamSet * const combinedMask = P->CreateStreamSet(1);
+    P->CreateKernelCall<StreamsIntersect>(extractionMasks, combinedMask);
+    StreamSet * const encoded = P->CreateStreamSet(8);
+    P->CreateKernelCall<S2PKernel>(u8bytes, encoded);
+
+    StreamSet * const ZTF_basis = P->CreateStreamSet(8);
+    FilterByMask(P, combinedMask, encoded, ZTF_basis);
+
+    StreamSet * const ZTF_bytes = P->CreateStreamSet(1, 8);
+    P->CreateKernelCall<P2SKernel>(ZTF_basis, ZTF_bytes);
+    P->CreateKernelCall<StdOutKernel>(ZTF_bytes);
     return reinterpret_cast<ztfHashFunctionType>(P->compile());
 }
 
@@ -117,8 +178,9 @@ int main(int argc, char *argv[]) {
         errs() << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
     } else {
         if (Decompression) {
-            auto ztfHashDecompressionFunction = ztfHash_decompression_gen(pxDriver);
-            ztfHashDecompressionFunction(fd);
+            errs() << "Coming soon!" << "\n";
+            //auto ztfHashDecompressionFunction = ztfHash_decompression_gen(pxDriver);
+            //ztfHashDecompressionFunction(fd);
         } else {
             auto ztfHashCompressionFunction = ztfHash_compression_gen(pxDriver);
             ztfHashCompressionFunction(fd);
