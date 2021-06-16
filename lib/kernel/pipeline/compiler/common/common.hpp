@@ -643,14 +643,14 @@ bool PipelineCommonGraphFunctions::mayHaveNonLinearIO(const size_t kernel) const
     for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
         const auto streamSet = source(input, mBufferGraphRef);
         const BufferNode & node = mBufferGraphRef[streamSet];
-        if (node.IsLinear) {
+        if (!node.IsLinear) {
             return true;
         }
     }
     for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
         const auto streamSet = target(output, mBufferGraphRef);
         const BufferNode & node = mBufferGraphRef[streamSet];
-        if (node.IsLinear) {
+        if (!node.IsLinear) {
             return true;
         }
     }

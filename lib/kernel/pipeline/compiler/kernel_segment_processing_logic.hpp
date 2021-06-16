@@ -89,14 +89,40 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mExhaustedPipelineInputAtExit = mExhaustedInput;
 
+
+
     identifyPipelineInputs(mKernelId);
 
     if (RequiresSynchronization[mKernelId]) {
         mIsBounded = isBounded();
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
-        const auto nonSourceKernel = in_degree(mKernelId, mBufferGraph) > 0;
-        mCheckInputChannels = nonSourceKernel && (mIsPartitionRoot || mayHaveNonLinearIO(mKernelId));
-        mMayLoopToEntry = nonSourceKernel && hasAtLeastOneNonGreedyInput() && (mCheckInputChannels || mHasExplicitFinalPartialStride);
+        mCheckInputChannels = false;
+        for (const auto input : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const BufferPort & port = mBufferGraph[input];
+            if (port.CanModifySegmentLength) {
+                mCheckInputChannels = true;
+                break;
+            }
+        }
+
+        mMayLoopToEntry = false;
+
+        if (in_degree(mKernelId, mBufferGraph) > 0) {
+
+            if (mHasExplicitFinalPartialStride || (mCheckInputChannels && hasAtLeastOneNonGreedyInput())) {
+                mMayLoopToEntry = true;
+            } else {
+                for (const auto output : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+                    const BufferPort & port = mBufferGraph[output];
+                    if (port.CanModifySegmentLength) {
+                        mMayLoopToEntry = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+
     } else {
         mHasExplicitFinalPartialStride = false;
         mIsBounded = false;
@@ -606,6 +632,7 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
         mTotalNumOfStridesAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtLoopExit");
     }
     mExhaustedPipelineInputAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInputAtLoopExit");
+    mFinalPartitionSegmentAtLoopExitPhi = nullptr;
     if (mIsPartitionRoot) {
         mFinalPartitionSegmentAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_finalPartitionSegmentAtLoopExitPhi");
     }
@@ -658,7 +685,6 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         assert (mAlreadyProgressedPhi);
         mAnyProgressedAtLoopExitPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
         mTerminatedAtLoopExitPhi->addIncoming(mInitialTerminationSignal, exitBlock);
-        mFinalPartitionSegmentAtLoopExitPhi->addIncoming(b->getTrue(), exitBlock);
     }
 
     if (mIsPartitionRoot) {
@@ -667,6 +693,7 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
             mExhaustedInputAtJumpPhi->addIncoming(mExhaustedPipelineInputPhi, exitBlock);
         }
         if (mMayLoopToEntry) {
+            mFinalPartitionSegmentAtLoopExitPhi->addIncoming(b->getTrue(), exitBlock);
             b->CreateLikelyCondBr(mExecutedAtLeastOnceAtLoopEntryPhi, mKernelLoopExit, mKernelJumpToNextUsefulPartition);
         } else {
             b->CreateBr(mKernelJumpToNextUsefulPartition);

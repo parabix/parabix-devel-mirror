@@ -587,11 +587,11 @@ void PipelineAnalysis::identifyLinearBuffers() {
             switch(attr.getKind()) {
                 case AttrId::Linear:
                 case AttrId::Deferred:
-                    return false;
+                    return true;
                 default: break;
             }
         }
-        return true;
+        return false;
     };
 
     // If the binding attributes of the producer/consumer(s) of a streamSet indicate

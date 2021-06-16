@@ -556,6 +556,7 @@ void StaticBuffer::copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consum
     indices[1] = b->getInt32(MallocedAddress);
     Value * const mallocedAddrField = b->CreateInBoundsGEP(mHandle, indices);
     Value * const bufferStart = b->CreateLoad(mallocedAddrField);
+    assert (bufferStart->getType()->isPointerTy());
     Value * const newBaseAddress = b->CreateGEP(bufferStart, b->CreateNeg(consumedChunks));
     Value * const effectiveCapacity = b->CreateAdd(consumedChunks, b->getSize(mCapacity));
 

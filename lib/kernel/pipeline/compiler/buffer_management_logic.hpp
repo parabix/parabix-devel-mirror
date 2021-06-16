@@ -726,7 +726,7 @@ void PipelineCompiler::prepareLinearThreadLocalOutputBuffers(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-        if (LLVM_UNLIKELY(bn.Locality == BufferLocality::ThreadLocal)) {
+        if (LLVM_UNLIKELY(bn.Locality == BufferLocality::ThreadLocal && bn.IsLinear)) {
             Value * const produced = mInitiallyProducedItemCount[streamSet];
             // purely threadlocal buffers are guaranteed to consume every produced
             // item each segment.
