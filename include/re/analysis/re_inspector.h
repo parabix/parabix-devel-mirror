@@ -29,6 +29,7 @@ protected:
     virtual void inspectReference(Reference * r);
     virtual void inspectStart(Start * s);
     virtual void inspectEnd(End * e);
+    virtual void inspectAny(Any * a);
     virtual void inspectCC(CC * cc);
     virtual void inspectSeq(Seq * s);
     virtual void inspectAlt(Alt * a);

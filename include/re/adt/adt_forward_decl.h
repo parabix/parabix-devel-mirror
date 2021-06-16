@@ -13,7 +13,7 @@ namespace re {
 
 class RE;
 
-class Name; class Start; class End;   class CC; 
+class Name; class Start; class End;   class CC; class Any;
 class Seq;  class Alt;   class Rep;   class Intersect; 
 class Diff; class Range; class Group; class Assertion;
 class Capture; class Reference; class PropertyExpression;

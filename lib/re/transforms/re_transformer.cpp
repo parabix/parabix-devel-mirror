@@ -36,6 +36,7 @@ RE * RE_Transformer::transform(RE * const from) { assert (from);
         case T::Type: to = transform##Type(llvm::cast<Type>(from)); break
     switch (from->getClassTypeId()) {
         TRANSFORM(Alt);
+        TRANSFORM(Any);
         TRANSFORM(Assertion);
         TRANSFORM(CC);
         TRANSFORM(Range);
@@ -79,6 +80,10 @@ RE * RE_Transformer::transformCapture(Capture * c) {
 
 RE * RE_Transformer::transformReference(Reference * r) {
     return r;
+}
+
+RE * RE_Transformer::transformAny(Any * a) {
+    return a;
 }
 
 RE * RE_Transformer::transformCC(CC * cc) {

@@ -56,6 +56,7 @@
 #include <re/analysis/collect_ccs.h>
 #include <re/transforms/replaceCC.h>
 #include <re/transforms/re_multiplex.h>
+#include <re/transforms/name_intro.h>
 #include <re/unicode/casing.h>
 #include <re/unicode/boundaries.h>
 #include <re/unicode/re_name_resolve.h>
@@ -281,6 +282,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         mREs[i] = re::exclude_CC(mREs[i], mBreakCC);
         mREs[i] = resolveAnchors(mREs[i], anchorRE);
         mREs[i] = regular_expression_passes(mREs[i]);
+        mREs[i] = name_variable_length_CCs(mREs[i]);
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (hasGraphemeClusterBoundary(mREs[i])) {
@@ -416,15 +418,21 @@ void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & 
         mWordBoundary_stream = P->CreateStreamSet(1, 1);
         WordBoundaryLogic(P, &mUTF8_Transformer, SourceStream, mU8index, mWordBoundary_stream);
     }
-    if (PropertyKernels) {
-        for (auto e : mExternalNames) {
-            re::RE * def = e->getDefinition();
-            if (isa<re::CC>(def) || isa<re::PropertyExpression>(def)) {
-                auto name = e->getFullName();
-                StreamSet * property = P->CreateStreamSet(1, 1);
+    for (auto e : mExternalNames) {
+        re::RE * def = e->getDefinition();
+        auto name = e->getFullName();
+        auto f = mPropertyStreamMap.find(name);
+        if (f == mPropertyStreamMap.end()) {
+            if (isa<re::PropertyExpression>(def)) {
                 //errs() << "preparing external: " << name << "\n";
+                StreamSet * property = P->CreateStreamSet(1, 1);
                 mPropertyStreamMap.emplace(name, property);
                 P->CreateKernelCall<UnicodePropertyKernelBuilder>(e, SourceStream, property);
+            } else if (re::CC * cc = dyn_cast<re::CC>(def)) {
+                StreamSet * ccStrm = P->CreateStreamSet(1, 1);
+                mPropertyStreamMap.emplace(name, ccStrm);
+                std::vector<re::CC *> ccs = {cc};
+                P->CreateKernelCall<CharClassesKernel>(ccs, SourceStream, ccStrm);
             }
         }
     }
@@ -502,7 +510,7 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         auto mpx_basis = mpx->getMultiplexedCCs();
         StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
         StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
-        P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
+        P->CreateKernelCall<CharClassesKernel>(mpx_basis, Source, u8CharClasses);
         FilterByMask(P, mU8index, u8CharClasses, CharClasses);
         options->setSource(CharClasses);
         options->addAlphabet(mpx, CharClasses);

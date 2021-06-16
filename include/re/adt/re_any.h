@@ -7,35 +7,19 @@
 #ifndef ANY_H
 #define ANY_H
 
-#include <llvm/Support/Casting.h>
 #include <re/adt/re_re.h>
-#include <re/adt/re_cc.h>
-#include <re/adt/re_name.h>
-#include <unicode/core/unicode_set.h>
 
 namespace re {
 
-class Any {
+class Any : public RE {
 public:
-    static inline bool classof(const RE * re) {
-        if (llvm::isa<Name>(re)) {
-            re = llvm::cast<Name>(re)->getDefinition();
-            if (re == nullptr) return false;
-        }
-        return llvm::isa<CC>(re) && llvm::cast<CC>(re)->full();
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
+    static Any * Create() {return new Any();}
+    RE_SUBTYPE(Any)
 private:
-    Any() {}
+    Any() : RE(ClassTypeId::Any) {}
 };
 
-inline RE * makeAny() {
-    Name * dot = makeName(".", Name::Type::UnicodeProperty);
-    dot->setDefinition(makeCC(0, 0x10FFFF));
-    return dot;
-}
+inline Any * makeAny() {return Any::Create();}
 
 }
 

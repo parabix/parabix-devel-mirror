@@ -247,7 +247,7 @@ protected:
     unsigned                    mCaptureGroupCount;
     RE_Syntax                   mReSyntax;
     NameMap                     mNameMap;
-    std::map<std::string, re::RE *> mCaptureMap;
+    std::map<std::string, std::pair<re::RE *, unsigned>> mCaptureMap;
 };
 
 }

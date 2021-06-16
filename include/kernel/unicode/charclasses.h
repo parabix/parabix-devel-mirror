@@ -22,7 +22,7 @@ protected:
 
 class CharClassesKernel final : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    CharClassesKernel(BuilderRef b, std::vector<re::CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses);
+    CharClassesKernel(BuilderRef b, std::vector<re::CC *> ccs, StreamSet * BasisBits, StreamSet * CharClasses);
     bool hasSignature() const override { return true; }
     llvm::StringRef getSignature() const override;
 protected:
@@ -34,7 +34,7 @@ protected:
 
 class ByteClassesKernel final : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    ByteClassesKernel(BuilderRef b, std::vector<re::CC *> && ccs, StreamSet * inputStream, StreamSet * CharClasses);
+    ByteClassesKernel(BuilderRef b, std::vector<re::CC *> ccs, StreamSet * inputStream, StreamSet * CharClasses);
     bool hasSignature() const override { return true; }
     llvm::StringRef getSignature() const override;
 protected:
