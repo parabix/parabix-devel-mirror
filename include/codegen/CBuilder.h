@@ -467,6 +467,28 @@ public:
 
     llvm::CallInst * CreateCall(llvm::Value *Callee, llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
 
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionType *Ty, llvm::Value *Callee, llvm::BasicBlock *NormalDest,
+                                   llvm::BasicBlock *UnwindDest, llvm::ArrayRef<llvm::Value *> Args,
+                                   llvm::ArrayRef<llvm::OperandBundleDef> OpBundles, const llvm::Twine Name = "");
+
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionType *Ty, llvm::Value *Callee, llvm::BasicBlock *NormalDest,
+                                   llvm::BasicBlock *UnwindDest, llvm::ArrayRef<llvm::Value *> Args = llvm::None,
+                                   const llvm::Twine Name = "");
+
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionCallee Callee, llvm::BasicBlock *NormalDest, llvm::BasicBlock *UnwindDest,
+                                  llvm::ArrayRef<llvm::Value *> Args, llvm::ArrayRef<llvm::OperandBundleDef> OpBundles, 
+                                  const llvm::Twine Name = "") {
+        return CreateInvoke(Callee.getFunctionType(), Callee.getCallee(), NormalDest, UnwindDest, Args, OpBundles, Name);
+    }
+
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionCallee Callee, llvm::BasicBlock *NormalDest, llvm::BasicBlock *UnwindDest,
+                                   llvm::ArrayRef<llvm::Value *> Args = llvm::None, const llvm::Twine Name = "") {
+        return CreateInvoke(Callee.getFunctionType(), Callee.getCallee(), NormalDest, UnwindDest, Args, Name);
+    }
+
+    llvm::InvokeInst *CreateInvoke(llvm::Value *Callee, llvm::BasicBlock *NormalDest, llvm::BasicBlock *UnwindDest,
+                                   llvm::ArrayRef<llvm::Value *> Args, const llvm::Twine Name = "");
+
     llvm::CallInst * CreateSRandCall(llvm::Value * randomSeed);
     llvm::CallInst * CreateRandCall();
 

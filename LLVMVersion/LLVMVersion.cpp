@@ -54,6 +54,18 @@ namespace llvm_version {
     #endif
   }
 
+  InvokeInst * CreateInvoke(IRBuilderBase *b, Value * const Callee, BasicBlock * const NormalDest, BasicBlock * UnwindDest,
+                      ArrayRef< Value * > args, const Twine Name) {
+    #if LLVM_VERSION_MAJOR >= 11
+        auto *calleePtrType = llvm::cast<llvm::PointerType>(Callee->getType());
+        auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
+        return b->CreateInvoke(calleeType, Callee, NormalDest, UnwindDest, args);
+    #else
+        return b->CreateInvoke(Callee, NormalDest, UnwindDest, args);
+    #endif
+}
+
+
   void checkAddPassesToEmitFile(TargetMachine * mTarget, std::unique_ptr<legacy::PassManager> const & mPassManager, std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream) {
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
       if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {

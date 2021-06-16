@@ -66,7 +66,7 @@ llvm::Constant * getSplat(const unsigned fieldCount, llvm::Constant *Elt);
 llvm::VectorType * getVectorType(llvm::Type *ElementType, unsigned NumElements);
 llvm::StructType * getTypeByName(llvm::Module *M, llvm::StringRef Name);
 llvm::CallInst * CreateCall(llvm::IRBuilderBase *b, llvm::Value *callee, llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
-llvm::InvokeInst * CreateInvoke(llvm::Value * const doSegment, llvm::BasicBlock * const invokeOk, llvm::BasicBlock * mRethrowException,  llvm::ArrayRef< llvm::Value * > args);
+llvm::InvokeInst * CreateInvoke(llvm::IRBuilderBase *b, llvm::Value * const Callee, llvm::BasicBlock * const NormalDest, llvm::BasicBlock * UnwindDest,  llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
 llvm::CallInst * CreateMemMove(void * data, llvm::Value * Dst, llvm::Value * Src, llvm::Value *Size, unsigned Align, bool isVolatile, llvm::MDNode *TBAATag, llvm::MDNode *ScopeTag, llvm::MDNode *NoAliasTag);
 void checkAddPassesToEmitFile(llvm::TargetMachine * mTarget, std::unique_ptr<llvm::legacy::PassManager> const & mPassManager, std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream);
 

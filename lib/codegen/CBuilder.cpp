@@ -1643,6 +1643,21 @@ CallInst * CBuilder::CreateCall(Value *Callee, ArrayRef< Value * > args, const T
     return llvm_version::CreateCall(this, Callee, args, Name);
 }
 
+InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
+                                    ArrayRef<Value *> Args, ArrayRef<OperandBundleDef> OpBundles, const Twine Name) {
+    return IRBuilder<>::CreateInvoke(Ty, Callee, NormalDest, UnwindDest, Args, OpBundles, Name);
+}
+
+InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
+                                    ArrayRef<Value *> Args, const Twine Name) {
+    return IRBuilder<>::CreateInvoke(Ty, Callee, NormalDest, UnwindDest, Args, Name);
+}
+
+InvokeInst * CBuilder::CreateInvoke(Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
+                                    ArrayRef<Value *> Args, const Twine Name) {
+    return llvm_version::CreateInvoke(this, Callee, NormalDest, UnwindDest, Args, Name);
+}
+
 CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
     Module * const m = getModule();
     Function * srandFunc = m->getFunction("srand");
