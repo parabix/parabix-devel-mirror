@@ -563,7 +563,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
                              std::move(I), std::move(allocations), std::move(weight), std::move(remaining), rng);
 
-    BA.runGA(false);
+    BA.runGA();
 
     RequiredThreadLocalStreamSetMemory = BA.getBestFitnessValue();
 

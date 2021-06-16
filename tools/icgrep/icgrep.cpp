@@ -33,6 +33,7 @@
 #include <kernel/pipeline/driver/cpudriver.h>
 #ifdef ENABLE_PAPI
 #include <util/papi_helper.hpp>
+// #define REPORT_PAPI_TESTS
 #endif
 
 using namespace llvm;
@@ -174,15 +175,14 @@ int main(int argc, char *argv[]) {
     grep->initREs(REs);
     //llvm::errs() << "Before codegen, codegen::TaskThreads = " << codegen::TaskThreads << ", codegen::SegmentThreads = " << codegen::SegmentThreads << "\n";
     grep->grepCodeGen();
-//    #ifdef ENABLE_PAPI
-//    papi::PapiCounter<5> jitExecution{{PAPI_BR_MSP, PAPI_BR_CN, PAPI_L3_TCM, PAPI_TOT_INS, PAPI_TOT_CYC}};
-//    // papi::PapiCounter<4> jitExecution{{PAPI_L1_TCM, PAPI_L2_TCM, PAPI_L1_ICM, PAPI_L2_ICM}};
-//    jitExecution.start();
-//    #endif
+    #ifdef REPORT_PAPI_TESTS
+    papi::PapiCounter<4> jitExecution{{PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
+    jitExecution.start();
+    #endif
     const bool matchFound = grep->searchAllFiles();
-//    #ifdef ENABLE_PAPI
-//    jitExecution.stop();
-//    jitExecution.write(std::cerr);
-//    #endif
+    #ifdef REPORT_PAPI_TESTS
+    jitExecution.stop();
+    jitExecution.write(std::cerr);
+    #endif
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
 }

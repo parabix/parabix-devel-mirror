@@ -1,5 +1,12 @@
 #include <kernel/pipeline/pipeline_kernel.h>
+
+// #define USE_2020_PIPELINE_COMPILER
+
+#ifdef USE_2020_PIPELINE_COMPILER
+#include "2020/compiler/pipeline_compiler.hpp"
+#else
 #include "compiler/pipeline_compiler.hpp"
+#endif
 #include <llvm/IR/Function.h>
 
 // NOTE: the pipeline kernel is primarily a proxy for the pipeline compiler. Ideally, by making some kernels
@@ -74,14 +81,18 @@ bool PipelineKernel::allocatesInternalStreamSets() const {
  * @brief generateAllocateSharedInternalStreamSetsMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    #ifndef USE_2020_PIPELINE_COMPILER
     COMPILER->generateAllocateSharedInternalStreamSetsMethod(b, expectedNumOfStrides);
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateAllocateThreadLocalInternalStreamSetsMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    #ifndef USE_2020_PIPELINE_COMPILER
     COMPILER->generateAllocateThreadLocalInternalStreamSetsMethod(b, expectedNumOfStrides);
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -167,7 +178,9 @@ void PipelineKernel::recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & 
  * @brief runOptimizationPasses
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::runOptimizationPasses(BuilderRef b) const {
+    #ifndef USE_2020_PIPELINE_COMPILER
     COMPILER->runOptimizationPasses(b);
+    #endif
 }
 
 #define JOIN3(X,Y,Z) BOOST_JOIN(X,BOOST_JOIN(Y,Z))

@@ -13,6 +13,9 @@
 #include <kernel/pipeline/driver/driver.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 
+
+#define COMPARISON_STUDY
+
 using namespace llvm;
 
 inline size_t ceil_udiv(const size_t n, const size_t m) {
@@ -64,8 +67,50 @@ inline Value * apply_parallel_prefix_deletion(BuilderRef kb, const unsigned fw, 
 // Kernel inputs: stream_count data streams plus one del_mask stream
 // Outputs: the deleted streams, plus a partial sum popcount
 
+
+#ifdef COMPARISON_STUDY
+
+
+inline Value * partial_sum_popcount(const std::unique_ptr<KernelBuilder> & iBuilder, const unsigned fw, Value * mask) {
+    Value * field = iBuilder->simd_popcount(fw, mask);
+    const auto count = iBuilder->getBitBlockWidth() / fw;
+    for (unsigned move = 1; move < count; move *= 2) {
+        field = iBuilder->simd_add(fw, field, iBuilder->mvmd_slli(fw, field, move));
+    }
+    return field;
+}
+
+void DeletionKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+    Value * delMask = iBuilder->loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0));
+    const auto move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
+    for (unsigned j = 0; j < mStreamCount; ++j) {
+        Value * input = iBuilder->loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
+        Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
+        iBuilder->storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
+    }
+    Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
+    iBuilder->storeOutputStreamBlock("unitCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
+}
+
+void DeletionKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * remainingBytes) {
+    IntegerType * vecTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
+    Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
+    Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
+    Value * delMask = iBuilder->CreateOr(EOF_del, iBuilder->loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0)));
+    const auto move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
+    for (unsigned j = 0; j < mStreamCount; ++j) {
+        Value * input = iBuilder->loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
+        Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
+        iBuilder->storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
+    }
+    Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
+    iBuilder->storeOutputStreamBlock("unitCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
+}
+#else
+
 void DeletionKernel::generateDoBlockMethod(BuilderRef kb) {
     Value * delMask = kb->loadInputStreamBlock("delMaskSet", kb->getInt32(0));
+    kb->CallPrintRegister("delMask", delMask);
     const auto move_masks = parallel_prefix_deletion_masks(kb, mDeletionFieldWidth, delMask);
     for (unsigned j = 0; j < mStreamCount; ++j) {
         Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j));
@@ -73,6 +118,7 @@ void DeletionKernel::generateDoBlockMethod(BuilderRef kb) {
         kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), output);
     }
     Value * unitCount = kb->simd_popcount(mDeletionFieldWidth, kb->simd_not(delMask));
+    kb->CallPrintRegister("unitCount", unitCount);
     kb->storeOutputStreamBlock("unitCounts", kb->getInt32(0), kb->bitCast(unitCount));
 }
 
@@ -91,15 +137,17 @@ void DeletionKernel::generateFinalBlockMethod(BuilderRef kb, Value * remainingBy
     kb->storeOutputStreamBlock("unitCounts", kb->getInt32(0), kb->bitCast(unitCount));
 }
 
-DeletionKernel::DeletionKernel(BuilderRef b, const unsigned fieldWidth, const unsigned streamCount)
-: BlockOrientedKernel(b, "del" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
-{Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
-  Binding{b->getStreamSetTy(), "delMaskSet"}},
-{Binding{b->getStreamSetTy(streamCount), "outputStreamSet"},
-  Binding{b->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(b->getBitBlockWidth())}},
+#endif
+
+DeletionKernel::DeletionKernel(BuilderRef b, StreamSet * input, StreamSet * delMask, StreamSet * output, StreamSet * unitCounts)
+: BlockOrientedKernel(b, "del" + std::to_string(b->getBitBlockWidth()/output->getNumElements()) + "_" + std::to_string(output->getNumElements()),
+{Binding{"inputStreamSet", input},
+  Binding{"delMaskSet", delMask}},
+{Binding{"outputStreamSet", output},
+  Binding{"unitCounts", unitCounts, FixedRate(), RoundUpTo(b->getBitBlockWidth())}},
 {}, {}, {})
-, mDeletionFieldWidth(fieldWidth)
-, mStreamCount(streamCount) {
+, mDeletionFieldWidth(b->getBitBlockWidth() / output->getNumElements())
+, mStreamCount(output->getNumElements()) {
 }
 
 void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {

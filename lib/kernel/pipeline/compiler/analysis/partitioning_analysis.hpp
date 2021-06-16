@@ -1901,20 +1901,7 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
     transitive_reduction_dag(ordering, G);
     END_SCOPED_REGION
 
-//    auto & out = errs();
-
-//    out << "digraph \"" << "J0" << "\" {\n";
-//    for (auto v : make_iterator_range(vertices(G))) {
-//        out << "v" << v << " [label=\"" << v << " : {";
-////        out << reverseLCA[v];
-//        out << "}\"];\n";
-//    }
-//    for (auto e : make_iterator_range(edges(G))) {
-//        const auto s = source(e, G);
-//        const auto t = target(e, G);
-//        out << "v" << s << " -> v" << t << ";\n";
-//    }
-//    out << "}\n\n";
+    auto & out = errs();
 
     #ifndef NDEBUG
     for (unsigned i = 0; i < PartitionCount; ++i) {
@@ -2024,6 +2011,12 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
         }
         mPartitionJumpIndex[i] = n;
     }
+
+
+
+
+
+
 
 //    out << "digraph \"" << "J2" << "\" {\n";
 //    for (auto v : make_iterator_range(vertices(G))) {

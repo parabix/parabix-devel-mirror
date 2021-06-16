@@ -41,7 +41,7 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
 
     auto nextArg = [&]() {
         assert (arg != arg_end);
-        Value * const v = b->CreatePointerCast(&*arg, voidPtrTy);
+        Value * const v = &*arg;
         std::advance(arg, 1);
         return v;
     };
@@ -55,49 +55,87 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
     for (const Kernel * const kernel : cast<PipelineKernel>(mTarget)->getKernels()) {
         if (LLVM_UNLIKELY(kernel->externallyInitialized())) {
 
-            unsigned kernelIndex = PipelineInput;
+            auto kernelId = PipelineInput;
 
-            for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+            for (auto i = FirstKernel; i <= LastKernel; ++i) {
                 if (kernel == getKernel(i)) {
-                    kernelIndex = i;
+                    kernelId = i;
                     break;
                 }
             }
-            assert ("could not find matching family kernel?" && (kernelIndex >= FirstKernel));
 
-            // get the internal prefix for this kernel.
-            const auto prefix = makeKernelName(kernelIndex);
+            if (LLVM_UNLIKELY(kernelId < FirstKernel)) {
 
-            auto readNextScalar = [&](const StringRef name) {
-                auto ptr = getScalarFieldPtr(b.get(), name); assert (ptr);
-                Value * value = nextArg();
-                if (LLVM_UNLIKELY(CheckAssertions)) {
-                    b->CreateAssert(value, "family parameter (%s) was given a null value", b->GetString(name));
+                #ifndef NDEBUG
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                out << "Warning: family kernel ";
+                out << kernel->getName();
+                out << " was removed from the pipeline.\n";
+                errs() << out.str();
+                #endif
+
+                if (LLVM_LIKELY(kernel->isStateful())) {
+                    nextArg();
                 }
-                b->CreateStore(value, ptr);
-            };
-
-            if (LLVM_LIKELY(kernel->isStateful())) {
-                readNextScalar(prefix);
-            }
-            if (LLVM_LIKELY(kernel->hasFamilyName())) {
-                const auto tl = kernel->hasThreadLocal();
-                const auto ai = kernel->allocatesInternalStreamSets();
-                if (ai) {
-                    readNextScalar(prefix + ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
-                }
-                if (tl) {
-                    readNextScalar(prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+                if (LLVM_LIKELY(kernel->hasFamilyName())) {
+                    const auto tl = kernel->hasThreadLocal();
+                    const auto ai = kernel->allocatesInternalStreamSets();
                     if (ai) {
-                        readNextScalar(prefix + ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+                        nextArg();
                     }
+                    if (tl) {
+                        nextArg();
+                        if (ai) {
+                            nextArg();
+                        }
+                    }
+                    nextArg();
+                    if (tl) {
+                        nextArg();
+                    }
+                    nextArg();
                 }
-                readNextScalar(prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
-                if (tl) {
-                    readNextScalar(prefix + FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+
+            } else {
+
+                // get the internal prefix for this kernel.
+                const auto prefix = makeKernelName(kernelId);
+
+                auto readNextScalar = [&](const StringRef name) {
+                    auto ptr = getScalarFieldPtr(b.get(), name); assert (ptr);
+                    Value * value = b->CreatePointerCast(nextArg(), voidPtrTy);
+                    if (LLVM_UNLIKELY(CheckAssertions)) {
+                        b->CreateAssert(value, "family parameter (%s) was given a null value", b->GetString(name));
+                    }
+                    b->CreateStore(value, ptr);
+                };
+
+                if (LLVM_LIKELY(kernel->isStateful())) {
+                    readNextScalar(prefix);
                 }
-                readNextScalar(prefix + FINALIZE_FUNCTION_POINTER_SUFFIX);
+                if (LLVM_LIKELY(kernel->hasFamilyName())) {
+                    const auto tl = kernel->hasThreadLocal();
+                    const auto ai = kernel->allocatesInternalStreamSets();
+                    if (ai) {
+                        readNextScalar(prefix + ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+                    }
+                    if (tl) {
+                        readNextScalar(prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+                        if (ai) {
+                            readNextScalar(prefix + ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+                        }
+                    }
+                    readNextScalar(prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
+                    if (tl) {
+                        readNextScalar(prefix + FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+                    }
+                    readNextScalar(prefix + FINALIZE_FUNCTION_POINTER_SUFFIX);
+                }
             }
+
+
+
         }
     }
 

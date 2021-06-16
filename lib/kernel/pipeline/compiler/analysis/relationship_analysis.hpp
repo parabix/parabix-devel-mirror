@@ -792,15 +792,6 @@ void PipelineAnalysis::generateInitialPipelineGraph(BuilderRef b) {
     combineDuplicateKernels(b, kernels, Relationships);
     removeUnusedKernels(p_in, p_out, kernels, Relationships);
 
-    #ifndef EXPERIMENTAL_SCHEDULING
-    // Add ordering constraints to ensure the input must be before all kernel invocations
-    // and the invocations must come before the output.
-    for (const auto v : vertex) {
-        add_edge(p_in, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, Relationships);
-        add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, Relationships);
-    }
-    #endif
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

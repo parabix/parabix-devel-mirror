@@ -83,6 +83,10 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     BasicBlock * const exit = b->CreateBasicBlock("mmapSourceExit");
 
     Value * const numOfStrides = b->getNumOfStrides();
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(b->CreateIsNotNull(numOfStrides),
+                        "Internal error: %s.numOfStrides cannot be 0", b->GetString("MMapSource"));
+    }
 
     ConstantInt * const MMAP_PAGE_SIZE = b->getSize(getPageSize());
     Value * const STRIDE_ITEMS = b->CreateMul(numOfStrides, b->getSize(stride));
@@ -110,7 +114,6 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->SetInsertPoint(checkRemaining);
     Value * const producedItems = b->getProducedItemCount("sourceBuffer");
     Value * const nextProducedItems = b->CreateAdd(producedItems, STRIDE_ITEMS);
-    Value * const newBuffer = b->getRawOutputPointer("sourceBuffer", producedItems);
     Value * const fileItems = b->getScalarField("fileItems");
     Value * const lastPage = b->CreateICmpULE(fileItems, nextProducedItems);
     b->CreateUnlikelyCondBr(lastPage, setTermination, exit);
@@ -176,6 +179,11 @@ void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
 void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
 
     Value * const numOfStrides = b->getNumOfStrides();
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(b->CreateIsNotNull(numOfStrides),
+                        "Internal error: %s.numOfStrides cannot be 0", b->GetString("ReadSource"));
+    }
+
     Value * const segmentItems = b->CreateMul(numOfStrides, b->getSize(stride));
     ConstantInt * const codeUnitBytes = b->getSize(codeUnitWidth / 8);
     Value * const segmentBytes = b->CreateMul(segmentItems, codeUnitBytes);
@@ -409,6 +417,11 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
 
     Value * const numOfStrides = b->getNumOfStrides();
 
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(b->CreateIsNotNull(numOfStrides),
+                        "Internal error: %s.numOfStrides cannot be 0", b->GetString(getName()));
+    }
+
     const auto codeUnitWidth = source->getFieldWidth();
 
     Value * const segmentItems = b->CreateMul(numOfStrides, b->getSize(getStride()));
@@ -445,12 +458,12 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
         // make sure our copy is block-aligned
         Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
         readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
-        readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
-        if (codeUnitWidth == 1) {
+        Value * lastFileByte = fileItems;
+        if (codeUnitWidth < 8) {
             // If trying to load a bitstream and the number of items is not byte-aligned, load an extra byte.
-            Value * const isPartialByte = b->CreateICmpNE(b->CreateURem(fileItems, b->getSize(8)), b->getSize(0));
-            readEnd = b->CreateGEP(readEnd, b->CreateSelect(isPartialByte, b->getInt32(1), b->getInt32(0)));
+            lastFileByte = b->CreateRoundUpRational(fileItems, Rational{8, codeUnitWidth});
         }
+        readEnd = b->getRawOutputPointer("sourceBuffer", lastFileByte);
     }
 
     DataLayout DL(b->getModule());

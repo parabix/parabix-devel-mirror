@@ -15,7 +15,7 @@ namespace llvm {
 template<> class TypeBuilder<pthread_t, false> {
 public:
   static Type *get(LLVMContext& C) {
-    return IntegerType::get(C, sizeof(pthread_t) * 8);
+    return ArrayType::get(IntegerType::getInt8Ty(C), sizeof(pthread_t));
   }
 };
 }
@@ -422,6 +422,9 @@ inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
     verifyBufferRelationships();
     mScalarValue.reset(FirstKernel, LastScalar);
     readPipelineIOItemCounts(b);
+    if (LLVM_UNLIKELY(mNumOfThreads == 0)) {
+        report_fatal_error("Fatal error: cannot construct a 0-thread pipeline.");
+    }
     if (mNumOfThreads == 1) {
         generateSingleThreadKernelMethod(b);
     } else {
@@ -475,7 +478,7 @@ namespace {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief __pipeline_pin_current_thread_to_cpu
  ** ------------------------------------------------------------------------------------------------------------- */
-void __pipeline_pin_current_thread_to_cpu(int cpu) {
+void __pipeline_pin_current_thread_to_cpu(int32_t cpu) {
     mach_port_t mthread = mach_task_self();
     thread_affinity_policy_data_t policy = { cpu };
     thread_policy_set(mthread, THREAD_AFFINITY_POLICY, (thread_policy_t)&policy, 1);
@@ -484,15 +487,13 @@ void __pipeline_pin_current_thread_to_cpu(int cpu) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief __pipeline_pthread_create_on_cpu
  ** ------------------------------------------------------------------------------------------------------------- */
-void __pipeline_pthread_create_on_cpu(pthread_t * pthread, void *(*start_routine)(void *), void * arg, int cpu) {
-    if (pthread_create_suspended_np(pthread, nullptr, start_routine, arg) == 0) {
-        mach_port_t mthread = pthread_mach_thread_np(*pthread);
-        thread_affinity_policy_data_t policy = { cpu };
-        thread_policy_set(mthread, THREAD_AFFINITY_POLICY, (thread_policy_t)&policy, 1);
-        thread_resume(mthread);
-    } else {
-        pthread_create(pthread, nullptr, start_routine, arg);
-    }
+void __pipeline_pthread_create_on_cpu(pthread_t * pthread, void *(*start_routine)(void *), void * arg, int32_t cpu) {
+    const auto r = pthread_create_suspended_np(pthread, nullptr, start_routine, arg);
+    if (LLVM_UNLIKELY(r != 0)) __report_pthread_create_error(r);
+    mach_port_t mthread = pthread_mach_thread_np(*pthread);
+    thread_affinity_policy_data_t policy = { cpu };
+    thread_policy_set(mthread, THREAD_AFFINITY_POLICY, (thread_policy_t)&policy, 1);
+    thread_resume(mthread);
 }
 
 #elif BOOST_OS_LINUX
@@ -500,45 +501,36 @@ void __pipeline_pthread_create_on_cpu(pthread_t * pthread, void *(*start_routine
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief __pipeline_pin_current_thread_to_cpu
  ** ------------------------------------------------------------------------------------------------------------- */
-void __pipeline_pin_current_thread_to_cpu(int cpu) {
+void __pipeline_pin_current_thread_to_cpu(const int32_t cpu) {
     cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
-    sched_getaffinity(0, sizeof(cpu_set), &cpu_set);
-    for (int id = 0; id < CPU_SETSIZE; ++id) {
-        if (CPU_ISSET(id, &cpu_set)) {
-            if (cpu == 0) {
-                CPU_ZERO(&cpu_set);
-                CPU_SET(id, &cpu_set);
-                sched_setaffinity(0, sizeof(cpu_set), &cpu_set);
-                return;
-            }
-            --cpu;
-        }
-    }
+    CPU_SET(cpu, &cpu_set);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_set);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief __pipeline_pthread_create_on_cpu
  ** ------------------------------------------------------------------------------------------------------------- */
-void __pipeline_pthread_create_on_cpu(pthread_t * pthread, void *(*start_routine)(void *), void * arg, int cpu) {
+void __pipeline_pthread_create_on_cpu(pthread_t * pthread, void *(*start_routine)(void *), void * arg, const int32_t cpu) {
     cpu_set_t cpu_set;
-    CPU_ZERO(&cpu_set);
-    sched_getaffinity(0, sizeof(cpu_set), &cpu_set);
-    for (int id = 0; id < CPU_SETSIZE ; ++id) {
-        if (CPU_ISSET(id, &cpu_set)) {
-            if (cpu == 0) {
-                CPU_ZERO(&cpu_set);
-                CPU_SET(id, &cpu_set);
-                pthread_attr_t attr;
-                pthread_attr_init(&attr);
-                pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpu_set);
-                pthread_create(pthread, &attr, start_routine, arg);
-                return;
-            }
-            --cpu;
+    CPU_SET(cpu, &cpu_set);
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpu_set);
+    const auto r = pthread_create(pthread, &attr, start_routine, arg);
+    pthread_attr_destroy(&attr);
+    if (LLVM_UNLIKELY(r != 0)) {
+        const auto r = pthread_create(pthread, nullptr, start_routine, arg);
+        if (LLVM_UNLIKELY(r != 0)) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "Fatal error: pipeline failed to spawn requested number of threads.\n"
+                   "pthread_create returned error code " << r << ".";
+            report_fatal_error(out.str());
         }
     }
 }
+
 #endif
 
 }
@@ -596,6 +588,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
 
     Value * const processThreadId = b->CreateCall(pthreadSelfFn);
 
+
     for (unsigned i = 0; i != additionalThreads; ++i) {
         if (mTarget->hasThreadLocal()) {
             threadLocal[i] = mTarget->initializeThreadLocalInstance(b, initialSharedState);
@@ -622,12 +615,13 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         pthreadCreateArgs[1] = threadFunc;
         pthreadCreateArgs[2] = b->CreatePointerCast(threadState[i], voidPtrTy);
         pthreadCreateArgs[3] = b->getInt32(i + 1);
-
         b->CreateCall(pthreadCreateFn, pthreadCreateArgs);
     }
 
     Function * const pinProcessFn = m->getFunction("__pipeline_pin_current_thread_to_cpu");
-    b->CreateCall(pinProcessFn, b->getInt32(0));
+    FixedArray<Value *, 1> pinProcessArgs;
+    pinProcessArgs[0] = b->getInt32(0);
+    b->CreateCall(pinProcessFn, pinProcessArgs);
 
     // execute the process thread
     assert (isFromCurrentFunction(b, initialThreadLocal));
@@ -699,6 +693,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         pthreadJoinArgs[1] = status;
         b->CreateCall(pthreadJoinFn, pthreadJoinArgs);
     }
+
     if (LLVM_LIKELY(mTarget->hasThreadLocal())) {
         const auto n = mTarget->isStateful() ? 2 : 1;
         SmallVector<Value *, 2> args(n);

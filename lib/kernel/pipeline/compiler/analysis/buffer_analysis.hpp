@@ -110,13 +110,13 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 // determine this.
                 const auto bufferSize = bn.RequiredCapacity * mNumOfThreads;
                 assert (bufferSize > 0);
-                buffer = new DynamicBuffer(id++, b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
+                buffer = new DynamicBuffer(id++, b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, bn.IsLinear, 0U);
             } else {
                 auto bufferSize = bn.RequiredCapacity;
                 if (bn.Locality == BufferLocality::PartitionLocal) {
                     bufferSize *= mNumOfThreads;
                 }
-                buffer = new StaticBuffer(id++, b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, !bn.NonLinear, 0U);
+                buffer = new StaticBuffer(id++, b, output.getType(), bufferSize, bn.OverflowCapacity, bn.UnderflowCapacity, bn.IsLinear, 0U);
             }
             bn.Buffer = buffer;
 
@@ -237,7 +237,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 bn.Locality = BufferLocality::PartitionLocal;
             }
             if (mustBeLinear) {
-                bn.NonLinear = false;
+                bn.IsLinear = false;
             }
 
             return bp;
@@ -531,47 +531,22 @@ void PipelineAnalysis::identifyOutputNodeIds() {
 
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::identifyLinearBuffers() {
 
-    auto isNonLinear = [](const Binding & binding) {
-        const ProcessingRate & rate = binding.getRate();
-        const auto isFixed = rate.isFixed();
-        if (LLVM_LIKELY(isFixed)) {
-            for (const Attribute & attr : binding.getAttributes()) {
-                switch(attr.getKind()) {
-                    case AttrId::Linear:
-                    case AttrId::Deferred:
-                    case AttrId::LookBehind:
-                        return false;
-                    default: break;
-                }
-            }
-        }
-        return !isFixed;
-    };
-
-    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
-        BufferNode & N = mBufferGraph[streamSet];
-        const auto output = in_edge(streamSet, mBufferGraph);
-        const BufferPort & br = mBufferGraph[output];
-        N.NonLinear = isNonLinear(br.Binding);
-    }
-
     // All pipeline I/O must be linear
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         BufferNode & N = mBufferGraph[streamSet];
-        N.NonLinear = false;
+        N.IsLinear = true;
     }
 
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         BufferNode & N = mBufferGraph[streamSet];
-        N.NonLinear = false;
+        N.IsLinear = true;
     }
 
     // Any kernel that is internally synchronized or has a greedy rate input
@@ -584,7 +559,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
                 const auto streamSet = target(e, mBufferGraph);
                 BufferNode & N = mBufferGraph[streamSet];
-                N.NonLinear = false;
+                N.IsLinear = true;
             }
             mustBeLinear = true;
         } else {
@@ -602,17 +577,29 @@ void PipelineAnalysis::identifyLinearBuffers() {
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto streamSet = source(e, mBufferGraph);
                 BufferNode & N = mBufferGraph[streamSet];
-                N.NonLinear = false;
+                N.IsLinear = true;
             }
         }
     }
+
+    auto mustBeLinear = [](const Binding & binding) {
+        for (const Attribute & attr : binding.getAttributes()) {
+            switch(attr.getKind()) {
+                case AttrId::Linear:
+                case AttrId::Deferred:
+                    return false;
+                default: break;
+            }
+        }
+        return true;
+    };
 
     // If the binding attributes of the producer/consumer(s) of a streamSet indicate
     // that the kernel requires linear input, mark it accordingly.
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
         BufferNode & N = mBufferGraph[streamSet];
-        if (!N.NonLinear) {
+        if (N.IsLinear) {
             continue;
         }
 
@@ -620,29 +607,30 @@ void PipelineAnalysis::identifyLinearBuffers() {
         const BufferPort & producerRate = mBufferGraph[binding];
         const Binding & output = producerRate.Binding;
 
-
+        #ifdef FORCE_ALL_INTER_PARTITION_STREAMSETS_TO_BE_LINEAR
         const auto producer = source(binding, mBufferGraph);
         const auto partitionId = KernelPartitionId[producer];
+        #endif
 
-        bool nonLinear = true;
-        if (LLVM_UNLIKELY(isNonLinear(output))) {
-            nonLinear = false;
+        if (LLVM_UNLIKELY(mustBeLinear(output))) {
+             N.IsLinear = true;
         } else {
-            bool samePartition = true;
-
             for (const auto binding : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
                 const BufferPort & consumerRate = mBufferGraph[binding];
                 const Binding & input = consumerRate.Binding;
-                if (LLVM_UNLIKELY(isNonLinear(input))) {
-                    nonLinear = false;
+                if (LLVM_UNLIKELY(mustBeLinear(input))) {
+                    N.IsLinear = true;
                     break;
                 }
+                #ifdef FORCE_ALL_INTER_PARTITION_STREAMSETS_TO_BE_LINEAR
                 const auto consumer = target(binding, mBufferGraph);
-                samePartition &= (KernelPartitionId[consumer] == partitionId);
+                if (KernelPartitionId[consumer] != partitionId) {
+                    N.IsLinear = true;
+                    break;
+                }
+                #endif
            }
-           nonLinear |= !samePartition;
-        }       
-        N.NonLinear = nonLinear;
+        }
     }
 
 #if 0
@@ -666,6 +654,46 @@ void PipelineAnalysis::identifyLinearBuffers() {
     }
 #endif
 }
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyPortsThatModifySegmentLength
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::identifyPortsThatModifySegmentLength() {
+
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    auto currentPartitionId = -1U;
+    for (auto kernel = (firstKernel + 1U); kernel <= lastKernel; ++kernel) {
+        const auto partitionId = KernelPartitionId[kernel];
+        const bool isPartitionRoot = (partitionId != currentPartitionId);
+        currentPartitionId = partitionId;
+
+        for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            BufferPort & inputRate = mBufferGraph[e];
+            if (isPartitionRoot) {
+                // TODO: create symbolic rate ids
+                inputRate.CanModifySegmentLength = true;
+            } else {
+                const auto streamSet = source(e, mBufferGraph);
+                const BufferNode & N = mBufferGraph[streamSet];
+                inputRate.CanModifySegmentLength = (!N.IsLinear);
+            }
+        }
+        for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            BufferPort & outputRate = mBufferGraph[e];
+            const auto streamSet = target(e, mBufferGraph);
+            const BufferNode & N = mBufferGraph[streamSet];
+            outputRate.CanModifySegmentLength = (!N.IsLinear);
+        }
+    }
+
+
+
+
+}
+
 
 }
 

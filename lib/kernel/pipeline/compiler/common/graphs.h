@@ -254,7 +254,7 @@ enum BufferLocality {
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     unsigned Type = 0;
-    bool NonLinear = false;
+    bool IsLinear = false;
 
     BufferLocality Locality = BufferLocality::ThreadLocal;
 
@@ -306,8 +306,7 @@ struct BufferPort {
     Rational Minimum;
     Rational Maximum;
 
-//    unsigned LocalPortId = 0U;
-//    unsigned GlobalPortId = 0U;
+    bool CanModifySegmentLength = false;
 
     // binding attributes
     unsigned Add = 0;

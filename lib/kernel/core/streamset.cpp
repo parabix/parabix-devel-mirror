@@ -307,7 +307,7 @@ void ExternalBuffer::copyBackLinearOutputBuffer(BuilderPtr /* b */, llvm::Value 
     /* do nothing */
 }
 
-void ExternalBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */) const  {
+void ExternalBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Value * /* overflowItems */) const  {
     unsupported("reserveCapacity", "External");
 }
 
@@ -576,7 +576,7 @@ Value * StaticBuffer::getMallocAddress(BuilderPtr b) const {
     unsupported("getMallocAddress", "Static");
 }
 
-void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consumed, Value * const required) const  {
+void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consumed, Value * const required, Value * overflowItems) const  {
     if (mLinear) {
 
         SmallVector<char, 200> buf;
@@ -848,7 +848,7 @@ void DynamicBuffer::copyBackLinearOutputBuffer(BuilderPtr /* b */, llvm::Value *
     /* do nothing */
 }
 
-void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value * const consumed, Value * const required) const {
+void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value * const consumed, Value * const required, Value * overflowItems) const {
 
     SmallVector<char, 200> buf;
     raw_svector_ostream name(buf);
@@ -977,9 +977,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             indices[1] = b->getInt32(PriorAddress);
             Value * const priorBufferField = b->CreateInBoundsGEP(handle, indices);
             Value * priorBuffer = b->CreateLoad(priorBufferField);
-
-            priorBuffer = b->CreateInBoundsGEP(priorBuffer, b->CreateNeg(underflow));
-            b->CreateFree(priorBuffer);
+            b->CreateFree(b->CreateInBoundsGEP(priorBuffer, b->CreateNeg(underflow)));
             b->CreateStore(mallocAddress, priorBufferField);
             b->CreateStore(expandedBuffer, mallocAddrField);
             b->CreateMemCpy(expandedBuffer, unreadDataPtr, bytesToCopy, blockSize);
@@ -1007,15 +1005,12 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
                 b->CreateAssert(check, "unnecessary buffer expansion occurred");                
             }
             Value * const newCapacity = b->CreateRoundUp(requiredChunks, capacity);
-            Value * requiredCapacity = newCapacity;
-//            if (mUnderflow || mOverflow) {
-//                Constant * const additionalCapacity = b->getSize(mUnderflow + mOverflow);
-//                requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
-//            }
+            Value * const additionalCapacity = b->CreateAdd(underflow, overflow);
+            Value * const requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
 
             Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
             Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
-            newBuffer = addUnderflow(b, newBuffer, mUnderflow);
+            newBuffer = b->CreateInBoundsGEP(newBuffer, { underflow });
 
             Value * const consumedOffset = b->CreateURem(consumedChunks, capacity);
             Value * const producedOffset = b->CreateURem(producedChunks, capacity);
@@ -1066,7 +1061,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             b->CreateStore(virtualBase, priorBufferField);
             b->CreateStore(newBuffer, virtualBaseField);
             b->CreateStore(newCapacity, capacityField);
-            b->CreateFree(subtractUnderflow(b, priorBuffer, mUnderflow));
+            b->CreateFree(b->CreateInBoundsGEP(priorBuffer, { b->CreateNeg(underflow) }));
             b->CreateRetVoid();
         }
 
@@ -1075,6 +1070,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
     }
 
 
+//    Value * overflow = overflowItems ? overflowItems : b->getSize(mOverflow);
 
     b->CreateCall(func, { myHandle, produced, consumed, required, b->getSize(mUnderflow), b->getSize(mOverflow) });
 }
@@ -1126,10 +1122,10 @@ inline StreamSetBuffer::StreamSetBuffer(const unsigned id, const BufferKind k, B
 , mBufferKind(k)
 , mHandle(nullptr)
 , mType(resolveType(b, baseType))
+, mBaseType(baseType)
 , mOverflow(overflowSize)
 , mUnderflow(underflowSize)
 , mAddressSpace(AddressSpace)
-, mBaseType(baseType)
 , mLinear(linear || isEmptySet()) {
 
 }

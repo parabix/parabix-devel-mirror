@@ -94,7 +94,7 @@ public:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief runGA
      ** ------------------------------------------------------------------------------------------------------------- */
-    const PermutationBasedEvolutionaryAlgorithm & runGA(const bool print = false) {
+    const PermutationBasedEvolutionaryAlgorithm & runGA() {
 
         population.reserve(maxCandidates);
 
@@ -252,16 +252,6 @@ public:
                 bestGenerationalFitness = minFitness;
             }
 
-            if (print) {
-//                if (FitnessValueEvaluator::eval(bestGenerationalFitness, bestFitness)) {
-//                    bestFitness = bestGenerationalFitness;
-//                    errs() << ',' << g << ',' << bestGenerationalFitness;
-//                }
-                errs() << ',' << n << ',' << minFitness << ',' << bestGenerationalFitness << ',' << maxFitness;
-            }
-
-
-
             if (LLVM_UNLIKELY(n == populationSize)) {
                 if (++averageStallCount == maxStallGenerations) {
                     break;
@@ -283,7 +273,7 @@ public:
 
 
 
-            if (abs_subtract(bestGenerationalFitness, priorBestFitness) <= averageStallThreshold) {
+            if (abs_subtract(bestGenerationalFitness, priorBestFitness) <= maxStallThreshold) {
                 if (++bestStallCount == maxStallGenerations) {
                     break;
                 }
@@ -359,14 +349,6 @@ public:
 
                 population.swap(nextGeneration);
                 nextGeneration.clear();
-            }
-
-            if (print) {
-//                if (FitnessValueEvaluator::eval(bestGenerationalFitness, bestFitness)) {
-//                    bestFitness = bestGenerationalFitness;
-//                    errs() << ',' << g << ',' << bestGenerationalFitness;
-//                }
-                errs() << ',' << n << minFitness << ',' << bestGenerationalFitness << ',' << maxFitness;
             }
 
             priorAverageFitness = averageGenerationFitness;
@@ -498,15 +480,6 @@ protected:
 
 };
 
-static unsigned HS_InsertionAttempts = 0;
-static unsigned HS_UniqueInsertions = 0;
-
-enum class HMCRType {
-    Fixed = 0
-    , Cos = 1
-    , AbsCos = 2
-};
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief BitStringBasedHarmonySearch
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -520,8 +493,9 @@ public:
         static constexpr BitWord BITWORD_SIZE{sizeof(BitWord) * CHAR_BIT};
 
         explicit Candidate(const size_t N)
-        : _value((N + BITWORD_SIZE - 1) / BITWORD_SIZE, 0) {
-
+        : _value((N + BITWORD_SIZE - 1) / BITWORD_SIZE + 1, 0) {
+            assert (N > 0);
+            assert (_value.size() > 0);
         }
 
         Candidate(const Candidate & other)
@@ -600,9 +574,15 @@ public:
 
     using Population = std::vector<Individual>;
 
+    struct FitnessValueEvaluator {
+        constexpr static bool eval(const FitnessValueType a,const FitnessValueType b) {
+            return a > b;
+        }
+    };
+
     struct FitnessComparator {
         bool operator()(const Individual & a,const Individual & b) const{
-            return a->second > b->second;
+            return FitnessValueEvaluator::eval(a->second, b->second);;
         }
     };
 
@@ -613,13 +593,13 @@ public:
      ** ------------------------------------------------------------------------------------------------------------- */
     const BitStringBasedHarmonySearch & runHarmonySearch() {
 
+        assert (candidateLength > 1);
+
         population.reserve(maxCandidates);
 
         if (LLVM_UNLIKELY(initialize(population))) {
             goto enumerated_entire_search_space;
         }
-
-        assert (candidateLength > 1);
 
         BEGIN_SCOPED_REGION
 
@@ -627,24 +607,27 @@ public:
 
         std::uniform_int_distribution<unsigned> zeroOrOneInt(0, 1);
 
+        FitnessValueType sumOfGenerationalFitness = 0.0;
+
+        for (const auto & I : population) {
+            const auto fitness = I->second;
+            sumOfGenerationalFitness += fitness;
+        }
+
+
+        constexpr auto minFitVal = std::numeric_limits<FitnessValueType>::min();
+        constexpr auto maxFitVal = std::numeric_limits<FitnessValueType>::max();
+        constexpr auto worstFitnessValue = FitnessValueEvaluator::eval(minFitVal, maxFitVal) ? maxFitVal : minFitVal;
+
+        unsigned averageStallCount = 0;
+
+        double priorAverageFitness = worstFitnessValue;
+
+
         Population nextGeneration;
         nextGeneration.reserve(maxCandidates);
 
         Candidate newCandidate(candidateLength);
-
-//        errs() << ",0," << format("%.3f", bestResult);
-
-//        auto lastBestResult = bestResult;
-
-        double CosAmplitude = 0.0;
-        double CosShift = 0.0;
-        if (HMCRModelType == HMCRType::Cos) {
-            CosAmplitude = (MaxHMCR - MinHMCR) / 2.0;
-            CosShift = (MaxHMCR + MinHMCR) / 2.0;
-        } else if (HMCRModelType == HMCRType::AbsCos) {
-            CosAmplitude = (MaxHMCR - MinHMCR);
-            CosShift = MinHMCR;
-        }
 
         for (unsigned round = 0; round < maxRounds; ++round) {
 
@@ -652,13 +635,7 @@ public:
 
             assert (populationSize <= maxCandidates);
 
-            auto considerationRate = fixedConsiderationRate;
-            if (HMCRModelType == HMCRType::Cos) {
-                considerationRate = CosAmplitude * std::cos(CosAngularFrequency * (double)round) + CosShift;
-            }
-            if (HMCRModelType == HMCRType::AbsCos) {
-                considerationRate = CosAmplitude * std::abs(std::cos(CosAngularFrequency * (double)round)) + CosShift;
-            }
+            auto considerationRate = CosAmplitude * std::cos(CosAngularFrequency * (double)round) + CosShift;
 
             std::uniform_int_distribution<unsigned> upToN(0, populationSize - 1);
 
@@ -676,23 +653,32 @@ public:
             if (LLVM_LIKELY(f.second)) {
                 const auto val = fitness(f.first->first);
                 if (val >= population.front()->second) {
+                    sumOfGenerationalFitness += val;
                     f.first->second = val;
                     bestResult = std::max(bestResult, val);
                     std::pop_heap(population.begin(), population.end(), FitnessComparator{});
+                    const auto & worst = population.back();
+                    sumOfGenerationalFitness -= worst->second;
                     population.pop_back();
                     population.emplace_back(f.first);
                     std::push_heap(population.begin(), population.end(), FitnessComparator{});
                 }
             }
 
-//            if (lastBestResult < bestResult) {
-//                errs() << ',' << (round + 1U) << ',' << format("%.3f", bestResult);
-//                lastBestResult = bestResult;
-//            }
+            const auto n = population.size();
+
+            const double averageGenerationFitness = ((double)sumOfGenerationalFitness) / ((double)n);
+
+            if (abs_subtract(averageGenerationFitness, priorAverageFitness) <= static_cast<double>(averageStallThreshold)) {
+                if (++averageStallCount == maxStallGenerations) {
+                    break;
+                }
+            } else {
+                averageStallCount = 0;
+            }
+            assert (averageStallCount < maxStallGenerations);
 
         }
-
-//        errs() << ',' << maxRounds << ',' << format("%.3f", bestResult);
 
         END_SCOPED_REGION
 
@@ -748,9 +734,7 @@ protected:
      ** ------------------------------------------------------------------------------------------------------------- */
     bool insertCandidate(const Candidate & candidate, Population & population) {
         const auto f = candidates.insert(std::make_pair(candidate, 0));
-        ++HS_InsertionAttempts;
         if (LLVM_LIKELY(f.second)) {
-            ++HS_UniqueInsertions;
             const auto val = fitness(f.first->first);
             f.first->second = val;
             bestResult = std::max(bestResult, val);
@@ -776,38 +760,22 @@ protected:
     BitStringBasedHarmonySearch(const unsigned candidateLength
                           , const unsigned maxRounds
                           , const unsigned maxCandidates
-                          , const double considerationRate
+//                          , const double minHMCR
+//                          , const double maxHMCR
+//                          , const double frequency
+                          , const FitnessValueType averageStallThreshold
+                          , const unsigned maxStallGenerations
                           , const size_t seed)
     : candidateLength(candidateLength)
     , maxRounds(maxRounds)
     , maxCandidates(maxCandidates)
-    , HMCRModelType(HMCRType::Fixed)
-    , fixedConsiderationRate(considerationRate)
-    , MinHMCR(0.0)
-    , MaxHMCR(0.0)
-    , CosAngularFrequency(0.0)
+//    , MinHMCR(minHMCR)
+//    , MaxHMCR(maxHMCR)
+//    , CosAngularFrequency(frequency)
+    , averageStallThreshold(averageStallThreshold)
+    , maxStallGenerations(maxStallGenerations)
     , rng(seed) {
-        assert (0.0 <= considerationRate && considerationRate <= 1.0);
-    }
 
-    BitStringBasedHarmonySearch(const unsigned candidateLength
-                          , const unsigned maxRounds
-                          , const unsigned maxCandidates
-                          , const HMCRType type
-                          , const double minHMCR
-                          , const double maxHMCR
-                          , const double frequency
-                          , const size_t seed)
-    : candidateLength(candidateLength)
-    , maxRounds(maxRounds)
-    , maxCandidates(maxCandidates)
-    , HMCRModelType(type)
-    , fixedConsiderationRate(0.00)
-    , MinHMCR(minHMCR)
-    , MaxHMCR(maxHMCR)
-    , CosAngularFrequency(frequency)
-    , rng(seed) {
-        assert (maxHMCR >= minHMCR);
     }
 
 public:
@@ -815,13 +783,15 @@ public:
     const unsigned candidateLength;
     const unsigned maxRounds;
     const unsigned maxCandidates;
-    const HMCRType HMCRModelType;
 
-    const double fixedConsiderationRate;
+    const FitnessValueType averageStallThreshold;
+    const unsigned maxStallGenerations;
 
-    const double MinHMCR;
-    const double MaxHMCR;
-    const double CosAngularFrequency;
+    constexpr static double MinHMCR = 0.8;
+    constexpr static double MaxHMCR = 1.0;
+    constexpr static double CosAngularFrequency = 0.3141592653589793238462643383279502884197169399375105820974944592;
+    constexpr static double CosAmplitude = (MaxHMCR - MinHMCR) / 2.0;
+    constexpr static double CosShift = (MaxHMCR + MinHMCR) / 2.0;
 
     FitnessValueType bestResult = 0;
 

@@ -443,8 +443,8 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
                        "is implementation defined", {});
 
         __CreateAssert(CreateICmpEQ(CreateURem(size, align), ZERO),
-                       "CreateAlignedMalloc: size (%d) must be an "
-                       "integral multiple of alignment (%d).", {size, align});
+                       "CreateAlignedMalloc: allocation size (%" PRIu64 ") must be an "
+                       "integral multiple of alignment (%" PRIu64 ").", {size, align});
     }
     Value * ptr = nullptr;
     if (hasAlignedAlloc()) {
@@ -473,7 +473,9 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         report_fatal_error("stdlib.h does not contain either aligned_alloc or posix_memalign");
     }
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        __CreateAssert(CreateIsNotNull(ptr), "CreateAlignedMalloc: returned null (out of memory?)", {});
+        __CreateAssert(CreateIsNotNull(ptr), "CreateAlignedMalloc: returned null when attempting "
+                                             "to allocate %" PRIu64 " bytes at %" PRIu64 " alignment (out of memory?)",
+                                             {size, align});
     }
     CreateMemZero(ptr, size, alignment);
     return ptr;

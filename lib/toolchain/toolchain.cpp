@@ -49,7 +49,8 @@ DebugOptions(cl::desc("Debugging Options"), cl::values(clEnumVal(VerifyIR, "Run 
                         clEnumVal(EnableBlockingIOCounter, "Count and report the number of blocked kernel "
                                                            "executions due to insufficient data/space of a "
                                                            "particular stream."),
-                        clEnumVal(DisableIndirectBranch, "Disable use of indirect branches in kernel code.")
+                        clEnumVal(DisableIndirectBranch, "Disable use of indirect branches in kernel code."),
+                        clEnumVal(PrintPipelineGraph, "Write PipelineKernel graph in dot file format to stderr.")
                         CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 
 
@@ -199,7 +200,7 @@ inline bool disableObjectCacheDueToCommandLineOptions() {
     return true;
     #else
     if (!TraceOption.empty()) return true;
-    // if (!DebugOptions.empty()) return true;
+    if (DebugOptions.isSet(PrintPipelineGraph)) return true;
     if (ShowIROption != OmittedOption) return true;
     if (ShowUnoptimizedIROption != OmittedOption) return true;
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
