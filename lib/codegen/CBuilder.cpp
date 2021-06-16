@@ -1527,13 +1527,7 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
 
         }
     }
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
-    return IRBuilder<>::CreateMemMove(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
-#elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-    return IRBuilder<>::CreateMemMove(Dst, Align, Src, Align, Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
-#else
-    return IRBuilder<>::CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
-#endif
+    return llvm_version::CreateMemMove(this, Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
 CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVolatile,
@@ -1558,13 +1552,7 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
         Value * const nonOverlapping = CreateOr(srcEndsBeforeDst, dstEndsBeforeSrc);
         CreateAssert(nonOverlapping, "CreateMemCpy: overlapping ranges is undefined");
     }
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
-    return IRBuilder<>::CreateMemCpy(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
-#elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-    return IRBuilder<>::CreateMemCpy(Dst, Align, Src, Align, Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
-#else
-    return IRBuilder<>::CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
-#endif
+    return llvm_version::CreateMemCpy(this, Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 }
 
 CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsigned Align,

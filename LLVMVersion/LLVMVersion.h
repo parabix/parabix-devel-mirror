@@ -65,9 +65,16 @@ namespace llvm_version {
 llvm::Constant * getSplat(const unsigned fieldCount, llvm::Constant *Elt);
 llvm::VectorType * getVectorType(llvm::Type *ElementType, unsigned NumElements);
 llvm::StructType * getTypeByName(llvm::Module *M, llvm::StringRef Name);
-llvm::CallInst * CreateCall(llvm::IRBuilderBase *b, llvm::Value *callee, llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
-llvm::InvokeInst * CreateInvoke(llvm::IRBuilderBase *b, llvm::Value * const Callee, llvm::BasicBlock * const NormalDest, llvm::BasicBlock * UnwindDest,  llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
-llvm::CallInst * CreateMemMove(void * data, llvm::Value * Dst, llvm::Value * Src, llvm::Value *Size, unsigned Align, bool isVolatile, llvm::MDNode *TBAATag, llvm::MDNode *ScopeTag, llvm::MDNode *NoAliasTag);
-void checkAddPassesToEmitFile(llvm::TargetMachine * mTarget, std::unique_ptr<llvm::legacy::PassManager> const & mPassManager, std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream);
+llvm::CallInst * CreateCall(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b, llvm::Value *callee,
+                            llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
+llvm::InvokeInst * CreateInvoke(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b, llvm::Value * const Callee,
+                                llvm::BasicBlock * const NormalDest, llvm::BasicBlock * UnwindDest, llvm::ArrayRef< llvm::Value * > args,
+                                const llvm::Twine Name = "");
+llvm::CallInst * CreateMemMove(llvm::IRBuilderBase * b, llvm::Value * Dst, llvm::Value * Src, llvm::Value *Size, unsigned Align, bool isVolatile,
+                               llvm::MDNode *TBAATag, llvm::MDNode *ScopeTag, llvm::MDNode *NoAliasTag);
+llvm::CallInst * CreateMemCpy(llvm::IRBuilderBase * b, llvm::Value * Dst, llvm::Value * Src, llvm::Value * Size, unsigned Align,
+                              bool isVolatile, llvm::MDNode * TBAATag, llvm::MDNode * TBAAStructTag, llvm::MDNode * ScopeTag, llvm::MDNode * NoAliasTag);
+void checkAddPassesToEmitFile(llvm::TargetMachine * mTarget, std::unique_ptr<llvm::legacy::PassManager> const & mPassManager,
+                              std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream);
 
 } // namespace llvm_version

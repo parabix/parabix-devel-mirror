@@ -65,6 +65,29 @@ namespace llvm_version {
     #endif
 }
 
+  CallInst * CreateMemMove(IRBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
+                          bool isVolatile, MDNode * TBAATag, MDNode * ScopeTag, MDNode * NoAliasTag) {
+      #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
+          return b->CreateMemMove(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile,
+                                  TBAATag, ScopeTag, NoAliasTag);
+      #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+          return b->CreateMemMove(Dst, Align, Src, Align, Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+      #else
+          return b->CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+      #endif
+  }
+
+  CallInst * CreateMemCpy(IRBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
+                          bool isVolatile, MDNode * TBAATag, MDNode * TBAAStructTag, MDNode * ScopeTag, MDNode * NoAliasTag) {
+      #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
+          return b->CreateMemCpy(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile,
+                                TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
+      #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+          return b->CreateMemCpy(Dst, Align, Src, Align, Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
+      #else
+          return b->CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
+      #endif
+  }
 
   void checkAddPassesToEmitFile(TargetMachine * mTarget, std::unique_ptr<legacy::PassManager> const & mPassManager, std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream) {
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
