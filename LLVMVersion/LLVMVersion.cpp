@@ -55,7 +55,7 @@ namespace llvm_version {
   }
 
   InvokeInst * CreateInvoke(IRBuilderBase *b, Value * const Callee, BasicBlock * const NormalDest, BasicBlock * UnwindDest,
-                      ArrayRef< Value * > args, const Twine Name) {
+                            ArrayRef< Value * > args, const Twine Name) {
     #if LLVM_VERSION_MAJOR >= 11
         auto *calleePtrType = llvm::cast<llvm::PointerType>(Callee->getType());
         auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
@@ -66,7 +66,7 @@ namespace llvm_version {
 }
 
   CallInst * CreateMemMove(IRBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
-                          bool isVolatile, MDNode * TBAATag, MDNode * ScopeTag, MDNode * NoAliasTag) {
+                           bool isVolatile, MDNode * TBAATag, MDNode * ScopeTag, MDNode * NoAliasTag) {
       #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
           return b->CreateMemMove(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile,
                                   TBAATag, ScopeTag, NoAliasTag);
@@ -89,7 +89,8 @@ namespace llvm_version {
       #endif
   }
 
-  void checkAddPassesToEmitFile(TargetMachine * mTarget, std::unique_ptr<legacy::PassManager> const & mPassManager, std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream) {
+  void checkAddPassesToEmitFile(TargetMachine * mTarget, std::unique_ptr<legacy::PassManager> const & mPassManager,
+                                std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream) {
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
       if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
         if (!codegen::ShowASMOption.empty()) {
