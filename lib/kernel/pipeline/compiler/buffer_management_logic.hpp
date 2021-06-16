@@ -97,7 +97,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
 
                 const auto scale = MaximumNumOfStrides[i] * Rational{mNumOfThreads};
                 params.push_back(b->CreateCeilUMulRate(expectedNumOfStrides, scale));
-                b->createCall(func, params);
+                b->CreateCall(func, params);
             }
         }
         // and allocate any output buffers

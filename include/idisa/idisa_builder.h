@@ -104,16 +104,6 @@ public:
         return CreateAlignedMalloc(size, mBitBlockWidth / 8);
     }
 
-    llvm::CallInst * createCall(llvm::Value *callee, llvm::ArrayRef<llvm::Value *> args, const llvm::Twine &Name = "") {
-        #if LLVM_VERSION_MAJOR >= 11
-            auto *calleePtrType = llvm::cast<llvm::PointerType>(callee->getType());
-            auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
-            return CreateCall(calleeType, callee, args, Name);
-        #else
-            return CreateCall(callee, args, Name);
-        #endif
-    }
-
     llvm::VectorType * fwVectorType(const unsigned fw);
 
     llvm::Constant * simd_himask(unsigned fw);

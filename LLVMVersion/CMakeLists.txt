@@ -6,5 +6,4 @@ SRC
   LLVMVersion.h
 DEPS
   toolchain
-  codegen
 )

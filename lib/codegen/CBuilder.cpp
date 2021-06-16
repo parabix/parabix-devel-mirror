@@ -1630,6 +1630,19 @@ Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, 
     return IRBuilder<>::CreateInsertElement(Vec, NewElt, Idx, Name);
 }
 
+CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Value * > Args, const Twine Name) {
+    return IRBuilder<>::CreateCall(FTy, Callee, Args, Name);
+}
+
+CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Value * > Args,
+                                ArrayRef< OperandBundleDef > OpBundles, const Twine Name) {
+    return IRBuilder<>::CreateCall(FTy, Callee, Args, OpBundles, Name);
+}
+
+CallInst * CBuilder::CreateCall(Value *Callee, ArrayRef< Value * > args, const Twine Name) {
+    return llvm_version::CreateCall(this, Callee, args, Name);
+}
+
 CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
     Module * const m = getModule();
     Function * srandFunc = m->getFunction("srand");

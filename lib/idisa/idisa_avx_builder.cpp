@@ -27,12 +27,12 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
             Value * signmask_f64func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx_movmsk_pd_256);
             Type * bitBlock_f64type = llvm_version::getVectorType(getDoubleTy(), mBitBlockWidth/64);
             Value * a_as_pd = CreateBitCast(a, bitBlock_f64type);
-            return createCall(signmask_f64func, a_as_pd);
+            return CreateCall(signmask_f64func, a_as_pd);
         } else if (fw == 32) {
             Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx_movmsk_ps_256);
             Type * bitBlock_f32type = llvm_version::getVectorType(getFloatTy(), mBitBlockWidth/32);
             Value * a_as_ps = CreateBitCast(a, bitBlock_f32type);
-            return createCall(signmask_f32func, a_as_ps);
+            return CreateCall(signmask_f32func, a_as_ps);
         }
     } else if (mBitBlockWidth == 512) {
         if (fw == 64) {
@@ -46,7 +46,7 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
             Type * halfBlock_f32type = llvm_version::getVectorType(getFloatTy(), mBitBlockWidth/64);
             Value * pack_as_ps = CreateBitCast(packh, halfBlock_f32type);
             Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx_movmsk_ps_256);
-            return createCall(signmask_f32func, pack_as_ps);
+            return CreateCall(signmask_f32func, pack_as_ps);
         }
     }
     // Otherwise use default SSE2 logic.
@@ -57,11 +57,11 @@ Value * IDISA_AVX_Builder::CreateZeroHiBitsFrom(Value * bits, Value * pos, const
     Type * Ty = bits->getType();
     if (hasBMI1 && (Ty == getInt64Ty())) {
         Value * bzhi_64 = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_bzhi_64);
-        return createCall(bzhi_64, {bits, pos}, Name);
+        return CreateCall(bzhi_64, {bits, pos}, Name);
     }
     if (hasBMI1 && (Ty == getInt32Ty())) {
         Value * bzhi_32 = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_bzhi_32);
-        return createCall(bzhi_32, {bits, pos}, Name);
+        return CreateCall(bzhi_32, {bits, pos}, Name);
     }
     return CBuilder::CreateZeroHiBitsFrom(bits, pos, Name);
 }
@@ -127,8 +127,8 @@ Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
             Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
             // Merge the bytes.
             Value * byte_merge = esimd_mergeh(8, a, b);
-            Value * low_bits = createCall(shufFn, {interleave_table,  fwCast(8, simd_select_lo(8, byte_merge))});
-            Value * high_bits = simd_slli(16, createCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
+            Value * low_bits = CreateCall(shufFn, {interleave_table,  fwCast(8, simd_select_lo(8, byte_merge))});
+            Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
             // For each 16-bit field, interleave the low bits of the two bytes.
             low_bits = simd_or(simd_select_lo(16, low_bits), simd_srli(16, low_bits, 8-fw));
             // For each 16-bit field, interleave the high bits of the two bytes.
@@ -157,8 +157,8 @@ Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
             Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
             // Merge the bytes.
             Value * byte_merge = esimd_mergel(8, a, b);
-            Value * low_bits = createCall(shufFn, {interleave_table,  fwCast(8, simd_select_lo(8, byte_merge))});
-            Value * high_bits = simd_slli(16, createCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
+            Value * low_bits = CreateCall(shufFn, {interleave_table,  fwCast(8, simd_select_lo(8, byte_merge))});
+            Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
             // For each 16-bit field, interleave the low bits of the two bytes.
             low_bits = simd_or(simd_select_lo(16, low_bits), simd_srli(16, low_bits, 8-fw));
             // For each 16-bit field, interleave the high bits of the two bytes.
@@ -181,7 +181,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Va
         Value * vpackuswbfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_packuswb);
         Value * a_low = fwCast(16, simd_and(a, simd_lomask(fw)));
         Value * b_low = fwCast(16, simd_and(b, simd_lomask(fw)));
-        return createCall(vpackuswbfunc, {a_low, b_low});
+        return CreateCall(vpackuswbfunc, {a_low, b_low});
     }
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::hsimd_packl_in_lanes(lanes, fw, a, b);
@@ -192,7 +192,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Va
         Value * vpackuswbfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_packuswb);
         Value * a_low = simd_srli(fw, a, fw/2);
         Value * b_low = simd_srli(fw, b, fw/2);
-        return createCall(vpackuswbfunc, {a_low, b_low});
+        return CreateCall(vpackuswbfunc, {a_low, b_low});
     }
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::hsimd_packh_in_lanes(lanes, fw, a, b);
@@ -202,7 +202,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Va
 Value * IDISA_AVX2_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
     if (((fw == 32) || (fw == 16)) && (getVectorBitWidth(a) == AVX_width)) {
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packuswb : Intrinsic::x86_avx2_packusdw);
-        Value * packed = fwCast(64, createCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
         auto field_count = AVX_width/64;
         SmallVector<Constant *, 4> Idxs(field_count);
         for (unsigned int i = 0; i < field_count/2; i++) {
@@ -219,7 +219,7 @@ Value * IDISA_AVX2_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
 Value * IDISA_AVX2_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
     if (((fw == 32) || (fw == 16)) && (getVectorBitWidth(a) == AVX_width)) {
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packsswb : Intrinsic::x86_avx2_packssdw);
-        Value * packed = fwCast(64, createCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
         auto field_count = AVX_width/64;
         SmallVector<Constant *, 4> Idxs(field_count);
         for (unsigned int i = 0; i < field_count/2; i++) {
@@ -290,7 +290,7 @@ Value * IDISA_AVX2_Builder::simd_pext(unsigned fieldwidth, Value * v, Value * ex
         for (unsigned i = 0; i < n; i++) {
             Value * v_i = mvmd_extract(fieldwidth, v, i);
             Value * mask_i = mvmd_extract(fieldwidth, extract_mask, i);
-            Value * bits = createCall(PEXT_f, {v_i, mask_i});
+            Value * bits = CreateCall(PEXT_f, {v_i, mask_i});
             result = mvmd_insert(fieldwidth, result, bits, i);
         }
         return bitCast(result);
@@ -307,7 +307,7 @@ Value * IDISA_AVX2_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * de
         for (unsigned i = 0; i < n; i++) {
             Value * v_i = mvmd_extract(fieldwidth, v, i);
             Value * mask_i = mvmd_extract(fieldwidth, deposit_mask, i);
-            Value * bits = createCall(PDEP_f, {v_i, mask_i});
+            Value * bits = CreateCall(PDEP_f, {v_i, mask_i});
             result = mvmd_insert(fieldwidth, result, bits, i);
         }
         return bitCast(result);
@@ -333,8 +333,8 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
             for (unsigned i = 0; i < n; i++) {
                 Value * s = mvmd_extract(bitWidth, strm, i);
                 Value * ix = mvmd_extract(bitWidth, index_strm, i);
-                Value * ix_popcnt = createCall(popcount, {ix});
-                Value * bits = createCall(PEXT_f, {s, ix});
+                Value * ix_popcnt = CreateCall(popcount, {ix});
+                Value * bits = CreateCall(PEXT_f, {s, ix});
                 Value * adv = CreateOr(CreateShl(bits, shiftAmount), carry);
                 // We have two cases depending on whether the popcount of the index pack is < shiftAmount or not.
                 Value * popcount_small = CreateICmpULT(ix_popcnt, shiftVal);
@@ -343,7 +343,7 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
                                 CreateLShr(carry, ix_popcnt));
                 Value * carry_if_popcount_large = CreateLShr(bits, CreateSub(ix_popcnt, shiftVal));
                 carry = CreateSelect(popcount_small, carry_if_popcount_small, carry_if_popcount_large);
-                result = mvmd_insert(bitWidth, result, createCall(PDEP_f, {adv, ix}), i);
+                result = mvmd_insert(bitWidth, result, CreateCall(PDEP_f, {adv, ix}), i);
             }
             Value * carryOut = mvmd_insert(bitWidth, allZeroes(), carry, 0);
             return std::pair<Value *, Value *>{bitCast(carryOut), bitCast(result)};
@@ -356,9 +356,9 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
             for (unsigned i = 0; i < n; i++) {
                 Value * s = mvmd_extract(bitWidth, strm, i);
                 Value * ix = mvmd_extract(bitWidth, index_strm, i);
-                Value * ix_popcnt = createCall(popcount, {ix});
-                Value * bits = createCall(PEXT_f, {s, ix});  // All these bits are shifted out (appended to carry).
-                result = mvmd_insert(bitWidth, result, createCall(PDEP_f, {mvmd_extract(bitWidth, carry, 0), ix}), i);
+                Value * ix_popcnt = CreateCall(popcount, {ix});
+                Value * bits = CreateCall(PEXT_f, {s, ix});  // All these bits are shifted out (appended to carry).
+                result = mvmd_insert(bitWidth, result, CreateCall(PDEP_f, {mvmd_extract(bitWidth, carry, 0), ix}), i);
                 carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed, make room for new bits.
                 carry = CreateOr(carry, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(CreateSub(shiftVal, ix_popcnt), iBitBlock)));
             }
@@ -375,9 +375,9 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
             for (unsigned i = 0; i < n; i++) {
                 Value * s = mvmd_extract(bitWidth, strm, i);
                 Value * ix = mvmd_extract(bitWidth, index_strm, i);
-                Value * ix_popcnt = createCall(popcount, {ix});
-                Value * bits = createCall(PEXT_f, {s, ix});  // All these bits are shifted out (appended to carry).
-                result = mvmd_insert(bitWidth, result, createCall(PDEP_f, {mvmd_extract(bitWidth, carry, 0), ix}), i);
+                Value * ix_popcnt = CreateCall(popcount, {ix});
+                Value * bits = CreateCall(PEXT_f, {s, ix});  // All these bits are shifted out (appended to carry).
+                result = mvmd_insert(bitWidth, result, CreateCall(PDEP_f, {mvmd_extract(bitWidth, carry, 0), ix}), i);
                 carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed.
                 carryOut = CreateOr(carryOut, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(generated, iBitBlock)));
                 generated = CreateAdd(generated, ix_popcnt);
@@ -395,7 +395,7 @@ Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
             Value * signmask_f8func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_pmovmskb);
             Type * bitBlock_i8type = llvm_version::getVectorType(getInt8Ty(), mBitBlockWidth/8);
             Value * a_as_ps = CreateBitCast(a, bitBlock_i8type);
-            return createCall(signmask_f8func, a_as_ps);
+            return CreateCall(signmask_f8func, a_as_ps);
         }
     }
     // Otherwise use default SSE logic.
@@ -424,7 +424,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::V
         permuteVec = simd_and(permuteVec, simd_ult(fw, permuteVec, fieldCountSplat));
         // Insert a zero value at position 0 (OK for shifts > 0)
         Value * a0 = mvmd_insert(fw, a, Constant::getNullValue(fieldTy), 0);
-        Value * shifted = createCall(permuteFunc, {a0, permuteVec});
+        Value * shifted = CreateCall(permuteFunc, {a0, permuteVec});
         return simd_if(1, simd_eq(fw, shiftSplat, allZeroes()), a, shifted);
     }
     return IDISA_Builder::mvmd_srl(fw, a, shift, safe);
@@ -452,7 +452,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::V
         permuteVec = simd_or(permuteVec, simd_lt(fw, permuteVec, fwCast(fw, allZeroes())));
         // Insert a zero value at position 7 (OK for shifts > 0)
         Value * a0 = mvmd_insert(fw, a, Constant::getNullValue(fieldTy), 7);
-        Value * shifted = createCall(permuteFunc, {a0, permuteVec});
+        Value * shifted = CreateCall(permuteFunc, {a0, permuteVec});
         return simd_if(1, simd_eq(fw, shiftSplat, allZeroes()), a, shifted);
     }
     return IDISA_Builder::mvmd_sll(fw, a, shift, safe);
@@ -480,7 +480,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_shuffle(unsigned fw, llvm::Value * a, llv
     }
     if (mBitBlockWidth == 256 && fw == 32) {
         Value * shuf32Func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
-        return createCall(shuf32Func, {fwCast(32, a), fwCast(32, index_vector)});
+        return CreateCall(shuf32Func, {fwCast(32, a), fwCast(32, index_vector)});
     }
     return IDISA_Builder::mvmd_shuffle(fw, a, index_vector);
 }
@@ -489,7 +489,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
     if (hasBMI2 && (mBitBlockWidth == 256) && (fw == 64)) {
         Value * PDEP_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_32);
         Value * mask = CreateZExt(select_mask, getInt32Ty());
-        Value * mask32 = CreateMul(createCall(PDEP_func, {mask, getInt32(0x55)}), getInt32(3));
+        Value * mask32 = CreateMul(CreateCall(PDEP_func, {mask, getInt32(0x55)}), getInt32(3));
         Value * result = fwCast(fw, mvmd_compress(32, fwCast(32, a), CreateTrunc(mask32, getInt8Ty())));
         return result;
     }
@@ -503,11 +503,11 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
         Value * const popcount_func = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, getInt32Ty());
         // First duplicate each mask bit to select 4-bit fields
         Value * mask = CreateZExt(select_mask, getInt32Ty());
-        Value * field_count = createCall(popcount_func, mask);
-        Value * spread = createCall(PDEP_func, {mask, getInt32(0x11111111)});
+        Value * field_count = CreateCall(popcount_func, mask);
+        Value * spread = CreateCall(PDEP_func, {mask, getInt32(0x11111111)});
         Value * ext_mask = CreateMul(spread, getInt32(0xF));
         // Now extract the 4-bit index values for the required fields.
-        Value * indexes = createCall(PEXT_func, {getInt32(0x76543210), ext_mask});
+        Value * indexes = CreateCall(PEXT_func, {getInt32(0x76543210), ext_mask});
         // Broadcast to all fields
         Value * bdcst = CreateShuffleVector(CreateBitCast(indexes, v1xi32Ty),
                                             UndefValue::get(v1xi32Ty),
@@ -568,7 +568,7 @@ Value * IDISA_AVX512F_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
         Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b), fwCast(32, allZeroes()), mask});
 #else
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packuswb_512 : Intrinsic::x86_avx512_packusdw_512);
-        Value * packed = createCall(pack_func, {fwCast(fw, a), fwCast(fw, b)});
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)});
 #endif
         auto field_count = AVX512_width/64;
         SmallVector<Constant *, 16> Idxs(field_count);
@@ -591,7 +591,7 @@ Value * IDISA_AVX512F_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
         Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b), fwCast(32, allZeroes()), mask});
 #else
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packsswb_512 : Intrinsic::x86_avx512_packssdw_512);
-        Value * packed = createCall(pack_func, {fwCast(fw, a), fwCast(fw, b)});
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)});
 #endif
         auto field_count = AVX512_width/64;
         SmallVector<Constant *, 16> Idxs(field_count);
@@ -705,7 +705,7 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle2(unsigned fw, Value * table0, 
             Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
             return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, table0), fwCast(fw, table1), mask});
 #else
-            return createCall(permuteFunc, {fwCast(fw, table0), fwCast(fw, index_vector), fwCast(fw, table1)});
+            return CreateCall(permuteFunc, {fwCast(fw, table0), fwCast(fw, index_vector), fwCast(fw, table1)});
 #endif
         }
     }
@@ -729,7 +729,7 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a,
 #else
         Type * maskTy = llvm_version::getVectorType(getInt1Ty(), fieldCount);
         Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress, fwVectorType(fw));
-        return createCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), CreateBitCast(mask, maskTy)});
+        return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), CreateBitCast(mask, maskTy)});
 #endif
     }
     if (mBitBlockWidth == 512 && fw == 64) {
@@ -739,7 +739,7 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a,
 #else
         Type * maskTy = llvm_version::getVectorType(getInt1Ty(), fieldCount);
         Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress, fwVectorType(fw));
-        return createCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), CreateBitCast(mask, maskTy)});
+        return CreateCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), CreateBitCast(mask, maskTy)});
 #endif
     }
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);
@@ -795,9 +795,9 @@ llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a)
          Value * pack64_8_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_qb_512);
          // popcounts of 64 bit fields will always fit in 8 bit fields.
          // We don't need the masked version of this, but the unmasked intrinsic was not found.
-         c = createCall(pack64_8_func, {c, zero16xi8, Constant::getAllOnesValue(getInt8Ty())});
+         c = CreateCall(pack64_8_func, {c, zero16xi8, Constant::getAllOnesValue(getInt8Ty())});
          Value * horizSADfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_psad_bw);
-         c = createCall(horizSADfunc, {c, zero16xi8});
+         c = CreateCall(horizSADfunc, {c, zero16xi8});
          return CreateInsertElement(allZeroes(), CreateExtractElement(c, zeroInt32), zeroInt32);
     }
     if (hostCPUFeatures.hasAVX512VPOPCNTDQ && (fw == 32 || fw == 64)){
@@ -806,7 +806,7 @@ llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a)
     }
     if (hostCPUFeatures.hasAVX512BW && (fw == 64)) {
         Value * horizSADfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_psad_bw_512);
-        return bitCast(createCall(horizSADfunc, {fwCast(8, simd_popcount(8, a)), fwCast(8, allZeroes())}));
+        return bitCast(CreateCall(horizSADfunc, {fwCast(8, simd_popcount(8, a)), fwCast(8, allZeroes())}));
     }
     //https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation
     if((fw == 64) && (mBitBlockWidth == 512)){
@@ -873,8 +873,8 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4)), zeroByteSplat, mask}), fw);
 #else
         Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_pshuf_b_512);
-        Value * low_bits = createCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
-        Value * high_bits = simd_slli(16, createCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
+        Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
+        Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
 #endif
         Value * lo_move_back = simd_srli(16, low_bits, 8-fw);
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
@@ -919,8 +919,8 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4)), zeroByteSplat, mask}), fw);
 #else
         Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_pshuf_b_512);
-        Value * low_bits = createCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
-        Value * high_bits = simd_slli(16, createCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
+        Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
+        Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
 #endif
         Value * lo_move_back = simd_srli(16, low_bits, 8-fw);
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
@@ -979,7 +979,7 @@ Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value
     Value * ternLogicFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_pternlog_d_512);
     Value * args[4] = {fwCast(32, a), fwCast(32, b), fwCast(32, c), simd_mask};
 #endif
-    Value * rslt = createCall(ternLogicFn, args);
+    Value * rslt = CreateCall(ternLogicFn, args);
     return bitCast(rslt);
 }
 
