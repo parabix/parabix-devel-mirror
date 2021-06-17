@@ -55,16 +55,17 @@ namespace llvm_version {
     #endif
   }
 
-  InvokeInst * CreateInvoke(IRBuilderBase *b, Value * const Callee, BasicBlock * const NormalDest, BasicBlock * UnwindDest,
+  InvokeInst * CreateInvoke(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b,
+                            Value * const Callee, BasicBlock * const NormalDest, BasicBlock * UnwindDest,
                             ArrayRef< Value * > args, const Twine Name) {
     #if LLVM_VERSION_MAJOR >= 11
         auto *calleePtrType = llvm::cast<llvm::PointerType>(Callee->getType());
         auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
-        return b->CreateInvoke(calleeType, Callee, NormalDest, UnwindDest, args);
+        return b.CreateInvoke(calleeType, Callee, NormalDest, UnwindDest, args);
     #else
-        return b->CreateInvoke(Callee, NormalDest, UnwindDest, args);
+        return b.CreateInvoke(Callee, NormalDest, UnwindDest, args);
     #endif
-}
+  }
 
   CallInst * CreateMemMove(IRBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
                            bool isVolatile, MDNode * TBAATag, MDNode * ScopeTag, MDNode * NoAliasTag) {

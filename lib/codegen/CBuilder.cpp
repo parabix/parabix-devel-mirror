@@ -1643,7 +1643,7 @@ InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock 
 
 InvokeInst * CBuilder::CreateInvoke(Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
                                     ArrayRef<Value *> Args, const Twine Name) {
-    return llvm_version::CreateInvoke(this, Callee, NormalDest, UnwindDest, Args, Name);
+    return llvm_version::CreateInvoke(*this, Callee, NormalDest, UnwindDest, Args, Name);
 }
 
 CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
