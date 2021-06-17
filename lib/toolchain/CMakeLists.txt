@@ -22,7 +22,7 @@ SRC
     toolchain.cpp
 )
 
-if(ARTIFACT_TYPE STREQUAL "Shared" AND ARTIFACT_MODE EQUAL "Multiple")
+if(ARTIFACT_TYPE STREQUAL "Shared" AND ARTIFACT_MODE STREQUAL "Multiple")
     if(APPLE)
     # The Darwin linker on macOS does not support the --whole-archive flag.
     # Instead it has -all_load which does something similar. On macOS we need

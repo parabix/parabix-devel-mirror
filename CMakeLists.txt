@@ -28,7 +28,7 @@ option(GENERATE_TOOLS "Controls whether or not it generate tools" ON)
 
 # Build Artifact Configuration
 set(ARTIFACT_MODE "Multiple" CACHE STRING "Build framework into a single artifact (Single) or multiple artifacts (Multiple)")
-set(ARTIFACT_TYPE "Static" CACHE STRING "Build frameword as shared (Shared) or static (Static) libraries")
+set(ARTIFACT_TYPE "Shared" CACHE STRING "Build frameword as shared (Shared) or static (Static) libraries")
 
 # Validate framework build style
 set(VALID_BUILD_MODE "Single" "Multiple")
