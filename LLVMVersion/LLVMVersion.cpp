@@ -3,9 +3,7 @@
 #include <codegen/CBuilder.h>
 
 #include <llvm/IR/Constants.h>
-#include <llvm/Support/Alignment.h>
 #include <llvm/Support/FileSystem.h>
-#include <llvm/Support/TypeSize.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Metadata.h>
@@ -16,6 +14,12 @@
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/ADT/APInt.h>
 
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
+#include <llvm/Support/Alignment.h>
+#include <llvm/Support/TypeSize.h>
+#endif
+
+
 using namespace llvm;
 
 namespace llvm_version {
@@ -23,8 +27,10 @@ namespace llvm_version {
   Constant * getSplat(const unsigned fieldCount, Constant *Elt) {
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(12, 0, 0)
       return ConstantVector::getSplat(ElementCount::get(fieldCount, false), Elt);
-    #else
+    #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
       return ConstantVector::getSplat({fieldCount, false}, Elt);
+    #else
+      return ConstantVector::getSplat(fieldCount, Elt);
     #endif
   }
 
