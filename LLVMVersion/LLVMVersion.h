@@ -52,6 +52,11 @@ class VectorType;
 
 template <class T>
 class ArrayRef;
+
+class ConstantFolder;
+class IRBuilderDefaultInserter;
+template <typename, typename>
+class IRBuilder;
 }
 
 namespace llvm_version {

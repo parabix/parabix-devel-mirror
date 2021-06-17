@@ -44,13 +44,14 @@ namespace llvm_version {
     #endif
   }
 
-  CallInst * CreateCall(IRBuilderBase * b, Value *Callee, ArrayRef< Value * > args, const Twine Name) {
+  CallInst * CreateCall(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b, Value *Callee,
+                        ArrayRef< Value * > args, const Twine Name) {
     #if LLVM_VERSION_MAJOR >= 11
         auto *calleePtrType = llvm::cast<llvm::PointerType>(Callee->getType());
         auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
-        return b->CreateCall(calleeType, Callee, args, Name);
+        return b.CreateCall(calleeType, Callee, args, Name);
     #else
-        return b->CreateCall(Callee, args, Name);
+        return b.CreateCall(Callee, args, Name);
     #endif
   }
 

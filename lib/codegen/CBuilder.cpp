@@ -1628,7 +1628,7 @@ CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Valu
 }
 
 CallInst * CBuilder::CreateCall(Value *Callee, ArrayRef< Value * > args, const Twine Name) {
-    return llvm_version::CreateCall(this, Callee, args, Name);
+    return llvm_version::CreateCall(*this, Callee, args, Name);
 }
 
 InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
