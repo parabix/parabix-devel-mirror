@@ -183,7 +183,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             BufferPort bp(port, binding, lb, ub);
 
             bool cannotBePlacedIntoThreadLocalMemory = false;
-            bool mustBeLinear = false;
 
             if (LLVM_UNLIKELY(rate.getKind() == RateId::Unknown)) {
                 bp.IsManaged = true;
@@ -213,12 +212,8 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                     case AttrId::Principal:
                         bp.IsPrincipal = true;
                         break;
-                    case AttrId::Linear:
-                        mustBeLinear = true;
-                        break;
                     case AttrId::Deferred:
                         cannotBePlacedIntoThreadLocalMemory = true;
-                        mustBeLinear = true;
                         bp.IsDeferred = true;
                         break;
                     case AttrId::SharedManagedBuffer:
@@ -236,10 +231,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             if (cannotBePlacedIntoThreadLocalMemory) {
                 bn.Locality = BufferLocality::PartitionLocal;
             }
-            if (mustBeLinear) {
-                bn.IsLinear = false;
-            }
-
             return bp;
         };
 

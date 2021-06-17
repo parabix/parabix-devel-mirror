@@ -786,6 +786,7 @@ repeat: getReverseTopologicalOrdering();
                 if (LLVM_LIKELY(typeId == TypeId::Zeroes)) {
                     switch (targetTypeId) {
                         case TypeId::Advance:
+                        case TypeId::IndexedAdvance:
                         case TypeId::Lookahead:
                         case TypeId::InFile:
                         case TypeId::AtEOF:
@@ -1341,6 +1342,9 @@ private:
         if (LLVM_LIKELY(f != M.end())) {
             return f->second;
         }
+        if (!(isConstant(expr->getClassTypeId()) || isLiteral(expr->getClassTypeId()))) {
+            expr->print(errs());
+        }
         assert (isConstant(expr->getClassTypeId()) || isLiteral(expr->getClassTypeId()));
         const auto u = makeVertex(expr->getClassTypeId(), expr);
         M.emplace(expr, u);
@@ -1354,7 +1358,9 @@ private:
         assert (stmt);
         assert (M.count(stmt) == 0);
         const auto typeId = stmt->getClassTypeId();
-        if (LLVM_UNLIKELY(typeId == TypeId::Sel)) {
+        if (LLVM_UNLIKELY(typeId == TypeId::Ternary)) {
+            report_fatal_error("Ternary operations not supported by DistributivePass");
+        } else if (LLVM_UNLIKELY(typeId == TypeId::Sel)) {
             const auto c = addExpression(cast<Sel>(stmt)->getCondition());
             const auto t = addExpression(cast<Sel>(stmt)->getTrueExpr());
             const auto f = addExpression(cast<Sel>(stmt)->getFalseExpr());
@@ -1457,7 +1463,7 @@ private:
                 }
             } else {
                 if (report) {
-                    errs() << u << " has " << n << " operands but requires " << requiredOperands(typeId) << "\n";
+                    errs() << u << " (typeid=" << (unsigned)typeId << ") has " << n << " operands but requires " << requiredOperands(typeId) << "\n";
                 }
                 return false;
             }
@@ -1483,6 +1489,8 @@ private:
             case TypeId::If:
             case TypeId::While:
                 return 1;
+            case TypeId::IndexedAdvance:
+                return 3;
             case TypeId::Sel:
                 llvm_unreachable("impossible");
             default:
@@ -1687,7 +1695,12 @@ private:
     }
 
     static bool isLiteral(const TypeId typeId) {
-        return typeId == TypeId::Integer || typeId == TypeId::Var;
+        switch (typeId) {
+            case TypeId::Integer: case TypeId::Var: case TypeId::Extract:
+                return true;
+            default:
+                return false;
+        }
     }
 
     static bool isDistributive(const TypeId typeId) {

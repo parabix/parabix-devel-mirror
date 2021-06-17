@@ -515,10 +515,9 @@ void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-        const StreamSetBuffer * const buffer = bn.Buffer;
-        if (buffer->isLinear()) continue;
-
         if (bn.CopyBack) {
+            assert (!bn.IsLinear);
+            const StreamSetBuffer * const buffer = bn.Buffer;
             const BufferPort & br = mBufferGraph[e];
             Value * const capacity = buffer->getCapacity(b);
             Value * const alreadyProduced = mAlreadyProducedPhi[br.Port];
@@ -543,11 +542,10 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
 
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-        const StreamSetBuffer * const buffer = bn.Buffer;
-        if (buffer->isLinear()) continue;
 
         if (bn.CopyBackReflection) {
-
+            assert (!bn.IsLinear);
+            const StreamSetBuffer * const buffer = bn.Buffer;
             const BufferPort & br = mBufferGraph[e];
             Value * const capacity = buffer->getCapacity(b);
             Value * const initial = mInitiallyProducedItemCount[streamSet];

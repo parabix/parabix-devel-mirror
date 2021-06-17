@@ -102,14 +102,6 @@ public:
         errs() << "determineBufferSize\n";
         #endif
 
-        P.determineBufferSize(b);
-
-
-
-//        errs() << "determineBufferLayout\n";
-
-        P.determineBufferLayout(b, rng);
-
 //        errs() << "identifyBufferLocality\n";
 
         P.markInterPartitionStreamSetsAsGloballyShared(); // linkedPartitions
@@ -125,9 +117,12 @@ public:
 
         // Finish annotating the buffer graph       
         P.identifyLinearBuffers();
-        P.identifyZeroExtendedStreamSets();
 //        P.identifyLocalPortIds();
         P.identifyPortsThatModifySegmentLength();
+        P.identifyZeroExtendedStreamSets();
+
+        P.determineBufferSize(b);
+        P.determineBufferLayout(b, rng);
 
         // Make the remaining graphs
         P.makeConsumerGraph();

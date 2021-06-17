@@ -16,80 +16,86 @@ void PipelineAnalysis::determineBufferSize(BuilderRef b) {
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
         BufferNode & bn = mBufferGraph[streamSet];
+        if (LLVM_UNLIKELY(bn.isExternal())) {
+            continue;
+        }
+
         const auto producerOutput = in_edge(streamSet, mBufferGraph);
         const BufferPort & producerRate = mBufferGraph[producerOutput];
 
-        if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
-
-            // TODO: If we have an open system, then the input rate to this pipeline cannot
-            // be bounded a priori. During initialization, we could pass a "suggestion"
-            // argument to indicate what the outer pipeline believes its I/O rates will be.
+        // TODO: If we have an open system, then the input rate to this pipeline cannot
+        // be bounded a priori. During initialization, we could pass a "suggestion"
+        // argument to indicate what the outer pipeline believes its I/O rates will be.
 
 
-            // If this buffer is externally used, we cannot analyze the dataflow rate of
-            // external consumers. Default to dynamic for such buffers.
+        // If this buffer is externally used, we cannot analyze the dataflow rate of
+        // external consumers. Default to dynamic for such buffers.
 
-            // Similarly if any internal consumer has a deferred rate, we cannot analyze
-            // any consumption rates.
+        // Similarly if any internal consumer has a deferred rate, we cannot analyze
+        // any consumption rates.
 
-            auto maxDelay = producerRate.Delay;
-            auto maxLookAhead = producerRate.LookAhead;
-            auto maxLookBehind = producerRate.LookBehind;
+        auto maxDelay = producerRate.Delay;
+        auto maxLookAhead = producerRate.LookAhead;
+        auto maxLookBehind = producerRate.LookBehind;
 
-            const auto producer = source(producerOutput, mBufferGraph);
+        const auto producer = source(producerOutput, mBufferGraph);
 
-            auto bMin = floor(producerRate.Minimum * MinimumNumOfStrides[producer]);
-            auto bMax = ceiling(producerRate.Maximum * MaximumNumOfStrides[producer]);
+        auto bMin = floor(producerRate.Minimum * MinimumNumOfStrides[producer]);
+        auto bMax = ceiling(producerRate.Maximum * MaximumNumOfStrides[producer]);
 
+        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
 
-            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const BufferPort & consumerRate = mBufferGraph[e];
 
-                const BufferPort & consumerRate = mBufferGraph[e];
+            const auto consumer = target(e, mBufferGraph);
 
-                const auto consumer = target(e, mBufferGraph);
+            const auto cMin = floor(consumerRate.Minimum * MinimumNumOfStrides[consumer]);
+            const auto cMax = ceiling(consumerRate.Maximum * MaximumNumOfStrides[consumer]);
 
-                const auto cMin = floor(consumerRate.Minimum * MinimumNumOfStrides[consumer]);
-                const auto cMax = ceiling(consumerRate.Maximum * MaximumNumOfStrides[consumer]);
+            assert (cMax >= cMin);
 
-                assert (cMax >= cMin);
+            assert (consumerRate.Maximum >= consumerRate.Minimum);
 
-                assert (consumerRate.Maximum >= consumerRate.Minimum);
-
-                bMin = std::min(bMin, cMin);
-                bMax = std::max(bMax, cMax);
+            bMin = std::min(bMin, cMin);
+            bMax = std::max(bMax, cMax);
 
 //                // Get output overflow size
-                auto lookAhead = consumerRate.LookAhead;
-                if (consumerRate.Minimum < consumerRate.Maximum) {
-                    lookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
-                }
-
-                maxDelay = std::max(maxDelay, consumerRate.Delay);
-                maxLookAhead = std::max(maxLookAhead, lookAhead);
-                maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
+            auto lookAhead = consumerRate.LookAhead;
+            if (consumerRate.Minimum < consumerRate.Maximum) {
+                lookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
             }
 
-            // calculate overflow (copyback) and fascimile (copyforward) space
-            bn.LookAhead = maxLookAhead;
-            bn.LookBehind = maxLookBehind;
-
-            const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
-            const auto overflow1 = std::max(overflow0, bMax);
-            const auto overflowSize = round_up_to(overflow1, blockWidth) / blockWidth;
-
-            const auto underflow0 = std::max(bn.LookBehind, maxDelay);
-            const auto underflowSize = round_up_to(underflow0, blockWidth) / blockWidth;
-            const auto required = (bMax * 2) - bMin;
-
-            const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
-            const auto reqSize2 = 2 * (overflowSize + underflowSize);
-            auto requiredSize = std::max(reqSize1, reqSize2);
-
-            bn.OverflowCapacity = overflowSize;
-            bn.UnderflowCapacity = underflowSize;
-            bn.RequiredCapacity = requiredSize;
-
+            maxDelay = std::max(maxDelay, consumerRate.Delay);
+            maxLookAhead = std::max(maxLookAhead, lookAhead);
+            maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
         }
+
+        // calculate overflow (copyback) and fascimile (copyforward) space
+        bn.LookAhead = maxLookAhead;
+        bn.LookBehind = maxLookBehind;
+
+        const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
+        const auto overflow1 = std::max(overflow0, bMax);
+        const auto overflowSize = round_up_to(overflow1, blockWidth) / blockWidth;
+
+        const auto underflow0 = std::max(bn.LookBehind, maxDelay);
+        const auto underflowSize = round_up_to(underflow0, blockWidth) / blockWidth;
+        const auto required = (bMax * 2) - bMin;
+
+        const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
+        const auto reqSize2 = 2 * (overflowSize + underflowSize);
+        auto requiredSize = std::max(reqSize1, reqSize2);
+
+        bn.OverflowCapacity = overflowSize;
+        bn.RequiredCapacity = requiredSize;
+
+        if (!bn.IsLinear) {
+            bn.UnderflowCapacity = underflowSize;
+            const auto copyBack = producerRate.Maximum - producerRate.Minimum;
+            bn.CopyBack = round_up_to(ceiling(copyBack), blockWidth);
+        }
+
+
     }
 
 
