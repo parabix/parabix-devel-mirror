@@ -62,8 +62,33 @@ bool lexical_ordering(const Graph & G, Vec & L) {
 
 using ReverseTopologicalOrdering = SmallVector<unsigned, 256>;
 
-template <typename Vector, typename Graph>
-void transitive_closure_dag(const Vector & ordering, Graph & G) {
+#ifndef NDEBUG
+template <typename Sorting, typename Graph>
+bool is_valid_topological_sorting(const Sorting & S, const Graph & G) {
+    const auto n = num_vertices(G);
+    std::vector<unsigned> remaining(n);
+    for (unsigned i = 0; i < n; ++i) {
+        remaining[i] = in_degree(i, G);
+    }
+    std::vector<unsigned> order(S.begin(), S.end());
+    assert (order.size() == n);
+    for (const auto u : reverse(order)) {
+        if (remaining[u] != 0) {
+            return false;
+        }
+        for (const auto e : make_iterator_range(out_edges(u, G))) {
+            const auto v = target(e, G);
+            assert (remaining[v] > 0);
+            remaining[v]--;
+        }
+    }
+    return true;
+}
+#endif
+
+template <typename Sorting, typename Graph>
+void transitive_closure_dag(const Sorting & ordering, Graph & G,
+                            typename Graph::edge_property_type edge_property_value = {}) {
     // Simple transitive closure for DAGs
     for (unsigned u : ordering) {
         for (const auto e : make_iterator_range(in_edges(u, G))) {
@@ -71,18 +96,19 @@ void transitive_closure_dag(const Vector & ordering, Graph & G) {
             for (const auto f : make_iterator_range(out_edges(u, G))) {
                 const auto t = target(f, G);
                 if (edge(s, t, G).second) continue;
-                typename Graph::edge_property_type p{};
-                add_edge(s, t, p, G);
+                add_edge(s, t, edge_property_value, G);
             }
         }
     }
 }
 
-template <typename Vector, typename Graph>
-void transitive_reduction_dag(const Vector & ordering, Graph & G) {
+template <typename Sorting, typename Graph>
+void transitive_reduction_dag(const Sorting & ordering, Graph & G) {
     using Edge = typename graph_traits<Graph>::edge_descriptor;
-    BitVector sources(num_vertices(G), false);
+    BitVector sources(num_vertices(G));
     for (unsigned u : ordering ) {
+        assert (u < num_vertices(G));
+        sources.reset();
         for (auto e : make_iterator_range(in_edges(u, G))) {
             sources.set(source(e, G));
         }
@@ -91,7 +117,6 @@ void transitive_reduction_dag(const Vector & ordering, Graph & G) {
                 return sources.test(source(f, G));
             }, G);
         }
-        sources.reset();
     }
 }
 
@@ -111,5 +136,54 @@ inline void transitive_reduction_dag(Graph & G) {
     transitive_closure_dag(ordering, G);
     transitive_reduction_dag(ordering, G);
 }
+
+template <typename Graph, typename Functor>
+bool enumerateUpToNTopologicalOrderings(const Graph & G, const unsigned N, Functor f) {
+
+    // returns true if we visit all of them prior to hitting our limit N
+
+    const auto n = num_vertices(G);
+    std::vector<unsigned> indeg(n);
+    for (unsigned i = 0; i < n; ++i) {
+        indeg[i] = in_degree(i, G);
+    }
+
+    // brute-force recursive approach
+
+    std::vector<unsigned> list;
+    list.reserve(n);
+
+    unsigned orderingsFound = 0;
+
+    std::function<bool(void)> recurse = [&]() {
+        for (unsigned i = 0; i < n; ++i) {
+            if (indeg[i] == 0) {
+                list.push_back(i);
+                if (list.size() == n) {
+                    f(list);
+                    if (++orderingsFound >= N) {
+                        return true;
+                    }
+                } else {
+                    indeg[i] = -1U; // mark this as visited
+                    for (const auto e : make_iterator_range(out_edges(i, G))) {
+                        indeg[target(e, G)]--;
+                    }
+                    if (recurse()) {
+                        return true;
+                    }
+                    for (const auto e : make_iterator_range(out_edges(i, G))) {
+                        indeg[target(e, G)]++;
+                    }
+                    indeg[i] = 0;
+                }
+                list.pop_back();
+            }
+        }
+        return false;
+    };
+    return !recurse();
+}
+
 
 #endif // LEXOGRAPHIC_ORDERING_HPP

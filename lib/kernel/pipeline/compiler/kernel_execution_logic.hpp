@@ -29,7 +29,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mKernelSharedHandle, CBuilder::Protect::WRITE);
     }
-
+    #ifdef ENABLE_PAPI
+    readPAPIMeasurement(b, mKernelId, PAPIReadBeforeMeasurementArray);
+    #endif
     Value * const beforeKernelCall = startCycleCounter(b);
     Value * doSegmentRetVal = nullptr;
     if (mRethrowException) {
@@ -41,6 +43,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         doSegmentRetVal = b->CreateCall(doSegment, args);
     }
     updateCycleCounter(b, mKernelId, beforeKernelCall, CycleCounter::KERNEL_EXECUTION);
+    #ifdef ENABLE_PAPI
+    accumPAPIMeasurementWithoutReset(b, PAPIReadBeforeMeasurementArray, mKernelId, PAPIKernelCounter::PAPI_KERNEL_EXECUTION);
+    #endif
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugResume(b);
@@ -48,10 +53,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     if (mKernelCanTerminateEarly) {
         mTerminatedExplicitly = doSegmentRetVal;
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeKernelName(mKernelId);
-        debugPrint(b, "* " + prefix + "_terminatedExplicitly = %" PRIu64, mTerminatedExplicitly);
-        #endif
     } else {
         mTerminatedExplicitly = nullptr;
     }
@@ -122,14 +123,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeKernelName(mKernelId);
     #endif
-
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocation);
+    #endif
     const auto greedy = mKernel->isGreedy();
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
-            // addNextArg(mMaximumNumOfStrides);
         }
-        addNextArg(mKernelIsFinal);
+        addNextArg(b->CreateIsNotNull(mIsFinalInvocation));
     } else {
         addNextArg(mNumOfLinearStrides);
         #ifdef PRINT_DEBUG_MESSAGES
@@ -150,7 +152,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
             const auto streamSet = source(port, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
-            const StreamSetBuffer * const buffer = bn.Buffer;
 
             const auto  deferred = rt.IsDeferred;
 
@@ -187,7 +188,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             Value * addr = nullptr;
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
                 assert ("internally synchronized I/O must be linear!" && !bn.NonLinear);
-                addr = getVirtualBaseAddress(b, rt, buffer, processed);
+                addr = getVirtualBaseAddress(b, rt, bn, processed);
             } else {
                 addr = mInputVirtualBaseAddressPhi[rt.Port];
             }
@@ -243,12 +244,14 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             produced = mAlreadyProducedPhi[rt.Port];
         }
         const auto managed = rt.IsShared || mKernelIsInternallySynchronized || rt.IsManaged;
+
         if (LLVM_UNLIKELY(rt.IsShared)) {
             addNextArg(b->CreatePointerCast(buffer->getHandle(), voidPtrTy));
         } else if (LLVM_UNLIKELY(managed)) {
             mReturnedOutputVirtualBaseAddressPtr[rt.Port] = addVirtualBaseAddressArg(b, buffer, args);
         } else {
-            addNextArg(b->CreatePointerCast(getVirtualBaseAddress(b, rt, buffer, produced), voidPtrTy));
+            Value * const vba = getVirtualBaseAddress(b, rt, bn, produced);
+            addNextArg(b->CreatePointerCast(vba, voidPtrTy));
         }
 
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
@@ -380,6 +383,20 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
             } else if (rate.isBounded() || rate.isUnknown()) {
                 assert (mReturnedProducedItemCountPtr[outputPort]);
                 produced = b->CreateLoad(mReturnedProducedItemCountPtr[outputPort]);
+            } else if (rate.isRelative()) {
+                auto getRefPort = [&] () {
+                    const auto refPort = getReference(outputPort);
+                    if (LLVM_LIKELY(refPort.Type == PortType::Input)) {
+                        return getInput(mKernelId, refPort);
+                    } else {
+                        return getOutput(mKernelId, refPort);
+                    }
+                };
+                const BufferPort & ref = mBufferGraph[getRefPort()];
+                if (mProducedDeferredItemCount[ref.Port]) {
+                    mProducedDeferredItemCount[outputPort] = b->CreateMulRational(mProducedDeferredItemCount[ref.Port], rate.getRate());
+                }
+                produced = b->CreateMulRational(mProducedItemCount[ref.Port], rate.getRate());
             } else {
                 SmallVector<char, 256> tmp;
                 raw_svector_ostream out(tmp);

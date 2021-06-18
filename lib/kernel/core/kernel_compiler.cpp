@@ -96,14 +96,14 @@ void KernelCompiler::constructStreamSetBuffers(BuilderRef b) {
     mStreamSetInputBuffers.resize(numOfInputStreams);
     for (unsigned i = 0; i < numOfInputStreams; ++i) {
         const Binding & input = mInputStreamSets[i];
-        mStreamSetInputBuffers[i].reset(new ExternalBuffer(b, input.getType(), true, 0));
+        mStreamSetInputBuffers[i].reset(new ExternalBuffer(i, b, input.getType(), true, 0));
     }
     mStreamSetOutputBuffers.clear();
     const auto numOfOutputStreams = mOutputStreamSets.size();
     mStreamSetOutputBuffers.resize(numOfOutputStreams);
     for (unsigned i = 0; i < numOfOutputStreams; ++i) {
         const Binding & output = mOutputStreamSets[i];
-        mStreamSetOutputBuffers[i].reset(new ExternalBuffer(b, output.getType(), true, 0));
+        mStreamSetOutputBuffers[i].reset(new ExternalBuffer(i + numOfInputStreams, b, output.getType(), true, 0));
     }
 }
 
@@ -401,7 +401,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     reset(mUpdatableProcessedInputItemPtr, numOfInputs);
 
     #ifdef CHECK_IO_ADDRESS_RANGE
-    auto checkStreamRange = [&](const std::unique_ptr<StreamSetBuffer> & buffer, const Binding & binding, Value * const startItemCount) {
+    auto checkStreamRange = [&](const StreamSetBuffer * const buffer, const Binding & binding, Value * const startItemCount) {
 
         SmallVector<char, 256> tmp;
         raw_svector_ostream out(tmp);
@@ -416,11 +416,18 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         Value * const baseAddress = buffer->getBaseAddress(b);
         Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, fromIndex);
         Value * const start = b->CreatePointerCast(startPtr, int8PtrTy);
-        Value * const toIndex = b->CreateCeilUDiv(buffer->getCapacity(b), BLOCK_WIDTH);
+
+        Value * const endPos = b->CreateAdd(startItemCount, buffer->getCapacity(b));
+        Value * const toIndex = b->CreateCeilUDiv(endPos, BLOCK_WIDTH);
         Value * const endPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, toIndex);
         Value * const end = b->CreatePointerCast(endPtr, int8PtrTy);
 
         Value * const length = b->CreatePtrDiff(end, start);
+
+        b->CreateAssert(b->CreateICmpULE(start, end),
+                        "%s: illegal kernel I/O address range [0x%" PRIx64 ", 0x%" PRIx64 ")",
+                        b->GetString(out.str()), start, end);
+
         b->CheckAddress(start, length, out.str());
 
 
@@ -433,13 +440,16 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// ----------------------------------------------------
         /// virtual base address
         /// ----------------------------------------------------
-        auto & buffer = mStreamSetInputBuffers[i];
-        assert (buffer.get() && buffer->isLinear());
+        StreamSetBuffer * const buffer = mStreamSetInputBuffers[i].get();
+        assert (buffer && buffer->isLinear());
+        assert (isa<ExternalBuffer>(buffer));
+
         const Binding & input = mInputStreamSets[i];
         Value * const virtualBaseAddress = b->CreatePointerCast(nextArg(), buffer->getPointerType());
         Value * const localHandle = b->CreateAllocaAtEntryPoint(buffer->getHandleType(b));
         buffer->setHandle(localHandle);
         buffer->setBaseAddress(b, virtualBaseAddress);
+
         if (LLVM_UNLIKELY(enableAsserts)) {
             b->CreateAssert(buffer->getBaseAddress(b), "%s.%s: virtual base address cannot be null",
                             b->GetString(getName()), b->GetString(input.getName()));
@@ -465,7 +475,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             assert (port.Type == PortType::Input && port.Number < i);
             assert (mProcessedInputItemPtr[port.Number]);
             Value * const ref = b->CreateLoad(mProcessedInputItemPtr[port.Number]);
-            processed = b->CreateMulRate(ref, rate.getRate());
+            processed = b->CreateMulRational(ref, rate.getRate());
         }
         assert (processed);
         assert (processed->getType() == sizeTy);
@@ -479,7 +489,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         if (LLVM_UNLIKELY(internallySynchronized || requiresItemCount(input))) {
             accessible = nextArg();
         } else {
-            accessible = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+            accessible = b->CreateCeilUMulRational(mFixedRateFactor, rate.getRate() / fixedRateLCM);
         }
         assert (accessible);
         assert (accessible->getType() == sizeTy);
@@ -513,8 +523,9 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// ----------------------------------------------------
         /// logical buffer base address
         /// ----------------------------------------------------
-        const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i];
-        assert (buffer.get() && buffer->isLinear());
+        StreamSetBuffer * const buffer = mStreamSetOutputBuffers[i].get();
+        assert (buffer && buffer->isLinear());
+
         const Binding & output = mOutputStreamSets[i];
         const auto isShared = output.hasAttribute(AttrId::SharedManagedBuffer);
         const auto isLocal = internallySynchronized || isShared || Kernel::isLocalBuffer(output, false);
@@ -534,6 +545,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             Value * const localHandle = b->CreateAllocaAtEntryPoint(buffer->getHandleType(b));
             buffer->setHandle(localHandle);
             buffer->setBaseAddress(b, virtualBaseAddress);
+            assert (isa<ExternalBuffer>(buffer));
         }
         assert (buffer->getHandle());
         if (LLVM_UNLIKELY(enableAsserts)) {
@@ -560,7 +572,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             assert (port.Type == PortType::Input || (port.Type == PortType::Output && port.Number < i));
             const auto & items = (port.Type == PortType::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
             Value * const ref = b->CreateLoad(items[port.Number]);
-            produced = b->CreateMulRate(ref, rate.getRate());
+            produced = b->CreateMulRational(ref, rate.getRate());
         }
         assert (produced);
         assert (produced->getType() == sizeTy);
@@ -583,12 +595,13 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
                 writable = nextArg();
                 assert (writable && writable->getType() == sizeTy);
             } else if (mFixedRateFactor) {
-                writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+                writable = b->CreateCeilUMulRational(mFixedRateFactor, rate.getRate() / fixedRateLCM);
                 assert (writable && writable->getType() == sizeTy);
             }
             Value * capacity = nullptr;
             if (writable) {
                 capacity = b->CreateAdd(produced, writable);
+                buffer->setCapacity(b, capacity);
                 #ifdef CHECK_IO_ADDRESS_RANGE
                 if (LLVM_UNLIKELY(enableAsserts)) {
                     checkStreamRange(buffer, output, produced);
@@ -596,8 +609,8 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
                 #endif
             } else {
                 capacity = ConstantExpr::getNeg(b->getSize(1));
+                buffer->setCapacity(b, capacity);
             }
-            buffer->setCapacity(b, capacity);
         }
         mWritableOutputItems[i] = writable;
     }
@@ -1100,6 +1113,7 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeOptions o
             case ScalarType::ThreadLocal:
                 if (options == InitializeOptions::SkipThreadLocal) continue;
                 assert (threadLocalIndex < threadLocalCount);
+                assert (mThreadLocalHandle);
                 indices[1] = b->getInt32(threadLocalIndex++);
                 scalar = b->CreateInBoundsGEP(mThreadLocalHandle, indices);
                 break;
@@ -1198,7 +1212,34 @@ const BindingMapEntry & KernelCompiler::getBinding(const BindingType type, const
         case BindingType::StreamOutput:
             out << "streamset"; break;
     }
-    out << " named " << name;
+    out << " named \"" << name << "\"\n"
+           "Currently contains:";
+
+
+    auto listAvailableBindings = [&](const Bindings & bindings) {
+        if (LLVM_UNLIKELY(bindings.empty())) {
+            out << "<no bindings>";
+        } else {
+            char joiner = ' ';
+            for (const auto & binding : bindings) {
+                out << joiner << binding.getName();
+                joiner = ',';
+            }
+        }
+        out << '\n';
+    };
+
+    switch (type) {
+        case BindingType::ScalarInput:
+            listAvailableBindings(mInputScalars); break;
+        case BindingType::ScalarOutput:
+            listAvailableBindings(mOutputScalars); break;
+        case BindingType::StreamInput:
+            listAvailableBindings(mInputStreamSets); break;
+        case BindingType::StreamOutput:
+            listAvailableBindings(mOutputStreamSets); break;
+    }
+
     report_fatal_error(out.str());
 }
 
@@ -1227,7 +1268,7 @@ StreamSetPort KernelCompiler::getStreamPort(const StringRef name) const {
 
     SmallVector<char, 256> tmp;
     raw_svector_ostream out(tmp);
-    out << "Kernel " << getName() << " does not contain a streamset named " << name;
+    out << "Kernel " << getName() << " does not contain a streamset named: \"" << name << "\"";
     report_fatal_error(out.str());
 }
 

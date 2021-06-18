@@ -5,6 +5,7 @@
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include "../pipeline_compiler.hpp"
 #include <kernel/core/refwrapper.h>
 #include <util/extended_boost_graph_containers.h>
 #include <toolchain/toolchain.h>
@@ -40,6 +41,10 @@ using LengthAssertions = PipelineKernel::LengthAssertions;
 using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
+
+using Vertex = unsigned;
+
+using StreamSetId = unsigned;
 
 struct RelationshipNode {
 
@@ -139,36 +144,48 @@ struct RelationshipType : public StreamSetPort {
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType, no_property>;
 
-struct Relationships : public RelationshipGraph {
+struct ProgramGraph : public RelationshipGraph {
     using Vertex = RelationshipGraph::vertex_descriptor;
 
     template <typename T>
     inline Vertex add(T key) {
-        RelationshipNode k(key);
-        return __add(k);
+        return __add(RelationshipNode{key});
     }
 
     template <typename T>
     inline Vertex set(T key, Vertex v) {
-        RelationshipNode k(key);
-        return __set(k, v);
+        return __set(RelationshipNode{key}, v);
     }
 
     template <typename T>
     inline Vertex find(T key) {
-        RelationshipNode k(key);
-        return __find(k);
+        return __find(RelationshipNode{key});
     }
 
     template <typename T>
     inline Vertex addOrFind(T key, const bool permitAdd = true) {
-        RelationshipNode k(key);
-        return __addOrFind(k, permitAdd);
+        return __addOrFind(RelationshipNode{key}, permitAdd);
     }
 
     RelationshipGraph & Graph() {
         return static_cast<RelationshipGraph &>(*this);
     }
+
+    const RelationshipGraph & Graph() const {
+        return static_cast<const RelationshipGraph &>(*this);
+    }
+
+    ProgramGraph() = default;
+
+    ProgramGraph(size_t n) noexcept : RelationshipGraph(n) { }
+
+    ProgramGraph(ProgramGraph && G) noexcept
+    : RelationshipGraph(std::move(G.Graph()))
+    , mMap(std::move(G.mMap)) {
+
+    }
+
+    ProgramGraph & operator=(ProgramGraph && G) = default;
 
 private:
 
@@ -227,11 +244,19 @@ enum BufferType : unsigned {
 
 ENABLE_ENUM_FLAGS(BufferType)
 
+enum BufferLocality {
+    ThreadLocal
+    , PartitionLocal
+
+    , GloballyShared
+};
+
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     unsigned Type = 0;
-    bool NonLocal = false;
     bool NonLinear = false;
+
+    BufferLocality Locality = BufferLocality::ThreadLocal;
 
     unsigned CopyBack = 0;
     unsigned CopyBackReflection = 0;
@@ -239,6 +264,12 @@ struct BufferNode {
     unsigned LookAhead = 0;
     unsigned LookBehind = 0;
     unsigned MaxAdd = 0;
+
+    size_t   BufferStart = 0;
+
+    size_t   RequiredCapacity = 0;
+    size_t   OverflowCapacity = 0;
+    size_t   UnderflowCapacity = 0;
 
     unsigned OutputItemCountId = 0;
 
@@ -262,7 +293,9 @@ struct BufferNode {
         return (Type & BufferType::Shared) != 0;
     }
 
-
+    bool isNonThreadLocal() const {
+        return (Locality != BufferLocality::ThreadLocal);
+    }
 
 };
 
@@ -273,8 +306,8 @@ struct BufferPort {
     Rational Minimum;
     Rational Maximum;
 
-    unsigned LocalPortId = 0U;
-    unsigned GlobalPortId = 0U;
+//    unsigned LocalPortId = 0U;
+//    unsigned GlobalPortId = 0U;
 
     // binding attributes
     unsigned Add = 0;
@@ -310,8 +343,6 @@ struct BufferPort {
 };
 
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferPort>;
-
-using BufferVertexSet = SmallFlatSet<BufferGraph::vertex_descriptor, 32>;
 
 struct ConsumerNode {
     mutable Value * Consumed = nullptr;
@@ -364,70 +395,100 @@ enum CountingType : unsigned {
 
 ENABLE_ENUM_FLAGS(CountingType)
 
-using PipelineIOGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 template <typename T>
 using OwningVector = std::vector<std::unique_ptr<T>>;
 
-using Partition = std::vector<unsigned>;
+using KernelIdVector = std::vector<unsigned>;
 
-using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
+using OrderingDAWG = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
-struct PartitioningGraphNode {
-    enum TypeId {
-        Partition = 0
-        , Variable
-        , Fixed
-        , Greedy
-        , PartialSum
-        , Relative
-    };
+struct PartitionData {
 
-    TypeId Type = TypeId::Partition;
-    unsigned StreamSet = 0;
-    unsigned Delay = 0;
+    KernelIdVector          Kernels;
+    std::vector<Rational>   Repetitions;
+    OrderingDAWG            Orderings;
+    Rational                ExpectedRepetitions{0};
 
-    PartitioningGraphNode() = default;
 };
 
-struct PartitioningGraphEdge {
-    enum TypeId : unsigned {
-        IOPort = 0
-        , Channel
-        , Reference
-    };
+using PartitionGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionData, StreamSetId>;
 
-    TypeId          Type;
-    unsigned        Kernel;
-    StreamSetPort   Port;
 
-    PartitioningGraphEdge(unsigned kernel, StreamSetPort port) : Type(IOPort), Kernel(kernel), Port(port) { }
-    PartitioningGraphEdge(TypeId type = IOPort, unsigned kernel = 0, StreamSetPort port = StreamSetPort{}) : Type(type), Kernel(kernel), Port(port) { }
-};
+struct PartitionIOData {
 
-bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B) {
-    assert (A.Type == B.Type);
-    if (A.Kernel < B.Kernel) {
-        return true;
+    // RefWrapper<const BufferPort> Port;
+    BufferPort Port;
+    unsigned Kernel;
+
+    PartitionIOData() = default;
+
+    PartitionIOData(BufferPort & port, unsigned kernel)
+    : Port(port)
+    , Kernel(kernel) {
+
     }
-    return (A.Port < B.Port);
-}
 
-using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
+};
+
+using PartitionIOGraph =  adjacency_list<vecS, vecS, bidirectionalS, no_property, PartitionIOData>;
+
+using PartitionDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property>;
+
+struct PartitionDataflowEdge {
+    unsigned    KernelId;
+    Rational    Expected;
+
+    PartitionDataflowEdge() = default;
+
+    PartitionDataflowEdge(unsigned id, Rational expected)
+    : KernelId(id)
+    , Expected(expected) {
+
+    }
+
+};
+
+using PartitionDataflowGraph = adjacency_list<vecS, vecS, bidirectionalS, Rational, PartitionDataflowEdge>;
+
+using PartitionOrderingGraph = adjacency_list<hash_setS, vecS, bidirectionalS, std::vector<unsigned>, double>;
+
+struct PartitionOrdering {
+    PartitionOrderingGraph  Graph;
+    KernelIdVector          Kernels;
+    const unsigned          NumOfKernelSets;
+
+    PartitionOrdering(PartitionOrderingGraph && graph, unsigned numOfKernelSets, flat_set<unsigned> && kernels)
+    : Graph(graph)
+    , Kernels(kernels.begin(), kernels.end())
+    , NumOfKernelSets(numOfKernelSets) {
+
+    }
+};
+
+struct SchedulingNode {
+
+    enum NodeType {
+        IsKernel = 0
+        , IsStreamSet = 1
+        , IsExternal = 2
+    };
+
+    NodeType Type = NodeType::IsKernel;
+    Rational Size;
+
+    SchedulingNode() = default;
+
+    SchedulingNode(NodeType ty, Rational size = Rational{0})
+    : Type(ty)
+    , Size(size) {
+
+    }
+};
+
+using SchedulingGraph = adjacency_list<vecS, vecS, bidirectionalS, SchedulingNode, Rational>;
 
 using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
-
-struct IOCheckEdge {
-    unsigned        Kernel = 0;
-    StreamSetPort   Port;
-
-    IOCheckEdge() = default;
-    IOCheckEdge(unsigned kernel, StreamSetPort port) : Kernel(kernel), Port(port) { }
-};
-
-using IOCheckGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, IOCheckEdge>;
-
-using LengthConstraintGraph = adjacency_list<vecS, vecS, undirectedS>;
 
 }
 

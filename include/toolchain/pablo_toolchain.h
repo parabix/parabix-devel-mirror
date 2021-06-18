@@ -15,7 +15,7 @@ namespace llvm { namespace cl { class OptionCategory; } }
 namespace pablo {
 
 enum PabloDebugFlags {
-    VerifyPablo, DumpTrace,
+    VerifyPablo, DumpTrace
 };
 extern std::string ShowOptimizedPabloOption;
 extern std::string ShowPabloOption;

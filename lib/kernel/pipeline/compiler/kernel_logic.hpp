@@ -4,6 +4,8 @@
 
 namespace kernel {
 
+#warning CACHE ACTIVE KERNEL VALUES AT ENTRY BLOCK
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -42,6 +44,26 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b, Value * con
         const Binding & input = br.Binding;
         Value * const fullyProcessed = truncateBlockSize(b, input, processed, terminated);
         mFullyProcessedItemCount[port] = fullyProcessed;
+        if (CheckAssertions) {
+            const auto streamSet = source(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+
+            if (bn.Locality == BufferLocality::ThreadLocal) {
+                Value * const produced = mLocallyAvailableItems[streamSet]; assert (produced);
+                // NOTE: static linear buffers are assumed to be threadlocal.
+                Value * const fullyConsumed = b->CreateICmpEQ(produced, processed);
+                Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
+                Value * const fatalError = b->CreateICmpEQ(mTerminatedAtLoopExitPhi, fatal);
+                Value * const valid = b->CreateOr(fullyConsumed, fatalError);
+                Constant * const bindingName = b->GetString(input.getName());
+
+                b->CreateAssert(valid,
+                                "%s.%s: local available item count (%" PRId64 ") does not match "
+                                "its processed item count (%" PRId64 ")",
+                                mCurrentKernelName, bindingName,
+                                produced, processed);
+            }
+        }
     }
 }
 
@@ -111,14 +133,7 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const BufferPort & inp
     }
     Constant * const lookAhead = b->getSize(inputPort.LookAhead);
     Value * const closed = isClosed(b, inputPort.Port);
-    if (LLVM_UNLIKELY(CheckAssertions)) {
-        const Binding & binding = inputPort.Binding;
-        b->CreateAssert(b->CreateOr(b->CreateICmpUGE(itemCount, lookAhead), closed),
-                        "%s.%s: look ahead exceeds item count",
-                        mCurrentKernelName,
-                        b->GetString(binding.getName()));
-    }
-    Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
+    Value * const reducedItemCount = b->CreateSaturatingSub(itemCount, lookAhead);
     return b->CreateSelect(closed, itemCount, reducedItemCount);
 }
 
@@ -233,24 +248,6 @@ Value * PipelineCompiler::getThreadLocalHandlePtr(BuilderRef b, const unsigned k
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief supportsInternalSynchronization
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::supportsInternalSynchronization() const {
-    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized))) {
-        if (LLVM_UNLIKELY(mMayHaveNonLinearIO)) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "PipelineCompiler error: " <<
-                   mKernel->getName() << " is internally synchronized"
-                   " but permits non-linear I/O.";
-            report_fatal_error(out.str());
-        }
-        return true;
-    }
-    return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isBounded
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::isBounded() const {
@@ -258,7 +255,7 @@ bool PipelineCompiler::isBounded() const {
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
-        if (bn.NonLocal) {
+        if (bn.isNonThreadLocal()) {
             const BufferPort & br = mBufferGraph[e];
             const Binding & binding = br.Binding;
             const ProcessingRate & rate = binding.getRate();
@@ -387,6 +384,21 @@ bool PipelineCompiler::hasExternalIO(const size_t kernel) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasAtLeastOneNonGreedyInput
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::hasAtLeastOneNonGreedyInput() const {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & bp = mBufferGraph[e];
+        const Binding & binding = bp.Binding;
+        if (!binding.getRate().isGreedy()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+#if 0
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyPipelineInputs
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::identifyLocalPortIds(const unsigned kernelId) {
@@ -430,6 +442,7 @@ void PipelineCompiler::identifyLocalPortIds(const unsigned kernelId) {
     assert ("gap in local output port ids?" && (static_cast<int>(outputs.count()) == outputs.find_first_unset()));
 
 }
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex
@@ -505,13 +518,10 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mNumOfTruncatedInputBuffers = 0;
 
     mHasZeroExtendedInput = nullptr;
-    mZeroExtendBufferPhi = nullptr;
-    mAnyRemainingInput = nullptr;
     mExhaustedPipelineInputPhi = nullptr;
     mExhaustedInputAtJumpPhi = nullptr;
 
-    mKernelIsFinal = nullptr;
-    mKernelIsPenultimate = nullptr;
+    mAnyClosed = nullptr;
 
     mKernelInsufficientInput = nullptr;
     mKernelTerminated = nullptr;
@@ -519,6 +529,12 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mKernelInitiallyTerminatedExit = nullptr;
 
     mMaximumNumOfStrides = nullptr;
+    mNumOfLinearStridesPhi = nullptr;
+    mNumOfLinearStrides = nullptr;
+    mFixedRateFactorPhi = nullptr;
+    mFinalPartialStrideFixedRateRemainderPhi = nullptr;
+    mIsFinalInvocationPhi = nullptr;
+    mIsFinalInvocation = nullptr;
 
     assert (mKernelId >= FirstKernel);
     assert (mKernelId <= LastKernel);
@@ -529,7 +545,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mInitiallyProcessedDeferredItemCount.reset(numOfInputs);
     mAlreadyProcessedPhi.reset(numOfInputs);
     mAlreadyProcessedDeferredPhi.reset(numOfInputs);
-    mInputEpoch.reset(numOfInputs);
     mIsInputZeroExtended.reset(numOfInputs);
     mInputVirtualBaseAddressPhi.reset(numOfInputs);
     mFirstInputStrideLength.reset(numOfInputs);
@@ -539,8 +554,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mProcessedItemCount.reset(numOfInputs);
     mProcessedDeferredItemCountPtr.reset(numOfInputs);
     mProcessedDeferredItemCount.reset(numOfInputs);
-    mInsufficientIOProcessedPhi.reset(numOfInputs);
-    mInsufficientIOProcessedDeferredPhi.reset(numOfInputs);
     mUpdatedProcessedPhi.reset(numOfInputs);
     mUpdatedProcessedDeferredPhi.reset(numOfInputs);
     mFullyProcessedItemCount.reset(numOfInputs);
@@ -559,8 +572,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mProducedDeferredItemCountPtr.reset(numOfOutputs);
     mProducedDeferredItemCount.reset(numOfOutputs);
     mProducedAtTerminationPhi.reset(numOfOutputs);
-    mInsufficientIOProducedPhi.reset(numOfOutputs);
-    mInsufficientIOProducedDeferredPhi.reset(numOfOutputs);
     mUpdatedProducedPhi.reset(numOfOutputs);
     mUpdatedProducedDeferredPhi.reset(numOfOutputs);
     mFullyProducedItemCount.reset(numOfOutputs);

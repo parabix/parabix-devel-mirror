@@ -196,9 +196,6 @@ static cl::alias ColorAlias("colours", cl::desc("Alias for -color"), cl::aliasop
 // 
 static void icgrep_error_handler(void *UserData, const std::string &Message, bool GenCrashDiag) {
     // Modified from LLVM's internal report_fatal_error logic.
-    #ifndef NDEBUG
-    throw std::runtime_error(Message);
-    #else
     SmallVector<char, 64> Buffer;
     raw_svector_ostream OS(Buffer);
     OS << "icgrep ERROR: " << Message << "\n";
@@ -209,7 +206,6 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
     // particular that we remove files registered with RemoveFileOnSignal.
     llvm::sys::RunInterruptHandlers();
     exit(InternalFailureCode);
-    #endif
 }
 
 void InitializeCommandLineInterface(int argc, char *argv[]) {

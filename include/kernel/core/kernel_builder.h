@@ -11,7 +11,7 @@ class KernelBuilder : public virtual IDISA::IDISA_Builder {
     friend class KernelCompiler;
 public:
 
-    using Rational = boost::rational<unsigned>;
+    using Rational = ProcessingRate::Rational;
 
     enum TerminationCode : unsigned {
         None = 0
@@ -221,19 +221,19 @@ public:
 
     // rational math functions
 
-    llvm::Value * CreateUDivRate(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
+    llvm::Value * CreateUDivRational(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateCeilUDivRate(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
+    llvm::Value * CreateCeilUDivRational(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateMulRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateMulRational(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateCeilUMulRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateCeilUMulRational(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateURemRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateURemRational(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateRoundDownRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateRoundDownRational(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateRoundUpRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateRoundUpRational(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
     KernelCompiler * getCompiler() const noexcept {
         return mCompiler;

@@ -295,11 +295,9 @@ inline bool ParabixObjectCache::requiresCacheCleanUp() noexcept {
     if (LLVM_UNLIKELY(mStartedCacheCleanupDaemon)) {
         return false;
     }
-    FileLock f(fs::path{mCachePath.str()});
-    if (LLVM_UNLIKELY(f.locked())) {
-        return true;
-    }
-    return false;
+    // if we cannot lock the pid file then an earlier process
+    // must have acquired it.
+    return FileLock{fs::path{mCachePath.str()}}.locked();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -308,8 +306,8 @@ inline bool ParabixObjectCache::requiresCacheCleanUp() noexcept {
 void ParabixObjectCache::initiateCacheCleanUp() noexcept {
     if (LLVM_UNLIKELY(requiresCacheCleanUp())) {
         mStartedCacheCleanupDaemon = true;
-        // syslog?
-        if (fork() == 0) {
+        const auto pid = fork();
+        if (pid == 0) {
             char * const cachePath = const_cast<char *>(mCachePath.c_str());
             char * args[3] = {const_cast<char *>(CACHE_JANITOR_FILE_NAME), cachePath, nullptr};
             Path janitorFileName(codegen::ProgramName);
@@ -317,8 +315,18 @@ void ParabixObjectCache::initiateCacheCleanUp() noexcept {
             sys::path::append(janitorFileName, CACHE_JANITOR_FILE_NAME);
             char * const janitorPath = const_cast<char *>(janitorFileName.c_str());
             if (execvp(janitorPath, args) < 0) {
+                #ifndef NDEBUG
+                SmallVector<char, 1024> tmp;
+                raw_svector_ostream out(tmp);
+                out << "failed to exec cache cleanup deamon \"" << janitorPath << "\"";
+                perror(reinterpret_cast<const char *>(out.str().bytes().begin()));
+                #endif
                 exit(errno);
             }
+        } else if (pid < 0) {
+            #ifndef NDEBUG
+            perror("failed to fork cache cleanup deamon process");
+            #endif
         }
     }
 }
@@ -430,4 +438,5 @@ inline void ParabixObjectCache::saveCacheSettings() noexcept {
 
 ParabixObjectCache::ParabixObjectCache() {
     loadCacheSettings();
+    initiateCacheCleanUp();
 }

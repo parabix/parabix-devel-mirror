@@ -864,6 +864,9 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         StreamSet * ColorizedCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
         E->CreateKernelCall<MatchCoordinatesKernel>(ColorizedBreaks, ColorizedBreaks, ColorizedCoords, 1);
 
+        // TODO: source coords >= colorized coords until the final stride?
+        // E->AssertEqualLength(SourceCoords, ColorizedCoords);
+
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
         Kernel * const matchK = E->CreateKernelCall<ColorizedReporter>(ColorizedBytes, SourceCoords, ColorizedCoords, callbackObject);
         matchK->link("accumulate_match_wrapper", accumulate_match_wrapper);

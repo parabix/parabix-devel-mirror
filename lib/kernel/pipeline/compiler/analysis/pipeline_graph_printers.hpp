@@ -1,8 +1,9 @@
 #ifndef PIPELINE_GRAPH_PRINTER_HPP
 #define PIPELINE_GRAPH_PRINTER_HPP
 
-#include "relationship_analysis.hpp"
+#include "pipeline_analysis.hpp"
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/graph/strong_components.hpp>
 
 namespace kernel {
 
@@ -40,6 +41,9 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
             out << '(' << v.numerator() << '/' << v.denominator() << ')';
         }
     };
+
+    std::vector<unsigned> component(num_vertices(G));
+    strong_components(G, component.data());
 
     out << "digraph " << name << " {\n";
     for (const auto v : make_iterator_range(vertices(G))) {
@@ -122,10 +126,12 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
     for (const auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
         const auto t = target(e, G);
-        out << "v" << s << " -> v" << t << " [";
+        out << "v" << s << " -> v" << t << " ";
+        char joiner = '[';
         const RelationshipType & rt = G[e];
         if (rt.Reason != ReasonType::OrderingConstraint) {
-            out  << "label=\"";
+            out  << joiner << "label=\"";
+            joiner = ',';
             switch (rt.Type) {
                 case PortType::Input:
                     out << 'I';
@@ -154,6 +160,10 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
             out << "\"";
         }
 
+        if (LLVM_UNLIKELY(component[s] == component[t])) {
+            out << joiner << "penwidth=3";
+            joiner = ',';
+        }
 
         switch (rt.Reason) {
             case ReasonType::None:
@@ -161,13 +171,13 @@ void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_o
                 break;
             case ReasonType::ImplicitPopCount:
             case ReasonType::ImplicitRegionSelector:
-                out << " color=blue";
+                out << joiner << "color=blue";
                 break;
             case ReasonType::Reference:
-                out << " color=gray";
+                out << joiner << "color=gray";
                 break;
             case ReasonType::OrderingConstraint:
-                out << " color=red";
+                out << joiner << "color=red";
                 break;
         }
         out << "];\n";
@@ -205,12 +215,28 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
     auto printStreamSet = [&](const unsigned streamSet) {
         out << "v" << streamSet << " [shape=record,";
         const BufferNode & bn = mBufferGraph[streamSet];
-        if (bn.NonLocal) {
-            out << "style=bold,";
+        switch (bn.Locality) {
+            case BufferLocality::GloballyShared:
+            case BufferLocality::PartitionLocal:
+                out << "style=bold,";
+            default:
+                break;
         }
-        out << "label=\"" << streamSet << "|{";
+
+        switch (bn.Locality) {
+            case BufferLocality::ThreadLocal:
+            case BufferLocality::PartitionLocal:
+                out << "color=blue,";
+            default:
+                break;
+        }
 
         const StreamSetBuffer * const buffer = bn.Buffer;
+
+        out << "label=\"" << streamSet << " (" << buffer->getId() << ") |{";
+
+
+
         if (buffer == nullptr) {
             out << '?';
         } else {
@@ -274,6 +300,8 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (bn.MaxAdd) {
             out << "|+" << bn.MaxAdd;
         }
+
+
         out << "}}\"];\n";
 
     };
@@ -310,19 +338,29 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
         const Kernel * const kernelObj = getKernel(kernel);
 
+        assert (kernelObj);
 
         const auto explicitFinalPartialStride = kernelObj->requiresExplicitPartialFinalStride();
         const auto nonLinear = mayHaveNonLinearIO(kernel);
 
         const auto borders = nonLinear ? '2' : '1';
-
-
-
         out << "v" << kernel << " [label=\"[" <<
-                kernel << "] " << name << "\\n"
-                " Expected:  ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
-                                print_rational(MaximumNumOfStrides[kernel]) << "]\\n"
-                "\" shape=rect,style=rounded,peripheries=" << borders;
+                kernel << "] " << name << "\\n";
+        if (MinimumNumOfStrides.size() > 0) {
+            out << " Expected: [";
+            if (MaximumNumOfStrides.size() > 0) {
+                print_rational(MinimumNumOfStrides[kernel]) << ',';
+                print_rational(MaximumNumOfStrides[kernel]);
+            } else {
+                print_rational(MinimumNumOfStrides[kernel]) << ",?";
+            }
+            out << "]\\n";
+        }
+        if (kernelObj->canSetTerminateSignal()) {
+            out << "<CanTerminateEarly>\\n";
+        }
+
+        out << "\" shape=rect,style=rounded,peripheries=" << borders;
                 if (explicitFinalPartialStride) {
                     out << ",color=\"blue\"";
                 }
@@ -344,7 +382,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
     printKernel(PipelineInput, "P_{in}", true);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
+        const Kernel * const kernel = getKernel(i); assert (kernel);
         auto name = kernel->getName().str();
         boost::replace_all(name, "\"", "\\\"");
         printKernel(i, name, false);
@@ -406,7 +444,10 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                 break;
             default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
         }
-        out << " {G" << pd.GlobalPortId << ",L" << pd.LocalPortId << '}';
+        // out << " {G" << pd.GlobalPortId << ",L" << pd.LocalPortId << '}';
+
+
+
         if (pd.IsPrincipal) {
             out << " [P]";
         }
@@ -430,7 +471,9 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (pd.LookAhead) {
             out << " [LA:" << pd.LookAhead << ']';
         }
-
+        if (pd.Delay) {
+            out << " [Delay:" << pd.Delay << ']';
+        }
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
         out << "\\n" << name << "\"";
