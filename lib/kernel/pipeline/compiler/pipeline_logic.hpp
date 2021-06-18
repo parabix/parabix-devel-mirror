@@ -15,7 +15,7 @@ namespace llvm {
 template<> class TypeBuilder<pthread_t, false> {
 public:
   static Type *get(LLVMContext& C) {
-    return ArrayType::get(IntegerType::getInt8Ty(C), sizeof(pthread_t));
+    return IntegerType::getIntNTy(C, sizeof(pthread_t) * CHAR_BIT);
   }
 };
 }
@@ -471,6 +471,14 @@ enum : unsigned {
 
 namespace {
 
+void __report_pthread_create_error(const int r) {
+    SmallVector<char, 256> tmp;
+    raw_svector_ostream out(tmp);
+    out << "Fatal error: pipeline failed to spawn requested number of threads.\n"
+           "pthread_create returned error code " << r << ".";
+    report_fatal_error(out.str());
+}
+
 #if BOOST_OS_MACOS
 
 // TODO: look into thread affinity for osx
@@ -521,13 +529,7 @@ void __pipeline_pthread_create_on_cpu(pthread_t * pthread, void *(*start_routine
     pthread_attr_destroy(&attr);
     if (LLVM_UNLIKELY(r != 0)) {
         const auto r = pthread_create(pthread, nullptr, start_routine, arg);
-        if (LLVM_UNLIKELY(r != 0)) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "Fatal error: pipeline failed to spawn requested number of threads.\n"
-                   "pthread_create returned error code " << r << ".";
-            report_fatal_error(out.str());
-        }
+        if (LLVM_UNLIKELY(r != 0)) __report_pthread_create_error(r);
     }
 }
 

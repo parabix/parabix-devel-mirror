@@ -149,11 +149,6 @@ struct BufferLayoutOptimizer final : public PermutationBasedEvolutionaryAlgorith
         assert (candidates.empty());
         assert (initialPopulation.empty());
 
-        const auto t0 = std::chrono::high_resolution_clock::now();
-
-        Candidate candidate;
-        candidate.reserve(candidateLength);
-
         std::vector<Pack> H;
         H.reserve(candidateLength);
 
@@ -184,7 +179,8 @@ struct BufferLayoutOptimizer final : public PermutationBasedEvolutionaryAlgorith
             std::iota(J.begin(), J.end(), 0);
             std::shuffle(J.begin(), J.end(), rng);
 
-            assert (candidate.empty());
+            Candidate candidate;
+            candidate.reserve(candidateLength);
 
             for (;;) {
 
@@ -246,19 +242,15 @@ struct BufferLayoutOptimizer final : public PermutationBasedEvolutionaryAlgorith
             // given our candidate, do a first-fit allocation to determine the actual
             // memory layout.
 
-            if (insertCandidate(candidate, initialPopulation)) {
+            if (insertCandidate(std::move(candidate), initialPopulation)) {
                 if (initialPopulation.size() >= BUFFER_LAYOUT_INITIAL_CANDIDATES) {
                     return false;
                 }
             }
 
             H.clear();
-            candidate.clear();
         }
 
-        const auto t1 = std::chrono::high_resolution_clock::now();
-
-        bs_init_time += (t1 - t0).count();
 
         return true;
     }

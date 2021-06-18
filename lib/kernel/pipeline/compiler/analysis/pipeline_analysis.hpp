@@ -115,6 +115,8 @@ public:
 
         P.annotateBufferGraphWithAddAttributes();
 
+        P.identifyInterPartitionSymbolicRates();
+
         // Finish annotating the buffer graph       
         P.identifyLinearBuffers();
 //        P.identifyLocalPortIds();
@@ -199,8 +201,6 @@ private:
     // partitioning analysis
 
     PartitionGraph identifyKernelPartitions();
-
-    void makePartitionIOGraph();
 
     void determinePartitionJumpIndices();
 

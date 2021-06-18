@@ -1033,7 +1033,7 @@ struct PartitionSchedulingAnalysis final : public PermutationBasedEvolutionaryAl
         // solution space.
 
         return enumerateUpToNTopologicalOrderings(D, INITIAL_TOPOLOGICAL_POPULATION_SIZE, [&](const Candidate & L) {
-            insertCandidate(L, initialPopulation);
+            insertCandidate(Candidate{L}, initialPopulation);
         });
 
     }
@@ -1106,6 +1106,7 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P, rando
 
         const auto & kernels = currentPartition.Kernels;
         const auto numOfKernels = kernels.size();
+        assert (numOfKernels > 0);
         const auto fakeOutput = numOfKernels + 1U;
 
         // We want to generate a subgraph of S consisting of only the kernel nodes

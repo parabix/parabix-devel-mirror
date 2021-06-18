@@ -56,7 +56,7 @@ public:
 
     struct FitnessComparator {
         bool operator()(const Individual & a,const Individual & b) const{
-            return FitnessValueEvaluator::eval(a->second, b->second);;
+            return FitnessValueEvaluator::eval(a->second, b->second);
         }
     };
 
@@ -96,7 +96,8 @@ public:
      ** ------------------------------------------------------------------------------------------------------------- */
     const PermutationBasedEvolutionaryAlgorithm & runGA() {
 
-        population.reserve(maxCandidates);
+        population.reserve(3 * maxCandidates);
+        assert (population.empty());
 
         const auto enumeratedAll = initGA(population);
 
@@ -114,7 +115,7 @@ public:
 
         permutation_bitset bitString(candidateLength);
 
-        BitVector V(candidateLength);
+        BitVector uncopied(candidateLength);
 
         std::uniform_real_distribution<double> zeroToOneReal(0.0, 1.0);
 
@@ -131,8 +132,6 @@ public:
         double priorAverageFitness = worstFitnessValue;
         FitnessValueType priorBestFitness = worstFitnessValue;
 
-        FitnessValueType bestFitness = worstFitnessValue;
-
         std::vector<double> weights;
 
         flat_set<unsigned> chosen;
@@ -141,7 +140,7 @@ public:
         for (unsigned g = 0; g < maxGenerations; ++g) {
 
             const auto populationSize = population.size();
-            assert (populationSize > 0);
+            assert (populationSize > 1);
 
             const auto c = maxStallGenerations - std::max(averageStallCount, bestStallCount);
             const auto d = std::min(maxGenerations - g, c);
@@ -160,6 +159,9 @@ public:
                         const Candidate & A = population[i]->first;
                         const Candidate & B = population[j]->first;
 
+                        assert (A.size() == candidateLength);
+                        assert (B.size() == candidateLength);
+
                         // generate a random bit string
                         bitString.randomize(rng);
 
@@ -167,18 +169,31 @@ public:
 
                             Candidate C(candidateLength);
 
-                            V.reset();
+                            assert (candidateLength > 1);
+                            assert (C.size() == candidateLength);
+
+                            uncopied.reset();
+
+                            #ifndef NDEBUG
+                            unsigned count = 0;
+                            #endif
 
                             for (unsigned k = 0; k < candidateLength; ++k) {
                                 const auto t = bitString.test(k);
                                 if (t == selector) {
                                     const auto v = A[k];
                                     assert (v < candidateLength);
-                                    V.set(v);
+                                    assert ("candidate contains duplicate values?" && !uncopied.test(v));
+                                    uncopied.set(v);
+                                    #ifndef NDEBUG
+                                    ++count;
+                                    #endif
                                 } else {
                                     C[k] = A[k];
                                 }
                             }
+
+                            assert (count == uncopied.count());
 
                             for (unsigned k = 0U, p = -1U; k < candidateLength; ++k) {
                                 const auto t = bitString.test(k);
@@ -186,19 +201,25 @@ public:
                                     // V contains 1-bits for every entry we did not
                                     // directly copy from A into C. We now insert them
                                     // into C in the same order as they are in B.
+                                    #ifndef NDEBUG
+                                    assert (count-- > 0);
+                                    #endif
                                     for (;;){
                                         ++p;
                                         assert (p < candidateLength);
                                         const auto v = B[p];
                                         assert (v < candidateLength);
-                                        if (V.test(v)) break;
+                                        if (uncopied.test(v)) {
+                                            break;
+                                        }
                                     }
                                     C[k] = B[p];
                                 }
                             }
+                            assert (count == 0);
 
                             repairCandidate(C);
-                            insertCandidate(C, population);
+                            insertCandidate(std::move(C), population);
                         };
 
                         crossover(A, B, true);
@@ -224,11 +245,11 @@ public:
                     std::shuffle(C.begin() + a, C.begin() + b, rng);
 
                     repairCandidate(C);
-                    insertCandidate(C, population);
+                    insertCandidate(std::move(C), population);
                 }
             }
 
-            const auto n = population.size();
+            const auto newPopulationSize = population.size();
 
             FitnessValueType sumOfGenerationalFitness = 0.0;
             auto minFitness = maxFitVal;
@@ -245,14 +266,14 @@ public:
                 }
             }
 
-            const double averageGenerationFitness = ((double)sumOfGenerationalFitness) / ((double)n);
+            const double averageGenerationFitness = ((double)sumOfGenerationalFitness) / ((double)newPopulationSize);
 
             FitnessValueType bestGenerationalFitness = maxFitness;
             if (FitnessValueEvaluator::eval(minFitness, maxFitness)) {
                 bestGenerationalFitness = minFitness;
             }
 
-            if (LLVM_UNLIKELY(n == populationSize)) {
+            if (LLVM_UNLIKELY(newPopulationSize == populationSize)) {
                 if (++averageStallCount == maxStallGenerations) {
                     break;
                 }
@@ -283,12 +304,14 @@ public:
             assert (bestStallCount < maxStallGenerations);
 
             // BOLTZMANN SELECTION:
-
-            if (n > maxCandidates) {
+            if (newPopulationSize > maxCandidates) {
 
                 assert (nextGeneration.empty());
 
                 if (LLVM_UNLIKELY(minFitness == maxFitness)) {
+
+
+
                     std::shuffle(population.begin(), population.end(), rng);
                     for (unsigned i = 0; i < maxCandidates; ++i) {
                         nextGeneration.emplace_back(population[i]);
@@ -298,7 +321,7 @@ public:
                     // Calculate the variance for the annealing factor
 
                     double sumDiffOfSquares = 0.0;
-                    for (unsigned i = 0; i < n; ++i) {
+                    for (unsigned i = 0; i < newPopulationSize; ++i) {
                         const auto w = population[i]->second;
                         const auto d = w - averageGenerationFitness;
                         sumDiffOfSquares += d * d;
@@ -310,19 +333,25 @@ public:
                     if (LLVM_LIKELY(sumDiffOfSquares == 0)) {
                         beta = 4.0;
                     } else {
-                        beta = std::sqrt(n / sumDiffOfSquares);
+                        beta = std::sqrt(newPopulationSize / sumDiffOfSquares);
                     }
 
-                    if (weights.size() < n) {
-                        weights.resize(n);
+                    if (weights.size() < newPopulationSize) {
+                        weights.resize(newPopulationSize);
                     }
 
-                    chosen.clear();
+                    const auto weights_end = weights.begin() + newPopulationSize;
+
+                    assert (chosen.empty());
+
                     auto sumX = 0.0;
                     unsigned fittestIndividual = 0;
                     const double r = beta / (double)(maxFitness - minFitness);
-                    for (unsigned i = 0; i < n; ++i) {
-                        const auto w = population[i]->second;
+                    for (unsigned i = 0; i < newPopulationSize; ++i) {
+                        const auto itr = population[i];
+                        assert (itr->first.size() == candidateLength);
+                        const auto w = itr->second;
+                        assert (w >= bestGenerationalFitness);
                         if (w == bestGenerationalFitness) {
                             fittestIndividual = i;
                         }
@@ -337,14 +366,19 @@ public:
                     while (chosen.size() < maxCandidates) {
                         const auto d = selector(rng);
                         assert (d < sumX);
-                        const auto f = std::upper_bound(weights.begin(), weights.end(), d);
-                        assert (f != weights.end());
-                        const auto j = std::distance(weights.begin(), f);
+                        const auto f = std::upper_bound(weights.begin(), weights_end, d);
+                        assert (f != weights_end);
+                        const unsigned j = std::distance(weights.begin(), f);
+                        assert (j < newPopulationSize);
                         chosen.insert(j);
                     }
                     for (unsigned i : chosen) {
-                        nextGeneration.emplace_back(population[i]);
+                        assert (i < newPopulationSize);
+                        const auto itr = population[i];
+                        assert (itr->first.size() == candidateLength);
+                        nextGeneration.push_back(itr);
                     }
+                    chosen.clear();
                 }
 
                 population.swap(nextGeneration);
@@ -396,8 +430,18 @@ protected:
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief insertCandidate
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool insertCandidate(const Candidate & candidate, Population & population) {
-        const auto f = candidates.emplace(candidate, 0);
+    bool insertCandidate(Candidate && candidate, Population & population) {
+        assert (candidate.size() == candidateLength);
+        #ifndef NDEBUG
+        BitVector check(candidateLength);
+        for (unsigned i = 0; i != candidateLength; ++i) {
+            const auto v = candidate[i];
+            assert ("invalid candidate #" && v < candidateLength);
+            check.set(v);
+        }
+        assert ("duplicate candidate #" && (check.count() == candidateLength));
+        #endif
+        const auto f = candidates.emplace(std::move(candidate), 0);
         if (LLVM_LIKELY(f.second)) {
             const auto value = fitness(f.first->first);
             f.first->second = value;

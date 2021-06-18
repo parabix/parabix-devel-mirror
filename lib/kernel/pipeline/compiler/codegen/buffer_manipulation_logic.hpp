@@ -581,8 +581,6 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 Value * const fullBytesToCopy = b->CreateSub(fullCopyEndPtrInt, initialPtrInt);
 
                 b->CreateMemCpy(mallocedAddress, initialPtr, fullBytesToCopy, blockSize);
-
-                // Value * const base = b->CreateMul(b->CreateLShr(processed, LOG_2_BLOCK_WIDTH), numOfStreams);
                 Value * const outputVBA = tmp.getStreamBlockPtr(b, mallocedAddress, sz_ZERO, b->CreateNeg(initial));
                 Value * const maskedAddress = b->CreatePointerCast(outputVBA, bufferPtrTy);
                 assert (maskedAddress->getType() == inputAddress->getType());
@@ -639,7 +637,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             FixedArray<Value *, 6> args;
             args[0] = b->CreatePointerCast(inputBaseAddresses[inputPort.Number], int8PtrTy);
             const auto itemsPerSegment = ceiling(mKernel->getStride() * rate.getUpperBound()); assert (itemsPerSegment >= 1);
-            args[1] = b->getSize(itemsPerSegment);
+            args[1] = b->getSize(std::max(itemsPerSegment, b->getBitBlockWidth()));
             if (port.IsDeferred) {
                 args[2] = mAlreadyProcessedDeferredPhi[inputPort];
             } else {

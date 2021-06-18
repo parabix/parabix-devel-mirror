@@ -307,6 +307,9 @@ struct BufferPort {
     Rational Maximum;
 
     bool CanModifySegmentLength = false;
+    #ifdef COMPUTE_SYMBOLIC_RATE_IDS
+    unsigned SymbolicRateId = 0U;
+    #endif
 
     // binding attributes
     unsigned Add = 0;
