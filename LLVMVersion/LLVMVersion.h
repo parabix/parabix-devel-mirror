@@ -1,6 +1,7 @@
 #pragma once
 
 #include <toolchain/toolchain.h>
+#include <cbuilder_config.hpp>
 
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -52,11 +53,6 @@ class VectorType;
 
 template <class T>
 class ArrayRef;
-
-class ConstantFolder;
-class IRBuilderDefaultInserter;
-template <typename, typename>
-class IRBuilder;
 }
 
 namespace llvm_version {
@@ -70,14 +66,14 @@ namespace llvm_version {
 llvm::Constant * getSplat(const unsigned fieldCount, llvm::Constant *Elt);
 llvm::VectorType * getVectorType(llvm::Type *ElementType, unsigned NumElements);
 llvm::StructType * getTypeByName(llvm::Module *M, llvm::StringRef Name);
-llvm::CallInst * CreateCall(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b, llvm::Value *callee,
+llvm::CallInst * CreateCall(CBuilderBase * b, llvm::Value *callee,
                             llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
-llvm::InvokeInst * CreateInvoke(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b, llvm::Value * const Callee,
+llvm::InvokeInst * CreateInvoke(CBuilderBase * b, llvm::Value * const Callee,
                                 llvm::BasicBlock * const NormalDest, llvm::BasicBlock * UnwindDest, llvm::ArrayRef< llvm::Value * > args,
                                 const llvm::Twine Name = "");
-llvm::CallInst * CreateMemMove(llvm::IRBuilderBase * b, llvm::Value * Dst, llvm::Value * Src, llvm::Value *Size, unsigned Align, bool isVolatile,
+llvm::CallInst * CreateMemMove(CBuilderBase * b, llvm::Value * Dst, llvm::Value * Src, llvm::Value *Size, unsigned Align, bool isVolatile,
                                llvm::MDNode *TBAATag, llvm::MDNode *ScopeTag, llvm::MDNode *NoAliasTag);
-llvm::CallInst * CreateMemCpy(llvm::IRBuilderBase * b, llvm::Value * Dst, llvm::Value * Src, llvm::Value * Size, unsigned Align,
+llvm::CallInst * CreateMemCpy(CBuilderBase * b, llvm::Value * Dst, llvm::Value * Src, llvm::Value * Size, unsigned Align,
                               bool isVolatile, llvm::MDNode * TBAATag, llvm::MDNode * TBAAStructTag, llvm::MDNode * ScopeTag, llvm::MDNode * NoAliasTag);
 void checkAddPassesToEmitFile(llvm::TargetMachine * mTarget, std::unique_ptr<llvm::legacy::PassManager> const & mPassManager,
                               std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream);

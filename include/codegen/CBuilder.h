@@ -20,6 +20,7 @@
 #endif
 #include <util/not_null.h>
 
+#include <cbuilder_config.hpp>
 #include "LLVMVersion.h"
 
 namespace kernel { class KernelBuilder; }
@@ -36,7 +37,7 @@ inline bool is_power_2(const uint64_t n) {
 
 extern "C" void free_debug_wrapper(void * ptr);
 
-class CBuilder : public llvm::IRBuilder<> {
+class CBuilder : public CBuilderBase {
 public:
 
     CBuilder(llvm::LLVMContext & C);

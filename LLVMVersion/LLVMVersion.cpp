@@ -50,30 +50,30 @@ namespace llvm_version {
     #endif
   }
 
-  CallInst * CreateCall(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b, Value *Callee,
+  CallInst * CreateCall(CBuilderBase * b, Value *Callee,
                         ArrayRef< Value * > args, const Twine Name) {
     #if LLVM_VERSION_MAJOR >= 11
         auto *calleePtrType = llvm::cast<llvm::PointerType>(Callee->getType());
         auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
-        return b.CreateCall(calleeType, Callee, args, Name);
+        return b->CreateCall(calleeType, Callee, args, Name);
     #else
-        return b.CreateCall(Callee, args, Name);
+        return b->CreateCall(Callee, args, Name);
     #endif
   }
 
-  InvokeInst * CreateInvoke(llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> & b,
+  InvokeInst * CreateInvoke(CBuilderBase * b,
                             Value * const Callee, BasicBlock * const NormalDest, BasicBlock * UnwindDest,
                             ArrayRef< Value * > args, const Twine Name) {
     #if LLVM_VERSION_MAJOR >= 11
         auto *calleePtrType = llvm::cast<llvm::PointerType>(Callee->getType());
         auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
-        return b.CreateInvoke(calleeType, Callee, NormalDest, UnwindDest, args);
+        return b->CreateInvoke(calleeType, Callee, NormalDest, UnwindDest, args);
     #else
-        return b.CreateInvoke(Callee, NormalDest, UnwindDest, args);
+        return b->CreateInvoke(Callee, NormalDest, UnwindDest, args);
     #endif
   }
 
-  CallInst * CreateMemMove(IRBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
+  CallInst * CreateMemMove(CBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
                            bool isVolatile, MDNode * TBAATag, MDNode * ScopeTag, MDNode * NoAliasTag) {
       #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
           return b->CreateMemMove(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile,
@@ -85,7 +85,7 @@ namespace llvm_version {
       #endif
   }
 
-  CallInst * CreateMemCpy(IRBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
+  CallInst * CreateMemCpy(CBuilderBase * b, Value * Dst, Value * Src, Value * Size, unsigned Align,
                           bool isVolatile, MDNode * TBAATag, MDNode * TBAAStructTag, MDNode * ScopeTag, MDNode * NoAliasTag) {
       #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
           return b->CreateMemCpy(Dst, llvm_version::AlignType(Align), Src, llvm_version::AlignType(Align), Size, isVolatile,

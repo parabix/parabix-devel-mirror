@@ -1628,7 +1628,7 @@ CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Valu
 }
 
 CallInst * CBuilder::CreateCall(Value *Callee, ArrayRef< Value * > args, const Twine Name) {
-    return llvm_version::CreateCall(*this, Callee, args, Name);
+    return llvm_version::CreateCall(this, Callee, args, Name);
 }
 
 InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
@@ -1643,7 +1643,7 @@ InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock 
 
 InvokeInst * CBuilder::CreateInvoke(Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
                                     ArrayRef<Value *> Args, const Twine Name) {
-    return llvm_version::CreateInvoke(*this, Callee, NormalDest, UnwindDest, Args, Name);
+    return llvm_version::CreateInvoke(this, Callee, NormalDest, UnwindDest, Args, Name);
 }
 
 CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
@@ -1874,7 +1874,7 @@ void CBuilder::CheckAddress(Value * const Ptr, Value * const Size, Constant * co
 
 
 CBuilder::CBuilder(LLVMContext & C)
-: IRBuilder<>(C)
+: CBuilderBase(C)
 , mCacheLineAlignment(64)
 , mSizeType(IntegerType::get(getContext(), sizeof(size_t) * 8))
 , mFILEtype(nullptr)
