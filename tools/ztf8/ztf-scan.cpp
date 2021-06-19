@@ -1515,9 +1515,9 @@ void generatePhraseHashProcessingLoops(BuilderRef b,
         b->CallPrintInt("hashCode", keyHash);
         b->CallPrintInt("keyStartPos", keyStartPos);
         b->CallPrintInt("keyLength"+std::to_string(streamNum), keyLength);
-        b->CreateCondBr(b->CreateICmpEQ(toCompress, sz_ZERO), markCompression, tryStore);
         #endif
 
+        b->CreateCondBr(b->CreateICmpEQ(toCompress, sz_ZERO), markCompression, tryStore);
         b->SetInsertPoint(markCompression);
         Value * initialMask = b->CreateAlignedLoad(keyBasePtr, 1);
         //keylen - 2 is the # bytes to be compressed
