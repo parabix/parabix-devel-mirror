@@ -8,7 +8,7 @@
  *  Equivalence
  */
 
-#include <map>
+#include <unordered_map>
 #include <string>
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/CaseFolding.h>

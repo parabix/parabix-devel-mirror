@@ -18,8 +18,6 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
     #ifndef DISABLE_ZERO_EXTEND
     using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
 
-    flat_set<unsigned> globalIds;
-
     for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         const RelationshipNode & rn = mStreamGraph[kernel];
         assert (rn.Type == RelationshipNode::IsKernel);
@@ -80,10 +78,9 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
         // whether *any* of the inputs to a kernel are inputs to the partition. Any such input would not
         // dictate the dataflow within the partition until after this kernel has been executed.
 
+        // TODO: once we can determine what inter-partition channels can bound the number of strides for
+        // a partition, we can filter the ones that will never be zero-extended.
 
-        bool necessary = false;
-
-        globalIds.clear();
         const auto partitionId = KernelPartitionId[kernel];
         for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
             BufferPort & inputData = mBufferGraph[input];
@@ -91,22 +88,14 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
             const auto producer = parent(streamSet, mBufferGraph);
             const auto prodPartitionId = KernelPartitionId[producer];
             if (partitionId != prodPartitionId) {
-                necessary = true;
-                break;
-            }
-            globalIds.insert(inputData.GlobalPortId);
-        }
-
-        if (necessary || globalIds.size() > 1) {
-            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-                BufferPort & inputData = mBufferGraph[input];
                 const Binding & binding = inputData.Binding;
                 if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::ZeroExtended))) {
                     inputData.IsZeroExtended = true;
                 }
+                HasZeroExtendedStream = true;
             }
-            HasZeroExtendedStream = true;
         }
+
     }
     #endif
 }

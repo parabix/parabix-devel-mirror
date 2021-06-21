@@ -5,6 +5,8 @@
  */
 #include <kernel/core/callback.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_os_ostream.h>
+
 using namespace kernel;
 
 

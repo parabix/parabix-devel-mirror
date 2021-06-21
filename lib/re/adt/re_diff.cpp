@@ -22,6 +22,8 @@ RE * makeDiff(RE * lh, RE * rh) {
         return lh;
     } else if (LLVM_UNLIKELY(isEmptySet(lh))) {
         return lh;
+    } else if (Diff * d = dyn_cast<Diff>(lh)) {
+        return makeDiff(d->getLH(), makeAlt({d->getRH(), rh}));
     }
     return Diff::Create(lh, rh);
 }

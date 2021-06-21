@@ -49,11 +49,18 @@
 #define IN_DEBUG_MODE false
 #endif
 
+#if defined(__clang__) || defined (__GNUC__)
+    #define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#else
+    #define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif
+
 using namespace llvm;
 using namespace kernel;
 
 using AttrId = kernel::Attribute::KindId;
 
+ATTRIBUTE_NO_SANITIZE_ADDRESS
 CPUDriver::CPUDriver(std::string && moduleName)
 : BaseDriver(std::move(moduleName))
 , mTarget(nullptr)
@@ -109,8 +116,6 @@ CPUDriver::CPUDriver(std::string && moduleName)
     mBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
     mBuilder->setDriver(*this);
     mBuilder->setModule(mMainModule);
-
-
 }
 
 Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
@@ -167,7 +172,6 @@ inline void CPUDriver::preparePassManager() {
         }
         mPassManager->add(createPrintModulePass(*mIROutputStream));
     }
-    mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
     mPassManager->add(createSROAPass());                       // Promote elements of aggregate allocas whose addresses are not taken to registers.
@@ -177,7 +181,7 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
     mPassManager->add(createReassociatePass());                // Canonicalizes commutative expressions
     mPassManager->add(createGVNPass());                        // Global value numbering redundant expression elimination pass
-    mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
+    mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes    
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         mPassManager->add(createRemoveRedundantAssertionsPass());
     }
@@ -224,6 +228,7 @@ void CPUDriver::generateUncachedKernels() {
             kernel->generateKernel(mBuilder);
             Module * const module = kernel->getModule(); assert (module);
             module->setTargetTriple(mMainModule->getTargetTriple());
+            module->setDataLayout(mMainModule->getDataLayout());
             mPassManager->run(*module);
             mCachedKernel.emplace_back(kernel.release());
         }
@@ -276,8 +281,8 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     };
 
     // compile any uncompiled kernels
-    addModules(Infrequent, CodeGenOpt::None);
-    addModules(Normal, codegen::BackEndOptLevel);
+    addModules(Infrequent, codegen::BackEndOptLevel);
+    addModules(Normal, CodeGenOpt::Default);
 
     // write/declare the "main" method
     auto mainModule = std::make_unique<Module>("main", *mContext);

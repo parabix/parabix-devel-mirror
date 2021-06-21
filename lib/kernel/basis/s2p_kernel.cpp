@@ -265,11 +265,12 @@ protected:
     bool mCompletionFromQuads;
 };
 
-void BitPairsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+void BitPairsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * bitPairLoop = b->CreateBasicBlock("bitPairLoop");
     BasicBlock * bitPairFinalize = b->CreateBasicBlock("bitPairFinalize");
     Constant * const ZERO = b->getSize(0);
+    Value * numOfBlocks = b->CreateMul(numOfStrides, b->getSize(getStride()/b->getBitBlockWidth()));
     b->CreateBr(bitPairLoop);
     b->SetInsertPoint(bitPairLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
@@ -297,13 +298,16 @@ BitPairsKernel::BitPairsKernel(BuilderRef b,
                                StreamSet * const bitPairs)
 : MultiBlockKernel(b, "BitPairs"
 , {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
-                   , {Binding{"bitPairs", bitPairs, FixedRate(), RoundUpTo(b->getBitBlockWidth())}}, {}, {}, {}) {}
+                   , {Binding{"bitPairs", bitPairs, FixedRate(), RoundUpTo(2 * b->getBitBlockWidth())}}, {}, {}, {}) {
+    setStride(2 * b->getBitBlockWidth());
+}
 
-void BitQuadsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+void BitQuadsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * bitQuadLoop = b->CreateBasicBlock("bitQuadLoop");
     BasicBlock * bitQuadFinalize = b->CreateBasicBlock("bitQuadFinalize");
     Constant * const ZERO = b->getSize(0);
+    Value * numOfBlocks = b->CreateMul(numOfStrides, b->getSize(getStride()/b->getBitBlockWidth()));
     b->CreateBr(bitQuadLoop);
     b->SetInsertPoint(bitQuadLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
@@ -332,13 +336,16 @@ BitQuadsKernel::BitQuadsKernel(BuilderRef b,
                                StreamSet * const bitQuads)
 : MultiBlockKernel(b, "BitQuads"
 , {Binding{"bitPairs", bitPairs, FixedRate(), Principal()}}
-                   , {Binding{"bitQuads", bitQuads}}, {}, {}, {}) {}
+                   , {Binding{"bitQuads", bitQuads, FixedRate(), RoundUpTo(2 * b->getBitBlockWidth())}}, {}, {}, {}) {
+    setStride(2 * b->getBitBlockWidth());
+}
 
-void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * s2pLoop = b->CreateBasicBlock("s2pLoop");
     BasicBlock * s2pFinalize = b->CreateBasicBlock("s2pFinalize");
     Constant * const ZERO = b->getSize(0);
+    Value * numOfBlocks = b->CreateMul(numOfStrides, b->getSize(getStride()/b->getBitBlockWidth()));
     b->CreateBr(s2pLoop);
     b->SetInsertPoint(s2pLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
@@ -370,6 +377,7 @@ S2P_CompletionKernel::S2P_CompletionKernel(BuilderRef b,
     : MultiBlockKernel(b, completionFromQuads ? "S2PfromQuads" : "S2PfromPairs",
                        {Binding{"bitPacks", bitPacks, FixedRate(), Principal()}},
                        {Binding{"basisBits", BasisBits}}, {}, {}, {}), mCompletionFromQuads(completionFromQuads) {
+        setStride(2 * b->getBitBlockWidth());
     }
 
 void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,

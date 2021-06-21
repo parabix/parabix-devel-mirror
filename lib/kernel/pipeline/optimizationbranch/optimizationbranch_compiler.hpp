@@ -367,7 +367,7 @@ void OptimizationBranchCompiler::constructStreamSetBuffers(BuilderRef b) {
     mStreamSetInputBuffers.resize(numOfInputStreams);
     for (unsigned i = 0; i < numOfInputStreams; ++i) {
         const Binding & input = mInputStreamSets[i];
-        mStreamSetInputBuffers[i].reset(new ExternalBuffer(b, input.getType(), true, 0));
+        mStreamSetInputBuffers[i].reset(new ExternalBuffer(i, b, input.getType(), true, 0));
     }
 
     mStreamSetOutputBuffers.clear();
@@ -380,9 +380,9 @@ void OptimizationBranchCompiler::constructStreamSetBuffers(BuilderRef b) {
             const ProcessingRate & rate = output.getRate();
             const auto ub = rate.getUpperBound() * mTarget->getStride();
             const auto bufferSize = ceiling(ub);
-            buffer = new DynamicBuffer(b, output.getType(), bufferSize, 0, 0, true, 0);
+            buffer = new DynamicBuffer(i + numOfInputStreams, b, output.getType(), bufferSize, 0, 0, true, 0);
         } else {
-            buffer = new ExternalBuffer(b, output.getType(), true, 0);
+            buffer = new ExternalBuffer(i + numOfInputStreams, b, output.getType(), true, 0);
         }
         mStreamSetOutputBuffers[i].reset(buffer);
     }
@@ -525,11 +525,11 @@ inline const RelationshipRef & getConditionRef(const RelationshipGraph & G) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef b) {
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    if (codegen::SegmentThreads > 1) {
-        mThreadId = b->CreatePThreadSelf();
-    }
-    #endif
+//    #ifdef PRINT_DEBUG_MESSAGES
+//    if (codegen::SegmentThreads > 1) {
+//        mThreadId = b->CreatePThreadSelf();
+//    }
+//    #endif
 
     findBranchDemarcations(b);
     // Two threads could be simultaneously calculating the spans and the later one
@@ -585,7 +585,7 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     Value * const accessible = getAccessibleInputItems(condRef.Name);
     const Binding & binding = condRef.Binding;
     const auto condRate = binding.getRate().getLowerBound() * mTarget->getStride();
-    Value * const numOfStrides = b->CreateUDivRate(accessible, condRate);
+    Value * const numOfStrides = b->CreateUDivRational(accessible, condRate);
     Value * const largeEnough = b->CreateICmpULT(numOfStrides, spanCapacity);
     b->CreateLikelyCondBr(largeEnough, summarizeDemarcations, resizeSpan);
 
@@ -806,7 +806,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     PointerType * const voidPtrTy = b->getVoidPtrTy();
 
-    for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+    for (const auto e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
         const RelationshipRef & host = mStreamSetGraph[e];
         const RelationshipRef & path = mStreamSetGraph[parent(e, mStreamSetGraph)];
         const StreamSetBuffer * const buffer = getInputStreamSetBuffer(host.Index);
@@ -827,7 +827,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
     PointerType * const voidPtrPtrTy = voidPtrTy->getPointerTo();
 
-    for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+    for (const auto e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
         const RelationshipRef & host = mStreamSetGraph[e];
         const auto & buffer = mStreamSetOutputBuffers[host.Index];
 
@@ -974,13 +974,13 @@ Value * OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b,
         b->CreateUnlikelyCondBr(isFinal, calculateFinalItemCounts, executeKernel);
 
         b->SetInsertPoint(calculateFinalItemCounts);
-        for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & path = mStreamSetGraph[parent(e, mStreamSetGraph)];
             const Binding & input = kernel->getInputStreamSetBinding(path.Index);
             const ProcessingRate & rate = input.getRate();
             if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
                 Value * const scaledInverseOfAccessibleInput =
-                    b->CreateMulRate(mAccessibleInputItems[path.Index], rateLCM / rate.getRate());
+                    b->CreateMulRational(mAccessibleInputItems[path.Index], rateLCM / rate.getRate());
                 minScaledInverseOfAccessibleInput =
                     b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
             }
@@ -990,12 +990,12 @@ Value * OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b,
 
         const auto numOfOutputs = out_degree(branchType, mStreamSetGraph);
         SmallVector<Value *, 16> pendingOutputItems(numOfOutputs, nullptr);
-        for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+        for (const auto e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & path = mStreamSetGraph[child(e, mStreamSetGraph)];
             const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
             const ProcessingRate & rate = output.getRate();
             if (rate.isFixed()) {
-                pendingOutputItems[path.Index] = b->CreateCeilUDivRate(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
+                pendingOutputItems[path.Index] = b->CreateCeilUDivRational(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
             }
         }
         b->CreateBr(executeKernel);

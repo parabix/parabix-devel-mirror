@@ -456,7 +456,7 @@ SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(BuilderRef b,
 
 : MultiBlockKernel(b, "PEXTdel" + std::to_string(PEXTWidth) + "_" + std::to_string(inputStreamSet->getNumElements()),
 {Binding{"selectors", selectors}, Binding{"inputStreamSet", inputStreamSet}},
-makeSwizzledDeleteByPEXTOutputBindings(outputStreamSets, PEXTWidth),
+ makeSwizzledDeleteByPEXTOutputBindings(outputStreamSets, PEXTWidth),
 {}, {}, {})
 , mStreamCount(inputStreamSet->getNumElements())
 , mSwizzleFactor(b->getBitBlockWidth() / PEXTWidth)
@@ -491,7 +491,7 @@ void SwizzledDeleteByPEXTkernel::generateMultiBlockLogic(BuilderRef b, llvm::Val
     ConstantInt * const PEXT_WIDTH_MASK = b->getSize(mPEXTWidth - 1);
 
     // All output groups have the same count.
-    Value * const baseOutputProduced = b->getProducedItemCount("outputSwizzle0");
+    Value * const baseOutputProduced = b->getProducedItemCount(getOutputStreamSetBinding(0).getName());
     Value * const baseProducedOffset = b->CreateAnd(baseOutputProduced, BLOCK_WIDTH_MASK);
 
     // There is a separate vector of pending data for each swizzle group.
@@ -548,7 +548,7 @@ void SwizzledDeleteByPEXTkernel::generateMultiBlockLogic(BuilderRef b, llvm::Val
             Value * const shiftedItems = b->CreateShl(newItems, shiftVector);
             Value * const combinedGroup = b->CreateOr(pendingData[j], shiftedItems);
             // To avoid an unpredictable branch, always store the combined group, whether full or not.
-            b->storeOutputStreamBlock("outputSwizzle" + std::to_string(j), swizzleIndex, blockOffset, combinedGroup);
+            b->storeOutputStreamBlock(getOutputStreamSetBinding(j).getName(), swizzleIndex, blockOffset, combinedGroup);
             // Any items in excess of the space available in the current pending group overflow for the next group.
             Value * overFlowGroup = b->CreateLShr(newItems, spaceVector);
             // If we filled the space, then the overflow group becomes the new pending group and the index is updated.

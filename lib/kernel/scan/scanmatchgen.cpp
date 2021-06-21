@@ -54,6 +54,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 
     Module * const m = b->getModule();
     Constant * const sz_STRIDE = b->getSize(mStride);
+    assert ((mStride % b->getBitBlockWidth()) == 0);
     Constant * const sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * const sz_ZERO = b->getSize(0);
     Constant * const sz_ONE = b->getSize(1);
@@ -121,6 +122,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
         baseCounts = b->CreatePHI(b->getBitBlockType(), 2);
         baseCounts->addIncoming(b->allZeroes(), stridePrologue);
     }
+
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
     Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, strideBlockIndex);
     Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
@@ -427,8 +429,9 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     }
     Value * matchWordMask = b->CreateZExt(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
     Value * breakWordMask = b->CreateZExt(b->hsimd_signmask(sw.width, anyBreak), sizeTy);
-    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "matchMask");
-    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "breakMask");
+    Value * const shift = b->CreateMul(blockNo, sw.WORDS_PER_BLOCK);
+    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, shift), "matchMask");
+    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, shift), "breakMask");
     Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
 
     matchMaskAccum->addIncoming(matchMask, stridePrecomputation);

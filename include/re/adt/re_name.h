@@ -211,22 +211,25 @@ public:
         return std::string(mName, mNameLength);
     }
     RE * getCapture() const {return mCapture;}
-    static Reference * Create(std::string name, RE * capture) {
-        return new Reference(name.c_str(), name.length(), capture);
+    unsigned getInstance() const {return mInstance;}
+    static Reference * Create(std::string name, RE * capture, unsigned instance) {
+        return new Reference(name.c_str(), name.length(), capture, instance);
     }
     RE_SUBTYPE(Reference)
 private:
-    Reference(const char * name, const length_t nameLength, RE * capture): RE(ClassTypeId::Reference)
+    Reference(const char * name, const length_t nameLength, RE * capture, unsigned instance): RE(ClassTypeId::Reference)
     , mNameLength(nameLength)
     , mName(replicateString(name, nameLength))
-    , mCapture(capture) {}
+    , mCapture(capture)
+    , mInstance(instance) {}
     const length_t mNameLength;
     const char * const mName;
     RE * mCapture;
+    unsigned mInstance;
 };
 
-inline RE * makeReference(std::string name, RE * capture){
-    return Reference::Create(name, capture);
+inline RE * makeReference(std::string name, RE * capture, unsigned instance){
+    return Reference::Create(name, capture, instance);
 }
 
 class PropertyExpression : public RE {

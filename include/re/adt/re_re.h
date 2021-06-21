@@ -24,6 +24,7 @@ public:
     using VectorAllocator = ProxyAllocator<RE *>;
     enum class ClassTypeId : unsigned {
         Alt
+        , Any
         , Assertion
         , CC
         , Range

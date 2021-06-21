@@ -22,6 +22,7 @@ enable_testing()
 
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
+option(ENABLE_PAPI "Enable PAPI support if available" OFF)
 option(LLVM_PATH "LLVM root directory")
 option(GENERATE_TOOLS "Controls whether or not it generate tools" ON)
 
@@ -96,6 +97,16 @@ string(REGEX REPLACE "[0-9]+[.]([0-9]+).*" "\\1" Z3_VERSION_MINOR "${Z3_VERSION_
 string(REGEX REPLACE "[0-9]+[.][0-9]+[.]([0-9]+).*" "\\1" Z3_VERSION_PATCH "${Z3_VERSION_STRING}")
 math(EXPR Z3_VERSION_INTEGER "${Z3_VERSION_MAJOR} * 10000 + ${Z3_VERSION_MINOR} * 100 + ${Z3_VERSION_PATCH}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DZ3_VERSION_INTEGER=${Z3_VERSION_INTEGER}")
+
+###   Import Dependency: PAPI   ###
+
+if (ENABLE_PAPI)
+find_package(PAPI REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PAPI -lpapi")
+include_directories(${PAPI_INCLUDE_DIRS})
+message(STATUS "Found PAPI_INCLUDE_DIRS: ${PAPI_INCLUDE_DIRS}")
+endif()
+
 
 ###   Project Configuration   ###
 
@@ -204,7 +215,7 @@ endif()
 # Release & Debug flags
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -g2 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 function(parabix_add_module)
     cmake_parse_arguments(
@@ -234,6 +245,9 @@ function(parabix_add_module)
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
         if (ARG_USES_Z3)
             target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
+        endif()
+        if (ENABLE_PAPI)
+            target_link_libraries(${ARG_NAME} ${PAPI_LIBRARIES})
         endif()
     endif()
 endfunction(parabix_add_module)
@@ -397,10 +411,10 @@ add_test(
   WORKING_DIRECTORY ${QA_DIR}/gb18030
   COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=1")
 
-#add_test(
-#  NAME gb18030_multithreaded_test
-#  WORKING_DIRECTORY ${QA_DIR}/gb18030
-#  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
+add_test(
+  NAME gb18030_multithreaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
 
 
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)

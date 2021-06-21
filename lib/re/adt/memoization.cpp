@@ -79,6 +79,8 @@ static bool lessThan(const Capture * const lh, const Capture * const rh) {
 static bool lessThan(const Reference * const lh, const Reference * const rh) {
     if (lh->getName() != rh->getName()) {
         return lh->getName() < rh->getName();
+    } else if (lh->getInstance() != rh->getInstance()) {
+        return lh->getInstance() < rh->getInstance();
     } else if (lh->getCapture() == nullptr) {
         return rh->getCapture() != nullptr;
     } else if (rh->getCapture() == nullptr) {
@@ -180,7 +182,7 @@ static bool compare(const RE * const lh, const RE * const rh) {
             return lessThan(cast<Alt>(lh), cast<Alt>(rh));
         case Type::Seq:
             return lessThan(cast<Seq>(lh), cast<Seq>(rh));
-        case Type::End: case Type::Start:
+        case Type::Any: case Type::End: case Type::Start:
             return false;
         case Type::Assertion:
             return lessThan(cast<Assertion>(lh), cast<Assertion>(rh));

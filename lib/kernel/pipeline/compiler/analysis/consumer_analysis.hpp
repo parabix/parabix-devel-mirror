@@ -21,6 +21,122 @@ void PipelineAnalysis::makeConsumerGraph() {
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         // copy the producing edge
         const auto pe = in_edge(streamSet, mBufferGraph);
+        const BufferPort & output = mBufferGraph[pe];
+        const auto producer = source(pe, mBufferGraph);
+        add_edge(producer, streamSet, ConsumerEdge{output.Port, 0, ConsumerEdge::None}, mConsumerGraph);
+
+        // If we have no consumers, we do not want to update the consumer count on exit
+        // as we would then have to retain a scalar for it.
+
+        const BufferNode & streamSetNode = mBufferGraph[streamSet];
+        if (streamSetNode.Locality != BufferLocality::GloballyShared) {
+            continue;
+        }
+
+        if (LLVM_UNLIKELY(out_degree(streamSet, mBufferGraph) == 0)) {
+            continue;
+        }
+
+        auto lastConsumer = PipelineInput;
+        const auto partitionId = KernelPartitionId[producer];
+        auto index = 0U;
+
+        // TODO: check gb18030. we can reduce the number of tests by knowing that kernel processes
+        // the same amount of data so we only need to update this value after invoking the last one.
+
+        for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const auto consumer = target(ce, mBufferGraph);
+            if (KernelPartitionId[consumer] != partitionId) {
+                lastConsumer = std::max<unsigned>(lastConsumer, consumer);
+                const BufferPort & input = mBufferGraph[ce];
+                add_edge(streamSet, consumer, ConsumerEdge{input.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
+            }
+        }
+
+        assert (lastConsumer != PipelineInput);
+
+        // Although we may already know the final consumed item count prior
+        // to executing the last consumer, we need to defer writing the final
+        // consumed item count until the very last consumer reads the data.
+
+        ConsumerGraph::edge_descriptor e;
+        bool exists;
+        std::tie(e, exists) = edge(streamSet, lastConsumer, mConsumerGraph);
+        const auto flags = ConsumerEdge::WriteConsumedCount;
+        if (exists) {
+            ConsumerEdge & cn = mConsumerGraph[e];
+            cn.Flags |= flags;
+        } else {
+            add_edge(streamSet, lastConsumer, ConsumerEdge{output.Port, 0, flags}, mConsumerGraph);
+        }
+    }
+
+    // If this is a pipeline input, we want to update the count at the end of the loop.
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        ConsumerGraph::edge_descriptor f;
+        bool exists;
+        std::tie(f, exists) = edge(streamSet, PipelineOutput, mConsumerGraph);
+        const auto flags = ConsumerEdge::UpdateExternalCount;
+        if (exists) {
+            ConsumerEdge & cn = mConsumerGraph[f];
+            cn.Flags |= flags;
+        } else {
+            const BufferPort & br = mBufferGraph[e];
+            add_edge(streamSet, PipelineOutput, ConsumerEdge{br.Port, 0, flags}, mConsumerGraph);
+        }
+    }
+
+#if 0
+
+    auto & out = errs();
+
+    out << "digraph \"ConsumerGraph\" {\n";
+    for (auto v : make_iterator_range(vertices(mConsumerGraph))) {
+        out << "v" << v << " [label=\"" << v << "\"];\n";
+    }
+    for (auto e : make_iterator_range(edges(mConsumerGraph))) {
+        const auto s = source(e, mConsumerGraph);
+        const auto t = target(e, mConsumerGraph);
+        out << "v" << s << " -> v" << t <<
+               " [label=\"";
+        const ConsumerEdge & c = mConsumerGraph[e];
+        if (c.Flags & ConsumerEdge::UpdatePhi) {
+            out << 'U';
+        }
+        if (c.Flags & ConsumerEdge::WriteConsumedCount) {
+            out << 'W';
+        }
+        if (c.Flags & ConsumerEdge::UpdateExternalCount) {
+            out << 'E';
+        }
+        out << "\"];\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+
+#endif
+
+}
+
+
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeConsumerGraph
+ *
+ * Copy the buffer graph but amalgamate any multi-edges into a single one
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::makeConsumerGraph() {
+
+    mConsumerGraph = ConsumerGraph(LastStreamSet + 1);
+
+    flat_set<unsigned> observedGlobalPortIds;
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        // copy the producing edge
+        const auto pe = in_edge(streamSet, mBufferGraph);
         const BufferPort & br = mBufferGraph[pe];
         const auto producer = source(pe, mBufferGraph);
         add_edge(producer, streamSet, ConsumerEdge{br.Port, 0, ConsumerEdge::None}, mConsumerGraph);
@@ -125,6 +241,8 @@ void PipelineAnalysis::makeConsumerGraph() {
 #endif
 
 }
+
+#endif
 
 }
 

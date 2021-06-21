@@ -34,6 +34,7 @@ class UTF8_Transformer : public EncodingTransformer {
 public:
     UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None);
 protected:
+    RE * transformAny(Any * a) override;
     RE * transformCC(CC * cc) override;
 };
 

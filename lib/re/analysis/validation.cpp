@@ -28,6 +28,7 @@ bool RE_Validator::validate(const RE * const re) {
 case T::Type: return validate##Type(llvm::cast<Type>(re)); break
     switch (re->getClassTypeId()) {
             VALIDATE(Alt);
+            VALIDATE(Any);
             VALIDATE(Assertion);
             VALIDATE(CC);
             VALIDATE(Range);
@@ -57,6 +58,10 @@ bool RE_Validator::validateCapture(const Capture * c) {
 }
 
 bool RE_Validator::validateReference(const Reference * r) {
+    return true;
+}
+
+bool RE_Validator::validateAny(const Any * a) {
     return true;
 }
 

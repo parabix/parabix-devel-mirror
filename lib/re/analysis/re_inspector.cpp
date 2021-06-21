@@ -26,6 +26,7 @@ void RE_Inspector::inspect(RE * const re) {
         case T::Type: inspect##Type(llvm::cast<Type>(re)); break
     switch (re->getClassTypeId()) {
         INSPECT(Alt);
+        INSPECT(Any);
         INSPECT(Assertion);
         INSPECT(CC);
         INSPECT(Range);
@@ -57,6 +58,9 @@ void RE_Inspector::inspectCapture(Capture * c) {
 }
 
 void RE_Inspector::inspectReference(Reference * r) {
+}
+
+void RE_Inspector::inspectAny(Any * a) {
 }
 
 void RE_Inspector::inspectCC(CC * cc) {
