@@ -65,7 +65,13 @@ static cl::opt<int> WordLen("length", cl::desc("Length of words."), cl::init(2))
 typedef void (*ztfHashFunctionType)(uint32_t fd);
 
 EncodingInfo encodingScheme1(8,
-                             {{3, 3, 2, 0xC0, 8, 0}, {4, 4, 2, 0xC8, 8, 0}, {5, 8, 2, 0xD0, 8, 0}, {9, 16, 3, 0xE0, 8, 0}, {17, 32, 4, 0xF0, 8, 0}});
+                             {{3, 3, 2, 0xC0, 8, 0}, //minLen, maxLen, hashBytes, pfxBase, hashBits, ?
+                              {4, 4, 2, 0xC8, 8, 0},
+                              {5, 8, 2, 0xD0, 8, 0},
+                              {9, 16, 3, 0xE0, 8, 0},
+                              {17, 32, 4, 0xF0, 8, 0}
+                             });
+
 ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
 
     auto & b = driver.getBuilder();
@@ -81,62 +87,73 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(codeUnitStream, u8basis);
 
-    StreamSet * WordChars = P->CreateStreamSet(1);
-    P->CreateKernelCall<WordMarkKernel>(u8basis, WordChars);
-
-    StreamSet * phraseRuns = P->CreateStreamSet(1);
-    P->CreateKernelCall<ZTF_Phrases>(u8basis, WordChars, phraseRuns);
-    //P->CreateKernelCall<DebugDisplayKernel>("phraseRuns", phraseRuns);
-
-    std::vector<StreamSet *> allPhraseRuns;
-    std::vector<StreamSet *> allRunIndex;
-    std::vector<StreamSet *> allOverflow;
-    std::vector<StreamSet *> allHashValues;
-    for (unsigned i = 0; i < WordLen; i++) {
-        StreamSet * phraseSeq = P->CreateStreamSet(1);
-        P->CreateKernelCall<PhraseRunSeq>(phraseRuns, phraseSeq, WordLen, i);
-        //P->CreateKernelCall<DebugDisplayKernel>("phraseSeq", phraseSeq);
-        allPhraseRuns.push_back(phraseSeq);
-        StreamSet * const runIndex = P->CreateStreamSet(5);
-        StreamSet * const overflow = P->CreateStreamSet(1);
-        P->CreateKernelCall<RunIndex>(phraseSeq, runIndex, overflow);
-        allRunIndex.push_back(runIndex);
-        allOverflow.push_back(overflow);
-        //P->CreateKernelCall<DebugDisplayKernel>("runIndex", runIndex);
-        StreamSet * const bixHashes = P->CreateStreamSet(encodingScheme1.MAX_HASH_BITS);
-        P->CreateKernelCall<BixHash>(u8basis, phraseSeq, bixHashes);
-        //P->CreateKernelCall<DebugDisplayKernel>("bixHashes", bixHashes);
-        std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
-        StreamSet * const hashValues = P->CreateStreamSet(1, 16);
-        P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
-        allHashValues.push_back(hashValues);
-        //P->CreateKernelCall<DebugDisplayKernel>("hashValues", hashValues);
-    }
-
     StreamSet * u8bytes = codeUnitStream;
     std::vector<StreamSet *> extractionMasks;
-    for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
-        std::vector<StreamSet *> allGroupMarks;
-        // get the groupMarks streams marking all phrases of length l such that groupInfo.lo < l < groupInfo.hi
-        // for each of the q phraseSeq streams
-        for ( unsigned ii = 0; ii < WordLen; ii++) {
-            //unsigned ii = 0;
-            StreamSet * groupMarks = P->CreateStreamSet(1);
-            P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, allPhraseRuns[ii], allRunIndex[ii], allOverflow[ii], groupMarks);
-            //P->CreateKernelCall<DebugDisplayKernel>("groupMarks", groupMarks);
-            allGroupMarks.push_back(groupMarks);
-        }
-        StreamSet * extractionMask = P->CreateStreamSet(1);
-        StreamSet * input_bytes = u8bytes;
-        StreamSet * output_bytes = P->CreateStreamSet(1, 8);
-        StreamSet * compSymSeq = P->CreateStreamSet(1);
+    for (unsigned iter = WordLen; iter > 0; iter--) {
+        StreamSet * WordChars = P->CreateStreamSet(1);
+        P->CreateKernelCall<WordMarkKernel>(u8basis, WordChars);
 
-        // TODO: inlcude length based phrase compression
-        P->CreateKernelCall<PhraseCompression>(encodingScheme1, i, allGroupMarks, allHashValues, input_bytes,  extractionMask, output_bytes, compSymSeq);
-        //P->CreateKernelCall<DebugDisplayKernel>("extractionMask", extractionMask);
-        //P->CreateKernelCall<DebugDisplayKernel>("compSymSeq", compSymSeq);
-        extractionMasks.push_back(extractionMask);
-        u8bytes = output_bytes;
+        StreamSet * const phraseRuns = P->CreateStreamSet(1);
+        StreamSet * const codewordRuns = P->CreateStreamSet(1);
+        P->CreateKernelCall<ZTF_Phrases>(u8basis, WordChars, phraseRuns);
+        //codewordRuns
+        //P->CreateKernelCall<DebugDisplayKernel>("phraseRuns", phraseRuns);
+        //P->CreateKernelCall<DebugDisplayKernel>("codewordRuns", codewordRuns);
+
+        std::vector<StreamSet *> allPhraseRuns;
+        std::vector<StreamSet *> allRunIndex;
+        std::vector<StreamSet *> allOverflow;
+        std::vector<StreamSet *> allHashValues;
+        allPhraseRuns.reserve(iter);
+        allRunIndex.reserve(iter);
+        allOverflow.reserve(iter);
+        allHashValues.reserve(iter);
+        // analyze all the phrase run sequence with current length of phrase
+        for (unsigned i = 0; i < iter; i++) {
+            StreamSet * const phraseSeq = P->CreateStreamSet(1);
+            // use compSymSeq to aviod a sequence running across codewords
+            P->CreateKernelCall<PhraseRunSeq>(phraseRuns, phraseSeq, iter, i);
+            //P->CreateKernelCall<DebugDisplayKernel>("phraseSeq", phraseSeq);
+            allPhraseRuns.push_back(phraseSeq);
+            StreamSet * const runIndex = P->CreateStreamSet(5);
+            StreamSet * const overflow = P->CreateStreamSet(1);
+            P->CreateKernelCall<RunIndex>(phraseSeq, runIndex, overflow);
+            allRunIndex.push_back(runIndex);
+            allOverflow.push_back(overflow);
+            //P->CreateKernelCall<DebugDisplayKernel>("runIndex", runIndex);
+            StreamSet * const bixHashes = P->CreateStreamSet(encodingScheme1.MAX_HASH_BITS);
+            P->CreateKernelCall<BixHash>(u8basis, phraseSeq, bixHashes);
+            //P->CreateKernelCall<DebugDisplayKernel>("bixHashes", bixHashes);
+            std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
+            StreamSet * const hashValues = P->CreateStreamSet(1, 16);
+            P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
+            allHashValues.push_back(hashValues);
+            //P->CreateKernelCall<DebugDisplayKernel>("hashValues", hashValues);
+        }
+
+        extractionMasks.reserve(encodingScheme1.byLength.size());
+        for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
+            std::vector<StreamSet *> allGroupMarks;
+            // get the groupMarks streams marking all phrases of length l such that groupInfo.lo < l < groupInfo.hi
+            // for each of the q phraseSeq streams
+            for ( unsigned ii = 0; ii < iter; ii++) {
+                StreamSet * groupMarks = P->CreateStreamSet(1);
+                P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, allPhraseRuns[ii], allRunIndex[ii], allOverflow[ii], groupMarks);
+                //P->CreateKernelCall<DebugDisplayKernel>("groupMarks", groupMarks);
+                allGroupMarks.push_back(groupMarks);
+            }
+            StreamSet * extractionMask = P->CreateStreamSet(1);
+            StreamSet * compSymSeq = P->CreateStreamSet(1);
+            StreamSet * input_bytes = u8bytes;
+            StreamSet * output_bytes = P->CreateStreamSet(1, 8);
+
+            // TODO: inlcude length based phrase compression
+            P->CreateKernelCall<PhraseCompression>(encodingScheme1, i, allGroupMarks, allHashValues, input_bytes,  extractionMask, output_bytes, compSymSeq);
+            //P->CreateKernelCall<DebugDisplayKernel>("extractionMask", extractionMask);
+            //P->CreateKernelCall<DebugDisplayKernel>("compSymSeq", compSymSeq);
+            extractionMasks.push_back(extractionMask);
+            u8bytes = output_bytes;
+        }
     }
 
     StreamSet * const combinedMask = P->CreateStreamSet(1);
