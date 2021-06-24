@@ -1,3 +1,7 @@
+/* Some wrappers around the Clang/LLVM API used to preserve
+*  compatibility with older API versions while reducing
+*  the ifdef clutter in the rest of the subtree.
+*/
 #pragma once
 
 #include <toolchain/toolchain.h>

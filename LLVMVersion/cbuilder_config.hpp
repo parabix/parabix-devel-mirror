@@ -1,4 +1,8 @@
 
+/* Optimal LLVM IRBuilder<> configuration for CBuilder to inherit from.
+   Robust against the LLVM IRBuilder<> class hierarchy changes across
+   older and newer LLVM versions. */
+
 #ifndef CBUILDER_CONFIH_H
 #define CBUILDER_CONFIH_H
 
