@@ -7,7 +7,7 @@
 #include <objcache/object_cache.h>
 #include <llvm/Support/raw_ostream.h>
 
-#if LLVM_VERSION_MAJOR >= 10
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
 #include "llvm/Support/Host.h"
 #endif
 

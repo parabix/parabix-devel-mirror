@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#if LLVM_VERSION_MAJOR >= 10
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
 #include <llvm/IR/IntrinsicsNVPTX.h>
 #include <llvm/IR/IntrinsicsX86.h>
 #endif
