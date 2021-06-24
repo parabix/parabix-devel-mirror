@@ -4,6 +4,7 @@
 #include "pipeline_compiler.hpp"
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
+#include <llvm/Transforms/IPO.h>
 // #include <llvm/Transforms/Scalar/DCE.h>
 #include <llvm/IR/LegacyPassManager.h>
 
@@ -65,20 +66,25 @@ void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
     Module * const m = b->getModule();
 
     simplifyPhiNodes(m);
-    auto pm = std::make_unique<legacy::PassManager>();
+
+    auto pm = make_unique<legacy::PassManager>();
     pm->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     pm->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
+    pm->add(createEarlyCSEPass());
+   // pm->add(createHotColdSplittingPass());
     pm->run(*m);
 
     simplifyPhiNodes(m);
 
-    // m->print(errs(), nullptr);
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief simplifyPhiNodes
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::simplifyPhiNodes(Module * const m) const {
+void PipelineCompiler::simplifyPhiNodes(Module * const m) const {
 
     // LLVM is not aggressive enough with how it deals with phi nodes. To ensure that
     // we collapse every phi node in which all incoming values are identical into the

@@ -26,7 +26,9 @@
 #include <stdio.h>
 #include <boost/format.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <boost/intrusive/detail/math.hpp>
 #include <cxxabi.h>
+using boost::intrusive::detail::floor_log2;
 
 #ifdef HAS_ADDRESS_SANITIZER
 #include <llvm/Analysis/AliasAnalysis.h>
@@ -89,7 +91,7 @@ Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const 
         assert ("CreateUDiv divisor cannot be 0!" && d);
         if (is_power_2(d)) {
             if (d > 1) {
-                return CreateLShr(number, ConstantInt::get(divisor->getType(), std::log2(d)), Name);
+                return CreateLShr(number, ConstantInt::get(divisor->getType(), floor_log2(d)), Name);
             } else {
                 return number;
             }
@@ -370,6 +372,7 @@ CallInst * CBuilder::CallPrintInt(StringRef name, Value * const value, const STD
             num = CreateZExt(value, int64Ty);
         }
     } else {
+        assert (!"CallPrintInt was given a non-integer/non-pointer value.");
         report_fatal_error("CallPrintInt was given a non-integer/non-pointer value.");
     }
     assert (num->getType()->isIntegerTy() && num->getType()->getIntegerBitWidth() == 64);
@@ -601,15 +604,15 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
  *  ADVICE_DONTNEED
  *      Do not expect access in the near future. (For the time being, the application is finished with the given range, so the kernel
  *      can free resources associated with it.) Subsequent accesses of pages in this range will succeed, but will result either in
- *      reloading of the memory contents from the underlying mapped file (see mmap(2)) or zero-fill-on-demand pages for mappings
+ *      reloading of the memory contents from the underlying mapped file (see mmap(2)) or zero-fill-on-demand pages for mappings`
  *      without an underlying file.
  *
  * @return Value indicating success (0) or failure (-1).
  */
-Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
+Value * CBuilder::CreateMAdvise(Value * addr, Value * length, const int advice) {
     Triple T(mTriple);
     Value * result = nullptr;
-    if (T.isOSLinux() || T.isOSDarwin()) {
+    if (T.isOSLinux() || T.isOSDarwin()) {        
         Module * const m = getModule();
         IntegerType * const intTy = getInt32Ty();
         IntegerType * const sizeTy = getSizeTy();
@@ -621,20 +624,7 @@ Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
         }
         addr = CreatePointerCast(addr, voidPtrTy);
         length = CreateZExtOrTrunc(length, sizeTy);
-        int madv_flag = 0;
-        switch (advice) {
-            case Advice::ADVICE_NORMAL:
-                madv_flag = MADV_NORMAL; break;
-            case Advice::ADVICE_RANDOM:
-                madv_flag = MADV_RANDOM; break;
-            case Advice::ADVICE_SEQUENTIAL:
-                madv_flag = MADV_SEQUENTIAL; break;
-            case Advice::ADVICE_WILLNEED:
-                madv_flag = MADV_WILLNEED; break;
-            case Advice::ADVICE_DONTNEED:
-                madv_flag = MADV_DONTNEED; break;
-        }
-        result = CreateCall(MAdviseFunc, {addr, length, ConstantInt::get(intTy, madv_flag)});
+        result = CreateCall(MAdviseFunc, {addr, length, ConstantInt::get(intTy, advice)});
     }
     return result;
 }
@@ -874,81 +864,6 @@ Value * CBuilder::CreateRemoveCall(Value * path) {
         removeFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(removeFunc, {path});
-}
-
-Type * CBuilder::getPThreadTy() {
-    return IntegerType::get(getContext(), sizeof(pthread_t) * 8);
-}
-
-Value * CBuilder::CreatePThreadCreateCall(Value *  const thread, Value *  const attr, Function *  const start_routine, Value *  const arg) {
-    Module * const m = getModule();
-    Type * const voidPtrTy = getVoidPtrTy();
-    Function * pthreadCreateFunc = m->getFunction("pthread_create");
-    if (pthreadCreateFunc == nullptr) {
-        FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {getPThreadTy()->getPointerTo(), voidPtrTy, funVoidPtrVoidTy->getPointerTo(), voidPtrTy}, false);
-        pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", m);
-        pthreadCreateFunc->setCallingConv(CallingConv::C);
-    }
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        __CreateAssert(CreateIsNotNull(thread), "PThreadCreate: thread cannot be null", {});
-        __CreateAssert(CreateIsNotNull(start_routine), "PThreadCreate: start_routine cannot be null", {});
-        CheckAddress(arg, ConstantExpr::getSizeOf(voidPtrTy), "CreatePThreadCreateCall");
-    }
-    return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, voidPtrTy)});
-}
-
-Value * CBuilder::CreatePThreadYield() {
-    Module * const m = getModule();
-    Function * f = m->getFunction("pthread_yield");
-    if (f == nullptr) {
-        FunctionType * fty = FunctionType::get(getInt32Ty(), false);
-        f = Function::Create(fty, Function::ExternalLinkage, "pthread_yield", m);
-        f->setCallingConv(CallingConv::C);
-    }
-    return CreateCall(f);
-}
-
-Value * CBuilder::CreatePThreadExitCall(Value * const value_ptr) {
-    Module * const m = getModule();
-    Function * pthreadExitFunc = m->getFunction("pthread_exit");
-    PointerType * const voidPtrTy = getVoidPtrTy();
-    if (pthreadExitFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
-        pthreadExitFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_exit", m);
-        pthreadExitFunc->addFnAttr(Attribute::NoReturn);
-        pthreadExitFunc->setCallingConv(CallingConv::C);
-    }
-    // TODO: test whether value_ptr is null or a heap allocated address?
-    CallInst * exitThread = CreateCall(pthreadExitFunc, {value_ptr});
-    exitThread->setDoesNotReturn();
-    return exitThread;
-}
-
-Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * const value_ptr){
-    Module * const m = getModule();
-    Function * pthreadJoinFunc = m->getFunction("pthread_join");
-    PointerType * const voidPtrPtrTy = getVoidPtrTy()->getPointerTo();
-    if (pthreadJoinFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {getPThreadTy(), voidPtrPtrTy}, false);
-        pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", m);
-        pthreadJoinFunc->setCallingConv(CallingConv::C);
-    }
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CheckAddress(value_ptr, ConstantExpr::getSizeOf(voidPtrPtrTy), "CreatePThreadJoinCall");
-    }
-    return CreateCall(pthreadJoinFunc, {thread, value_ptr});
-}
-
-Value * CBuilder::CreatePThreadSelf() {
-    Module * const m = getModule();
-    Function * pthreadSelfFunc = m->getFunction("pthread_self");
-    if (pthreadSelfFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getPThreadTy(), false);
-        pthreadSelfFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_self", m);
-        pthreadSelfFunc->setCallingConv(CallingConv::C);
-    }
-    return CreateCall(pthreadSelfFunc);
 }
 
 extern "C"
@@ -2025,7 +1940,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                         fmt % "<any value>";
                                     }
                                 }
-                                __report_failure(name, fmt.str().data(), trace, n);
+
+                                SmallVector<char, 1024> tmp;
+                                raw_svector_ostream out(tmp);
+                                out << "STATIC FAILURE: " << fmt.str();
+                                __report_failure(name, out.str().data(), trace, n);
                                 discoveredStaticFailure = true;
                             } else {
                                 remove = true;

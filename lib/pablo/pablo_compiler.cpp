@@ -787,14 +787,7 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
         assert (value);
         mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream name(tmp);
-            expr->print(name);
-            if (value->getType()->isVectorTy()) {
-                b->CallPrintRegister(name.str(), value);
-            } else if (value->getType()->isIntegerTy()) {
-                b->CallPrintInt(name.str(), value);
-            }
+            dumpValueToConsole(b, expr, value);
         }
     }
 }
@@ -1084,6 +1077,17 @@ PabloCompiler::PabloCompiler(PabloKernel * const kernel)
 , mCarryManager(makeCarryManager())
 , mBranchCount(0) {
     assert ("PabloKernel cannot be null!" && kernel);
+}
+
+void PabloCompiler::dumpValueToConsole(BuilderRef b, const PabloAST * expr, llvm::Value * value) {
+    SmallVector<char, 256> tmp;
+    raw_svector_ostream name(tmp);
+    expr->print(name);
+    if (value->getType()->isVectorTy()) {
+        b->CallPrintRegister(name.str(), value);
+    } else if (value->getType()->isIntegerTy()) {
+        b->CallPrintInt(name.str(), value);
+    }
 }
 
 }

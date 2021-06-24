@@ -80,6 +80,8 @@ stateVector_t ccSequenceSearchObject::search_from_state(RE * re, stateVector_t v
         return mInitState;
     } else if (isa<End>(re)) {
         return v & mFinalState;
+    } else if (isa<Any>(re)) {
+        return (v << 1) | mInitState;
     } else if (const CC * cc = dyn_cast<CC>(re)) {
         stateVector_t CC_matches = 0;
         for (unsigned i = 0; i < mCCseq.size(); i++) {

@@ -153,28 +153,6 @@ public:
 
 };
 
-////PipelineKernel(BuilderRef b,
-////               std::string && signature,
-////               const unsigned numOfThreads,
-////               Kernels && kernels, CallBindings && callBindings,
-////               Bindings && stream_inputs, Bindings && stream_outputs,
-////               Bindings && scalar_inputs, Bindings && scalar_outputs);
-
-//class RootGrepPipelineKernel : public PipelineKernel {
-
-//    RootGrepPipelineKernel(BaseDriver & driver,
-//                             BuilderRef b,
-
-//                             Scalar * const buffer,
-//                             Scalar * const length,
-//                             Scalar * const accumulator) {
-
-
-
-//    }
-
-//};
-
 NestedInternalSearchEngine::NestedInternalSearchEngine(BaseDriver & driver)
 : mGrepRecordBreak(GrepRecordBreakKind::LF)
 , mCaseInsensitive(false)

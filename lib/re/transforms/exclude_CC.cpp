@@ -26,6 +26,9 @@ struct CC_Remover : public RE_Transformer {
         if (intersects(mExcludedCC, cc)) return subtractCC(cc, mExcludedCC);
         else return cc;
     }
+    RE * transformAny (Any * a) override {
+        return makeDiff(a, mExcludedCC);
+    }
     RE * transformName (Name * name) override {
         RE * defn = name->getDefinition();
         if (!defn) return name;

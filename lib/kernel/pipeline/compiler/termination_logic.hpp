@@ -140,28 +140,32 @@ Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned streamSet) const
 Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inputPort) const {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
-    const Kernel * const kernel = getKernel(producer);
-    bool normally = false;
-    for (const Attribute & attr : kernel->getAttributes()) {
-        switch (attr.getKind()) {
-            case AttrId::CanTerminateEarly:
-            case AttrId::MayFatallyTerminate:
-                normally = true;
-            default: continue;
-        }
-    }
-    return hasKernelTerminated(b, producer, normally);
+    return hasKernelTerminated(b, producer, kernelCanTerminateAbnormally(producer));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initiallyTerminated
+ * @brief kernelCanTerminateAbnormally
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
+bool PipelineCompiler::kernelCanTerminateAbnormally(const unsigned kernel) const {
+    for (const Attribute & attr : getKernel(kernel)->getAttributes()) {
+        switch (attr.getKind()) {
+            case AttrId::CanTerminateEarly:
+            case AttrId::MayFatallyTerminate:
+                return true;
+            default: continue;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief checkIfKernelIsAlreadyTerminated
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::checkIfKernelIsAlreadyTerminated(BuilderRef b) {
     if (mIsPartitionRoot) {
         const auto id = KernelPartitionId[mKernelId];
         Value * const signal = readTerminationSignal(b, id);
-
-        mTerminatedInitially = signal; assert (signal);
+        mInitialTerminationSignal = signal; assert (signal);
         setCurrentTerminationSignal(b, signal);
         Value * terminated = hasKernelTerminated(b, mKernelId);
 
@@ -172,9 +176,8 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
             Value * const allConsumersFinished = b->CreateICmpEQ(conSignal, b->getSize(n));
             terminated = b->CreateOr(terminated, allConsumersFinished);
         }
-        return terminated;
+        mInitiallyTerminated = terminated;
     }
-    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -239,12 +242,17 @@ void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
         Value * atLeastOneExhausted = nullptr;
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const BufferPort & br = mBufferGraph[e];
-            if (LLVM_UNLIKELY(br.IsZeroExtended)) continue;
             Value * const closed = isClosed(b, br.Port);
-            Value * const avail = getLocallyAvailableItemCount(b, br.Port);
-            Value * const processed = mProcessedItemCount[br.Port]; assert (processed);
 
-            Value * const fullyConsumed = b->CreateAnd(closed, b->CreateICmpULE(avail, processed));
+            Value * fullyConsumed = nullptr;
+            if (LLVM_UNLIKELY(br.IsZeroExtended)) {
+                fullyConsumed = closed;
+            } else {
+                Value * const avail = getLocallyAvailableItemCount(b, br.Port);
+                Value * const processed = mProcessedItemCount[br.Port]; assert (processed);
+                fullyConsumed = b->CreateAnd(closed, b->CreateICmpULE(avail, processed));
+            }
+
             if (LLVM_UNLIKELY(br.IsPrincipal)) {
                 if (atLeastOneExhausted) {
                     RecursivelyDeleteTriviallyDeadInstructions(atLeastOneExhausted);
@@ -296,45 +304,22 @@ void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::verifyPostInvocationTerminationSignal(BuilderRef b) {
 
+    Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
+
     if (mIsPartitionRoot) {
-        #ifndef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
-        Value * anyUnterminated = nullptr;
-        ConstantInt * const ZERO = b->getSize(0);
-        if (mCurrentPartitionId > 0) {
-            Value * const signal = mPartitionTerminationSignal[mCurrentPartitionId - 1];
-            anyUnterminated = b->CreateICmpEQ(signal, ZERO);
-        }
-
-        for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionJumpTree))) {
-            const auto partitionId = source(e, mPartitionJumpTree);
-            Value * const signal = mPartitionTerminationSignal[partitionId];
-            Value * const nonterm = b->CreateICmpEQ(signal, ZERO);
-            if (anyUnterminated) {
-                anyUnterminated = b->CreateOr(anyUnterminated, nonterm);
-            } else {
-                anyUnterminated = nonterm;
-            }
-        }
-
-        if (anyUnterminated) {
-            Value * const allTerminated = b->CreateNot(anyUnterminated);
-            Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-            Value * const notTerminatedNormally = b->CreateICmpNE(mTerminatedAtExitPhi, completed);
-            Value * const valid = b->CreateOr(notTerminatedNormally, allTerminated);
-            constexpr auto msg =
-                "Kernel %s of partition %" PRId64 " was flagged as complete "
-                "before any of its source partitions were terminated.";
-            b->CreateAssert(valid, msg,
-                mCurrentKernelName, b->getSize(mCurrentPartitionId));
-        }
-        #endif
-        mPartitionRootTerminationSignal = b->CreateIsNotNull(mTerminatedAtExitPhi);
+        constexpr auto msg =
+            "Partition root %s in partition %" PRId64 " should have been flagged as terminated "
+            "after invocation.";
+        Value * const valid = b->CreateOr(b->CreateNot(mFinalPartitionSegment), isTerminated);
+        b->CreateAssert(valid, msg, mCurrentKernelName, b->getSize(mCurrentPartitionId));
     } else {
-        Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
         constexpr auto msg =
             "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
             "after partition root %s was terminated.";
-        Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
+        Value * valid = b->CreateICmpEQ(mFinalPartitionSegment, isTerminated);
+        if (mKernelCanTerminateEarly) {
+            valid = b->CreateOr(valid, isTerminated);
+        }
         b->CreateAssert(valid, msg,
             mCurrentKernelName, b->getSize(mCurrentPartitionId),
             mKernelName[FirstKernelInPartition]);

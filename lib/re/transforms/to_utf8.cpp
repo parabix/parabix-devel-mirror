@@ -61,6 +61,10 @@ RE * UTF8_Transformer::transformCC(CC * cc) {
     return makeAlt(alt.begin(), alt.end());
 }
 
+RE * UTF8_Transformer::transformAny(Any * e) {
+    return rangeToUTF8(0, UCD::UNICODE_MAX);
+}
+
 UTF8_Transformer::UTF8_Transformer(NameTransformationMode m) :
     EncodingTransformer("ToUTF8", &cc::Unicode, &cc::UTF8, m) {}
 

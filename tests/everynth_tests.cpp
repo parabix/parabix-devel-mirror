@@ -37,8 +37,8 @@ protected:
 
 }
 
-auto every1in  = BinaryStream({".... ...1 .... 1... ...1"});
-auto every1out = BinaryStream({".... ...1 .... 1... ...1"});
+static auto every1in  = BinaryStream({".... ...1 .... 1... ...1"});
+static auto every1out = BinaryStream({".... ...1 .... 1... ...1"});
 
 TEST_CASE(every1, every1in, every1out) {
     auto const Result = T->CreateStreamSet(1);
@@ -46,8 +46,8 @@ TEST_CASE(every1, every1in, every1out) {
     AssertEQ(T, Result, Input<1>(T));
 }
 
-auto every2in  = BinaryStream({".... ...1 .... 1... ...1"});
-auto every2out = BinaryStream({".... ...1 .... 0... ...1"});
+static auto every2in  = BinaryStream({".... ...1 .... 1... ...1"});
+static auto every2out = BinaryStream({".... ...1 .... 0... ...1"});
 
 TEST_CASE(every2, every2in, every2out) {
     auto const Result = T->CreateStreamSet(1);
@@ -55,8 +55,8 @@ TEST_CASE(every2, every2in, every2out) {
     AssertEQ(T, Result, Input<1>(T));
 }
 
-auto every7in  = BinaryStream({".... ...1 .... 1... ...1 .... 1..1 ...1 ..1. 1.1. 1... ...."});
-auto every7out = BinaryStream({".... ...1 .... 0... ...0 .... 0..0 ...0 ..0. 1.0. 0... ...."});
+static auto every7in  = BinaryStream({".... ...1 .... 1... ...1 .... 1..1 ...1 ..1. 1.1. 1... ...."});
+static auto every7out = BinaryStream({".... ...1 .... 0... ...0 .... 0..0 ...0 ..0. 1.0. 0... ...."});
 
 TEST_CASE(every7, every7in, every7out) {
     auto const Result = T->CreateStreamSet(1);
@@ -64,8 +64,8 @@ TEST_CASE(every7, every7in, every7out) {
     AssertEQ(T, Result, Input<1>(T));
 }
 
-auto every4in  = HexStream({"ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff"});
-auto every4out = HexStream({"1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111"});
+static auto every4in  = HexStream({"ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff"});
+static auto every4out = HexStream({"1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111"});
 
 TEST_CASE(every4, every4in, every4out) {
     auto const Result = T->CreateStreamSet(1);
@@ -73,8 +73,8 @@ TEST_CASE(every4, every4in, every4out) {
     AssertEQ(T, Result, Input<1>(T));
 }
 
-auto every5in  = HexStream({"ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff 0000 0000 0000 0000"});
-auto every5out = HexStream({"1248 0124 8012 4801 2480 1248 0124 8012 4801 2480 1248 0124 8012 4801 2480 1248 0124 8012 4801 2480 0000 0000 0000 0000"});
+static auto every5in  = HexStream({"ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff 0000 0000 0000 0000"});
+static auto every5out = HexStream({"1248 0124 8012 4801 2480 1248 0124 8012 4801 2480 1248 0124 8012 4801 2480 1248 0124 8012 4801 2480 0000 0000 0000 0000"});
 
 TEST_CASE(every5, every5in, every5out) {
     auto const Result = T->CreateStreamSet(1);
@@ -82,8 +82,8 @@ TEST_CASE(every5, every5in, every5out) {
     AssertEQ(T, Result, Input<1>(T));
 }
 
-auto every256in  = HexStream({"ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff"});
-auto every256out = HexStream({"1000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 1000"});
+static auto every256in  = HexStream({"ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff ffff"});
+static auto every256out = HexStream({"1000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 1000"});
 
 TEST_CASE(every256, every256in, every256out) {
     auto const Result = T->CreateStreamSet(1);

@@ -62,6 +62,8 @@ const std::string Printer_RE::PrintRE(const RE * re) {
     } else if (const Reference * r = dyn_cast<const Reference>(re)) {
         retVal = "Ref \"";
         retVal += r->getName();
+        retVal += ".";
+        retVal += std::to_string(r->getInstance());
         retVal += "\" ";
     } else if (const Range* rg = dyn_cast<const Range>(re)) {
         retVal = "Range (";

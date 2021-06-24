@@ -9,10 +9,11 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
-#include <util/sha1.hpp>
-
-#include "LLVMVersion.h"
-
+#if BOOST_VERSION < 106600
+#include <boost/uuid/sha1.hpp>
+#else
+#include <boost/uuid/detail/sha1.hpp>
+#endif
 using namespace llvm;
 using namespace boost;
 using namespace llvm_version;
@@ -334,6 +335,7 @@ Function * Kernel::addInitializeDeclaration(BuilderRef b) const {
             std::advance(arg, 1);
         };
         if (LLVM_LIKELY(isStateful())) {
+            arg->addAttr(llvm::Attribute::AttrKind::NoCapture);
             setNextArgName("shared");
         }
         for (const Binding & binding : mInputScalars) {
@@ -395,6 +397,7 @@ Function * Kernel::addInitializeThreadLocalDeclaration(BuilderRef b) const {
                 std::advance(arg, 1);
             };
             if (LLVM_LIKELY(isStateful())) {
+                arg->addAttr(llvm::Attribute::AttrKind::NoCapture);
                 setNextArgName("shared");
             }
             assert (arg == func->arg_end());
@@ -454,6 +457,7 @@ Function * Kernel::addAllocateSharedInternalStreamSetsDeclaration(BuilderRef b) 
                 std::advance(arg, 1);
             };
             if (LLVM_LIKELY(isStateful())) {
+                arg->addAttr(llvm::Attribute::AttrKind::NoCapture);
                 setNextArgName("shared");
             }
             setNextArgName("expectedNumOfStrides");
@@ -515,6 +519,7 @@ Function * Kernel::addAllocateThreadLocalInternalStreamSetsDeclaration(BuilderRe
                 std::advance(arg, 1);
             };
             if (LLVM_LIKELY(isStateful())) {
+                arg->addAttr(llvm::Attribute::AttrKind::NoCapture);
                 setNextArgName("shared");
             }
             setNextArgName("threadLocal");
@@ -669,9 +674,11 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
             std::advance(arg, 1);
         };
         if (LLVM_LIKELY(isStateful())) {
+            arg->addAttr(llvm::Attribute::AttrKind::NoCapture);
             setNextArgName("shared");
         }
         if (LLVM_UNLIKELY(hasThreadLocal())) {
+            arg->addAttr(llvm::Attribute::AttrKind::NoCapture);
             setNextArgName("threadLocal");
         }
         const auto internallySynchronized = hasAttribute(AttrId::InternallySynchronized);

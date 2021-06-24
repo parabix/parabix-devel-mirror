@@ -85,18 +85,6 @@ Value * PipelineCompiler::startCycleCounter(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief startOptionalCycleCounter
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
-    Value * ptr = nullptr;
-    if (LLVM_UNLIKELY(EnableCycleCounter)) {
-        const auto prefix = makeKernelName(mKernelId) + STATISTICS_CYCLE_COUNT_SUFFIX;
-        ptr = b->getScalarFieldPtr(prefix + std::to_string(BUFFER_EXPANSION));
-    }
-    return ptr;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief updateOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::updateCycleCounter(BuilderRef b, const unsigned kernelId, Value * const start, const CycleCounter type) const {

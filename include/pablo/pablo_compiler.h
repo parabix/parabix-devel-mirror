@@ -68,6 +68,8 @@ private:
 
     llvm::Value * compileExpression(BuilderRef b, const PabloAST * expr, const bool ensureLoaded = true);
 
+    static void dumpValueToConsole(BuilderRef b, const PabloAST * expr, llvm::Value * value);
+
 private:
 
     PabloKernel * const                 mKernel;

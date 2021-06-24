@@ -104,7 +104,7 @@ public:
             return llvm::StringRef(mName);
         }
 
-        const unsigned getGroup() const {
+        unsigned getGroup() const {
             return mGroup;
         }
 
@@ -368,7 +368,7 @@ public:
 
     virtual std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const;
 
-    virtual ~Kernel() = 0;
+    virtual ~Kernel() ;
 
 protected:
 
