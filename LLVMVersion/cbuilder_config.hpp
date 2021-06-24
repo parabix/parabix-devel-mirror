@@ -8,13 +8,6 @@ namespace llvm { class ConstantFolder; }
 namespace llvm { class IRBuilderDefaultInserter; }
 namespace llvm { class LLVMContext; }
 
-class CBuilderBase :
-    public llvm::IRBuilder<> {
-    typedef llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> IRBuilderB;
-    public:
-        CBuilderBase(llvm::LLVMContext &context) :
-        IRBuilderB(context) {
+typedef llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> CBuilderBase;
 
-      }
-};
 #endif
