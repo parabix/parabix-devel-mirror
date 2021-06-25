@@ -376,7 +376,7 @@ CallInst * CBuilder::CallPrintInt(StringRef name, Value * const value, const STD
         report_fatal_error("CallPrintInt was given a non-integer/non-pointer value.");
     }
     assert (num->getType()->isIntegerTy() && num->getType()->getIntegerBitWidth() == 64);
-    return CreateCall(cast<Function>(printRegister), {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
+    return CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
 }
 
 Value * CBuilder::CreateMalloc(Value * size) {
@@ -778,7 +778,7 @@ Value * CBuilder::CreatePrefetch(Value * ptr, PrefetchRW mode, unsigned locality
     Value * modeVal = getInt32(mode == PrefetchRW::Read ? 0 : 1);
     Value * localityVal = getInt32(locality > 3 ? 3 : locality);
     Value * cacheKind = getInt32(c == CacheType::Instruction ? 0 : 1);
-    return CreateCall(cast<Function>(prefetchIntrin), {CreateBitCast(ptr, getInt8PtrTy()), modeVal, localityVal, cacheKind});
+    return CreateCall(prefetchIntrin, {CreateBitCast(ptr, getInt8PtrTy()), modeVal, localityVal, cacheKind});
 }
 
 PointerType * LLVM_READNONE CBuilder::getFILEptrTy() {
@@ -1234,7 +1234,7 @@ BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, Basic
 
 Value * CBuilder::CreatePopcount(Value * bits) {
     Value * ctpopFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, bits->getType());
-    return CreateCall(cast<Function>(ctpopFunc), bits);
+    return CreateCall(ctpopFunc, bits);
 }
 
 Value * CBuilder::CreateCountForwardZeroes(Value * value, const Twine Name, const no_conversion<bool> guaranteedNonZero) {
@@ -1242,7 +1242,7 @@ Value * CBuilder::CreateCountForwardZeroes(Value * value, const Twine Name, cons
         CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
     }
     Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
-    return CreateCall(cast<Function>(cttzFunc), {value, getInt1(guaranteedNonZero)}, Name);
+    return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
 Value * CBuilder::CreateCountReverseZeroes(Value * value, const Twine Name, const no_conversion<bool> guaranteedNonZero) {
@@ -1250,7 +1250,7 @@ Value * CBuilder::CreateCountReverseZeroes(Value * value, const Twine Name, cons
         CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
     }
     Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
-    return CreateCall(cast<Function>(ctlzFunc), {value, getInt1(guaranteedNonZero)}, Name);
+    return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
 Value * CBuilder::CreateResetLowestBit(Value * bits, const Twine Name) {
@@ -1305,7 +1305,7 @@ Constant * CBuilder::GetString(StringRef Str) {
 Value * CBuilder::CreateReadCycleCounter() {
     Module * const m = getModule();
     Value * cycleCountFunc = Intrinsic::getDeclaration(m, Intrinsic::readcyclecounter);
-    return CreateCall(cast<Function>(cycleCountFunc), std::vector<Value *>({}));
+    return CreateCall(cycleCountFunc, std::vector<Value *>({}));
 }
 
 Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * functionPtr) const {
