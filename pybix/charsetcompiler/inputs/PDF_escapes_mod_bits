@@ -1,0 +1,9 @@
+# PDF escape bit modifications
+pdf_mod_bit_0 = []
+pdf_mod_bit_1 = [bfnrt]
+pdf_mod_bit_2 = [bfnrt]
+pdf_mod_bit_3 = [rt]
+pdf_mod_bit_4 = [bfrt]
+pdf_mod_bit_5 = [nrt]
+pdf_mod_bit_6 = [bfr]
+pdf_mod_bit_7 = [rt]

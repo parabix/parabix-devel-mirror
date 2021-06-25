@@ -1,0 +1,5 @@
+lex.a = [a]
+lex.p = [p]
+lex.l = [l]
+lex.e = [e]
+lex.LF = [\x0A]

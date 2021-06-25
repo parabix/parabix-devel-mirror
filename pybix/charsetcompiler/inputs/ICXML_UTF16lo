@@ -1,0 +1,48 @@
+# ICXML_UTF16lo
+#
+
+#
+# For FFFE/FFFF recognition in XML
+# If the low byte matches xFE_FF, then look for 0xFFFE/F in
+# the source.
+xFE_FF = [\xFE-\xFF]
+
+# Control Characters and whitespace
+x00_x1F = [\x00-\x1F]
+lex.CR = [\x0D]
+lex.LF = [\x0A]
+lex.WS = [\x0D\x0A\x09\x20]
+#
+# XML Lexical Items
+lex.RefStart = [&]
+lex.Semicolon = [;]
+lex.LAngle = [<]
+lex.RAngle = [>]
+lex.LBracket = [[]
+lex.RBracket = []]
+lex.Exclam = [!]
+lex.QMark = [?]
+lex.Hyphen =  [-]
+lex.Equals = [=]
+lex.SQuote = [']
+lex.DQuote = ["]
+lex.Slash = [/]
+lex.Hash = [#]
+lex.NameScan = [-_.0-:A-Za-z\x80-\xFF]
+#
+# XML 1.1 
+DEL = [\x7F]
+#
+# Non-ASCII
+#
+# For C1 controls 0u80-0u9F in XML 1.1
+x80_x9F = [\x80-\x9F]
+lex.NEL = [\x85]
+
+#
+# For XML 1.1 LS = 0x2028
+# If the low byte matches x28, then look for 0x2028 in
+# the source.
+x28 = [\x28]
+
+

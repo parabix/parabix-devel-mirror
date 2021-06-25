@@ -1,0 +1,8 @@
+u16hi_any = [\x01-\xFF]
+u16hi_hi_surrogate = [\xD8-\xDB]
+u16hi_lo_surrogate = [\xDC-\xDF]
+u16hi_xFF = [\xFF]
+#
+# For XML1.1 LS = 0x2028
+u16hi_x20 = [\x20]
+

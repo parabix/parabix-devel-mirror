@@ -1,0 +1,6 @@
+CR = [\x0D]
+LF = [\x0A]
+HT = [\x09]
+control = [\x00-\x1F]
+illegal = [\x00-\x08\x0B-\x0C\x0E-\x1F]
+
