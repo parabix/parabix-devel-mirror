@@ -142,7 +142,7 @@ unsigned StreamSetBuffer::getFieldWidth() const {
  * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
  */
 Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Value * absolutePosition) const {
-    Type * const itemTy = mBaseType->getArrayElementType()->getVectorElementType();
+    Type * const itemTy = mBaseType->getArrayElementType()->getContainedType(0);
     #if LLVM_VERSION_CODE < LLVM_VERSION_CODE(13, 0, 0)
     const auto itemWidth = itemTy->getPrimitiveSizeInBits();
     #else
@@ -593,7 +593,7 @@ void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consu
         const auto streamCount = ty->getArrayNumElements();
         name << streamCount << 'x';
         ty = ty->getArrayElementType();
-        ty = ty->getVectorElementType();
+        ty = ty->getContainedType(0);
         const auto itemWidth = ty->getIntegerBitWidth();
         name << itemWidth << '_' << mAddressSpace;
 

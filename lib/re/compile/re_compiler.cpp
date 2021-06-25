@@ -721,7 +721,7 @@ RE_Block_Compiler::RE_Block_Compiler(RE_Block_Compiler * parent, PabloBuilder & 
 void RE_Compiler::addAlphabet(const cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
     mBasisSets.push_back(basis_set);
-    bool useDirectCC = basis_set[0]->getType()->getVectorElementType()->getIntegerBitWidth() > 1;
+    bool useDirectCC = basis_set[0]->getType()->getContainedType(0)->getIntegerBitWidth() > 1;
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (useDirectCC) {
         ccc = std::make_unique<cc::Direct_CC_Compiler>(mEntryScope, basis_set[0]);

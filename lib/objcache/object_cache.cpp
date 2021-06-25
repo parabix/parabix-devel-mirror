@@ -297,7 +297,7 @@ inline bool ParabixObjectCache::requiresCacheCleanUp() noexcept {
     }
     // if we cannot lock the pid file then an earlier process
     // must have acquired it.
-    return FileLock{fs::path{mCachePath.str()}}.locked();
+    return FileLock{fs::path{mCachePath.c_str()}}.locked();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
