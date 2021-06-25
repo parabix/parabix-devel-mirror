@@ -8,6 +8,7 @@
 
 #include <idisa/idisa_sse_builder.h>
 #include <toolchain/toolchain.h>
+#include "llvm/Support/Host.h"
 
 namespace IDISA {
 

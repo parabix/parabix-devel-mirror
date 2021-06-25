@@ -19,4 +19,5 @@ DEPS
     kernel.pipeline
     kernel.streamutils
     re.cc
+    LLVMVersion
 )

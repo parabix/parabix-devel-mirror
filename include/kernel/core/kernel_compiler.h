@@ -83,7 +83,7 @@ public:
 public:
 
     LLVM_READNONE std::string getName() const {
-        return mTarget->getName();
+        return mTarget->getName().str();
     }
 
     LLVM_READNONE llvm::Value * getAccessibleInputItems(const llvm::StringRef name) const {

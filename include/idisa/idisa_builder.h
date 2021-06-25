@@ -8,6 +8,9 @@
  */
 #include <codegen/CBuilder.h>
 #include <llvm/IR/DerivedTypes.h>
+
+#include "LLVMVersion.h"
+
 namespace llvm { class Constant; }
 namespace llvm { class LoadInst; }
 namespace llvm { class Module; }
@@ -18,7 +21,7 @@ namespace IDISA {
 
 
 inline bool isStreamTy(llvm::Type * t) {
-    return t->isVectorTy() && (t->getVectorNumElements() == 0);
+    return t->isVectorTy() && (llvm::cast<llvm::VectorType>(t)->getNumElements() == 0);
 }
 
 inline bool isStreamSetTy(llvm::Type * t) {
@@ -229,7 +232,7 @@ public:
     }
 
     static llvm::VectorType * LLVM_READNONE getStreamTy(llvm::LLVMContext & C, const unsigned FieldWidth = 1) {
-        return llvm::VectorType::get(llvm::IntegerType::getIntNTy(C, FieldWidth), 0);
+        return llvm_version::getVectorType(llvm::IntegerType::getIntNTy(C, FieldWidth), unsigned{0});
     }
 
     static llvm::ArrayType * LLVM_READNONE getStreamSetTy(llvm::LLVMContext & C, const unsigned NumElements = 1, const unsigned FieldWidth = 1) {

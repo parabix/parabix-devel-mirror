@@ -30,6 +30,8 @@
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
 
+#include <llvm/Support/CommandLine.h>
+
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <iostream>

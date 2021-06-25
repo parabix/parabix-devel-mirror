@@ -51,7 +51,7 @@ public:
         assert ("FunctionTypeBuilder did not resolve a function type." && type);
         assert ("Function was not provided the correct number of args" && type->getNumParams() == args.size());
         // Since the pipeline kernel module has not been made yet, just record the function info and its arguments.
-        mCallBindings.emplace_back(name, type, reinterpret_cast<void *>(&functionPtr), std::move(args));
+        mCallBindings.emplace_back(name.str(), type, reinterpret_cast<void *>(&functionPtr), std::move(args));
     }
 
     Scalar * getInputScalar(const unsigned i) {

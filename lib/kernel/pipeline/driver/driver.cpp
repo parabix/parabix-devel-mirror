@@ -7,6 +7,10 @@
 #include <objcache/object_cache.h>
 #include <llvm/Support/raw_ostream.h>
 
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
+#include "llvm/Support/Host.h"
+#endif
+
 using namespace kernel;
 
 using RelationshipAllocator = Relationship::Allocator;
@@ -15,14 +19,14 @@ using RelationshipAllocator = Relationship::Allocator;
  * @brief makePipelineWithIO
  ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<ProgramBuilder> BaseDriver::makePipelineWithIO(Bindings stream_inputs, Bindings stream_outputs, Bindings scalar_inputs, Bindings scalar_outputs) {
-    return llvm::make_unique<ProgramBuilder>(*this, std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_inputs), std::move(scalar_outputs));
+    return std::make_unique<ProgramBuilder>(*this, std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_inputs), std::move(scalar_outputs));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipeline
  ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<ProgramBuilder> BaseDriver::makePipeline(Bindings scalar_inputs, Bindings scalar_outputs) {
-    return llvm::make_unique<ProgramBuilder>(*this, Bindings{}, Bindings{}, std::move(scalar_inputs), std::move(scalar_outputs));
+    return std::make_unique<ProgramBuilder>(*this, Bindings{}, Bindings{}, std::move(scalar_inputs), std::move(scalar_outputs));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

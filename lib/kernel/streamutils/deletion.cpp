@@ -13,7 +13,10 @@
 #include <kernel/pipeline/driver/driver.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 inline size_t ceil_udiv(const size_t n, const size_t m) {
     return (n + m - 1) / m;
@@ -252,11 +255,11 @@ void StreamCompressKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * c
     IntegerType * const sizeTy = b->getSizeTy();
     const unsigned numFields = b->getBitBlockWidth() / mCompressedFieldWidth;
     Constant * zeroSplat = Constant::getNullValue(b->fwVectorType(mCompressedFieldWidth));
-    Constant * oneSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, 1));
+    Constant * oneSplat = llvm_version::getSplat(numFields, ConstantInt::get(fwTy, 1));
     Constant * CFW = ConstantInt::get(fwTy, mCompressedFieldWidth);
-    Constant * fwSplat = ConstantVector::getSplat(numFields, CFW);
+    Constant * fwSplat = llvm_version::getSplat(numFields, CFW);
     Constant * numFieldConst = ConstantInt::get(fwTy, numFields);
-    Constant * fwMaskSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
+    Constant * fwMaskSplat = llvm_version::getSplat(numFields, ConstantInt::get(fwTy, mCompressedFieldWidth - 1));
     Constant * BLOCK_WIDTH = ConstantInt::get(fwTy, b->getBitBlockWidth());
     Constant * BLOCK_MASK = ConstantInt::get(fwTy, b->getBitBlockWidth() - 1);
 

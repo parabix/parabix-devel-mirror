@@ -24,10 +24,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <boost/filesystem.hpp>
+
+#include "LLVMVersion.h"
+
 namespace fs = boost::filesystem;
 
 using namespace llvm;
 using namespace kernel;
+using namespace llvm_version;
 
 static cl::OptionCategory testFlags("Command Flags", "test options");
 
@@ -64,7 +68,8 @@ void ShiftLimitKernel::generateDoBlockMethod(BuilderRef kb) {
     Constant * const ZeroConst = kb->getSize(0);
     Value * shiftOperand = kb->loadInputStreamBlock("shiftOperand", ZeroConst);
     unsigned fieldCount = kb->getBitBlockWidth()/mTestFw;
-    Value * limited = kb->simd_umin(mTestFw, shiftOperand, ConstantVector::getSplat(fieldCount, ConstantInt::get(fwTy, mShiftLimit)));
+    Constant * op = llvm_version::getSplat(fieldCount, ConstantInt::get(fwTy, mShiftLimit));
+    Value * limited = kb->simd_umin(mTestFw, shiftOperand, op);
     kb->storeOutputStreamBlock("limitedShift", ZeroConst, limited);
 }
 

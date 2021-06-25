@@ -32,7 +32,10 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 namespace pablo {
 
@@ -137,7 +140,7 @@ LessThan * PabloBlock::createLessThan(PabloAST * expr1, PabloAST * expr2) {
     CHECK_SAME_TYPE(t1, t2);
     Type * ty = getParent()->getInt1Ty();
     if (t1->isVectorTy() || t2->isVectorTy()) {
-        ty = VectorType::get(ty, 0);
+        ty = llvm_version::getVectorType(ty, unsigned{0});
     }
     return new (mAllocator) LessThan(ty, expr1, expr2, mAllocator);
 }
@@ -148,7 +151,7 @@ Equals * PabloBlock::createEquals(PabloAST * expr1, PabloAST * expr2) {
     CHECK_SAME_TYPE(t1, t2);
     Type * ty = getParent()->getInt1Ty();
     if (t1->isVectorTy() || t2->isVectorTy()) {
-        ty = VectorType::get(ty, 0);
+        ty = llvm_version::getVectorType(ty, unsigned{0});
     }
     return new (mAllocator) Equals(ty, expr1, expr2, mAllocator);
 }
@@ -210,19 +213,19 @@ While * PabloBlock::createWhile(PabloAST * condition, PabloBlock * body) {
 
 Repeat * PabloBlock::createRepeat(Integer * fieldWidth, PabloAST * value, const String * const name) {
     assert (fieldWidth && value);
-    Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()), 0);
+    Type * const type = llvm_version::getVectorType(IntegerType::get(value->getType()->getContext(), fieldWidth->value()), unsigned{0});
     return insertAtInsertionPoint(new (mAllocator) Repeat(fieldWidth, value, type, name, mAllocator));
 }
 
 PackH * PabloBlock::createPackH(Integer * fieldWidth, PabloAST * value, const String * const name) {
     assert (fieldWidth && value);
-    Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()/2), 0);
+    Type * const type = llvm_version::getVectorType(IntegerType::get(value->getType()->getContext(), fieldWidth->value()/2), unsigned{0});
     return insertAtInsertionPoint(new (mAllocator) PackH(fieldWidth, value, name, type, mAllocator));
 }
 
 PackL * PabloBlock::createPackL(Integer * fieldWidth, PabloAST * value, const String * const name) {
     assert (fieldWidth && value);
-    Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()/2), 0);
+    Type * const type = llvm_version::getVectorType(IntegerType::get(value->getType()->getContext(), fieldWidth->value()/2), unsigned{0});
     return insertAtInsertionPoint(new (mAllocator) PackL(fieldWidth, value, name, type, mAllocator));
 }
 

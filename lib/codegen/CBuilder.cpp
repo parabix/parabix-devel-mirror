@@ -1365,7 +1365,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char *
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
-    LI->setAlignment(Align);
+    LI->setAlignment(llvm_version::AlignType(Align));
     return LI;
 }
 
@@ -1378,7 +1378,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine 
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
-    LI->setAlignment(Align);
+    LI->setAlignment(llvm_version::AlignType(Align));
     return LI;
 }
 
@@ -1391,7 +1391,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolat
         CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
-    LI->setAlignment(Align);
+    LI->setAlignment(llvm_version::AlignType(Align));
     return LI;
 }
 
@@ -1404,7 +1404,7 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
         CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
-    SI->setAlignment(Align);
+    SI->setAlignment(llvm_version::AlignType(Align));
     return SI;
 }
 
@@ -1442,11 +1442,7 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
 
         }
     }
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-    return IRBuilder<>::CreateMemMove(Dst, Align, Src, Align, Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
-#else
-    return IRBuilder<>::CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
-#endif
+    return llvm_version::CreateMemMove(this, Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
 CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVolatile,
@@ -1471,11 +1467,7 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
         Value * const nonOverlapping = CreateOr(srcEndsBeforeDst, dstEndsBeforeSrc);
         CreateAssert(nonOverlapping, "CreateMemCpy: overlapping ranges is undefined");
     }
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-    return IRBuilder<>::CreateMemCpy(Dst, Align, Src, Align, Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
-#else
-    return IRBuilder<>::CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
-#endif
+    return llvm_version::CreateMemCpy(this, Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 }
 
 CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsigned Align,
@@ -1490,7 +1482,7 @@ CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsign
             CreateAssertZero(CreateURem(intPtr, align), "CreateMemSet: Ptr is misaligned");
         }
     }
-    return IRBuilder<>::CreateMemSet(Ptr, Val, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+    return IRBuilder<>::CreateMemSet(Ptr, Val, Size, llvm_version::AlignType(Align), isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
 CallInst * CBuilder::CreateMemCmp(Value * Ptr1, Value * Ptr2, Value * Num) {
@@ -1522,7 +1514,7 @@ Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine Name
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");
         }
-        Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
+        Constant * const Size = ConstantInt::get(Idx->getType(), llvm::cast<llvm::VectorType>(Vec->getType())->getNumElements());
         // exctracting an element from a position that exceeds the length of the vector is undefined
         __CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }
@@ -1534,11 +1526,39 @@ Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, 
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");
         }
-        Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
+        Constant * const Size = ConstantInt::get(Idx->getType(), llvm::cast<llvm::VectorType>(Vec->getType())->getNumElements());
         // inserting an element into a position that exceeds the length of the vector is undefined
         __CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }
     return IRBuilder<>::CreateInsertElement(Vec, NewElt, Idx, Name);
+}
+
+CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Value * > Args, const Twine Name) {
+    return IRBuilder<>::CreateCall(FTy, Callee, Args, Name);
+}
+
+CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Value * > Args,
+                                ArrayRef< OperandBundleDef > OpBundles, const Twine Name) {
+    return IRBuilder<>::CreateCall(FTy, Callee, Args, OpBundles, Name);
+}
+
+CallInst * CBuilder::CreateCall(Value *Callee, ArrayRef< Value * > args, const Twine Name) {
+    return llvm_version::CreateCall(this, Callee, args, Name);
+}
+
+InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
+                                    ArrayRef<Value *> Args, ArrayRef<OperandBundleDef> OpBundles, const Twine Name) {
+    return IRBuilder<>::CreateInvoke(Ty, Callee, NormalDest, UnwindDest, Args, OpBundles, Name);
+}
+
+InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
+                                    ArrayRef<Value *> Args, const Twine Name) {
+    return IRBuilder<>::CreateInvoke(Ty, Callee, NormalDest, UnwindDest, Args, Name);
+}
+
+InvokeInst * CBuilder::CreateInvoke(Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
+                                    ArrayRef<Value *> Args, const Twine Name) {
+    return llvm_version::CreateInvoke(this, Callee, NormalDest, UnwindDest, Args, Name);
 }
 
 CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
@@ -1769,7 +1789,7 @@ void CBuilder::CheckAddress(Value * const Ptr, Value * const Size, Constant * co
 
 
 CBuilder::CBuilder(LLVMContext & C)
-: IRBuilder<>(C)
+: CBuilderBase(C)
 , mCacheLineAlignment(64)
 , mSizeType(IntegerType::get(getContext(), sizeof(size_t) * 8))
 , mFILEtype(nullptr)

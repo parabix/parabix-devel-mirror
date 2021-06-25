@@ -46,7 +46,10 @@
 #include <pablo/printer_pablos.h>
 #include <tuple>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 namespace pablo {
 
@@ -671,7 +674,7 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
                 value = b->CreateZExtOrTrunc(value, ty);
             }
         } else if (const PackH * const p = dyn_cast<PackH>(stmt)) {
-            const auto sourceWidth = p->getValue()->getType()->getVectorElementType()->getIntegerBitWidth();
+            const auto sourceWidth = p->getValue()->getType()->getContainedType(0)->getIntegerBitWidth();
             const auto packWidth = p->getFieldWidth()->value();
             assert (sourceWidth == packWidth);
             Value * const base = compileExpression(b, p->getValue(), false);
@@ -691,7 +694,7 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
                 b->CreateStore(P, b->CreateGEP(value, {ZERO, b->getInt32(i)}));
             }
         } else if (const PackL * const p = dyn_cast<PackL>(stmt)) {
-            const auto sourceWidth = p->getValue()->getType()->getVectorElementType()->getIntegerBitWidth();
+            const auto sourceWidth = p->getValue()->getType()->getContainedType(0)->getIntegerBitWidth();
             const auto packWidth = p->getFieldWidth()->value();
             assert (sourceWidth == packWidth);
             Value * const base = compileExpression(b, p->getValue(), false);
@@ -795,8 +798,8 @@ unsigned getIntegerBitWidth(const Type * ty) {
         ty = ty->getArrayElementType();
     }
     if (ty->isVectorTy()) {
-        assert (ty->getVectorNumElements() == 0);
-        ty = ty->getVectorElementType();
+        assert (llvm::cast<llvm::VectorType>(ty)->getNumElements() == 0);
+        ty = ty->getContainedType(0);
     }
     return ty->getIntegerBitWidth();
 }
@@ -855,7 +858,7 @@ Value * PabloCompiler::compileExpression(BuilderRef b, const PabloAST * const ex
                 const unsigned intWidth = std::min(getIntegerBitWidth(lh->getType()), getIntegerBitWidth(rh->getType()));
                 const unsigned maskWidth = b->getBitBlockWidth() / intWidth;
                 IntegerType * const maskTy = b->getIntNTy(maskWidth);
-                VectorType * const vTy = VectorType::get(b->getIntNTy(intWidth), maskWidth);
+                VectorType * const vTy = llvm_version::getVectorType(b->getIntNTy(intWidth), maskWidth);
 
                 Value * baseLhv = nullptr;
                 Value * lhvStreamIndex = nullptr;
@@ -917,7 +920,7 @@ Value * PabloCompiler::compileExpression(BuilderRef b, const PabloAST * const ex
 
                 } else {
 
-                    value = UndefValue::get(VectorType::get(maskTy, intWidth));
+                    value = UndefValue::get(llvm_version::getVectorType(maskTy, intWidth));
 
                     for (unsigned i = 0; i < intWidth; ++i) {
                         llvm::Constant * const index = b->getInt32(i);
@@ -1061,9 +1064,9 @@ Value * PabloCompiler::getPointerToVar(BuilderRef b, const Var * var, Value * in
 inline std::unique_ptr<CarryManager> makeCarryManager() {
     switch (CarryMode) {
         case PabloCarryMode::BitBlock:
-            return make_unique<CarryManager>();
+            return std::make_unique<CarryManager>();
         case PabloCarryMode::Compressed:
-            return make_unique<CompressedCarryManager>();
+            return std::make_unique<CompressedCarryManager>();
     }
     llvm_unreachable("Unknown CarryManager type!");
 }

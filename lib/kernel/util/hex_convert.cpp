@@ -8,8 +8,11 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include "LLVMVersion.h"
+
 using namespace kernel;
 using namespace llvm;
+using namespace llvm_version;
 
 HexToBinary::HexToBinary(BuilderRef b, StreamSet * hexStream, StreamSet * binStream)
 : BlockOrientedKernel(b, "HexToBinary",
@@ -21,13 +24,12 @@ void HexToBinary::generateDoBlockMethod(BuilderRef b) {
     Type * i8Ty = b->getInt8Ty();
     Constant * const ZERO = b->getSize(0);
     const unsigned bytesPerBlock = b->getBitBlockWidth()/8;
-    Constant * splat_0 = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, '0'));
-    Constant * splat_9 = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, '9'));
-    Constant * case_shift = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a' - 'A'));
-    Constant * splat_a = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a'));
-    Constant * splat_f = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'f'));
-    Constant * af_cvt = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a' - 10));
-
+    Constant * splat_0 = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, '0'));
+    Constant * splat_9 = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, '9'));
+    Constant * case_shift = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a' - 'A'));
+    Constant * splat_a = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a'));
+    Constant * splat_f = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'f'));
+    Constant * af_cvt = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a' - 10));
     for (unsigned i = 0; i < 4; i++) {
         Value * hexPack[2];
         hexPack[0] = b->loadInputStreamPack("hexdata", ZERO, b->getInt32(2*i));
@@ -57,9 +59,9 @@ void BinaryToHex::generateDoBlockMethod(BuilderRef b) {
     Type * i8Ty = b->getInt8Ty();
     Constant * const ZERO = b->getSize(0);
     const unsigned bytesPerBlock = b->getBitBlockWidth()/8;
-    Constant * splatCh_0 = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, '0'));
-    Constant * splat_9 = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 9));
-    Constant * splatCh_a = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a'-10));
+    Constant * splatCh_0 = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, '0'));
+    Constant * splat_9 = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 9));
+    Constant * splatCh_a = llvm_version::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a'-10));
     for (unsigned i = 0; i < 4; i++) {
         Value * bit_data = b->loadInputStreamBlock("binary_data", ZERO, b->getInt32(i));
         Value * nybble_0 = b->fwCast(8, b->esimd_mergel(4, bit_data, b->allZeroes()));

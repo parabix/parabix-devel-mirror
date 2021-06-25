@@ -11,7 +11,10 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/ErrorHandling.h>
 
+#include "LLVMVersion.h"
+
 using namespace llvm;
+using namespace llvm_version;
 
 #define IS_POW_2(i) ((i > 0) && ((i & (i - 1)) == 0))
 
@@ -205,7 +208,7 @@ ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceS
 
 static Value * collapseVector(BuilderRef b, Value * const vec) {
     assert (vec->getType()->isVectorTy());
-    uint32_t count = vec->getType()->getVectorNumElements();
+    uint32_t count = llvm::cast<llvm::VectorType>(vec->getType())->getNumElements();
     Value * accum = b->CreateExtractElement(vec, (uint64_t) 0);
     for (uint32_t i = 1; i < count; ++i) {
         accum = b->CreateOr(accum, b->CreateExtractElement(vec, i));
@@ -214,7 +217,7 @@ static Value * collapseVector(BuilderRef b, Value * const vec) {
 }
 
 static Value * vectorFromRepeating(BuilderRef b, Value * const value, size_t count) {
-    Value * vec = Constant::getNullValue(VectorType::get(value->getType(), count));
+    Value * vec = Constant::getNullValue(llvm_version::getVectorType(value->getType(), count));
     for (size_t i = 0; i < count; ++i) {
         vec = b->CreateInsertElement(vec, value, i);
     }
@@ -233,7 +236,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
 
     Value * const ZERO_MASK = Constant::getNullValue(sw.StrideMaskTy);
 
-    Type * const i1VecTy = VectorType::get(b->getInt1Ty(), numInputStreams);
+    Type * const i1VecTy = llvm_version::getVectorType(b->getInt1Ty(), numInputStreams);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const strideInit = b->CreateBasicBlock("strideInit");
@@ -292,7 +295,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     b->SetInsertPoint(masksReady);
     // There is some data to be processed in the masks, we'll store the mask
     // values in a vector to be processed in parallel.
-    Value * maskVec = Constant::getNullValue(VectorType::get(sw.StrideMaskTy, numInputStreams));
+    Value * maskVec = Constant::getNullValue(llvm_version::getVectorType(sw.StrideMaskTy, numInputStreams));
     for (uint32_t i = 0; i < numInputStreams; ++i) {
         maskVec = b->CreateInsertElement(maskVec, maskValues[i], i);
     }
@@ -323,7 +326,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     // which scan words to parallel process.
 
     b->SetInsertPoint(parallelProcessMasks);
-    Type * const maskVectorTy = VectorType::get(sw.StrideMaskTy, numInputStreams);
+    Type * const maskVectorTy = llvm_version::getVectorType(sw.StrideMaskTy, numInputStreams);
     Value * const nullMaskVector = Constant::getNullValue(maskVectorTy);
     Value * const allOneMaskVector = Constant::getAllOnesValue(maskVectorTy);
     PHINode * const maskVectorPhi = b->CreatePHI(maskVectorTy, 2);
@@ -347,7 +350,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     //        but it may be better to loop through each mask and only load the words
     //        we need.
 
-    Type * const wordVectorTy = VectorType::get(sw.Ty, numInputStreams);
+    Type * const wordVectorTy = llvm_version::getVectorType(sw.Ty, numInputStreams);
     Value * const nullWordVector = Constant::getNullValue(wordVectorTy);
     Value * loadedWordVec = nullWordVector;
     for (uint32_t i = 0; i < numInputStreams; ++i) {

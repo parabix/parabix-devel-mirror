@@ -110,7 +110,7 @@ public:
                                      MatchResults = driver.CreateStreamSet();
                                  }
 
-                                 auto options = make_unique<GrepKernelOptions>();
+                                 auto options = std::make_unique<GrepKernelOptions>();
 
                                  auto r = resolveCaseInsensitiveMode(patterns[i].second, caseInsensitive);
                                  r = regular_expression_passes(r);

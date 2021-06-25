@@ -23,4 +23,5 @@ SRC
 DEPS
     pablo.bixnum
     kernel.pipeline
+    LLVMVersion
 )

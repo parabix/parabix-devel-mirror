@@ -1,0 +1,9 @@
+parabix_add_module(
+NAME
+  LLVMVersion
+SRC
+  LLVMVersion.cpp
+  LLVMVersion.h
+DEPS
+  toolchain
+)

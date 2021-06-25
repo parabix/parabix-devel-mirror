@@ -495,7 +495,7 @@ inline void Kernel::link(llvm::StringRef name, ExternalFunctionType & functionPt
     auto & C = mModule->getContext();
     auto * const type = FunctionTypeBuilder<ExternalFunctionType>::get(C);
     assert ("FunctionTypeBuilder did not resolve a function type." && type);
-    mLinkedFunctions.emplace_back(name, type, reinterpret_cast<void *>(functionPtr));
+    mLinkedFunctions.emplace_back(name.str(), type, reinterpret_cast<void *>(functionPtr));
 }
 
 class SegmentOrientedKernel : public Kernel {

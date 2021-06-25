@@ -20,6 +20,9 @@
 #endif
 #include <util/not_null.h>
 
+#include <cbuilder_config.hpp>
+#include "LLVMVersion.h"
+
 namespace kernel { class KernelBuilder; }
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
@@ -34,7 +37,7 @@ inline bool is_power_2(const uint64_t n) {
 
 extern "C" void free_debug_wrapper(void * ptr);
 
-class CBuilder : public llvm::IRBuilder<> {
+class CBuilder : public CBuilderBase {
 public:
 
     CBuilder(llvm::LLVMContext & C);
@@ -135,7 +138,7 @@ public:
 
     llvm::AllocaInst * CreateAlignedAlloca(llvm::Type * const Ty, const unsigned alignment, llvm::Value * const ArraySize = nullptr) {
         llvm::AllocaInst * const alloc = CreateAlloca(Ty, ArraySize);
-        alloc->setAlignment(alignment);
+        alloc->setAlignment(llvm_version::AlignType(alignment));
         return alloc;
     }
 
@@ -417,6 +420,47 @@ public:
     llvm::Value * CreateInsertElement(llvm::Value *Vec, llvm::Value *NewElt, uint64_t Idx, const llvm::Twine Name = "") {
         return CreateInsertElement(Vec, NewElt, getInt64(Idx), Name);
     }
+
+    virtual llvm::CallInst * CreateCall(llvm::FunctionType *FTy, llvm::Value *Callee,
+                                        llvm::ArrayRef< llvm::Value * > Args = llvm::None,
+                                        const llvm::Twine Name = "");
+
+    virtual llvm::CallInst * CreateCall(llvm::FunctionType *FTy, llvm::Value *Callee, llvm::ArrayRef< llvm::Value * > Args,
+                                        llvm::ArrayRef< llvm::OperandBundleDef > OpBundles, const llvm::Twine Name = "");
+
+    llvm::CallInst * CreateCall(llvm::FunctionCallee Callee, llvm::ArrayRef< llvm::Value * > Args = llvm::None,
+                                const llvm::Twine Name = "") {
+        return CreateCall(Callee.getFunctionType(), Callee.getCallee(), Args, Name);
+    }
+
+    llvm::CallInst * CreateCall(llvm::FunctionCallee Callee, llvm::ArrayRef< llvm::Value * > Args,
+                                llvm::ArrayRef< llvm::OperandBundleDef > OpBundles, const llvm::Twine Name = "") {
+        return CreateCall(Callee.getFunctionType(), Callee.getCallee(), Args, OpBundles, Name);
+    }
+
+    llvm::CallInst * CreateCall(llvm::Value *Callee, llvm::ArrayRef< llvm::Value * > args, const llvm::Twine Name = "");
+
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionType *Ty, llvm::Value *Callee, llvm::BasicBlock *NormalDest,
+                                   llvm::BasicBlock *UnwindDest, llvm::ArrayRef<llvm::Value *> Args,
+                                   llvm::ArrayRef<llvm::OperandBundleDef> OpBundles, const llvm::Twine Name = "");
+
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionType *Ty, llvm::Value *Callee, llvm::BasicBlock *NormalDest,
+                                   llvm::BasicBlock *UnwindDest, llvm::ArrayRef<llvm::Value *> Args = llvm::None,
+                                   const llvm::Twine Name = "");
+
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionCallee Callee, llvm::BasicBlock *NormalDest, llvm::BasicBlock *UnwindDest,
+                                  llvm::ArrayRef<llvm::Value *> Args, llvm::ArrayRef<llvm::OperandBundleDef> OpBundles, 
+                                  const llvm::Twine Name = "") {
+        return CreateInvoke(Callee.getFunctionType(), Callee.getCallee(), NormalDest, UnwindDest, Args, OpBundles, Name);
+    }
+
+    llvm::InvokeInst *CreateInvoke(llvm::FunctionCallee Callee, llvm::BasicBlock *NormalDest, llvm::BasicBlock *UnwindDest,
+                                   llvm::ArrayRef<llvm::Value *> Args = llvm::None, const llvm::Twine Name = "") {
+        return CreateInvoke(Callee.getFunctionType(), Callee.getCallee(), NormalDest, UnwindDest, Args, Name);
+    }
+
+    llvm::InvokeInst *CreateInvoke(llvm::Value *Callee, llvm::BasicBlock *NormalDest, llvm::BasicBlock *UnwindDest,
+                                   llvm::ArrayRef<llvm::Value *> Args, const llvm::Twine Name = "");
 
     llvm::CallInst * CreateSRandCall(llvm::Value * randomSeed);
     llvm::CallInst * CreateRandCall();

@@ -33,9 +33,9 @@ void UnicodePropertyKernelBuilder::generatePabloMethod() {
     std::unique_ptr<cc::CC_Compiler> ccc;
     bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
     if (useDirectCC) {
-        ccc = llvm::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = llvm::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
     UCD::UCDCompiler unicodeCompiler(*ccc.get(), pb);
     pablo::Var * propertyVar = pb.createVar(mName->getFullName(), pb.createZeroes());

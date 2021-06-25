@@ -28,6 +28,8 @@
 #include <toolchain/toolchain.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include <llvm/Support/CommandLine.h>
+
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <iostream>
@@ -39,7 +41,7 @@ using namespace codegen;
 using namespace re;
 
 
-static cl::OptionCategory x8u16Options("x8u16 Options", "Transcoding control options.");
+static llvm::cl::OptionCategory x8u16Options("x8u16 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(x8u16Options));
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::cat(x8u16Options));
 
