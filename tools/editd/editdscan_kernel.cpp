@@ -32,7 +32,7 @@ void editdScanKernel::generateDoBlockMethod(BuilderRef b) {
     for(unsigned i = 0; i < fieldCount; ++i) {
         for(unsigned d = 0; d < mNumElements; d++) {
             Value * matchWord = b->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
-            b->CreateCall(scanWordFunction, {matchWord, b->getInt32(d), scanwordPos});
+            b->CreateCall(scanWordFunction->getFunctionType(), scanWordFunction, {matchWord, b->getInt32(d), scanwordPos});
         }
         scanwordPos = b->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
     }
@@ -58,6 +58,7 @@ Function * editdScanKernel::generateScanWordRoutine(BuilderRef b) const {
     basePos->setName("basePos");
 
     Function * const matchProcessor = m->getFunction("wrapped_report_pos");
+    FunctionType * fty = matchProcessor->getFunctionType();
     assert (matchProcessor);
 //    FunctionType * fTy = FunctionType::get(b->getVoidTy(), {T, b->getInt32Ty()}, false);
 //    Function * const matchProcessor = Function::Create(fTy, Function::ExternalLinkage, "wrapped_report_pos", m);
@@ -80,7 +81,7 @@ Function * editdScanKernel::generateScanWordRoutine(BuilderRef b) const {
     Value * match_pos = b->CreateAdd(b->CreateCountForwardZeroes(matches_phi), basePos);
     Value * matches_new = b->CreateAnd(matches_phi, b->CreateSub(matches_phi, ConstantInt::get(T, 1)));
     matches_phi->addIncoming(matches_new, matchesLoopBlock);
-    b->CreateCall(matchProcessor, std::vector<Value *>({match_pos, dist}));
+    b->CreateCall(fty, matchProcessor, std::vector<Value *>({match_pos, dist}));
     b->CreateBr(matchesCondBlock);
 
     b->SetInsertPoint(matchesDoneBlock);

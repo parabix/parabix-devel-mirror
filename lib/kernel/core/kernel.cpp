@@ -952,6 +952,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     // allocate any internal stream sets
     if (LLVM_LIKELY(allocatesInternalStreamSets())) {
         Function * const allocInternal = getAllocateSharedInternalStreamSetsFunction(b);
+        FunctionType * fTy = allocInternal->getFunctionType();
         SmallVector<Value *, 2> allocArgs;
         if (LLVM_LIKELY(isStateful())) {
             allocArgs.push_back(sharedHandle);
@@ -959,7 +960,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         // pass in the desired number of segments
         #warning fix this so BufferSegments is an argument to main
         allocArgs.push_back(b->getSize(codegen::BufferSegments));
-        b->CreateCall(allocInternal, allocArgs);
+        b->CreateCall(fTy, allocInternal, allocArgs);
         if (hasThreadLocal()) {
             Function * const allocInternal = getAllocateThreadLocalInternalStreamSetsFunction(b);
             SmallVector<Value *, 3> allocArgs;
@@ -968,7 +969,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
             }
             allocArgs.push_back(threadLocalHandle);
             allocArgs.push_back(ONE);
-            b->CreateCall(allocInternal, allocArgs);
+            b->CreateCall(fTy, allocInternal, allocArgs);
         }
     }
 
@@ -996,8 +997,10 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         b->SetInsertPoint(handleCatch);
         LandingPadInst * const caughtResult = b->CreateLandingPad(caughtResultType, 0);
         caughtResult->addClause(ConstantPointerNull::get(int8PtrTy));
-        b->CreateCall(b->getBeginCatch(), {b->CreateExtractValue(caughtResult, 0)});
-        b->CreateCall(b->getEndCatch());
+        Function * catchFn = b->getBeginCatch();
+        Function * catchEndFn = b->getEndCatch();
+        b->CreateCall(catchFn->getFunctionType(), catchFn, {b->CreateExtractValue(caughtResult, 0)});
+        b->CreateCall(catchEndFn->getFunctionType(), catchEndFn);
         BasicBlock * const afterCatch = b->GetInsertBlock();
         b->CreateBr(handleDeallocation);
 
@@ -1006,7 +1009,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         successPhi->addIncoming(b->getTrue(), beforeInvoke);
         successPhi->addIncoming(b->getFalse(), afterCatch);
     } else {
-        b->CreateCall(doSegment, segmentArgs);
+        b->CreateCall(doSegment->getFunctionType(), doSegment, segmentArgs);
     }
     if (hasThreadLocal()) {
         SmallVector<Value *, 2> args;
@@ -1055,7 +1058,7 @@ void Kernel::initializeInstance(BuilderRef b, ArrayRef<Value *> args) const {
     assert (args[0] && "cannot initialize before creation");
     assert (args[0]->getType()->getPointerElementType() == getSharedStateType());
     Function * const init = getInitializeFunction(b);
-    b->CreateCall(init, args);
+    b->CreateCall(init->getFunctionType(), init, args);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1066,9 +1069,9 @@ Value * Kernel::initializeThreadLocalInstance(BuilderRef b, Value * const handle
     if (hasThreadLocal()) {
         Function * const init = getInitializeThreadLocalFunction(b);
         if (handle) {
-            instance = b->CreateCall(init, handle);
+            instance = b->CreateCall(init->getFunctionType(), init, handle);
         } else {
-            instance = b->CreateCall(init);
+            instance = b->CreateCall(init->getFunctionType(), init);
         }
     }
     return instance;
@@ -1080,7 +1083,7 @@ Value * Kernel::initializeThreadLocalInstance(BuilderRef b, Value * const handle
 void Kernel::finalizeThreadLocalInstance(BuilderRef b, ArrayRef<Value *> args) const {
     assert (args.size() == (isStateful() ? 2 : 1));
     Function * const init = getFinalizeThreadLocalFunction(b); assert (init);
-    b->CreateCall(init, args);
+    b->CreateCall(init->getFunctionType(), init, args);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1090,9 +1093,9 @@ Value * Kernel::finalizeInstance(BuilderRef b, Value * const handle) const {
     Value * result = nullptr;
     Function * const termFunc = getFinalizeFunction(b);
     if (LLVM_LIKELY(isStateful())) {
-        result = b->CreateCall(termFunc, { handle });
+        result = b->CreateCall(termFunc->getFunctionType(), termFunc, { handle });
     } else {
-        result = b->CreateCall(termFunc);
+        result = b->CreateCall(termFunc->getFunctionType(), termFunc);
     }
     if (mOutputScalars.empty()) {
         assert (!result || result->getType()->isVoidTy());
@@ -1136,7 +1139,8 @@ Value * Kernel::constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const 
         initArgs.push_back(f->second); assert (initArgs.back());
     }
     recursivelyConstructFamilyKernels(b, initArgs, params);
-    b->CreateCall(getInitializeFunction(b), initArgs);
+    Function * init = getInitializeFunction(b);
+    b->CreateCall(init->getFunctionType(), getInitializeFunction(b), initArgs);
     END_SCOPED_REGION
 
     if (LLVM_LIKELY(hasFamilyName())) {

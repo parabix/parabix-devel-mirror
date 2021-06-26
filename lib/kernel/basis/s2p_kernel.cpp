@@ -199,8 +199,9 @@ void S2PKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks)
         b->setProducedItemCount("basisBits", producedCount);
         b->setFatalTerminationSignal();
         Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
+        FunctionType * fTy = dispatcher->getFunctionType();
         Value * handler = b->getScalarField("handler_address");
-        b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), NULL_SIGNAL)});
+        b->CreateCall(fTy, dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), NULL_SIGNAL)});
         b->CreateBr(s2pExit);
 
         b->SetInsertPoint(s2pExit);

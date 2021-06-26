@@ -598,14 +598,14 @@ void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consu
 
 
         Module * const m = b->getModule();
+        IntegerType * const sizeTy = b->getSizeTy();
+        FunctionType * funcTy = FunctionType::get(b->getVoidTy(), {myHandle->getType(), sizeTy, sizeTy, sizeTy, sizeTy}, false);
         Function * func = m->getFunction(name.str());
         if (func == nullptr) {
 
             const auto ip = b->saveIP();
 
             LLVMContext & C = m->getContext();
-            IntegerType * const sizeTy = b->getSizeTy();
-            FunctionType * funcTy = FunctionType::get(b->getVoidTy(), {myHandle->getType(), sizeTy, sizeTy, sizeTy, sizeTy}, false);
             func = Function::Create(funcTy, Function::InternalLinkage, name.str(), m);
 
             b->SetInsertPoint(BasicBlock::Create(C, "entry", func));
@@ -679,7 +679,7 @@ void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consu
             setHandle(myHandle);
         }
 
-        b->CreateCall(func, { myHandle, produced, consumed, b->getSize(mUnderflow), b->getSize(mOverflow) });
+        b->CreateCall(funcTy, func, { myHandle, produced, consumed, b->getSize(mUnderflow), b->getSize(mOverflow) });
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -873,14 +873,14 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
     Value * const myHandle = getHandle();
 
     Module * const m = b->getModule();
+    IntegerType * const sizeTy = b->getSizeTy();
+    FunctionType * funcTy = FunctionType::get(b->getVoidTy(), {myHandle->getType(), sizeTy, sizeTy, sizeTy, sizeTy, sizeTy}, false);
     Function * func = m->getFunction(name.str());
     if (func == nullptr) {
 
         const auto ip = b->saveIP();
 
         LLVMContext & C = m->getContext();
-        IntegerType * const sizeTy = b->getSizeTy();
-        FunctionType * funcTy = FunctionType::get(b->getVoidTy(), {myHandle->getType(), sizeTy, sizeTy, sizeTy, sizeTy, sizeTy}, false);
         func = Function::Create(funcTy, Function::InternalLinkage, name.str(), m);
 
         b->SetInsertPoint(BasicBlock::Create(C, "entry", func));
@@ -1076,7 +1076,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
 
 
-    b->CreateCall(func, { myHandle, produced, consumed, required, b->getSize(mUnderflow), b->getSize(mOverflow) });
+    b->CreateCall(funcTy, func, { myHandle, produced, consumed, required, b->getSize(mUnderflow), b->getSize(mOverflow) });
 }
 
 // Constructors

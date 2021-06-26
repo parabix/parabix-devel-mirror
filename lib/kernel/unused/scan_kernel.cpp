@@ -159,7 +159,7 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     Value * const callbackIndex = b->CreateAdd(strideIndex, b->CreateAdd(wordIndex_InStride, bitIndex_InWord), "callbackIndex");
     Value * const sourcePtr = b->getRawInputPointer("source", callbackIndex);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
-    b->CreateCall(callback, {sourcePtr, callbackIndex});
+    b->CreateCall(callback->getFunctionType(), callback, {sourcePtr, callbackIndex});
     Value * const processedWord = b->CreateResetLowestBit(processingWord);
     processingWord->addIncoming(processedWord, processWord);
     // Loop back if the scan word has another 1 bit in it.
@@ -397,7 +397,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     Value * const callbackIndex = b->CreateAdd(strideIndex, b->CreateAdd(wordIndex, bitOffset), "callbackIndex");
     Value * const sourcePtr = b->getRawInputPointer("source", callbackIndex);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
-    b->CreateCall(callback, {sourcePtr, callbackIndex, streamIndex});
+    b->CreateCall(callback->getFunctionType(), callback, {sourcePtr, callbackIndex, streamIndex});
     b->CreateBr(performCallbackLoopTail);
 
     b->SetInsertPoint(performCallbackLoopTail);

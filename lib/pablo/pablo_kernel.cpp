@@ -211,8 +211,7 @@ void PabloKernel::generateFinalizeMethod(BuilderRef b) {
                                              b->getInt32(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH));
 
         Function * dprintf = b->GetDprintf();
-
-
+        FunctionType * fTy = dprintf->getFunctionType();
 
         Value * profile = b->getScalarFieldPtr("profile");
 
@@ -228,7 +227,7 @@ void PabloKernel::generateFinalizeMethod(BuilderRef b) {
             str << "\n";
 
             Value * taken = b->CreateLoad(b->CreateGEP(profile, {b->getInt32(0), b->getInt32(branchCount++)}));
-            b->CreateCall(dprintf, {fd, b->GetString(str.str()), taken});
+            b->CreateCall(fTy, dprintf, {fd, b->GetString(str.str()), taken});
 
         }
 

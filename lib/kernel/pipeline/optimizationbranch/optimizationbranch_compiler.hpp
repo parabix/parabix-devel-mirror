@@ -420,7 +420,9 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
             const auto j = ref.Index + firstArgIndex;
             args[j] = getInputScalar(b, source(e, mScalarGraph));
         }
-        Value * const terminatedOnInit = b->CreateCall(kernel->getInitializeFunction(b), args);
+        Function * terminationFn = kernel->getInitializeFunction(b);
+        FunctionType * fTy = terminationFn->getFunctionType();
+        Value * const terminatedOnInit = b->CreateCall(fTy, terminationFn, args);
         Value * const term = b->CreateICmpNE(terminatedOnInit, ZERO);
         terminated = b->CreateOr(terminated, term);
     }
@@ -871,7 +873,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
         addNextArg(mConsumedOutputItems[host.Index]);
     }
 
-    Value * const terminated = b->CreateCall(doSegment, args);
+    Value * const terminated = b->CreateCall(doSegment->getFunctionType(), doSegment, args);
 
     // TODO: if either of these kernels "share" an output scalar, copy the scalar value from the
     // branch we took to the state of the branch we avoided. This requires that the branch pipeline
@@ -1207,7 +1209,8 @@ void OptimizationBranchCompiler::allocateOwnedBranchBuffers(BuilderRef b, Value 
                     params.push_back(loadThreadLocalHandle(b, i));
                 }
                 params.push_back(expectedNumOfStrides);
-                b->CreateCall(func, params);
+                FunctionType * fTy = func->getFunctionType();
+                b->CreateCall(fTy, func, params);
             }
         }
     }
@@ -1274,7 +1277,8 @@ BOOST_NOINLINE void OptimizationBranchCompiler::debugPrint(BuilderRef b, Twine f
         assert ("null argument given to debugPrint" && arg);
     }
     #endif
-    b->CreateCall(b->GetDprintf(), argVals);
+    Function * printFn = b->GetDprintf();
+    b->CreateCall(printFn->getFunctionType(), printFn, argVals);
 }
 
 #endif

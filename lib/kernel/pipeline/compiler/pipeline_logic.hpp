@@ -594,7 +594,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     SmallVector<Value *, 8> threadState(additionalThreads);
     SmallVector<Value *, 8> threadLocal(additionalThreads);
 
-    Value * const processThreadId = b->CreateCall(pthreadSelfFn);
+    Value * const processThreadId = b->CreateCall(pthreadSelfFn->getFunctionType(), pthreadSelfFn);
 
     for (unsigned i = 0; i != additionalThreads; ++i) {
         if (mTarget->hasThreadLocal()) {
@@ -608,7 +608,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
                 }
                 allocArgs.push_back(threadLocal[i]);
                 allocArgs.push_back(b->getSize(1));
-                b->CreateCall(allocInternal, allocArgs);
+                b->CreateCall(allocInternal->getFunctionType(), allocInternal, allocArgs);
             }
         }
         threadState[i] = constructThreadStructObject(b, processThreadId, threadLocal[i], i + 1);
@@ -623,17 +623,17 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         pthreadCreateArgs[2] = b->CreatePointerCast(threadState[i], voidPtrTy);
         pthreadCreateArgs[3] = b->getInt32(i + 1);
 
-        b->CreateCall(pthreadCreateFn, pthreadCreateArgs);
+        b->CreateCall(pthreadCreateFn->getFunctionType(), pthreadCreateFn, pthreadCreateArgs);
     }
 
     Function * const pinProcessFn = m->getFunction("__pipeline_pin_current_thread_to_cpu");
-    b->CreateCall(pinProcessFn, b->getInt32(0));
+    b->CreateCall(pinProcessFn->getFunctionType(), pinProcessFn, b->getInt32(0));
 
     // execute the process thread
     assert (isFromCurrentFunction(b, initialThreadLocal));
     Value * const pty_ZERO = Constant::getNullValue(pThreadTy);
     Value * const processState = constructThreadStructObject(b, pty_ZERO, initialThreadLocal, 0);
-    b->CreateCall(threadFunc, b->CreatePointerCast(processState, voidPtrTy));
+    b->CreateCall(threadFunc->getFunctionType(), threadFunc, b->CreatePointerCast(processState, voidPtrTy));
 
     // store where we'll resume compiling the DoSegment method
     const auto resumePoint = b->saveIP();
@@ -675,7 +675,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     #ifdef ENABLE_PAPI
     unregisterPAPIThread(b);
     #endif
-    b->CreateCall(pthreadExitFn, nullVoidPtrVal);
+    b->CreateCall(pthreadExitFn->getFunctionType(), pthreadExitFn, nullVoidPtrVal);
     b->CreateBr(exitFunction);
     b->SetInsertPoint(exitFunction);
     b->CreateRet(nullVoidPtrVal);
@@ -697,7 +697,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         Value * threadId = b->CreateLoad(threadIdPtr[i]);
         pthreadJoinArgs[0] = threadId;
         pthreadJoinArgs[1] = status;
-        b->CreateCall(pthreadJoinFn, pthreadJoinArgs);
+        b->CreateCall(pthreadJoinFn->getFunctionType(), pthreadJoinFn, pthreadJoinArgs);
     }
     if (LLVM_LIKELY(mTarget->hasThreadLocal())) {
         const auto n = mTarget->isStateful() ? 2 : 1;
@@ -763,7 +763,8 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         if (LLVM_LIKELY(mKernel->isStateful())) {
             params.push_back(mKernelSharedHandle);
         }
-        mScalarValue[i] = b->CreateCall(getKernelFinalizeFunction(b), params);
+        Value * finalizeFn = getKernelFinalizeFunction(b);
+        mScalarValue[i] = b->CreateCall(finalizeFn, params);
     }
     releaseOwnedBuffers(b, true);
     resetInternalBufferHandles();

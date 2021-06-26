@@ -126,6 +126,8 @@ StreamSetPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned 
 void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
     if (LLVM_UNLIKELY(EnableCycleCounter)) {
 
+        Function * Dprintf = b->GetDprintf();
+        FunctionType * fTy = Dprintf->getFunctionType();
         // Print the title line
 
         size_t maxLength = 0;
@@ -158,7 +160,7 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         FixedArray<Value *, 2> titleArgs;
         titleArgs[0] = STDERR;
         titleArgs[1] = b->GetString(title.str());
-        b->CreateCall(b->GetDprintf(), titleArgs);
+        b->CreateCall(fTy, Dprintf, titleArgs);
 
         // Print each kernel line
 
@@ -267,13 +269,13 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             args[12] = getPerc(fExecutionCycles);
             args[13] = b->CreateFMul(b->CreateFDiv(fCycles, fTotalCycles), fOneHundred);
 
-            b->CreateCall(b->GetDprintf(), args);
+            b->CreateCall(fTy, Dprintf, args);
         }
         // print final new line
         FixedArray<Value *, 2> finalArgs;
         finalArgs[0] = STDERR;
         finalArgs[1] = b->GetString("\n");
-        b->CreateCall(b->GetDprintf(), finalArgs);
+        b->CreateCall(fTy, Dprintf, finalArgs);
     }
 }
 
@@ -356,6 +358,8 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
 
         // Print the title line
+        Function * Dprintf = b->GetDprintf();
+        FunctionType * fTy = Dprintf->getFunctionType();
 
         size_t maxKernelLength = 0;
         size_t maxBindingLength = 0;
@@ -395,7 +399,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
         FixedArray<Value *, 2> titleArgs;
         titleArgs[0] = STDERR;
         titleArgs[1] = b->GetString(line.str());
-        b->CreateCall(b->GetDprintf(), titleArgs);
+        b->CreateCall(fTy, Dprintf, titleArgs);
 
         // Print each kernel line
 
@@ -467,7 +471,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
                 Value * const fBlockedCount100 = b->CreateFMul(fBlockedCount, fOneHundred);
                 args.push_back(b->CreateFDiv(fBlockedCount100, fTotalNumberOfSegments));
 
-                b->CreateCall(b->GetDprintf(), args);
+                b->CreateCall(fTy, Dprintf, args);
 
                 args.clear();
             }
@@ -500,7 +504,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
                 Value * const fBlockedCount100 = b->CreateFMul(fBlockedCount, fOneHundred);
                 args.push_back(b->CreateFDiv(fBlockedCount100, fTotalNumberOfSegments));
 
-                b->CreateCall(b->GetDprintf(), args);
+                b->CreateCall(fTy, Dprintf, args);
 
                 args.clear();
             }
@@ -510,7 +514,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
         FixedArray<Value *, 2> finalArgs;
         finalArgs[0] = STDERR;
         finalArgs[1] = b->GetString("\n");
-        b->CreateCall(b->GetDprintf(), finalArgs);
+        b->CreateCall(fTy, Dprintf, finalArgs);
     }
 }
 
@@ -532,6 +536,9 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
 
         ConstantInt * const i1_FALSE = b->getFalse();
         ConstantInt * const i1_TRUE = b->getTrue();
+
+        Function * Dprintf = b->GetDprintf();
+        FunctionType * fTy = Dprintf->getFunctionType();
 
         // Print the first title line
         SmallVector<char, 100> buffer;
@@ -556,7 +563,7 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         FixedArray<Value *, 2> titleArgs;
         titleArgs[0] = STDERR;
         titleArgs[1] = b->GetString(format.str());
-        b->CreateCall(b->GetDprintf(), titleArgs);
+        b->CreateCall(fTy, Dprintf, titleArgs);
 
         // Print the second title line
         buffer.clear();
@@ -575,7 +582,7 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         }
         format << '\n';
         titleArgs[1] = b->GetString(format.str());
-        b->CreateCall(b->GetDprintf(), titleArgs);
+        b->CreateCall(fTy, Dprintf, titleArgs);
 
         // Generate line format string
         buffer.clear();
@@ -684,7 +691,7 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         b->CreateCondBr(writeLine, doWriteLine, checkNext);
 
         b->SetInsertPoint(doWriteLine);
-        b->CreateCall(b->GetDprintf(), args);
+        b->CreateCall(fTy, Dprintf, args);
         b->CreateBr(checkNext);
 
         b->SetInsertPoint(checkNext);
@@ -702,7 +709,7 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         FixedArray<Value *, 2> finalArgs;
         finalArgs[0] = STDERR;
         finalArgs[1] = b->GetString("\n");
-        b->CreateCall(b->GetDprintf(), finalArgs);
+        b->CreateCall(fTy, Dprintf, finalArgs);
         for (unsigned i = 0; i < fieldCount; ++i) {
             b->CreateFree(traceLogArray[i]);
         }
@@ -815,6 +822,8 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
 
         // Print the title line
+        Function * Dprintf = b->GetDprintf();
+        FunctionType * fTy = Dprintf->getFunctionType();
 
         size_t maxKernelLength = 0;
         size_t maxBindingLength = 0;
@@ -854,7 +863,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         FixedArray<Value *, 2> constantArgs;
         constantArgs[0] = STDERR;
         constantArgs[1] = b->GetString(format.str());
-        b->CreateCall(b->GetDprintf(), constantArgs);
+        b->CreateCall(fTy, Dprintf, constantArgs);
 
         const auto totalLength = 4 + maxKernelLength + 4 + maxBindingLength + 7 + 15 + 18 + 2;
 
@@ -866,7 +875,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         format.write('\n');
         Constant * const singleBar = b->GetString(format.str());
         constantArgs[1] = singleBar;
-        b->CreateCall(b->GetDprintf(), constantArgs);
+        b->CreateCall(fTy, Dprintf, constantArgs);
 
 
         // generate the produced/processed title line
@@ -874,7 +883,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         format.indent(totalLength - 19);
         format << "PRODUCED/PROCESSED\n";
         constantArgs[1] = b->GetString(format.str());
-        b->CreateCall(b->GetDprintf(), constantArgs);
+        b->CreateCall(fTy, Dprintf, constantArgs);
 
         // generate a double-line (=) bar
         buffer.clear();
@@ -884,7 +893,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         format.write('\n');
         Constant * const doubleBar = b->GetString(format.str());
         constantArgs[1] = doubleBar;
-        b->CreateCall(b->GetDprintf(), constantArgs);
+        b->CreateCall(fTy, Dprintf, constantArgs);
 
         // Generate expansion line format string
         buffer.clear();
@@ -977,11 +986,11 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
                     Value * const newBufferSize = b->CreateLoad(newBufferSizeField);
                     expansionArgs[8] = newBufferSize;
 
-                    b->CreateCall(b->GetDprintf(), expansionArgs);
+                    b->CreateCall(fTy, Dprintf, expansionArgs);
 
                     constantArgs[1] = openingBar;
 
-                    b->CreateCall(b->GetDprintf(), constantArgs);
+                    b->CreateCall(fTy, Dprintf, constantArgs);
 
                     b->CreateCondBr(isFirst, nextEntry, writeItemCount);
 
@@ -1001,7 +1010,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
                     Value * const producedField = b->CreateGEP(entryArray, {index, TWO});
                     itemCountArgs[7] = b->CreateLoad(producedField);
 
-                    b->CreateCall(b->GetDprintf(), itemCountArgs);
+                    b->CreateCall(fTy, Dprintf, itemCountArgs);
                     itemCountArgs[4] = b->getInt8('I');
                     for (const auto e : make_iterator_range(out_edges(buffer, mConsumerGraph))) {
                         const ConsumerEdge & c = mConsumerGraph[e];
@@ -1014,12 +1023,12 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
                         const auto k = c.Index + 2; assert (k > 2);
                         Value * const processedField = b->CreateGEP(entryArray, {index, b->getInt32(k)});
                         itemCountArgs[7] = b->CreateLoad(processedField);
-                        b->CreateCall(b->GetDprintf(), itemCountArgs);
+                        b->CreateCall(fTy, Dprintf, itemCountArgs);
                     }
 
                     Value * const closingBar = b->CreateSelect(isLast, doubleBar, singleBar);
                     constantArgs[1] = closingBar;
-                    b->CreateCall(b->GetDprintf(), constantArgs);
+                    b->CreateCall(fTy, Dprintf, constantArgs);
 
                     b->CreateBr(nextEntry);
 
@@ -1033,7 +1042,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         }
         // print final new line
         constantArgs[1] = doubleBar;
-        b->CreateCall(b->GetDprintf(), constantArgs);
+        b->CreateCall(fTy, Dprintf, constantArgs);
     }
 }
 
@@ -1172,6 +1181,9 @@ void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
         ConstantInt * const SZ_ONE = b->getSize(1);
 
         // Print the title line
+        Function * Dprintf = b->GetDprintf();
+        FunctionType * fTy = Dprintf->getFunctionType();
+
         SmallVector<char, 100> buffer;
         raw_svector_ostream format(buffer);
         format << "STRIDES PER SEGMENT:\n\n"
@@ -1191,7 +1203,7 @@ void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
         FixedArray<Value *, 2> titleArgs;
         titleArgs[0] = STDERR;
         titleArgs[1] = b->GetString(format.str());
-        b->CreateCall(b->GetDprintf(), titleArgs);
+        b->CreateCall(fTy, Dprintf, titleArgs);
 
         // Generate line format string
         buffer.clear();
@@ -1276,7 +1288,7 @@ void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
             args[i - FirstKernel + 3] = updatedValue[i];
         }
 
-        b->CreateCall(b->GetDprintf(), args);
+        b->CreateCall(fTy, Dprintf, args);
 
         BasicBlock * const loopExit = b->CreateBasicBlock("reportStridesPerSegmentExit");
         BasicBlock * const loopEnd = b->GetInsertBlock();
@@ -1294,7 +1306,7 @@ void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
         FixedArray<Value *, 2> finalArgs;
         finalArgs[0] = STDERR;
         finalArgs[1] = b->GetString("\n");
-        b->CreateCall(b->GetDprintf(), finalArgs);
+        b->CreateCall(fTy, Dprintf, finalArgs);
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
             b->CreateFree(traceLogArray[i]);
         }
@@ -1461,6 +1473,9 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
 
 
     // Print the title line
+    Function * Dprintf = b->GetDprintf();
+    FunctionType * fTy = Dprintf->getFunctionType();
+
     SmallVector<char, 100> buffer;
     raw_svector_ostream format(buffer);
     format << title << "\n\n"
@@ -1489,7 +1504,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
     FixedArray<Value *, 2> titleArgs;
     titleArgs[0] = STDERR;
     titleArgs[1] = b->GetString(format.str());
-    b->CreateCall(b->GetDprintf(), titleArgs);
+    b->CreateCall(fTy, Dprintf, titleArgs);
 
     // Generate line format string
     buffer.clear();
@@ -1613,7 +1628,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
         }
     }
 
-    b->CreateCall(b->GetDprintf(), args);
+    b->CreateCall(fTy, Dprintf, args);
 
     BasicBlock * const loopExit = b->CreateBasicBlock("reportStridesPerSegmentExit");
     BasicBlock * const loopEnd = b->GetInsertBlock();
@@ -1633,7 +1648,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
     FixedArray<Value *, 2> finalArgs;
     finalArgs[0] = STDERR;
     finalArgs[1] = b->GetString("\n");
-    b->CreateCall(b->GetDprintf(), finalArgs);
+    b->CreateCall(fTy, Dprintf, finalArgs);
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
         if (LLVM_UNLIKELY(currentChunkPhi[i] == nullptr)) continue;
         b->CreateFree(currentChunkPhi[i]);

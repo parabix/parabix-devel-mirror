@@ -47,7 +47,8 @@ void MMapSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
     PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
     b->setScalarField("ancillaryBuffer", ConstantPointerNull::get(codeUnitPtrTy));
     Function * const fileSizeFn = b->getModule()->getFunction("file_size"); assert (fileSizeFn);
-    Value * fileSize = b->CreateZExtOrTrunc(b->CreateCall(fileSizeFn, fd), sizeTy);
+    FunctionType * fTy = fileSizeFn->getFunctionType();
+    Value * fileSize = b->CreateZExtOrTrunc(b->CreateCall(fTy, fileSizeFn, fd), sizeTy);
     b->CreateLikelyCondBr(b->CreateIsNotNull(fileSize), nonEmptyFile, emptyFile);
 
     b->SetInsertPoint(nonEmptyFile);
@@ -358,7 +359,8 @@ void FDSourceKernel::generateInitializeMethod(BuilderRef b) {
     // If the fileSize is 0, we may have a virtual file such as /proc/cpuinfo
     Function * const fileSizeFn = b->getModule()->getFunction("file_size");
     assert (fileSizeFn);
-    Value * const fileSize = b->CreateCall(fileSizeFn, fd);
+    FunctionType * fTy = fileSizeFn->getFunctionType();
+    Value * const fileSize = b->CreateCall(fTy, fileSizeFn, fd);
     Value * const emptyFile = b->CreateIsNull(fileSize);
     b->CreateUnlikelyCondBr(emptyFile, initializeRead, initializeMMap);
 
