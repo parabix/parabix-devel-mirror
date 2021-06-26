@@ -19,13 +19,30 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
+#include <llvm/Transforms/Scalar/GVN.h>
+#endif
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
+#include <llvm/Transforms/Scalar/SROA.h>
+#endif
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Utils.h>
+#endif
 #include <objcache/object_cache.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/IR/Verifier.h>
 #include "llvm/IR/Mangler.h"
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+#include <llvm/ExecutionEngine/MCJIT.h>
+#endif
 #include <llvm/ADT/Statistic.h>
-
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(8, 0, 0)
+#include <llvm/IR/LegacyPassManager.h>
+#else
+#include <llvm/IR/PassTimingInfo.h>
+#endif
 #ifndef NDEBUG
 #define IN_DEBUG_MODE true
 #else
@@ -168,7 +185,23 @@ inline void CPUDriver::preparePassManager() {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         mPassManager->add(createRemoveRedundantAssertionsPass());
     }
-    llvm_version::checkAddPassesToEmitFile(mTarget, mPassManager, mASMOutputStream);
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
+    if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
+        if (!codegen::ShowASMOption.empty()) {
+            std::error_code error;
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
+        } else {
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+        }
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, TargetMachine::CGFT_AssemblyFile))) {
+#else
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+#endif
+            report_fatal_error("LLVM error: could not add emit assembly pass");
+        }
+    }
+    #endif
 }
 
 void CPUDriver::generateUncachedKernels() {
@@ -279,14 +312,14 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::None);
     mEngine->addModule(std::move(mainModule));
     mEngine->finalizeObject();
-    auto mainFnPtr = mEngine->getFunctionAddress(main->getName().str());
+    auto mainFnPtr = mEngine->getFunctionAddress(main->getName());
     removeModules(Normal);
     removeModules(Infrequent);
     return reinterpret_cast<void *>(mainFnPtr);
 }
 
 bool CPUDriver::hasExternalFunction(llvm::StringRef functionName) const {
-    return RTDyldMemoryManager::getSymbolAddressInProcess(functionName.str());
+    return RTDyldMemoryManager::getSymbolAddressInProcess(functionName);
 }
 
 CPUDriver::~CPUDriver() {

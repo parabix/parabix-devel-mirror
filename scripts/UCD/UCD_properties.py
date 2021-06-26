@@ -76,7 +76,7 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
 
         const static std::vector<unsigned> buffer_offsets = {
         ${buffer_offsets}};
-        const static char string_buffer alignas(64) [${allocation_length}] = u8R"__(${string_buffer})__";
+        const static char string_buffer LLVM_ALIGNAS(64) [${allocation_length}] = u8R"__(${string_buffer})__";
 
         const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
@@ -117,7 +117,7 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
 
         const static std::vector<unsigned> buffer_offsets = {
         ${buffer_offsets}};
-        const static char string_buffer alignas(64) [${allocation_length}] = u8R"__(${string_buffer})__";
+        const static char string_buffer LLVM_ALIGNAS(64) [${allocation_length}] = u8R"__(${string_buffer})__";
 
         const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
@@ -156,7 +156,7 @@ def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
         ${NaN_set_value}
 
         const unsigned buffer_length = ${buffer_length};
-        const static char string_buffer alignas(64) [${allocation_length}] = u8R"__(${string_buffer})__";
+        const static char string_buffer LLVM_ALIGNAS(64) [${allocation_length}] = u8R"__(${string_buffer})__";
 
         const static std::vector<codepoint_t> defined_cps = {
         ${explicitly_defined_cps}};

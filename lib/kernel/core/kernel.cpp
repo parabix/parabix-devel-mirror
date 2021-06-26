@@ -16,7 +16,6 @@
 #endif
 using namespace llvm;
 using namespace boost;
-using namespace llvm_version;
 
 namespace kernel {
 
@@ -200,8 +199,8 @@ void Kernel::ensureLoaded() {
         return;
     }
     SmallVector<char, 256> tmp;
-    mSharedStateType = nullIfEmpty(llvm_version::getTypeByName(mModule, concat(getName(), SHARED_SUFFIX, tmp)));
-    mThreadLocalStateType = nullIfEmpty(llvm_version::getTypeByName(mModule, concat(getName(), THREAD_LOCAL_SUFFIX, tmp)));
+    mSharedStateType = nullIfEmpty(mModule->getTypeByName(concat(getName(), SHARED_SUFFIX, tmp)));
+    mThreadLocalStateType = nullIfEmpty(mModule->getTypeByName(concat(getName(), THREAD_LOCAL_SUFFIX, tmp)));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -211,8 +210,8 @@ void Kernel::loadCachedKernel(BuilderRef b) {
     assert ("loadCachedKernel was called after associating kernel with module" && !mModule);
     mModule = b->getModule(); assert (mModule);
     SmallVector<char, 256> tmp;
-    mSharedStateType = nullIfEmpty(llvm_version::getTypeByName(mModule, concat(getName(), SHARED_SUFFIX, tmp)));
-    mThreadLocalStateType = nullIfEmpty(llvm_version::getTypeByName(mModule, concat(getName(), THREAD_LOCAL_SUFFIX, tmp)));
+    mSharedStateType = nullIfEmpty(mModule->getTypeByName(concat(getName(), SHARED_SUFFIX, tmp)));
+    mThreadLocalStateType = nullIfEmpty(mModule->getTypeByName(concat(getName(), THREAD_LOCAL_SUFFIX, tmp)));
     linkExternalMethods(b);
     mGenerated = true;
 }
@@ -235,10 +234,10 @@ void Kernel::constructStateTypes(BuilderRef b) {
     Module * const m = getModule(); assert (b->getModule() == m);
     SmallVector<char, 256> tmpShared;
     auto strShared = concat(getName(), SHARED_SUFFIX, tmpShared);
-    mSharedStateType = llvm_version::getTypeByName(m, strShared);
+    mSharedStateType = m->getTypeByName(strShared);
     SmallVector<char, 256> tmpThreadLocal;
     auto strThreadLocal = concat(getName(), THREAD_LOCAL_SUFFIX, tmpThreadLocal);
-    mThreadLocalStateType = llvm_version::getTypeByName(m, strThreadLocal);
+    mThreadLocalStateType = m->getTypeByName(strThreadLocal);
     if (LLVM_LIKELY(mSharedStateType == nullptr && mThreadLocalStateType == nullptr)) {
         SmallVector<Type *, 64> shared;
         SmallVector<Type *, 64> threadLocal;

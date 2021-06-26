@@ -10,7 +10,7 @@ namespace kernel {
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<KernelCompiler> OptimizationBranch::instantiateKernelCompiler(BuilderRef b) const {
-    return std::make_unique<OptimizationBranchCompiler>(b, const_cast<OptimizationBranch *>(this));
+    return llvm::make_unique<OptimizationBranchCompiler>(b, const_cast<OptimizationBranch *>(this));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

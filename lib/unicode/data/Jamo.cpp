@@ -52,7 +52,7 @@ namespace UCD {
         92, 95, 98, 101, 103, 105, 108, 111, 113, 116, 119, 121, 123, 126,
         129, 132, 135, 138, 141, 144, 146, 148, 151, 153, 156, 159, 161,
         163, 165, 167, 169, 171};
-        const static char string_buffer alignas(64) [256] = u8R"__(G
+        const static char string_buffer LLVM_ALIGNAS(64) [256] = u8R"__(G
 GG
 N
 D

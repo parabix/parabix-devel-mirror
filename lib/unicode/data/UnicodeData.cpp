@@ -4525,7 +4525,7 @@ namespace UCD {
         902368, 902391, 902414, 902437, 902460, 902483, 902506, 902529,
         902552, 902575, 902598, 902621, 902644, 902667, 902690, 902713,
         902736, 902759, 902782, 902805};
-        const static char string_buffer alignas(64) [902912] = u8R"__(SPACE
+        const static char string_buffer LLVM_ALIGNAS(64) [902912] = u8R"__(SPACE
 EXCLAMATION MARK
 QUOTATION MARK
 NUMBER SIGN
@@ -43535,7 +43535,7 @@ PropertyObject * get_NA_PropertyObject() {  return & NA_ns::property_object; }
         23110, 23114, 23118, 23122, 23126, 23131, 23135, 23139, 23143,
         23147, 23151, 23155, 23160, 23164, 23169, 23174, 23179, 23183,
         23187, 23191, 23195, 23199, 23203, 23207, 23211, 23216};
-        const static char string_buffer alignas(64) [23296] = u8R"__(
+        const static char string_buffer LLVM_ALIGNAS(64) [23296] = u8R"__( 
  ̈
 a
  ̄
@@ -50368,7 +50368,7 @@ PropertyObject * get_DM_PropertyObject() {  return & DM_ns::property_object; }
         5204, 5209, 5214, 5219, 5224, 5229, 5234, 5239, 5244, 5249, 5254,
         5259, 5264, 5269, 5274, 5279, 5284, 5289, 5294, 5299, 5304, 5309,
         5314, 5319, 5324, 5329, 5334, 5339, 5344, 5349};
-        const static char string_buffer alignas(64) [5376] = u8R"__(A
+        const static char string_buffer LLVM_ALIGNAS(64) [5376] = u8R"__(A
 B
 C
 D
@@ -52297,7 +52297,7 @@ PropertyObject * get_SUC_PropertyObject() {  return & SUC_ns::property_object; }
         5170, 5175, 5180, 5185, 5190, 5195, 5200, 5205, 5210, 5215, 5220,
         5225, 5230, 5235, 5240, 5245, 5250, 5255, 5260, 5265, 5270, 5275,
         5280};
-        const static char string_buffer alignas(64) [5376] = u8R"__(a
+        const static char string_buffer LLVM_ALIGNAS(64) [5376] = u8R"__(a
 b
 c
 d
@@ -54210,7 +54210,7 @@ PropertyObject * get_SLC_PropertyObject() {  return & SLC_ns::property_object; }
         5030, 5035, 5040, 5045, 5050, 5055, 5060, 5065, 5070, 5075, 5080,
         5085, 5090, 5095, 5100, 5105, 5110, 5115, 5120, 5125, 5130, 5135,
         5140, 5145, 5150, 5155, 5160, 5165};
-        const static char string_buffer alignas(64) [5376] = u8R"__(A
+        const static char string_buffer LLVM_ALIGNAS(64) [5376] = u8R"__(A
 B
 C
 D
@@ -55884,7 +55884,7 @@ PropertyObject * get_ISC_PropertyObject() {  return & ISC_ns::property_object; }
 
 
         const unsigned buffer_length = 4843;
-        const static char string_buffer alignas(64) [4864] = u8R"__(0
+        const static char string_buffer LLVM_ALIGNAS(64) [4864] = u8R"__(0
 1
 2
 3

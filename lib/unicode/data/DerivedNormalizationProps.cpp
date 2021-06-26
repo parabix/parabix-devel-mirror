@@ -1642,7 +1642,7 @@ PropertyObject * get_NFD_QC_PropertyObject() {  return & NFD_QC_ns::property_obj
         23553, 23557, 23561, 23565, 23570, 23574, 23578, 23582, 23586,
         23590, 23594, 23599, 23603, 23608, 23613, 23618, 23622, 23626,
         23630, 23634, 23638, 23642, 23646, 23650, 23655};
-        const static char string_buffer alignas(64) [23808] = u8R"__(a
+        const static char string_buffer LLVM_ALIGNAS(64) [23808] = u8R"__(a
 b
 c
 d

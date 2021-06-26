@@ -730,7 +730,7 @@ namespace UCD {
         5185, 5190, 5195, 5200, 5205, 5210, 5215, 5220, 5225, 5230, 5235,
         5240, 5245, 5250, 5255, 5260, 5265, 5270, 5275, 5280, 5285, 5290,
         5295, 5300, 5305, 5310, 5315, 5320, 5325, 5330, 5335, 5340, 5345};
-        const static char string_buffer alignas(64) [5376] = u8R"__(a
+        const static char string_buffer LLVM_ALIGNAS(64) [5376] = u8R"__(a
 b
 c
 d
@@ -2373,7 +2373,7 @@ PropertyObject * get_SCF_PropertyObject() {  return & SCF_ns::property_object; }
         404, 410, 415, 420, 425, 432, 437, 444, 451, 456, 463, 470, 477,
         482, 487, 494, 500, 505, 510, 515, 522, 527, 530, 533, 536, 540,
         544, 547, 550, 555, 560, 565, 570, 575};
-        const static char string_buffer alignas(64) [768] = u8R"__(ss
+        const static char string_buffer LLVM_ALIGNAS(64) [768] = u8R"__(ss
 i̇
 ʼn
 ǰ

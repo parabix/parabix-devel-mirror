@@ -130,23 +130,23 @@ int main(int argc, char *argv[]) {
     std::unique_ptr<grep::GrepEngine> grep;
     switch (argv::Mode) {
         case argv::NormalMode:
-            grep = std::make_unique<grep::EmitMatchesEngine>(driver);
+            grep = make_unique<grep::EmitMatchesEngine>(driver);
             if (argv::MaxCountFlag) grep->setMaxCount(argv::MaxCountFlag);
             if (argv::WithFilenameFlag) grep->showFileNames();
             if (argv::LineNumberFlag) grep->showLineNumbers();
             if (argv::InitialTabFlag) grep->setInitialTab();
            break;
         case argv::CountOnly:
-            grep = std::make_unique<grep::CountOnlyEngine>(driver);
+            grep = make_unique<grep::CountOnlyEngine>(driver);
             if (argv::WithFilenameFlag) grep->showFileNames();
             if (argv::MaxCountFlag) grep->setMaxCount(argv::MaxCountFlag);
            break;
         case argv::FilesWithMatch:
         case argv::FilesWithoutMatch:
-            grep = std::make_unique<grep::MatchOnlyEngine>(driver, argv::Mode == argv::FilesWithMatch, argv::NullFlag);
+            grep = make_unique<grep::MatchOnlyEngine>(driver, argv::Mode == argv::FilesWithMatch, argv::NullFlag);
             break;
         case argv::QuietMode:
-            grep = std::make_unique<grep::QuietModeEngine>(driver);
+            grep = make_unique<grep::QuietModeEngine>(driver);
             break;
         default: llvm_unreachable("Invalid grep mode!");
     }

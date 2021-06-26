@@ -10,12 +10,9 @@
 #include <kernel/core/streamset.h>
 #include <toolchain/toolchain.h>
 
-#include "LLVMVersion.h"
-
 namespace llvm { class Type; }
 
 using namespace llvm;
-using namespace llvm_version;
 
 namespace kernel {
 
@@ -49,7 +46,7 @@ void UntilNkernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const num
     Constant * const BLOCKS_PER_STRIDE = b->getSize(blocksPerStride);
     const auto maximumBlocksPerIteration = packSize / packsPerBlock;
     Constant * const MAXIMUM_BLOCKS_PER_ITERATION = b->getSize(maximumBlocksPerIteration);
-    VectorType * const packVectorTy = llvm_version::getVectorType(sizeTy, packsPerBlock);
+    VectorType * const packVectorTy = VectorType::get(sizeTy, packsPerBlock);
 
     BasicBlock * const entry = b->GetInsertBlock();
     Value * const numOfBlocks = b->CreateMul(numOfStrides, BLOCKS_PER_STRIDE);
