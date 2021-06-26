@@ -79,7 +79,7 @@ Function * CCScanKernel::generateScanWordRoutine(BuilderRef iBuilder) const {
 
     iBuilder->SetInsertPoint(matchesLoopBlock);
 
-    Value * cttzFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::cttz, matches_phi->getType());
+    Function * cttzFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::cttz, matches_phi->getType());
     Value * tz = iBuilder->CreateCall(cttzFunc, std::vector<Value *>({matches_phi, ConstantInt::get(iBuilder->getInt1Ty(), 0)}));
 
     Value * match_pos = iBuilder->CreateAdd(tz, basePos);

@@ -774,7 +774,7 @@ void CBuilder::setNontemporal(StoreInst * s) {
 }
 
 Value * CBuilder::CreatePrefetch(Value * ptr, PrefetchRW mode, unsigned locality, CacheType c) {
-    Value * prefetchIntrin = Intrinsic::getDeclaration(getModule(), Intrinsic::prefetch);
+    Function * prefetchIntrin = Intrinsic::getDeclaration(getModule(), Intrinsic::prefetch);
     Value * modeVal = getInt32(mode == PrefetchRW::Read ? 0 : 1);
     Value * localityVal = getInt32(locality > 3 ? 3 : locality);
     Value * cacheKind = getInt32(c == CacheType::Instruction ? 0 : 1);
@@ -1233,7 +1233,7 @@ BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, Basic
 }
 
 Value * CBuilder::CreatePopcount(Value * bits) {
-    Value * ctpopFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, bits->getType());
+    Function * ctpopFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, bits->getType());
     return CreateCall(ctpopFunc, bits);
 }
 
@@ -1241,7 +1241,7 @@ Value * CBuilder::CreateCountForwardZeroes(Value * value, const Twine Name, cons
     if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
     }
-    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
+    Function * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
     return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
@@ -1249,7 +1249,7 @@ Value * CBuilder::CreateCountReverseZeroes(Value * value, const Twine Name, cons
     if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
     }
-    Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
+    Function * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
     return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
@@ -1304,7 +1304,7 @@ Constant * CBuilder::GetString(StringRef Str) {
 
 Value * CBuilder::CreateReadCycleCounter() {
     Module * const m = getModule();
-    Value * cycleCountFunc = Intrinsic::getDeclaration(m, Intrinsic::readcyclecounter);
+    Function * cycleCountFunc = Intrinsic::getDeclaration(m, Intrinsic::readcyclecounter);
     return CreateCall(cycleCountFunc, std::vector<Value *>({}));
 }
 

@@ -521,7 +521,7 @@ Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
 
 Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
     /*  Pure sequential solution too slow!
-     Value * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
+     Function * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
      return CreateCall(func, fwCast(fw, a));
      */
     if (fw > 8) {

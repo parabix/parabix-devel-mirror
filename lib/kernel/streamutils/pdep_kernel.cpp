@@ -233,7 +233,7 @@ void FieldDepositKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * co
 void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsigned fieldWidth, unsigned streamCount) {
         Type * fieldTy = kb->getIntNTy(fieldWidth);
         Type * fieldPtrTy = PointerType::get(fieldTy, 0);
-        Constant * PDEP_func = nullptr;
+    Function * PDEP_func = nullptr;
         if (fieldWidth == 64) {
             PDEP_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pdep_64);
         } else if (fieldWidth == 32) {

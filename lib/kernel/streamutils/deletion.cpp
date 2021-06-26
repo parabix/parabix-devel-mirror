@@ -116,7 +116,7 @@ void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * c
     if (BMI2_available() && ((mCompressFieldWidth == 32) || (mCompressFieldWidth == 64))) {
         Type * fieldTy = kb->getIntNTy(mCompressFieldWidth);
         Type * fieldPtrTy = PointerType::get(fieldTy, 0);
-        Constant * PEXT_func = nullptr;
+        Function * PEXT_func = nullptr;
         if (mCompressFieldWidth == 64) {
             PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_64);
         } else if (mCompressFieldWidth == 32) {
@@ -180,7 +180,7 @@ FieldCompressKernel::FieldCompressKernel(BuilderRef b,
 void PEXTFieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {
     Type * fieldTy = kb->getIntNTy(mPEXTWidth);
     Type * fieldPtrTy = PointerType::get(fieldTy, 0);
-    Constant * PEXT_func = nullptr;
+    Function * PEXT_func = nullptr;
     if (mPEXTWidth == 64) {
         PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_64);
     } else if (mPEXTWidth == 32) {
@@ -622,7 +622,7 @@ Returns:
 
 SwizzledDeleteByPEXTkernel::SwizzleSets SwizzledDeleteByPEXTkernel::makeSwizzleSets(BuilderRef b, llvm::Value * const selectors, Value * const strideIndex) {
 
-    Constant * pext = nullptr;
+    Function * pext = nullptr;
     if (mPEXTWidth == 64) {
         pext = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_64);
     } else if (mPEXTWidth == 32) {
@@ -697,7 +697,7 @@ void DeleteByPEXTkernel::generateFinalBlockMethod(BuilderRef kb, Value * remaini
 }
 
 void DeleteByPEXTkernel::generateProcessingLoop(BuilderRef kb, Value * delMask) {
-    Constant * PEXT_func = nullptr;
+    Function * PEXT_func = nullptr;
     if (mPEXTWidth == 64) {
         PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_64);
     } else if (mPEXTWidth == 32) {
