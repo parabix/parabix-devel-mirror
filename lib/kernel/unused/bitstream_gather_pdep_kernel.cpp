@@ -5,10 +5,7 @@
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Intrinsics.h>
 
-#include "LLVMVersion.h"
-
 using namespace llvm;
-using namespace llvm_version;
 
 namespace kernel {
 
@@ -202,8 +199,8 @@ namespace kernel {
     }
 
     llvm::Value* BitStreamGatherPDEPKernel::fill_address(BuilderRef b, unsigned fw, unsigned field_count, Value * a) {
-        Type * singleFieldVecTy = llvm_version::getVectorType(b->getIntNTy(fw), 1);
+        Type * singleFieldVecTy = VectorType::get(b->getIntNTy(fw), 1);
         Value * aVec = b->CreateBitCast(a, singleFieldVecTy);
-        return b->CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(llvm_version::getVectorType(b->getInt32Ty(), field_count)));
+        return b->CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(b->getInt32Ty(), field_count)));
     }
 }

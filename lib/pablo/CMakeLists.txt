@@ -28,5 +28,4 @@ SRC
     symbol_generator.cpp
 DEPS
     kernel.core
-    LLVMVersion
 )

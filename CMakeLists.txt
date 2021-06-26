@@ -73,13 +73,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLLVM_VERSION_INTEGER=${LLVM_VERSION_IN
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLLVM_VERSION_major=${LLVM_VERSION_MAJOR} -DLLVM_VERSION_MINOR=${LLVM_VERSION_MINOR}")
 message(STATUS "LLVM Version Integer: ${LLVM_VERSION_INTEGER}")
 
-set (llvm_patch_version "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
-set (llvm_minor_version "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.x")
-set (llvm_major_version "${LLVM_VERSION_MAJOR}.x.x")
 
-set (full_llvm_version ${llvm_patch_version})
-
-include_directories(LLVMVersion)
 
 ###   Import Dependency: Boost   ###
 
@@ -360,9 +354,6 @@ endif()
 
 # Kernel Tests
 add_subdirectory(tests)
-
-# LLVM compatibility layer
-add_subdirectory(LLVMVersion)
 
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")

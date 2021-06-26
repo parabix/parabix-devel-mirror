@@ -200,7 +200,7 @@ public:
     Token() = delete;
 
     TokenType getType() const { return mType; }
-    std::string getText() const { return mText.str(); }
+    std::string getText() const { return mText; }
     std::weak_ptr<SourceFile> const & getSourceRef() const { return mSourceRef; }
     size_t getLineNum() const { return mLineNum; }
     size_t getColNum() const { return mColNum; }

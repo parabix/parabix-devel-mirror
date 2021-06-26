@@ -45,7 +45,7 @@ namespace UCD {
 
         const static std::vector<unsigned> buffer_offsets = {
         0};
-        const static char string_buffer alignas(64) [256] = u8R"__()__";
+        const static char string_buffer LLVM_ALIGNAS(64) [256] = u8R"__()__";
 
         const static std::vector<codepoint_t> defined_cps{
         };

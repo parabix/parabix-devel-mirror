@@ -42,14 +42,3 @@ trigger_llvm9:
     include: .gitlab-pipelines/llvm9/config.yml
     strategy: depend
 
-trigger_llvm10:
-  stage: triggers
-  trigger:
-    include: .gitlab-pipelines/llvm10/config.yml
-    strategy: depend
-
-trigger_llvm11:
-  stage: triggers
-  trigger:
-    include: .gitlab-pipelines/llvm11/config.yml
-    strategy: depend

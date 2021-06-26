@@ -9,10 +9,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 
-#include "LLVMVersion.h"
-
 using namespace llvm;
-using namespace llvm_version;
 
 namespace IDISA {
 
@@ -52,7 +49,7 @@ Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     if (getVectorBitWidth(a) == SSE_width) {
         if (fw == 64) {
             Value * signmask_f64func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_movmsk_pd);
-            Type * bitBlock_f64type = llvm_version::getVectorType(getDoubleTy(), mBitBlockWidth/64);
+            Type * bitBlock_f64type = VectorType::get(getDoubleTy(), mBitBlockWidth/64);
             Value * a_as_pd = CreateBitCast(a, bitBlock_f64type);
             return CreateCall(signmask_f64func, a_as_pd);
         }
@@ -83,7 +80,7 @@ Value * IDISA_SSE_Builder::hsimd_signmask(const unsigned fw, Value * a) {
     // SSE special cases using Intrinsic::x86_sse_movmsk_ps (fw=32 only)
     if (fw == 32) {
         Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse_movmsk_ps);
-        Type * bitBlock_f32type = llvm_version::getVectorType(getFloatTy(), mBitBlockWidth/32);
+        Type * bitBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/32);
         Value * a_as_ps = CreateBitCast(a, bitBlock_f32type);
         if (getVectorBitWidth(a) == SSE_width) {
             return CreateCall(signmask_f32func, a_as_ps);
@@ -163,7 +160,7 @@ Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * index_v
         // Now create a mask to select between original and exchanged values.
         Constant * xchg[2] = {ConstantInt::get(getInt64Ty(), 1), ConstantInt::get(getInt64Ty(), 0)};
         Value * xchg_vec = ConstantVector::get({xchg, 2});
-        Constant * oneSplat = llvm_version::getSplat(2, ConstantInt::get(getInt64Ty(), 1));
+        Constant * oneSplat = ConstantVector::getSplat(2, ConstantInt::get(getInt64Ty(), 1));
         Value * exchange_mask = simd_eq(fw, simd_and(index_vector, oneSplat), xchg_vec);
         Value * rslt = simd_xor(simd_and(changed, exchange_mask), a);
         return rslt;
@@ -244,7 +241,7 @@ llvm::Value * IDISA_SSSE3_Builder::mvmd_shuffle(unsigned fw, llvm::Value * data_
     if (mBitBlockWidth == 128 && fw > 8) {
         // Create a table for shuffling with smaller field widths.
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Constant * idxMask = llvm_version::getSplat(fieldCount, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        Constant * idxMask = ConstantVector::getSplat(fieldCount, ConstantInt::get(getIntNTy(fw), fieldCount-1));
         Value * idx = simd_and(index_vector, idxMask);
         unsigned half_fw = fw/2;
         unsigned field_count = mBitBlockWidth/half_fw;

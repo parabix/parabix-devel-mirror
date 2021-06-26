@@ -277,7 +277,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 assert (arg == maskInput->arg_end());
 
 
-                Type * const singleElementStreamSetTy = ArrayType::get(llvm_version::getVectorType(IntegerType::get(C, itemWidth), 0), 1);
+                Type * const singleElementStreamSetTy = ArrayType::get(VectorType::get(IntegerType::get(C, itemWidth), 0), 1);
                 ExternalBuffer tmp(0, b, singleElementStreamSetTy, true, 0);
                 PointerType * const bufferPtrTy = tmp.getPointerType();
 

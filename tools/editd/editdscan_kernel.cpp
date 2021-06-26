@@ -8,10 +8,7 @@
 #include <kernel/core/kernel_builder.h>
 #include <llvm/IR/Module.h>
 
-#include "LLVMVersion.h"
-
 using namespace llvm;
-using namespace llvm_version;
 
 namespace kernel {
 
@@ -22,7 +19,7 @@ void editdScanKernel::generateDoBlockMethod(BuilderRef b) {
 
     const unsigned fieldCount = b->getBitBlockWidth() / mScanwordBitWidth;
     Type * T = b->getIntNTy(mScanwordBitWidth);
-    VectorType * scanwordVectorType =  llvm_version::getVectorType(T, fieldCount);
+    VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);
     Value * blockNo = b->getScalarField("BlockNo");
     Value * scanwordPos = b->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), b->getBitBlockWidth()));
 

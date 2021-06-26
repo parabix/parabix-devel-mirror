@@ -36,7 +36,7 @@ void DebugDisplayKernel::generateMultiBlockLogic(BuilderRef b, Value * const num
         if (mSCount != 1) {
             return std::string(mName) + "[" + std::to_string(i) + "]";
         } else {
-            return std::string(mName);
+            return mName;
         }
     };
 

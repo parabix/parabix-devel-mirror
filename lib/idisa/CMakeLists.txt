@@ -14,5 +14,4 @@ SRC
     idisa_sse_builder.cpp
 DEPS
     codegen
-    LLVMVersion
 )
