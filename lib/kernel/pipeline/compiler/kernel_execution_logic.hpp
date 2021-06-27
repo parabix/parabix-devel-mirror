@@ -172,12 +172,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocation);
     #endif
     const auto greedy = mKernel->isGreedy();
+    Value * isFinal = nullptr;
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
         }
-        addNextArg(b->CreateIsNotNull(mIsFinalInvocation));
+        isFinal = b->CreateIsNotNull(mIsFinalInvocation);
+        addNextArg(isFinal);
     } else {
+        isFinal = b->CreateIsNull(mNumOfLinearStrides);
         addNextArg(mNumOfLinearStrides);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
@@ -233,7 +236,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             Value * addr = nullptr;
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
                 assert ("internally synchronized I/O must be linear!" && bn.IsLinear);
-                addr = getVirtualBaseAddress(b, rt, bn, processed);
+                addr = getVirtualBaseAddress(b, rt, bn, processed, nullptr);
             } else {
                 addr = mInputVirtualBaseAddressPhi[rt.Port];
             }
@@ -295,7 +298,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         } else if (LLVM_UNLIKELY(managed)) {
             mReturnedOutputVirtualBaseAddressPtr[rt.Port] = addVirtualBaseAddressArg(buffer);
         } else {
-            Value * const vba = getVirtualBaseAddress(b, rt, bn, produced);
+            Value * const vba = getVirtualBaseAddress(b, rt, bn, produced, isFinal);
             addNextArg(b->CreatePointerCast(vba, voidPtrTy));
         }
 

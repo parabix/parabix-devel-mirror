@@ -915,8 +915,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             maskOffset = b->CreateAnd(position, BLOCK_MASK);
         }
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
-        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelLoopExit);
-        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelLoopExit);
+        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroUnwrittenLoop", mKernelLoopExit);
+        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroUnwrittenExit", mKernelLoopExit);
         Value * const numOfStreams = buffer->getStreamSetCount(b);
         Value * const baseAddress = buffer->getBaseAddress(b);
         #ifdef PRINT_DEBUG_MESSAGES
@@ -953,8 +953,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
             Value * const remainingPackBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, prefix + "_zeroFill_packStart = %" PRIu64, b->CreateSub(startInt, epochInt));
-            debugPrint(b, prefix + "_zeroFill_remainingPackBytes = %" PRIu64, remainingPackBytes);
+            debugPrint(b, prefix + "_zeroUnwritten_packStart = %" PRIu64, b->CreateSub(startInt, epochInt));
+            debugPrint(b, prefix + "_zeroUnwritten_remainingPackBytes = %" PRIu64, remainingPackBytes);
             #endif
             b->CreateMemZero(start, remainingPackBytes, blockWidth / 8);
         }
@@ -992,11 +992,11 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
             Value * const remainingBytes = b->CreateSub(endPtrInt, startPtrInt);
             #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, prefix + "_zeroFill_blockIndex = %" PRIu64, blockIndex);
-            debugPrint(b, prefix + "_zeroFill_nextOffset = %" PRIu64, nextOffset);
-            debugPrint(b, prefix + "_zeroFill_endOffset = %" PRIu64, endOffset);
-            debugPrint(b, prefix + "_zeroFill_bufferStart = %" PRIu64, b->CreateSub(startPtrInt, epochInt));
-            debugPrint(b, prefix + "_zeroFill_remainingBufferBytes = %" PRIu64, remainingBytes);
+            debugPrint(b, prefix + "_zeroUnwritten_blockIndex = %" PRIu64, blockIndex);
+            debugPrint(b, prefix + "_zeroUnwritten_nextOffset = %" PRIu64, nextOffset);
+            debugPrint(b, prefix + "_zeroUnwritten_endOffset = %" PRIu64, endOffset);
+            debugPrint(b, prefix + "_zeroUnwritten_bufferStart = %" PRIu64, b->CreateSub(startPtrInt, epochInt));
+            debugPrint(b, prefix + "_zeroUnwritten_remainingBufferBytes = %" PRIu64, remainingBytes);
             #endif
             b->CreateMemZero(startPtr, remainingBytes, blockWidth / 8);
         }

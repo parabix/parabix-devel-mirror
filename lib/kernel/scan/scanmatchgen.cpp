@@ -126,7 +126,6 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
     Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, strideBlockIndex);
     Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
-
     Value * const anyMatch = b->simd_any(sw.width, matchBitBlock);
     Value * const anyBreak = b->simd_any(sw.width, breakBitBlock);
     if (mLineNumbering) {
@@ -238,12 +237,6 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 
     Value * const startPtr = b->getRawInputPointer("InputStream", matchStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchEndPos);
-
-//    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-//        Value * const A = b->CreateSub(matchEndPos, matchStart);
-//        Value * const B = b->CreatePtrDiff(endPtr, startPtr);
-//        b->CreateAssert(b->CreateICmpEQ(A, B), "InputStream is not contiguous");
-//    }
 
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);

@@ -311,7 +311,7 @@ void ExternalBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */,
     unsupported("reserveCapacity", "External");
 }
 
-Value * ExternalBuffer::getMallocAddress(BuilderPtr b) const {
+Value * ExternalBuffer::getMallocAddress(BuilderPtr /* b */) const {
     unsupported("getMallocAddress", "External");
 }
 
@@ -319,7 +319,7 @@ Value * ExternalBuffer::getMallocAddress(BuilderPtr b) const {
 
 Value * InternalBuffer::getStreamBlockPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     Value * offset = nullptr;
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         offset = blockIndex;
     } else {
         offset = modByCapacity(b, blockIndex);
@@ -329,7 +329,7 @@ Value * InternalBuffer::getStreamBlockPtr(BuilderPtr b, Value * const baseAddres
 
 Value * InternalBuffer::getStreamPackPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
     Value * offset = nullptr;
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         offset = blockIndex;
     } else {
         offset = modByCapacity(b, blockIndex);
@@ -339,7 +339,7 @@ Value * InternalBuffer::getStreamPackPtr(BuilderPtr b, Value * const baseAddress
 
 Value * InternalBuffer::getStreamLogicalBasePtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     Value * baseBlockIndex = nullptr;
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         // NOTE: the base address of a linear buffer is always the virtual base ptr; just return it.
         baseBlockIndex = b->getSize(0);
     } else {
@@ -350,7 +350,7 @@ Value * InternalBuffer::getStreamLogicalBasePtr(BuilderPtr b, Value * const base
 
 Value * InternalBuffer::getRawItemPointer(BuilderPtr b, Value * const streamIndex, Value * absolutePosition) const {
     Value * pos = nullptr;
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         pos = absolutePosition;
     } else {
         pos = b->CreateURem(absolutePosition, getCapacity(b));
@@ -374,7 +374,7 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const p
 Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const producedItems, Value * const consumedItems, Value * const overflowItems) const {
     Value * const capacity = getCapacity(b);
     ConstantInt * const ZERO = b->getSize(0);
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             Value * const valid = b->CreateICmpULE(producedItems, capacityWithOverflow);
@@ -403,7 +403,7 @@ Type * StaticBuffer::getHandleType(BuilderPtr b) const {
     FixedArray<Type *, 4> types;
     types[BaseAddress] = typePtr;    
     IntegerType * const sizeTy = b->getSizeTy();
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         types[EffectiveCapacity] = sizeTy;
         types[MallocedAddress] = typePtr;
     } else {
@@ -467,12 +467,13 @@ Value * StaticBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
     assert (offset->getType()->isIntegerTy());
     if (LLVM_UNLIKELY(mLinear || isCapacityGuaranteed(offset, mCapacity))) {
         return offset;
-    } else if (LLVM_UNLIKELY(mCapacity == 1)) {
-        return ConstantInt::getNullValue(offset->getType());
-    } else if (LLVM_LIKELY(is_power_2(mCapacity))) {
-        return b->CreateAnd(offset, ConstantInt::get(offset->getType(), mCapacity - 1));
     } else {
-        return b->CreateURem(offset, ConstantInt::get(offset->getType(), mCapacity));
+        FixedArray<Value *, 2> indices;
+        indices[0] = b->getInt32(0);
+        indices[1] = b->getInt32(InternalCapacity);
+        Value * ptr = b->CreateInBoundsGEP(getHandle(), indices);
+        Value * const capacity = b->CreateLoad(ptr);
+        return b->CreateURem(offset, capacity);
     }
 }
 
@@ -501,12 +502,18 @@ Value * StaticBuffer::getInternalCapacity(BuilderPtr b) const {
 void StaticBuffer::setCapacity(BuilderPtr b, Value * capacity) const {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
-    Value * ptr = b->CreateInBoundsGEP(getHandle(), indices);
+    indices[1] = b->getInt32(InternalCapacity);
+    Value * const handle = getHandle(); assert (handle);
+    Value * capacityField = b->CreateInBoundsGEP(handle, indices);
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     assert (capacity->getType()->isIntegerTy());
     Value * const cap = b->CreateExactUDiv(capacity, BLOCK_WIDTH);
-    b->CreateStore(cap, ptr);
+    b->CreateStore(cap, capacityField);
+    if (mLinear) {
+        indices[1] = b->getInt32(EffectiveCapacity);
+        Value * const effCapacityField = b->CreateInBoundsGEP(handle, indices);
+        b->CreateStore(cap, effCapacityField);
+    }
 }
 
 Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
@@ -521,19 +528,29 @@ Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
 void StaticBuffer::setBaseAddress(BuilderPtr b, Value * addr) const {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    indices[1] = b->getInt32(BaseAddress);
     Value * const handle = getHandle(); assert (handle);
-    Value * const base = b->CreateInBoundsGEP(handle, indices);
-    b->CreateStore(addr, base);
+    b->CreateStore(addr, b->CreateInBoundsGEP(handle, indices));
+    if (mLinear) {
+         indices[1] = b->getInt32(MallocedAddress);
+         b->CreateStore(addr, b->CreateInBoundsGEP(handle, indices));
+    }
+}
+
+Value * StaticBuffer::getMallocAddress(BuilderPtr b) const {
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    return b->CreateLoad(b->CreateInBoundsGEP(getHandle(), indices));
 }
 
 Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(BaseAddress);
+    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
     Value * const handle = getHandle(); assert (handle);
-    Value * const base = b->CreateInBoundsGEP(handle, indices);
-    indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
+    Value * const base = b->CreateLoad(b->CreateInBoundsGEP(handle, indices));
+    indices[1] = b->getInt32(InternalCapacity);
     Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
     Value * const capacity = b->CreateLoad(capacityField);
     assert (capacity->getType() == b->getSizeTy());
@@ -543,7 +560,7 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
 void StaticBuffer::copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consumed) const {
 
     const auto blockWidth = b->getBitBlockWidth();
-    assert (is_power_2(blockWidth));
+    assert (is_pow2(blockWidth));
 
     ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
 
@@ -566,15 +583,6 @@ void StaticBuffer::copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consum
     b->CreateStore(newBaseAddress, baseAddrField);
     b->CreateStore(effectiveCapacity, capacityField);
 
-}
-
-Value * StaticBuffer::getMallocAddress(BuilderPtr b) const {
-    if (mLinear) {
-        Value * const ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(MallocedAddress)});
-        Value * const addr = b->CreateLoad(ptr);
-        return addr;
-    }
-    unsupported("getMallocAddress", "Static");
 }
 
 void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consumed, Value * const required, Value * overflowItems) const  {
@@ -634,7 +642,7 @@ void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consu
             setHandle(handle);
 
             const auto blockWidth = b->getBitBlockWidth();
-            assert (is_power_2(blockWidth));
+            assert (is_pow2(blockWidth));
             const auto blockSize = blockWidth / 8;
 
             ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
@@ -655,9 +663,7 @@ void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consu
             indices[1] = b->getInt32(MallocedAddress);
             Value * const mallocAddrField = b->CreateInBoundsGEP(handle, indices);
             Value * const mallocAddress = b->CreateLoad(mallocAddrField);
-
             Value * const bytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
-
             Value * const unreadDataPtr = b->CreateInBoundsGEP(virtualBase, consumedChunks);
 
             indices[1] = b->getInt32(InternalCapacity);
@@ -701,18 +707,15 @@ Type * DynamicBuffer::getHandleType(BuilderPtr b) const {
     Type * const emptyTy = StructType::get(C);
     FixedArray<Type *, 5> types;
     types[BaseAddress] = typePtr;
-    types[EffectiveCapacity] = sizeTy;
+    types[InternalCapacity] = sizeTy;
     types[PriorAddress] = typePtr;
-//    Type * capacityFieldTy = emptyTy;
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         types[MallocedAddress] = typePtr;
-//        if (mUnderflow) {
-//            capacityFieldTy = sizeTy;
-//        }
+        types[EffectiveCapacity] = sizeTy;
     } else {
         types[MallocedAddress] = emptyTy;
+        types[EffectiveCapacity] = emptyTy;
     }
-    types[InternalCapacity] = sizeTy;
     return StructType::get(C, types);
 }
 
@@ -729,12 +732,13 @@ void DynamicBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplie
         b->CreateAssert(capacity, "Dynamic buffer capacity cannot be 0.");
     }
 
-    indices[1] = b->getInt32(EffectiveCapacity);
+    indices[1] = b->getInt32(InternalCapacity);
     Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
     b->CreateStore(capacity, capacityField);
 
     indices[1] = b->getInt32(BaseAddress);
     Value * const baseAddressField = b->CreateInBoundsGEP(handle, indices);
+
     Value * const size = b->CreateAdd(capacity, b->getSize(mUnderflow + mOverflow));
     Value * const baseAddress = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
     Value * const adjBaseAddress = addUnderflow(b, baseAddress, mUnderflow);
@@ -744,13 +748,13 @@ void DynamicBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplie
     Value * const priorAddressField = b->CreateInBoundsGEP(handle, indices);
     b->CreateStore(nullPointerFor(b, baseAddress, mUnderflow), priorAddressField);
 
-    if (LLVM_UNLIKELY(mLinear)) {
+    if (mLinear) {
         indices[1] = b->getInt32(MallocedAddress);
         Value * const initialField = b->CreateInBoundsGEP(handle, indices);
         b->CreateStore(adjBaseAddress, initialField);
-        indices[1] = b->getInt32(InternalCapacity);
-        Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
-        b->CreateStore(capacity, capacityField);
+        indices[1] = b->getInt32(EffectiveCapacity);
+        Value * const effCapacityField = b->CreateInBoundsGEP(handle, indices);
+        b->CreateStore(capacity, effCapacityField);
     }
 }
 
@@ -783,23 +787,23 @@ Value * DynamicBuffer::getBaseAddress(BuilderPtr b) const {
 }
 
 Value * DynamicBuffer::getMallocAddress(BuilderPtr b) const {
-    if (mLinear) {
-        Value * const ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(MallocedAddress)});
-        Value * const addr = b->CreateLoad(ptr);
-        return addr;
-    }
-    unsupported("getMallocAddress", "Dynamic");
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    return b->CreateLoad(b->CreateInBoundsGEP(getHandle(), indices));
 }
 
 Value * DynamicBuffer::getOverflowAddress(BuilderPtr b) const {
-    assert (getHandle());
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(EffectiveCapacity);
-    Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), indices);
-    Value * const capacity = b->CreateLoad(capacityPtr);
-    assert (capacity->getType()->isIntegerTy());
-    return b->CreateInBoundsGEP(getBaseAddress(b), capacity);
+    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    Value * const handle = getHandle(); assert (handle);
+    Value * const base = b->CreateLoad(b->CreateInBoundsGEP(handle, indices));
+    indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
+    Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
+    Value * const capacity = b->CreateLoad(capacityField);
+    assert (capacity->getType() == b->getSizeTy());
+    return b->CreateInBoundsGEP(base, capacity);
 }
 
 Value * DynamicBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
@@ -810,11 +814,11 @@ Value * DynamicBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
         assert (getHandle());
         FixedArray<Value *, 2> indices;
         indices[0] = b->getInt32(0);
-        indices[1] = b->getInt32(EffectiveCapacity);
+        indices[1] = b->getInt32(InternalCapacity);
         Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), indices);
         Value * const capacity = b->CreateLoad(capacityPtr);
         assert (capacity->getType()->isIntegerTy());
-        return b->CreateURem(b->CreateZExtOrTrunc(offset, capacity->getType()), capacity);
+        return b->CreateURem(offset, capacity);
     }
 }
 
@@ -822,7 +826,7 @@ Value * DynamicBuffer::getCapacity(BuilderPtr b) const {
     assert (getHandle());
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(EffectiveCapacity);
+    indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
     Value * ptr = b->CreateInBoundsGEP(getHandle(), indices);
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     Value * const capacity = b->CreateLoad(ptr);
@@ -911,7 +915,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
         setHandle(handle);
 
         const auto blockWidth = b->getBitBlockWidth();
-        assert (is_power_2(blockWidth));
+        assert (is_pow2(blockWidth));
         const auto blockSize = blockWidth / 8;
 
         ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
@@ -919,7 +923,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
         FixedArray<Value *, 2> indices;
         indices[0] = b->getInt32(0);
-        indices[1] = b->getInt32(EffectiveCapacity);
+        indices[1] = b->getInt32(InternalCapacity);
 
         Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
         Value * const capacity = b->CreateLoad(capacityField);
@@ -963,7 +967,6 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
             b->SetInsertPoint(copyBack);
             b->CreateMemCpy(mallocAddress, unreadDataPtr, bytesToCopy, blockSize);
-
             BasicBlock * const copyBackExit = b->GetInsertBlock();
             b->CreateBr(updateBaseAddress);
 
@@ -995,7 +998,9 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             Value * const newBaseAddress = b->CreateGEP(newBaseBuffer, b->CreateNeg(consumedChunks));
             b->CreateStore(newBaseAddress, virtualBaseField);
             Value * const effectiveCapacity = b->CreateAdd(consumedChunks, bufferCapacityPhi);
-            b->CreateStore(effectiveCapacity, capacityField);
+            indices[1] = b->getInt32(EffectiveCapacity);
+            Value * const effCapacityField = b->CreateInBoundsGEP(handle, indices);
+            b->CreateStore(effectiveCapacity, effCapacityField);
             b->CreateRetVoid();
 
         } else { // Circular
@@ -1010,6 +1015,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             Value * const requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
 
             Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
+
             Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
             newBuffer = b->CreateInBoundsGEP(newBuffer, { underflow });
 
@@ -1056,13 +1062,11 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             indices[1] = b->getInt32(PriorAddress);
             Value * const priorBufferField = b->CreateInBoundsGEP(handle, indices);
             Value * const priorBuffer = b->CreateLoad(priorBufferField);
-            indices[1] = b->getInt32(InternalCapacity);
-            Value * const intCapacityField = b->CreateInBoundsGEP(getHandle(), indices);
-            b->CreateStore(newCapacity, intCapacityField);
+            b->CreateStore(newCapacity, capacityField);
             b->CreateStore(virtualBase, priorBufferField);
             b->CreateStore(newBuffer, virtualBaseField);
-            b->CreateStore(newCapacity, capacityField);
             b->CreateFree(b->CreateInBoundsGEP(priorBuffer, { b->CreateNeg(underflow) }));
+
             b->CreateRetVoid();
         }
 

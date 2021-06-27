@@ -259,9 +259,7 @@ struct BufferNode {
     BufferLocality Locality = BufferLocality::ThreadLocal;
 
     unsigned CopyBack = 0;
-    unsigned CopyBackReflection = 0;
-
-    unsigned LookAhead = 0;
+    unsigned CopyForwards = 0;
     unsigned LookBehind = 0;
     unsigned MaxAdd = 0;
 

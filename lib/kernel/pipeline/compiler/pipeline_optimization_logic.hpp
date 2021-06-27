@@ -7,7 +7,9 @@
 #include <llvm/Transforms/IPO.h>
 // #include <llvm/Transforms/Scalar/DCE.h>
 #include <llvm/IR/LegacyPassManager.h>
-
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
+#include <llvm/Transforms/Scalar/MemCpyOptimizer.h>
+#endif
 
 namespace kernel {
 
@@ -67,15 +69,17 @@ void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
 
     simplifyPhiNodes(m);
 
-    auto pm = make_unique<legacy::PassManager>();
+    auto pm = std::make_unique<legacy::PassManager>();
     pm->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     pm->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
     pm->add(createEarlyCSEPass());
-   // pm->add(createHotColdSplittingPass());
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
+    pm->add(createMemCpyOptPass());
+    #endif
+    // pm->add(createHotColdSplittingPass());
     pm->run(*m);
 
     simplifyPhiNodes(m);
-
 
 
 

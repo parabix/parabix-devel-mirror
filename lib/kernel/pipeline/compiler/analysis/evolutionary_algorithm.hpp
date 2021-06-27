@@ -441,6 +441,8 @@ protected:
         }
         assert ("duplicate candidate #" && (check.count() == candidateLength));
         #endif
+        // NOTE: do not erase candidates or switch the std::map to something else without
+        // verifying whether the population iterators are being invalidated.
         const auto f = candidates.emplace(std::move(candidate), 0);
         if (LLVM_LIKELY(f.second)) {
             const auto value = fitness(f.first->first);

@@ -155,12 +155,18 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         numOfLinearStrides = b->CreateZExt(b->CreateNot(exhausted), b->getSizeTy());
     }
 
+    Value * numOfOutputLinearStrides = numOfLinearStrides;
     for (const auto output : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const BufferPort & port = mBufferGraph[output];
         if (port.CanModifySegmentLength) {
-            Value * const strides = getNumOfWritableStrides(b, port, numOfLinearStrides);
-            numOfLinearStrides = b->CreateUMin(numOfLinearStrides, strides);
+            Value * const strides = getNumOfWritableStrides(b, port, numOfOutputLinearStrides);
+            numOfOutputLinearStrides = b->CreateUMin(numOfOutputLinearStrides, strides);
         }
+    }
+
+    if (numOfOutputLinearStrides != numOfLinearStrides) {
+        Value * const mustExpand = b->CreateIsNull(numOfOutputLinearStrides);
+        numOfLinearStrides = b->CreateSelect(mustExpand, numOfLinearStrides, numOfOutputLinearStrides);
     }
 
     numOfLinearStrides = calculateTransferableItemCounts(b, numOfLinearStrides);
@@ -175,10 +181,8 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const BufferPort & port = mBufferGraph[e];
-        if (!port.CanModifySegmentLength) {
-            const auto streamSet = target(e, mBufferGraph);
-            ensureSufficientOutputSpace(b, port, streamSet);
-        }
+        const auto streamSet = target(e, mBufferGraph);
+        ensureSufficientOutputSpace(b, port, streamSet);
     }
 
 }
@@ -293,8 +297,6 @@ Value * PipelineCompiler::calculateTransferableItemCounts(BuilderRef b, Value * 
         Value * numOfFinalLinearStrides = numOfLinearStrides;
 
         if (!mIsPartitionRoot) {
-
-
             for (const auto input : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
                 const BufferPort & port = mBufferGraph[input];
                 if (!port.CanModifySegmentLength) {
@@ -302,9 +304,6 @@ Value * PipelineCompiler::calculateTransferableItemCounts(BuilderRef b, Value * 
                     numOfFinalLinearStrides = b->CreateUMin(numOfFinalLinearStrides, strides);
                 }
             }
-
-            // isFinal = b->CreateICmpEQ(numOfFinalLinearStrides, sz_ZERO);
-
         }
 
         Value * const isFinal = b->CreateICmpEQ(numOfFinalLinearStrides, sz_ZERO);
@@ -406,7 +405,10 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const BufferPor
     assert (inputPort.Type == PortType::Input);
 
     Value * strideLength = getInputStrideLength(b, port);
-    if (StrideStepLength[mKernelId] > 1) {
+    // Only the partition root dictates how many strides this kernel will end up doing. All other kernels
+    // simply have to trust that the root determined the correct number or we'd be forced to have an
+    // under/overflow capable of containing an entire segment rather than a single stride.
+    if (mIsPartitionRoot && StrideStepLength[mKernelId] > 1) {
         ConstantInt * const stepSize = b->getSize(StrideStepLength[mKernelId]);
         strideLength = b->CreateMul(strideLength, stepSize);
     }
@@ -688,22 +690,22 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const BufferPort
 
     Value * overflow = nullptr;
     if (LLVM_LIKELY(useOverflow)) {
-//        if (bn.CopyBackReflection || rateData.LookAhead || rateData.Add) {
-//            const auto A = rateData.Add; //std::max(bn.CopyBackReflection, rateData.Add); //
-//            const auto B = std::max(bn.CopyBackReflection, rateData.LookAhead);
-//            if (A == B) {
-//                overflow = b->getSize(A);
-//            } else {
-//                Value * const closed = isClosed(b, inputPort);
-//                overflow = b->CreateSelect(closed, b->getSize(A), b->getSize(B));
-//            }
-//            #ifdef PRINT_DEBUG_MESSAGES
-//            debugPrint(b, prefix + "_overflow (add:%" PRIu64 ",la:%" PRIu64 ") = %" PRIu64,
-//                                    b->getSize(A),
-//                                    b->getSize(B),
-//                                    overflow);
-//            #endif
-//        }
+        if (bn.CopyForwards > 0 || port.Add > 0) {
+            const auto A = port.Add;
+            const auto L = bn.CopyForwards;
+            if (A == L) {
+                overflow = b->getSize(A);
+            } else {
+                Value * const closed = isClosed(b, inputPort);
+                overflow = b->CreateSelect(closed, b->getSize(A), b->getSize(L));
+            }
+            #ifdef PRINT_DEBUG_MESSAGES
+            debugPrint(b, prefix + "_overflow (add:%" PRIu64 ",la:%" PRIu64 ") = %" PRIu64,
+                                    b->getSize(A),
+                                    b->getSize(L),
+                                    overflow);
+            #endif
+        }
     }
 
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, overflow);
@@ -759,105 +761,108 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const BufferPort
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const BufferPort & port, const unsigned streamSet) {
 
-    const auto outputPort = port.Port;
-    assert (outputPort.Type == PortType::Output);
-
     const BufferNode & bn = mBufferGraph[streamSet];
 
-    if (bn.Locality == BufferLocality::ThreadLocal) {
+    if (bn.Locality == BufferLocality::ThreadLocal || bn.isUnowned()) {
         return;
     }
 
-    if (LLVM_UNLIKELY(bn.isOwned())) {
+    const auto outputPort = port.Port;
+    assert (outputPort.Type == PortType::Output);
+    const auto prefix = makeBufferName(mKernelId, outputPort);
+    const StreamSetBuffer * const buffer = bn.Buffer;
 
-        const auto prefix = makeBufferName(mKernelId, outputPort);
-        const StreamSetBuffer * const buffer = bn.Buffer;
+    getWritableOutputItems(b, port, true);
 
-        getWritableOutputItems(b, port, true);
+    Value * const required = mLinearOutputItemsPhi[outputPort];
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, prefix + "_required (%" PRIu64 ") = %" PRIu64, b->getSize(streamSet), required);
+    debugPrint(b, prefix + "_addr [%" PRIx64 ",%" PRIx64 ")",
+               buffer->getMallocAddress(b), buffer->getOverflowAddress(b));
+    #endif
 
-        Value * const required = mLinearOutputItemsPhi[outputPort];
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_required (%" PRIu64 ") = %" PRIu64, b->getSize(streamSet), required);
-        #endif
+    BasicBlock * const expandBuffer = b->CreateBasicBlock(prefix + "_expandBuffer", mKernelLoopCall);
+    BasicBlock * const expanded = b->CreateBasicBlock(prefix + "_expandedBuffer", mKernelLoopCall);
+    const auto beforeExpansion = mWritableOutputItems[outputPort.Number];
 
-        BasicBlock * const expandBuffer = b->CreateBasicBlock(prefix + "_expandBuffer", mKernelLoopCall);
-        BasicBlock * const expanded = b->CreateBasicBlock(prefix + "_expandedBuffer", mKernelLoopCall);
-        const auto beforeExpansion = mWritableOutputItems[outputPort.Number];
+    Value * const hasEnoughSpace = b->CreateICmpULE(required, beforeExpansion[WITH_OVERFLOW]);
 
-        Value * const hasEnoughSpace = b->CreateICmpULE(required, beforeExpansion[WITH_OVERFLOW]);
+    BasicBlock * const noExpansionExit = b->GetInsertBlock();
+    b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
 
-        BasicBlock * const noExpansionExit = b->GetInsertBlock();
-        b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
-
-        b->SetInsertPoint(expandBuffer);
-        #ifdef ENABLE_PAPI
-        readPAPIMeasurement(b, mKernelId, PAPIReadBeforeMeasurementArray);
-        #endif
-        Value * cycleCounterStart = nullptr;
-        if (LLVM_UNLIKELY(EnableCycleCounter)) {
-            cycleCounterStart = b->CreateReadCycleCounter();
-        }
-
-        // TODO: we need to calculate the total amount required assuming we process all input. This currently
-        // has a flaw in which if the input buffers had been expanded sufficiently yet processing had been
-        // held back by some input stream, we may end up expanding twice in the same iteration of this kernel,
-        // which could result in free'ing the "old" buffer twice.
-
-        Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
-        Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
-
-        buffer->reserveCapacity(b, produced, consumed, required);
-
-        recordBufferExpansionHistory(b, outputPort, buffer);
-        updateCycleCounter(b, mKernelId, cycleCounterStart, BUFFER_EXPANSION);
-        #ifdef ENABLE_PAPI
-        accumPAPIMeasurementWithoutReset(b, PAPIReadBeforeMeasurementArray, mKernelId, PAPI_BUFFER_EXPANSION);
-        #endif
-
-        auto & afterExpansion = mWritableOutputItems[outputPort.Number];
-        afterExpansion[WITH_OVERFLOW] = nullptr;
-        afterExpansion[WITHOUT_OVERFLOW] = nullptr;
-
-        getWritableOutputItems(b, port, true);
-        if (LLVM_UNLIKELY(beforeExpansion[WITHOUT_OVERFLOW] && (beforeExpansion[WITH_OVERFLOW] != beforeExpansion[WITHOUT_OVERFLOW]))) {
-            getWritableOutputItems(b, port, false);
-        }
-
-        assert (beforeExpansion[WITH_OVERFLOW] == nullptr || (beforeExpansion[WITH_OVERFLOW] != afterExpansion[WITH_OVERFLOW]));
-        assert ((beforeExpansion[WITH_OVERFLOW] != nullptr) && (afterExpansion[WITH_OVERFLOW] != nullptr));
-        assert (beforeExpansion[WITHOUT_OVERFLOW] == nullptr || (beforeExpansion[WITHOUT_OVERFLOW] != afterExpansion[WITHOUT_OVERFLOW]));
-        assert ((beforeExpansion[WITHOUT_OVERFLOW] == nullptr) ^ (afterExpansion[WITHOUT_OVERFLOW] != nullptr));
-        assert ((beforeExpansion[WITH_OVERFLOW] != beforeExpansion[WITHOUT_OVERFLOW]) ^ (afterExpansion[WITH_OVERFLOW] == afterExpansion[WITHOUT_OVERFLOW]));
-
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_writable' = %" PRIu64, afterExpansion[WITH_OVERFLOW]);
-        #endif
-
-        BasicBlock * const expandBufferExit = b->GetInsertBlock();
-        b->CreateBr(expanded);
-
-        b->SetInsertPoint(expanded);    
-
-        IntegerType * const sizeTy = b->getSizeTy();
-        if (afterExpansion[WITH_OVERFLOW]) {
-            PHINode * const phi = b->CreatePHI(sizeTy, 2);
-            phi->addIncoming(beforeExpansion[WITH_OVERFLOW], noExpansionExit);
-            phi->addIncoming(afterExpansion[WITH_OVERFLOW], expandBufferExit);
-            afterExpansion[WITH_OVERFLOW] = phi;
-        }
-
-        if (afterExpansion[WITHOUT_OVERFLOW]) {
-            if (LLVM_LIKELY(beforeExpansion[WITH_OVERFLOW] == beforeExpansion[WITHOUT_OVERFLOW])) {
-                afterExpansion[WITHOUT_OVERFLOW] = afterExpansion[WITH_OVERFLOW];
-            } else {
-                PHINode * const phi = b->CreatePHI(sizeTy, 2);
-                phi->addIncoming(beforeExpansion[WITHOUT_OVERFLOW], noExpansionExit);
-                phi->addIncoming(afterExpansion[WITHOUT_OVERFLOW], expandBufferExit);
-                afterExpansion[WITHOUT_OVERFLOW] = phi;
-            }
-        }
-
+    b->SetInsertPoint(expandBuffer);
+    #ifdef ENABLE_PAPI
+    readPAPIMeasurement(b, mKernelId, PAPIReadBeforeMeasurementArray);
+    #endif
+    Value * cycleCounterStart = nullptr;
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
+        cycleCounterStart = b->CreateReadCycleCounter();
     }
+
+    // TODO: we need to calculate the total amount required assuming we process all input. This currently
+    // has a flaw in which if the input buffers had been expanded sufficiently yet processing had been
+    // held back by some input stream, we may end up expanding twice in the same iteration of this kernel,
+    // which could result in free'ing the "old" buffer twice.
+
+    Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
+    Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
+
+    buffer->reserveCapacity(b, produced, consumed, required);
+
+    recordBufferExpansionHistory(b, outputPort, buffer);
+    updateCycleCounter(b, mKernelId, cycleCounterStart, BUFFER_EXPANSION);
+    #ifdef ENABLE_PAPI
+    accumPAPIMeasurementWithoutReset(b, PAPIReadBeforeMeasurementArray, mKernelId, PAPI_BUFFER_EXPANSION);
+    #endif
+
+    auto & afterExpansion = mWritableOutputItems[outputPort.Number];
+    afterExpansion[WITH_OVERFLOW] = nullptr;
+    afterExpansion[WITHOUT_OVERFLOW] = nullptr;
+
+    getWritableOutputItems(b, port, true);
+    if (LLVM_UNLIKELY(beforeExpansion[WITHOUT_OVERFLOW] && (beforeExpansion[WITH_OVERFLOW] != beforeExpansion[WITHOUT_OVERFLOW]))) {
+        getWritableOutputItems(b, port, false);
+    }
+
+    assert (beforeExpansion[WITH_OVERFLOW] == nullptr || (beforeExpansion[WITH_OVERFLOW] != afterExpansion[WITH_OVERFLOW]));
+    assert ((beforeExpansion[WITH_OVERFLOW] != nullptr) && (afterExpansion[WITH_OVERFLOW] != nullptr));
+    assert (beforeExpansion[WITHOUT_OVERFLOW] == nullptr || (beforeExpansion[WITHOUT_OVERFLOW] != afterExpansion[WITHOUT_OVERFLOW]));
+    assert ((beforeExpansion[WITHOUT_OVERFLOW] == nullptr) ^ (afterExpansion[WITHOUT_OVERFLOW] != nullptr));
+    assert ((beforeExpansion[WITH_OVERFLOW] != beforeExpansion[WITHOUT_OVERFLOW]) ^ (afterExpansion[WITH_OVERFLOW] == afterExpansion[WITHOUT_OVERFLOW]));
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, prefix + "_addr' [%" PRIx64 ",%" PRIx64 ")",
+               buffer->getMallocAddress(b), buffer->getOverflowAddress(b));
+    #endif
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, prefix + "_writable' = %" PRIu64, afterExpansion[WITH_OVERFLOW]);
+    #endif
+
+    BasicBlock * const expandBufferExit = b->GetInsertBlock();
+    b->CreateBr(expanded);
+
+    b->SetInsertPoint(expanded);
+
+    IntegerType * const sizeTy = b->getSizeTy();
+    if (afterExpansion[WITH_OVERFLOW]) {
+        PHINode * const phi = b->CreatePHI(sizeTy, 2);
+        phi->addIncoming(beforeExpansion[WITH_OVERFLOW], noExpansionExit);
+        phi->addIncoming(afterExpansion[WITH_OVERFLOW], expandBufferExit);
+        afterExpansion[WITH_OVERFLOW] = phi;
+    }
+
+    if (afterExpansion[WITHOUT_OVERFLOW]) {
+        if (LLVM_LIKELY(beforeExpansion[WITH_OVERFLOW] == beforeExpansion[WITHOUT_OVERFLOW])) {
+            afterExpansion[WITHOUT_OVERFLOW] = afterExpansion[WITH_OVERFLOW];
+        } else {
+            PHINode * const phi = b->CreatePHI(sizeTy, 2);
+            phi->addIncoming(beforeExpansion[WITHOUT_OVERFLOW], noExpansionExit);
+            phi->addIncoming(afterExpansion[WITHOUT_OVERFLOW], expandBufferExit);
+            afterExpansion[WITHOUT_OVERFLOW] = phi;
+        }
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -928,11 +933,9 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const BufferPort 
                         consumed, produced);        
     }
 
-    const BufferPort & rateData = mBufferGraph[output];
-
     ConstantInt * overflow = nullptr;
-    if (useOverflow && (bn.CopyBack || rateData.Add)) {
-        const auto k = std::max<unsigned>(bn.CopyBack, rateData.Add);
+    if (useOverflow && (bn.CopyBack || port.Add)) {
+        const auto k = std::max<unsigned>(bn.CopyBack, port.Add);
         overflow = b->getSize(k);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, prefix + "_overflow = %" PRIu64, overflow);
@@ -1256,6 +1259,170 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
 
     IntegerType * const sizeTy = b->getSizeTy();
     Constant * const sz_ZERO = b->getSize(0);
+    Constant * const sz_ONE = b->getSize(1);
+    Constant * const MAX_INT = ConstantInt::getAllOnesValue(sizeTy);
+
+    Value * initialItemCount = nullptr;
+    Value * sourceItemCount = nullptr;
+    Value * peekableItemCount = nullptr;
+    Value * minimumItemCount = MAX_INT;
+    Value * nonOverflowItems = nullptr;
+
+    const auto port = partialSumPort.Port;
+
+    const StreamSetBuffer * sourceBuffer = nullptr;
+
+    unsigned numOfPeekableItems = 0;
+
+    if (port.Type == PortType::Input) {
+        initialItemCount = mAlreadyProcessedPhi[port];
+        Value * const accessible = getAccessibleInputItems(b, partialSumPort, true);
+        const auto streamSet = getInputBufferVertex(port);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.CopyForwards) {
+            sourceBuffer = bn.Buffer;
+            numOfPeekableItems = bn.CopyForwards;
+
+            nonOverflowItems = getAccessibleInputItems(b, partialSumPort, false);
+            sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
+            peekableItemCount = subtractLookahead(b, partialSumPort, b->CreateAdd(initialItemCount, accessible));
+            minimumItemCount = getInputStrideLength(b, partialSumPort);
+        } else {
+            sourceItemCount = b->CreateAdd(initialItemCount, accessible);
+        }
+        sourceItemCount = subtractLookahead(b, partialSumPort, sourceItemCount);
+    } else { // if (port.Type == PortType::Output) {
+        initialItemCount = mAlreadyProducedPhi[port];
+        Value * const writable = getWritableOutputItems(b, partialSumPort, true);
+        const auto streamSet = getOutputBufferVertex(port);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.CopyBack) {
+            sourceBuffer = bn.Buffer;
+            numOfPeekableItems = bn.CopyBack;
+
+            nonOverflowItems = getWritableOutputItems(b, partialSumPort, false);
+            sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
+            peekableItemCount = b->CreateAdd(initialItemCount, writable);
+            minimumItemCount = getOutputStrideLength(b, partialSumPort);
+        } else {
+            sourceItemCount = b->CreateAdd(initialItemCount, writable);
+        }
+    }
+
+    const auto ref = getReference(port);
+    assert (ref.Type == PortType::Input);
+    const auto prefix = makeBufferName(mKernelId, ref) + "_readPartialSum";
+
+    const auto refInput = getInput(mKernelId, ref);
+    const BufferPort & refInputRate = mBufferGraph[refInput];
+    const auto refBufferVertex = getInputBufferVertex(ref);
+    const StreamSetBuffer * const popCountBuffer = mBufferGraph[refBufferVertex].Buffer;
+
+    BasicBlock * const popCountLoop =
+        b->CreateBasicBlock(prefix + "Loop", mKernelCheckOutputSpace);
+    BasicBlock * const popCountLoopExit =
+        b->CreateBasicBlock(prefix + "LoopExit", mKernelCheckOutputSpace);
+    Value * const baseAddress = popCountBuffer->getRawItemPointer(b, sz_ZERO, mAlreadyProcessedPhi[ref]);
+    BasicBlock * const popCountEntry = b->GetInsertBlock();
+
+    Value * cond = b->CreateICmpNE(numOfLinearStrides, sz_ZERO);
+    if (peekableItemCount) {
+        cond = b->CreateAnd(cond, b->CreateICmpUGE(sourceItemCount, minimumItemCount));
+    }
+    b->CreateLikelyCondBr(cond, popCountLoop, popCountLoopExit);
+
+    // TODO: replace this with a parallel icmp check and bitscan? binary search with initial
+    // check on the rightmost entry?
+
+    b->SetInsertPoint(popCountLoop);
+    PHINode * const numOfStrides = b->CreatePHI(sizeTy, 2);
+    numOfStrides->addIncoming(numOfLinearStrides, popCountEntry);
+    PHINode * const nextRequiredItems = b->CreatePHI(sizeTy, 2);
+    nextRequiredItems->addIncoming(MAX_INT, popCountEntry);
+
+    Value * const strideIndex = b->CreateSub(numOfStrides, sz_ONE);
+
+    Value * offset = strideIndex;
+
+    // get the popcount kernel's input rate so we can calculate the
+    // step factor for this kernel's usage of pop count partial sum
+    // stream.
+    const auto refOuput = in_edge(refBufferVertex, mBufferGraph);
+    const BufferPort & refOutputRate = mBufferGraph[refOuput];
+    const auto stepFactor = refInputRate.Maximum / refOutputRate.Maximum;
+
+    assert (stepFactor.denominator() == 1);
+    const auto step = stepFactor.numerator();
+    if (LLVM_UNLIKELY(step > 1)) {
+        offset = b->CreateMul(offset, b->getSize(step));
+    }
+    Value * const ptr = b->CreateInBoundsGEP(baseAddress, offset);
+    Value * const requiredItems = b->CreateLoad(ptr);
+
+    Value * const notEnough = b->CreateICmpUGT(requiredItems, sourceItemCount);
+    Value * const notDone = b->CreateICmpNE(strideIndex, sz_ZERO);
+    Value * const repeat = b->CreateAnd(notDone, notEnough);
+
+    if (LLVM_UNLIKELY(CheckAssertions)) {
+        const Binding & input = getInputBinding(ref);
+        Value * const inputName = b->GetString(input.getName());
+        b->CreateAssert(b->CreateICmpULE(initialItemCount, requiredItems),
+                        "%s.%s: partial sum is not non-decreasing at %" PRIu64
+                        " (prior %" PRIu64 " > current %" PRIu64 ")",
+                        mCurrentKernelName, inputName,
+                        strideIndex, initialItemCount, requiredItems);
+    }
+
+    nextRequiredItems->addIncoming(requiredItems, popCountLoop);
+    numOfStrides->addIncoming(strideIndex, popCountLoop);
+    b->CreateCondBr(repeat, popCountLoop, popCountLoopExit);
+
+    b->SetInsertPoint(popCountLoopExit);
+    PHINode * const numOfStridesPhi = b->CreatePHI(sizeTy, 2);
+    numOfStridesPhi->addIncoming(sz_ZERO, popCountEntry);
+    numOfStridesPhi->addIncoming(numOfStrides, popCountLoop);
+    PHINode * const requiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    requiredItemsPhi->addIncoming(sz_ZERO, popCountEntry);
+    requiredItemsPhi->addIncoming(requiredItems, popCountLoop);
+    PHINode * const nextRequiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);
+    nextRequiredItemsPhi->addIncoming(nextRequiredItems, popCountLoop);
+
+    Value * finalNumOfStrides = numOfStridesPhi;
+    if (peekableItemCount) {
+        // Since we want to allow the stream to peek into the overflow but not start
+        // in it, check to see if we can support one more stride by using it.
+//        Value * const internalCapacity = sourceBuffer->getInternalCapacity(b);
+//        Value * const pos = b->CreateURem(nextRequiredItemsPhi, internalCapacity);
+//        ConstantInt * const overflowLimit = b->getSize(numOfPeekableItems);
+//        Value * const hasOverwrittenData = b->CreateICmpUGE(nextRequiredItemsPhi, overflowLimit);
+//        Value * const canPeekIntoOverflow = b->CreateAnd(hasOverwrittenData, b->CreateICmpULE(nextRequiredItemsPhi, overflowLimit));
+
+        Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItemsPhi, peekableItemCount);
+        finalNumOfStrides = b->CreateAdd(finalNumOfStrides, b->CreateZExt(canPeekIntoOverflow, sizeTy));
+    }
+    if (LLVM_UNLIKELY(CheckAssertions)) {
+        const Binding & binding = getInputBinding(ref);
+        b->CreateAssert(b->CreateICmpNE(finalNumOfStrides, MAX_INT),
+                        "%s.%s: attempting to use sentinal popcount entry",
+                        mCurrentKernelName,
+                        b->GetString(binding.getName()));
+    }
+    return finalNumOfStrides;
+}
+
+
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getMaximumNumOfPartialSumStrides
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
+                                                           const BufferPort & partialSumPort,
+                                                           Value * const numOfLinearStrides) {
+
+    IntegerType * const sizeTy = b->getSizeTy();
+    Constant * const sz_ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
     Constant * const MAX_INT = ConstantInt::getAllOnesValue(sizeTy);
 
@@ -1264,16 +1431,17 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
     Value * sourceItemCount = nullptr;
     Value * peekableItemCount = nullptr;
     Value * minimumItemCount = MAX_INT;
+    Value * nonOverflowItems = nullptr;
 
     const auto port = partialSumPort.Port;
 
     if (port.Type == PortType::Input) {
         initialItemCount = mAlreadyProcessedPhi[port];
-        Value * const accessible = getAccessibleInputItems(b, partialSumPort);
-        const auto input = getInput(mKernelId, port);
-        const BufferPort & br = mBufferGraph[input];
-        if (br.LookAhead) {
-            Value * const nonOverflowItems = getAccessibleInputItems(b, partialSumPort, false);
+        Value * const accessible = getAccessibleInputItems(b, partialSumPort, true);
+        const auto streamSet = getInputBufferVertex(port);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.CopyForwards) {
+            nonOverflowItems = getAccessibleInputItems(b, partialSumPort, false);
             sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
             peekableItemCount = b->CreateAdd(initialItemCount, accessible);
             minimumItemCount = getInputStrideLength(b, partialSumPort);
@@ -1287,7 +1455,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
         const auto streamSet = getOutputBufferVertex(port);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.CopyBack) {
-            Value * const nonOverflowItems = getWritableOutputItems(b, partialSumPort, false);
+            nonOverflowItems = getWritableOutputItems(b, partialSumPort, false);
             sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
             peekableItemCount = b->CreateAdd(initialItemCount, writable);
             minimumItemCount = getOutputStrideLength(b, partialSumPort);
@@ -1345,6 +1513,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
     Value * const ptr = b->CreateInBoundsGEP(baseAddress, strideIndex);
     Value * const requiredItems = b->CreateLoad(ptr);
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);
+    Value * const done = b->CreateOr(hasEnough, b->CreateICmpULE(strideIndex, STEP));
 
     // NOTE: popcount streams are produced with a 1 element lookbehind window.
     if (LLVM_UNLIKELY(CheckAssertions)) {
@@ -1362,7 +1531,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
 
     nextRequiredItems->addIncoming(requiredItems, popCountLoop);
     numOfStrides->addIncoming(strideIndex, popCountLoop);
-    b->CreateCondBr(hasEnough, popCountLoopExit, popCountLoop);
+    b->CreateCondBr(done, popCountLoopExit, popCountLoop);
 
     b->SetInsertPoint(popCountLoopExit);
     PHINode * const numOfStridesPhi = b->CreatePHI(sizeTy, 2);
@@ -1381,7 +1550,8 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
         Value * const endedPriorToBufferEnd = b->CreateICmpNE(requiredItemsPhi, sourceItemCount);
         Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItemsPhi, peekableItemCount);
         Value * const useOverflow = b->CreateAnd(endedPriorToBufferEnd, canPeekIntoOverflow);
-        finalNumOfStrides = b->CreateSelect(useOverflow, b->CreateAdd(numOfStridesPhi, ONE), numOfStridesPhi);
+        Value * const plusOne = b->CreateAdd(finalNumOfStrides, ONE);
+        finalNumOfStrides = b->CreateSelect(useOverflow, plusOne, finalNumOfStrides);
     }
     if (LLVM_UNLIKELY(CheckAssertions)) {
         const Binding & binding = getInputBinding(ref);
@@ -1392,6 +1562,10 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b,
     }
     return finalNumOfStrides;
 }
+
+#endif
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateStrideLength

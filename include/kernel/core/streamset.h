@@ -273,7 +273,7 @@ public:
 
     llvm::Value * getInternalCapacity(BuilderPtr b) const override;
 
-    llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
+    llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const override;
 
     void copyBackLinearOutputBuffer(BuilderPtr b, llvm::Value * consumed) const override;
 

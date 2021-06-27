@@ -117,7 +117,8 @@ public:
 
         P.identifyInterPartitionSymbolicRates();
 
-        // Finish annotating the buffer graph       
+        // Finish annotating the buffer graph
+        P.identifyOwnedBuffers();
         P.identifyLinearBuffers();
 //        P.identifyLocalPortIds();
         P.identifyPortsThatModifySegmentLength();
@@ -235,6 +236,8 @@ private:
 
     void determineBufferLayout(BuilderRef b, random_engine & rng);
 
+    void identifyOwnedBuffers();
+
     void identifyLinearBuffers();
     void markInterPartitionStreamSetsAsGloballyShared();
     void identifyLocalPortIds();
@@ -327,6 +330,7 @@ public:
 
     std::vector<unsigned>           MinimumNumOfStrides;
     std::vector<unsigned>           MaximumNumOfStrides;
+    std::vector<unsigned>           StrideStepLength;
 
     BufferGraph                     mBufferGraph;
 

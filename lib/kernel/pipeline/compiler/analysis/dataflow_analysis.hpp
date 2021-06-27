@@ -812,20 +812,20 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
 void PipelineAnalysis::computeMinimumStrideLengthForConsistentDataflow() {
 
     // TODO: we already do this when scheduling. Organize the logic better to only do it once if this
-    // ends up being necessary for performance.s
+    // ends up being necessary for performance.
 
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    StrideStepLength.resize(PipelineOutput + 1);
 
     auto make_partition_vars = [&](const unsigned first, const unsigned last) {
         auto gcd = MinimumNumOfStrides[first];
         for (auto i = first + 1; i <= last; ++i) {
             gcd = boost::gcd(gcd, MinimumNumOfStrides[i]);
         }
-        if (gcd > 1) {
-            for (auto i = first; i <= last; ++i) {
-                MinimumNumOfStrides[i] /= gcd;
-            }
+        for (auto i = first; i <= last; ++i) {
+            StrideStepLength[i] = (MinimumNumOfStrides[i] / gcd);
         }
     };
 

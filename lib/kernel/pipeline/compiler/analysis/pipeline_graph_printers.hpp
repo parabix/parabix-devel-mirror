@@ -233,16 +233,19 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
         const StreamSetBuffer * const buffer = bn.Buffer;
 
-        out << "label=\"" << streamSet << " (" << buffer->getId() << ") |{";
+        out << "label=\"" << streamSet;
+        if (buffer) {
+            out << " (" << buffer->getId() << ")";
+        }
+        out << " |{";
 
 
-
+        if (bn.isExternal()) {
+            out << 'X';
+        }
         if (buffer == nullptr) {
             out << '?';
         } else {
-            if (bn.isExternal()) {
-                out << 'X';
-            }
             switch (buffer->getBufferKind()) {
                 case BufferId::StaticBuffer:
                     out << 'S'; break;
@@ -252,21 +255,21 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                     out << 'E'; break;
                 default: llvm_unreachable("unknown streamset type");
             }
+        }
+        if (bn.isUnowned()) {
+            out << 'U';
+        }
+        if (bn.isExternal()) {
+            out << 'P';
+        }
+        if (bn.IsLinear) {
+            out << 'L';
+        }
+        if (bn.isShared()) {
+            out << '*';
+        }
 
-            if (bn.isUnowned()) {
-                out << 'U';
-            }
-            if (bn.isExternal()) {
-                out << 'P';
-            }
-            if (buffer->isLinear()) {
-                out << 'L';
-            }
-            if (bn.isShared()) {
-                out << '*';
-            }
-
-
+        if (buffer) {
             Type * ty = buffer->getBaseType();
             out << ':'
                 << ty->getArrayNumElements() << 'x';
@@ -291,8 +294,8 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (bn.CopyBack) {
             out << "|CB:" << bn.CopyBack;
         }
-        if (bn.LookAhead) {
-            out << "|LA:" << bn.LookAhead;
+        if (bn.CopyForwards) {
+            out << "|CF:" << bn.CopyForwards;
         }
         if (bn.LookBehind) {
             out << "|LB:" << bn.LookBehind;
@@ -354,7 +357,11 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             } else {
                 print_rational(MinimumNumOfStrides[kernel]) << ",?";
             }
-            out << "]\\n";
+            out << "]";
+            if (StrideStepLength.size() > 0) {
+                out << " (x" << StrideStepLength[kernel] << ")";
+            }
+            out << "\\n";
         }
         if (kernelObj->canSetTerminateSignal()) {
             out << "<CanTerminateEarly>\\n";
