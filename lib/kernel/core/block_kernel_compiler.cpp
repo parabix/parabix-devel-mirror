@@ -299,7 +299,7 @@ inline void BlockKernelCompiler::writeFinalBlockMethod(BuilderRef b, Value * rem
         args.push_back(self);
         args.push_back(remainingItemCount);
         args.insert(args.end(), mAccessibleInputItems.begin(), mAccessibleInputItems.end());
-        b->CreateCall(mCurrentMethod, args);
+        b->CreateCall(mCurrentMethod->getFunctionType(), mCurrentMethod, args);
         mCurrentMethod = cp;
     }
 
@@ -323,7 +323,7 @@ void BlockKernelCompiler::generateDefaultFinalBlockMethod(BuilderRef b) {
         args.reserve(1 + mAccessibleInputItems.size());
         args.push_back(b->getHandle());
         args.insert(args.end(), mAccessibleInputItems.begin(), mAccessibleInputItems.end());
-        b->CreateCall(mDoBlockMethod, args);
+        b->CreateCall(mDoBlockMethod->getFunctionType(), mDoBlockMethod, args);
     }
 }
 

@@ -16,7 +16,7 @@ namespace kernel {
 void PipelineCompiler::debugInit(BuilderRef b) {
     if (codegen::SegmentThreads > 1) {
         Function * const pthreadSelfFn = b->getModule()->getFunction("pthread_self");
-        mThreadId = b->CreateCall(pthreadSelfFn);
+        mThreadId = b->CreateCall(pthreadSelfFn->getFunctionType(), pthreadSelfFn, {});
     } else {
         mThreadId = nullptr;
     }
@@ -63,7 +63,8 @@ BOOST_NOINLINE void PipelineCompiler::debugPrint(BuilderRef b, Twine format, Arg
         assert ("null argument given to debugPrint" && arg);
     }
     #endif
-    b->CreateCall(b->GetDprintf(), argVals);
+    Function * Dprintf = b->GetDprintf();
+    b->CreateCall(Dprintf->getFunctionType(), Dprintf, argVals);
 }
 
 void PipelineCompiler::debugHalt(BuilderRef b) const {

@@ -541,7 +541,7 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
         Value * excess = b->CreatePopcount(b->CreateLShr(fileBreakWord, offsetPosInWord));
         Value * priorLineCount = b->CreateAdd(b->CreateSub(offsetLineCount, excess), pendingLineNum);
         //b->CallPrintInt("priorLineCount", priorLineCount);
-        //b->CreateCall(finalizer, {accumulator, batchFileNum, priorLineCount});
+        //b->CreateCall(finalizer->getFunctionType(), finalizer, {accumulator, batchFileNum, priorLineCount});
         b->CreateCall(setBatchLineNumber->getFunctionType(), setBatchLineNumber, {accumulator, batchFileNum, priorLineCount});
     } else {
         b->CreateCall(setBatchLineNumber->getFunctionType(), setBatchLineNumber, {accumulator, batchFileNum, sz_ZERO});
@@ -641,7 +641,7 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     //b->CallPrintInt("nextInBatch2 nextFileNum", nextFileNum);
     b->setScalarField("batchFileNum", nextFileNum);
     inFinalFile = b->CreateICmpEQ(nextFileNum, maxFileNum);
-    nextFileLimit = b->CreateCall(getFileStartPos, {accumulator, b->CreateSelect(inFinalFile, maxFileNum, b->CreateAdd(nextFileNum, b->getInt32(1)))});
+    nextFileLimit = b->CreateCall(getFileStartPos->getFunctionType(), getFileStartPos, {accumulator, b->CreateSelect(inFinalFile, maxFileNum, b->CreateAdd(nextFileNum, b->getInt32(1)))});
     limit = b->CreateSelect(inFinalFile, strideLimit, nextFileLimit);
     b->setScalarField("pendingFileLimit", limit);
     beyondFileEnd = b->CreateICmpUGT(strideLimit, limit);
@@ -664,7 +664,7 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
 
     b->SetInsertPoint(callFinalizeScan);
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
-    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    b->CreateCall(finalizer->getFunctionType(), finalizer, {accumulator, bufferEnd});
     //b->CallPrintInt("finalizeScan maxFileNum", maxFileNum);
     /*if (mLineNumbering) {
         //b->CallPrintInt("strideFinalLineNumPhi", strideFinalLineNumPhi);

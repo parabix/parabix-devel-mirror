@@ -382,7 +382,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                       totalNumOfItems, accessibleItems[inputPort.Number]);
             #endif
 
-            Value * const maskedAddress = b->CreatePointerCast(b->CreateCall(maskInput, args), bufferType);
+            Value * const maskedAddress = b->CreatePointerCast(b->CreateCall(maskInput->getFunctionType(), maskInput, args), bufferType);
             BasicBlock * const maskedInputLoopExit = b->GetInsertBlock();
             b->CreateBr(selectedInput);
 
@@ -586,7 +586,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             strideLength = std::max(strideLength, R);
         }
         args[3] = b->getSize(ceiling(strideLength * Rational{1, blockWidth}));
-        b->CreateCall(maskOutput, args);
+        b->CreateCall(funcTy, maskOutput, args);
     }
     #endif
 }
