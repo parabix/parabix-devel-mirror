@@ -60,6 +60,8 @@ public:
 
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
 
+    virtual ~ParabixObjectCache();
+
 protected:
 
     ParabixObjectCache();

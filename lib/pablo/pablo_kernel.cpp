@@ -32,7 +32,7 @@ namespace pablo {
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<KernelCompiler> PabloKernel::instantiateKernelCompiler(BuilderRef /* b */) const {
-    return llvm::make_unique<PabloCompiler>(const_cast<PabloKernel *>(this));
+    return std::make_unique<PabloCompiler>(const_cast<PabloKernel *>(this));
 }
 
 Var * PabloKernel::getInputStreamVar(const std::string & name) {
@@ -211,7 +211,8 @@ void PabloKernel::generateFinalizeMethod(BuilderRef b) {
                                              b->getInt32(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH));
 
         Function * dprintf = b->GetDprintf();
-        FunctionType * fTy = dprintf->getFunctionType();
+
+
 
         Value * profile = b->getScalarFieldPtr("profile");
 
@@ -227,7 +228,7 @@ void PabloKernel::generateFinalizeMethod(BuilderRef b) {
             str << "\n";
 
             Value * taken = b->CreateLoad(b->CreateGEP(profile, {b->getInt32(0), b->getInt32(branchCount++)}));
-            b->CreateCall(fTy, dprintf, {fd, b->GetString(str.str()), taken});
+            b->CreateCall(dprintf, {fd, b->GetString(str.str()), taken});
 
         }
 
