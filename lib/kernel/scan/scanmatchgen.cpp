@@ -682,8 +682,8 @@ ScanBatchKernel::ScanBatchKernel(BuilderRef b, StreamSet * const Matches, Stream
     : MultiBlockKernel(b, "scanBatch" + std::to_string(strideBlocks),
 // inputs
 {Binding{"matchResult", Matches}
-,Binding{"lineBreak", LineBreakStream}
-,Binding{"InputStream", ByteStream, FixedRate(), { Deferred() }}},
+,Binding{"lineBreak", LineBreakStream, FixedRate(), ZeroExtended()}
+,Binding{"InputStream", ByteStream, FixedRate(), { ZeroExtended(), Deferred() }}},
 // outputs
 {},
 // input scalars
