@@ -63,6 +63,18 @@ namespace llvm_version {
   #endif
   }
 
+  CallInst * CreateCall(CBuilderBase * b, Value *callee,
+                        ArrayRef< Value * > args, ArrayRef< OperandBundleDef > OpBundles,
+                        const Twine Name) {
+  #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(11, 0, 0)
+      auto *calleePtrType = llvm::cast<llvm::PointerType>(callee->getType());
+      auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
+      return b->CreateCall(calleeType, callee, args, OpBundles, Name);
+  #else
+      return b->CreateCall(callee, args, OpBundles, Name);
+  #endif
+  }
+
   InvokeInst * CreateInvoke(CBuilderBase * b,
                             Value * const Callee, BasicBlock * const NormalDest, BasicBlock * UnwindDest,
                             ArrayRef< Value * > args, const Twine Name) {
@@ -72,6 +84,18 @@ namespace llvm_version {
       return b->CreateInvoke(calleeType, Callee, NormalDest, UnwindDest, args);
   #else
       return b->CreateInvoke(Callee, NormalDest, UnwindDest, args);
+  #endif
+  }
+
+  InvokeInst * CreateInvoke(CBuilderBase * b, Value * Callee, BasicBlock * NormalDest, BasicBlock * UnwindDest,
+                           ArrayRef<Value *> args, ArrayRef<OperandBundleDef> OpBundles,
+                           const Twine Name) {
+  #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(11, 0, 0)
+      auto *calleePtrType = llvm::cast<llvm::PointerType>(Callee->getType());
+      auto *calleeType = llvm::cast<llvm::FunctionType>(calleePtrType->getElementType());
+      return b->CreateInvoke(calleeType, Callee, NormalDest, UnwindDest, args, Name);
+  #else
+      return b->CreateInvoke(Callee, NormalDest, UnwindDest, args, OpBundles, Name);
   #endif
   }
 
@@ -99,26 +123,4 @@ namespace llvm_version {
   #endif
   }
 
-  void checkAddPassesToEmitFile(TargetMachine * mTarget, std::unique_ptr<legacy::PassManager> const & mPassManager,
-                                std::unique_ptr<llvm::raw_fd_ostream> & mASMOutputStream) {
-  #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
-      if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
-          if (!codegen::ShowASMOption.empty()) {
-              std::error_code error;
-              mASMOutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, llvm::sys::fs::OpenFlags::F_None);
-          } else {
-              mASMOutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
-          }
-  #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(10, 0, 0)
-      if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, CGFT_AssemblyFile))) {
-  #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-      if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, llvm::LLVMTargetMachine::CGFT_AssemblyFile))) {
-  #else
-      if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
-  #endif
-        report_fatal_error("LLVM error: could not add emit assembly pass");
-      }
-  }
-  #endif
-  }
 }

@@ -1533,32 +1533,24 @@ Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, 
     return IRBuilder<>::CreateInsertElement(Vec, NewElt, Idx, Name);
 }
 
-CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Value * > Args, const Twine Name) {
+CallInst * CBuilder::CreateCall(FunctionType * FTy, Value * Callee, ArrayRef< Value * > Args, const Twine Name) {
     return IRBuilder<>::CreateCall(FTy, Callee, Args, Name);
 }
 
-CallInst * CBuilder::CreateCall(FunctionType *FTy, Value *Callee, ArrayRef< Value * > Args,
-                                ArrayRef< OperandBundleDef > OpBundles, const Twine Name) {
-    return IRBuilder<>::CreateCall(FTy, Callee, Args, OpBundles, Name);
-}
-
-CallInst * CBuilder::CreateCall(Value *Callee, ArrayRef< Value * > args, const Twine Name) {
+CallInst * CBuilder::CreateCall(Value * Callee, ArrayRef< Value * > args, const Twine Name) {
     return llvm_version::CreateCall(this, Callee, args, Name);
 }
 
-InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
-                                    ArrayRef<Value *> Args, ArrayRef<OperandBundleDef> OpBundles, const Twine Name) {
-    return IRBuilder<>::CreateInvoke(Ty, Callee, NormalDest, UnwindDest, Args, OpBundles, Name);
+CallInst * CBuilder::CreateCall(Value * Callee, ArrayRef< Value * > args, llvm::ArrayRef< llvm::OperandBundleDef > OpBundles, const Twine Name) {
+    return llvm_version::CreateCall(this, Callee, args, Name);
 }
 
-InvokeInst * CBuilder::CreateInvoke(FunctionType *Ty, Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
-                                    ArrayRef<Value *> Args, const Twine Name) {
-    return IRBuilder<>::CreateInvoke(Ty, Callee, NormalDest, UnwindDest, Args, Name);
-}
-
-InvokeInst * CBuilder::CreateInvoke(Value *Callee, BasicBlock *NormalDest, BasicBlock *UnwindDest,
-                                    ArrayRef<Value *> Args, const Twine Name) {
+InvokeInst * CBuilder::CreateInvoke(Value * Callee, BasicBlock * NormalDest, BasicBlock * UnwindDest, ArrayRef<Value *> Args, const Twine Name) {
     return llvm_version::CreateInvoke(this, Callee, NormalDest, UnwindDest, Args, Name);
+}
+
+InvokeInst * CBuilder::CreateInvoke(Value * Callee, BasicBlock * NormalDest, BasicBlock * UnwindDest, ArrayRef<Value *> Args, ArrayRef<OperandBundleDef> OpBundles, const Twine Name) {
+    return llvm_version::CreateInvoke(this, Callee, NormalDest, UnwindDest, Args, OpBundles, Name);
 }
 
 CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
