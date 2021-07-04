@@ -37,8 +37,10 @@ namespace llvm_version {
   VectorType * getVectorType(Type *ElementType, unsigned NumElements) {
   #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(12, 0, 0)
       return VectorType::get(ElementType, ElementCount::get(NumElements, false));
-  #else
-      return VectorType::get(ElementType, {NumElements, false});
+   #elif LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(11, 0, 0)
+       return VectorType::get(ElementType, {NumElements, false});
+   #else
+      return VectorType::get(ElementType, NumElements);
   #endif
   }
 
