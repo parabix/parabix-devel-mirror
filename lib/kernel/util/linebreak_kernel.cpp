@@ -345,7 +345,7 @@ void LineStartsKernel::generatePabloMethod() {
 
 LineSpansKernel::LineSpansKernel(BuilderRef b, StreamSet * LineStarts, StreamSet * LineEnds, StreamSet * LineSpans)
 : PabloKernel(b, "LineSpans",
-              {Binding{"LineStarts", LineStarts}, Binding{"LineEnds", LineEnds}},
+              {Binding{"LineStarts", LineStarts}, Binding{"LineEnds", LineEnds, FixedRate(), Principal()}},
               {Binding{"LineSpans", LineSpans}}) {}
 
 void LineSpansKernel::generatePabloMethod() {

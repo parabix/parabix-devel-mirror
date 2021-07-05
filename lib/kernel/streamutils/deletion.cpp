@@ -169,7 +169,7 @@ FieldCompressKernel::FieldCompressKernel(BuilderRef b,
     mMaskOp.operation = maskOp.operation;
     mMaskOp.bindings.push_back(std::make_pair("extractionMask", maskOp.bindings[0].second));
     // assert (streamutil::resultStreamCount(maskOp) == 1);
-    mInputStreamSets.push_back({"extractionMask", maskOp.bindings[0].first});
+    mInputStreamSets.push_back({"extractionMask", maskOp.bindings[0].first, FixedRate(), Principal()});
     // assert (streamutil::resultStreamCount(inputOps) == outputStreamSet->getNumElements());
     std::unordered_map<StreamSet *, std::string> inputBindings;
     std::tie(mInputOps, inputBindings) = streamutils::mapOperationsToStreamNames(inputOps);
