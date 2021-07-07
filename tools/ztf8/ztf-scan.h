@@ -87,6 +87,27 @@ private:
     size_t mSubTableSize;
 };
 
+
+
+/*
+1. Kernel is executed for numOfStrides strides.
+2. Every stride is comprised of b number of blocks. Each block is the width of the SIMD register.
+3. A given stride may contain more than one keyword/phrases that are to be considered for compression.
+4. At a time, mNumSym such strides are analyzed to check for non-overlapping keyword/phrases.
+5. One keyword/phrase from a stride is looked at every time which may be overlapping.
+    Eg: aAbcd eEfgh iIjkl mMnop qQrstu vVwxyz ABCDE
+    4 word phrases: aAbcd eEfgh iIjkl mMnop, eEfgh iIjkl mMnop qQrstu, iIjkl mMnop qQrstu vVwxyz, mMnop qQrstu vVwxyz ABCDE
+                          len = 20                   len = 20                len = 20                   len = 20
+    all the 4 phrases are in the same length group and are overlapping.
+    Case 1: If none of the phrases have an entry in the scalar hashtable -> save all the 4 phrases in the hashTable.
+    Case 2: If one of the phrases has an entry in the hashTable -> try to compress that phrase and skip storing phrases in hashTable
+            If not possible, store all 4 entries in the scalar HashTable.
+    Case 3: If more than one phrases has an entry in the hashTable. Try compressing the first phrase.
+            (Extend to check all the phrases for compression that have an entry)
+6. Mark the current phrase as analyzed and move to the next phrase in all mNumSym strides
+7. Once all the phrases in the current stride are analyzed, move to the next stride
+8. Once all the strides are analyzed, the kernel may execute next set of strides
+*/
 class PhraseCompression final : public MultiBlockKernel {
 public:
     PhraseCompression(BuilderRef b,
