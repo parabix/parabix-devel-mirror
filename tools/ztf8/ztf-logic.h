@@ -124,6 +124,20 @@ protected:
     unsigned mSeqNum;
 };
 
+class PhraseRunSeqTemp : public pablo::PabloKernel {
+public:
+    PhraseRunSeqTemp(BuilderRef kb,
+                 StreamSet * phraseRuns,
+                 StreamSet * PhraseRunSeq,
+                 StreamSet * compSeqRuns,
+                 unsigned numSyms,
+                 unsigned seqNum);
+protected:
+    void generatePabloMethod() override;
+    unsigned mNumSyms;
+    unsigned mSeqNum;
+};
+
 // Given parsed symbol runs, produce a stream marking end positions only.
 class ZTF_SymbolEnds : public pablo::PabloKernel {
 public:

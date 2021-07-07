@@ -278,12 +278,51 @@ PhraseRunSeq::PhraseRunSeq(BuilderRef kb,
                         {Binding{"phraseRunSeq", phraseRunSeq}}), mNumSyms(numSyms),  mSeqNum(seqNum) { }
 
 void PhraseRunSeq::generatePabloMethod() {
-    llvm::errs() << "mSeqNum " << mSeqNum << "\n";
+    //llvm::errs() << "mSeqNum " << mSeqNum << "\n";
     PabloBuilder pb(getEntryScope());
     PabloAST * runs = getInputStreamSet("phraseRuns")[0];
-    PabloAST * phraseStart = pb.createEveryNth(pb.createNot(runs), pb.getInteger(mNumSyms));
-    phraseStart = pb.createIndexedAdvance(phraseStart, pb.createNot(runs), mSeqNum);
+    PabloAST * phraseStart = pb.createZeroes();
+    if (mNumSyms > 1) {
+        phraseStart = pb.createOr(phraseStart, pb.createEveryNth(pb.createNot(runs), pb.getInteger(mNumSyms)));
+    }
+    else {
+        phraseStart = pb.createOr(phraseStart, pb.createNot(runs));
+    }
+    if (mSeqNum > 0) {
+        phraseStart = pb.createIndexedAdvance(phraseStart, pb.createNot(runs), mSeqNum);
+    }
     PabloAST * ZTF_phrases = pb.createInFile(pb.createNot(phraseStart));
+    pb.createAssign(pb.createExtract(getOutputStreamVar("phraseRunSeq"), pb.getInteger(0)), ZTF_phrases);
+}
+
+PhraseRunSeqTemp::PhraseRunSeqTemp(BuilderRef kb,
+                 StreamSet * phraseRuns,
+                 StreamSet * phraseRunSeq,
+                 StreamSet * compSeqRuns,
+                 unsigned numSyms,
+                 unsigned seqNum)
+: pablo::PabloKernel(kb, "PhraseRunSeqTemp" + std::to_string(numSyms) + std::to_string(seqNum),
+                        {Binding{"phraseRuns", phraseRuns, FixedRate(1), LookAhead(1)},
+                         Binding{"compSeqRuns", compSeqRuns, FixedRate(1), LookAhead(1)}},
+                        {Binding{"phraseRunSeq", phraseRunSeq}}), mNumSyms(numSyms),  mSeqNum(seqNum) { }
+
+void PhraseRunSeqTemp::generatePabloMethod() {
+    //llvm::errs() << "mSeqNum " << mSeqNum << "\n";
+    PabloBuilder pb(getEntryScope());
+    PabloAST * runs = getInputStreamSet("phraseRuns")[0];
+    PabloAST * compSeqRuns = getInputStreamSet("compSeqRuns")[0];
+    PabloAST * phraseStart = pb.createZeroes();
+    if (mNumSyms > 1) {
+        phraseStart = pb.createOr(phraseStart, pb.createEveryNth(pb.createNot(runs), pb.getInteger(mNumSyms)));
+    }
+    else {
+        phraseStart = pb.createOr(phraseStart, pb.createNot(runs));
+    }
+    if (mSeqNum > 0) {
+        phraseStart = pb.createIndexedAdvance(phraseStart, pb.createNot(runs), mSeqNum);
+    }
+    PabloAST * ZTF_phrases = pb.createInFile(pb.createNot(phraseStart));
+    ZTF_phrases = pb.createAnd(ZTF_phrases, compSeqRuns);
     pb.createAssign(pb.createExtract(getOutputStreamVar("phraseRunSeq"), pb.getInteger(0)), ZTF_phrases);
 }
 
