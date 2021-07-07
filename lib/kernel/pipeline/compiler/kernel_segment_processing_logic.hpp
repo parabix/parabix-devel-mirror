@@ -89,14 +89,37 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mExhaustedPipelineInputAtExit = mExhaustedInput;
 
+
+
     identifyPipelineInputs(mKernelId);
 
     if (RequiresSynchronization[mKernelId]) {
         mIsBounded = isBounded();
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
-        const auto nonSourceKernel = in_degree(mKernelId, mBufferGraph) > 0;
-        mCheckInputChannels = nonSourceKernel && (mIsPartitionRoot || mayHaveNonLinearIO(mKernelId));
-        mMayLoopToEntry = nonSourceKernel && hasAtLeastOneNonGreedyInput() && (mCheckInputChannels || mHasExplicitFinalPartialStride);
+        mCheckInputChannels = false;
+        for (const auto input : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const BufferPort & port = mBufferGraph[input];
+            if (port.CanModifySegmentLength) {
+                mCheckInputChannels = true;
+                break;
+            }
+        }
+
+        mMayLoopToEntry = false;
+
+        if (in_degree(mKernelId, mBufferGraph) > 0) {
+            if (mHasExplicitFinalPartialStride || (mCheckInputChannels && hasAtLeastOneNonGreedyInput())) {
+                mMayLoopToEntry = true;
+            } else {
+                for (const auto output : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+                    const BufferPort & port = mBufferGraph[output];
+                    if (port.CanModifySegmentLength) {
+                        mMayLoopToEntry = true;
+                        break;
+                    }
+                }
+            }
+        }
     } else {
         mHasExplicitFinalPartialStride = false;
         mIsBounded = false;
@@ -110,6 +133,13 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     const auto handleNoUpdateExit = mIsPartitionRoot; // || !canJumpToAnotherPartition;
 
     const auto prefix = makeKernelName(mKernelId);
+
+    // TODO: if a kernel has circular buffers and the produced/consumption rate is not synchronous
+    // and the GCD of the stride step length of the producer/consumer is 1 but the stride step length
+    // of the consumer is > 1, we may get a scenario in which the partition root needs to check the
+    // raw produced item counts rather than the accessible ones to determine the segment length.
+    // We could bypass this by having a larger overflow region but doing so would cause us to memcpy
+    // more data than necessary.
 
     /// -------------------------------------------------------------------------------------
     /// BASIC BLOCK CONSTRUCTION
@@ -218,14 +248,10 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopCall);
-    if (RequiresSynchronization[mKernelId]) {
-        writeLookBehindLogic(b);
-    }
+    writeLookBehindLogic(b);
     writeKernelCall(b);
-    if (RequiresSynchronization[mKernelId]) {
-        writeCopyBackLogic(b);
-        // writeDelayReflectionLogic(b);
-    }
+    writeCopyBackLogic(b);
+    writeDelayReflectionLogic(b);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL EXPLICIT TERMINATION CHECK
@@ -270,9 +296,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     #endif
     writeTerminationSignal(b, mTerminatedSignalPhi);
     informInputKernelsOfTermination(b);
-    if (RequiresSynchronization[mKernelId]) {
-        clearUnwrittenOutputData(b);
-    }
+    clearUnwrittenOutputData(b);
     updatePhisAfterTermination(b);
     b->CreateBr(mKernelLoopExit);
 
@@ -298,9 +322,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     Value * const terminated = b->CreateICmpNE(mTerminatedAtLoopExitPhi, unterminated);
     computeFullyProcessedItemCounts(b, terminated);
     computeMinimumConsumedItemCounts(b);
-    if (RequiresSynchronization[mKernelId]) {
-        writeLookAheadLogic(b);
-    }
+    writeLookAheadLogic(b);
     computeFullyProducedItemCounts(b, terminated);
     replacePhiCatchWithCurrentBlock(b, mKernelLoopExitPhiCatch, mKernelExit);
     b->CreateBr(mKernelExit);
@@ -606,6 +628,7 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
         mTotalNumOfStridesAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtLoopExit");
     }
     mExhaustedPipelineInputAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInputAtLoopExit");
+    mFinalPartitionSegmentAtLoopExitPhi = nullptr;
     if (mIsPartitionRoot) {
         mFinalPartitionSegmentAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_finalPartitionSegmentAtLoopExitPhi");
     }
@@ -658,7 +681,6 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         assert (mAlreadyProgressedPhi);
         mAnyProgressedAtLoopExitPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
         mTerminatedAtLoopExitPhi->addIncoming(mInitialTerminationSignal, exitBlock);
-        mFinalPartitionSegmentAtLoopExitPhi->addIncoming(b->getTrue(), exitBlock);
     }
 
     if (mIsPartitionRoot) {
@@ -667,6 +689,7 @@ void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
             mExhaustedInputAtJumpPhi->addIncoming(mExhaustedPipelineInputPhi, exitBlock);
         }
         if (mMayLoopToEntry) {
+            mFinalPartitionSegmentAtLoopExitPhi->addIncoming(b->getFalse(), exitBlock);
             b->CreateLikelyCondBr(mExecutedAtLeastOnceAtLoopEntryPhi, mKernelLoopExit, mKernelJumpToNextUsefulPartition);
         } else {
             b->CreateBr(mKernelJumpToNextUsefulPartition);

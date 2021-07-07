@@ -47,7 +47,7 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
 //
 class DeletionKernel final : public BlockOrientedKernel {
 public:
-    DeletionKernel(BuilderRef b, unsigned fw, unsigned streamCount);
+    DeletionKernel(BuilderRef b, StreamSet * input, StreamSet * delMask, StreamSet * output, StreamSet * unitCounts);
 protected:
     void generateDoBlockMethod(BuilderRef iBuilder) override;
     void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;

@@ -6,96 +6,6 @@
 
 namespace kernel {
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief determineBufferSize
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::determineBufferSize(BuilderRef b) {
-
-    const auto blockWidth = b->getBitBlockWidth();
-
-    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
-
-        BufferNode & bn = mBufferGraph[streamSet];
-        const auto producerOutput = in_edge(streamSet, mBufferGraph);
-        const BufferPort & producerRate = mBufferGraph[producerOutput];
-
-        if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
-
-            // TODO: If we have an open system, then the input rate to this pipeline cannot
-            // be bounded a priori. During initialization, we could pass a "suggestion"
-            // argument to indicate what the outer pipeline believes its I/O rates will be.
-
-
-            // If this buffer is externally used, we cannot analyze the dataflow rate of
-            // external consumers. Default to dynamic for such buffers.
-
-            // Similarly if any internal consumer has a deferred rate, we cannot analyze
-            // any consumption rates.
-
-            auto maxDelay = producerRate.Delay;
-            auto maxLookAhead = producerRate.LookAhead;
-            auto maxLookBehind = producerRate.LookBehind;
-
-            const auto producer = source(producerOutput, mBufferGraph);
-
-            auto bMin = floor(producerRate.Minimum * MinimumNumOfStrides[producer]);
-            auto bMax = ceiling(producerRate.Maximum * MaximumNumOfStrides[producer]);
-
-
-            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-
-                const BufferPort & consumerRate = mBufferGraph[e];
-
-                const auto consumer = target(e, mBufferGraph);
-
-                const auto cMin = floor(consumerRate.Minimum * MinimumNumOfStrides[consumer]);
-                const auto cMax = ceiling(consumerRate.Maximum * MaximumNumOfStrides[consumer]);
-
-                assert (cMax >= cMin);
-
-                assert (consumerRate.Maximum >= consumerRate.Minimum);
-
-                bMin = std::min(bMin, cMin);
-                bMax = std::max(bMax, cMax);
-
-//                // Get output overflow size
-                auto lookAhead = consumerRate.LookAhead;
-                if (consumerRate.Minimum < consumerRate.Maximum) {
-                    lookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
-                }
-
-                maxDelay = std::max(maxDelay, consumerRate.Delay);
-                maxLookAhead = std::max(maxLookAhead, lookAhead);
-                maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
-            }
-
-            // calculate overflow (copyback) and fascimile (copyforward) space
-            bn.LookAhead = maxLookAhead;
-            bn.LookBehind = maxLookBehind;
-
-            const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
-            const auto overflow1 = std::max(overflow0, bMax);
-            const auto overflowSize = round_up_to(overflow1, blockWidth) / blockWidth;
-
-            const auto underflow0 = std::max(bn.LookBehind, maxDelay);
-            const auto underflowSize = round_up_to(underflow0, blockWidth) / blockWidth;
-            const auto required = (bMax * 2) - bMin;
-
-            const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
-            const auto reqSize2 = 2 * (overflowSize + underflowSize);
-            auto requiredSize = std::max(reqSize1, reqSize2);
-
-            bn.OverflowCapacity = overflowSize;
-            bn.UnderflowCapacity = underflowSize;
-            bn.RequiredCapacity = requiredSize;
-
-        }
-    }
-
-
-
-}
-
 #ifdef PERMIT_BUFFER_MEMORY_REUSE
 
 // TODO: nested pipeline kernels could report how much internal memory they require
@@ -143,11 +53,6 @@ struct BufferLayoutOptimizer final : public PermutationBasedEvolutionaryAlgorith
         assert (candidates.empty());
         assert (initialPopulation.empty());
 
-        const auto t0 = std::chrono::high_resolution_clock::now();
-
-        Candidate candidate;
-        candidate.reserve(candidateLength);
-
         std::vector<Pack> H;
         H.reserve(candidateLength);
 
@@ -178,7 +83,8 @@ struct BufferLayoutOptimizer final : public PermutationBasedEvolutionaryAlgorith
             std::iota(J.begin(), J.end(), 0);
             std::shuffle(J.begin(), J.end(), rng);
 
-            assert (candidate.empty());
+            Candidate candidate;
+            candidate.reserve(candidateLength);
 
             for (;;) {
 
@@ -240,19 +146,15 @@ struct BufferLayoutOptimizer final : public PermutationBasedEvolutionaryAlgorith
             // given our candidate, do a first-fit allocation to determine the actual
             // memory layout.
 
-            if (insertCandidate(candidate, initialPopulation)) {
+            if (insertCandidate(std::move(candidate), initialPopulation)) {
                 if (initialPopulation.size() >= BUFFER_LAYOUT_INITIAL_CANDIDATES) {
                     return false;
                 }
             }
 
             H.clear();
-            candidate.clear();
         }
 
-        const auto t1 = std::chrono::high_resolution_clock::now();
-
-        bs_init_time += (t1 - t0).count();
 
         return true;
     }
@@ -429,8 +331,11 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     std::vector<Pack> allocations(n);
     std::vector<unsigned> mapping(n, -1U);
 
-
     unsigned numOfLocalStreamSets = 0;
+
+    const auto blockWidth = b->getBitBlockWidth();
+
+    const auto alignment = b->getCacheAlignment();
 
     BEGIN_SCOPED_REGION
 
@@ -439,8 +344,6 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     // ordering.
 
     DataLayout DL(b->getModule());
-
-    const auto alignment = b->getCacheAlignment();
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
@@ -453,7 +356,6 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
                 const BufferPort & producerRate = mBufferGraph[output];
                 const Binding & outputRate = producerRate.Binding;
 
-
                 Type * const type = StreamSetBuffer::resolveType(b, outputRate.getType());
                 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(11, 0, 0)
                 const auto typeSize = DL.getTypeAllocSize(type);
@@ -461,13 +363,14 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
                 const auto typeSize = DL.getTypeAllocSize(type).getFixedSize();
                 #endif
                 assert (typeSize > 0);
+                assert ((typeSize % (blockWidth / 8)) == 0);
 
-                assert (bn.UnderflowCapacity == 0);
+                const auto c = bn.UnderflowCapacity + bn.RequiredCapacity + bn.OverflowCapacity;
 
-                const auto c = bn.RequiredCapacity + bn.OverflowCapacity;
                 assert (c > 0);
                 const auto w = round_up_to(c * typeSize, alignment);
                 assert (w > 0);
+                assert ((w % alignment) == 0);
 
                 const auto i = streamSet - FirstStreamSet;
                 assert (i < n);
@@ -539,7 +442,11 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
 
     END_SCOPED_REGION
 
-//   auto & out = errs();
+    if (LLVM_UNLIKELY(numOfLocalStreamSets == 0)) {
+        return;
+    }
+
+//    auto & out = errs();
 
 //    out << "graph \"I\" {\n";
 
@@ -563,7 +470,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     BufferLayoutOptimizer BA(numOfLocalStreamSets, firstKernel, lastKernel,
                              std::move(I), std::move(allocations), std::move(weight), std::move(remaining), rng);
 
-    BA.runGA(false);
+    BA.runGA();
 
     RequiredThreadLocalStreamSetMemory = BA.getBestFitnessValue();
 
@@ -581,6 +488,7 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
             BufferNode & bn = mBufferGraph[FirstStreamSet + i];
             const auto & interval = intervals[j];
             bn.BufferStart = interval.first;
+            assert ((bn.BufferStart % alignment) == 0);
         }
     }
 

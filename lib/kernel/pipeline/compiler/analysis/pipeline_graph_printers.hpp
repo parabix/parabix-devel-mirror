@@ -233,16 +233,19 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
         const StreamSetBuffer * const buffer = bn.Buffer;
 
-        out << "label=\"" << streamSet << " (" << buffer->getId() << ") |{";
+        out << "label=\"" << streamSet;
+        if (buffer) {
+            out << " (" << buffer->getId() << ")";
+        }
+        out << " |{";
 
 
-
+        if (bn.isExternal()) {
+            out << 'X';
+        }
         if (buffer == nullptr) {
             out << '?';
         } else {
-            if (bn.isExternal()) {
-                out << 'X';
-            }
             switch (buffer->getBufferKind()) {
                 case BufferId::StaticBuffer:
                     out << 'S'; break;
@@ -252,21 +255,21 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                     out << 'E'; break;
                 default: llvm_unreachable("unknown streamset type");
             }
+        }
+        if (bn.isUnowned()) {
+            out << 'U';
+        }
+        if (bn.isExternal()) {
+            out << 'P';
+        }
+        if (bn.IsLinear) {
+            out << 'L';
+        }
+        if (bn.isShared()) {
+            out << '*';
+        }
 
-            if (bn.isUnowned()) {
-                out << 'U';
-            }
-            if (bn.isExternal()) {
-                out << 'P';
-            }
-            if (buffer->isLinear()) {
-                out << 'L';
-            }
-            if (bn.isShared()) {
-                out << '*';
-            }
-
-
+        if (buffer) {
             Type * ty = buffer->getBaseType();
             out << ':'
                 << ty->getArrayNumElements() << 'x';
@@ -291,8 +294,8 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (bn.CopyBack) {
             out << "|CB:" << bn.CopyBack;
         }
-        if (bn.LookAhead) {
-            out << "|LA:" << bn.LookAhead;
+        if (bn.CopyForwards) {
+            out << "|CF:" << bn.CopyForwards;
         }
         if (bn.LookBehind) {
             out << "|LB:" << bn.LookBehind;
@@ -354,7 +357,11 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             } else {
                 print_rational(MinimumNumOfStrides[kernel]) << ",?";
             }
-            out << "]\\n";
+            out << "]";
+            if (StrideStepLength.size() > 0) {
+                out << " (x" << StrideStepLength[kernel] << ")";
+            }
+            out << "\\n";
         }
         if (kernelObj->canSetTerminateSignal()) {
             out << "<CanTerminateEarly>\\n";
@@ -393,43 +400,32 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         const auto s = source(e, mBufferGraph);
         const auto t = target(e, mBufferGraph);
 
-        const BufferPort & pd = mBufferGraph[e];
+        const BufferPort & port = mBufferGraph[e];
 
         bool isLocal = true;
-        bool isChecked = false;
         // is this edge from a buffer to a kernel?
         if (s >= FirstStreamSet) {
             const auto p = parent(s, mBufferGraph);
             const auto pId = KernelPartitionId[p];
             const auto tId = KernelPartitionId[t];
             // does this use of the buffer cross a partition boundary?
-            if (pId != tId) {
-                isLocal = false;
-//                // does the consuming partition need to check this buffer?
-//                for (const auto f : make_iterator_range(in_edges(tId, mPartitioningGraph))) {
-//                    const PartitioningGraphEdge & E = mPartitioningGraph[f];
-//                    if (E.Kernel == t && E.Port == pd.Port) {
-//                        isChecked = true;
-//                        break;
-//                    }
-//                }
-            }
+            isLocal = (pId == tId);
         }
 
         out << "v" << s << " -> v" << t <<
                " [";
-        out << "label=\"#" << pd.Port.Number << ": ";
-        const Binding & binding = pd.Binding;
+        out << "label=\"#" << port.Port.Number << ": ";
+        const Binding & binding = port.Binding;
         const ProcessingRate & rate = binding.getRate();
         switch (rate.getKind()) {
             case RateId::Fixed:
                 out << "F(";
-                print_rational(pd.Minimum);
+                print_rational(port.Minimum);
                 out << ")";
                 break;
             case RateId::Bounded:
                 out << "B(";
-                rate_range(pd.Minimum, pd.Maximum);
+                rate_range(port.Minimum, port.Maximum);
                 out << ")";
                 break;
             case RateId::Greedy:
@@ -448,38 +444,38 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
 
 
-        if (pd.IsPrincipal) {
+        if (port.IsPrincipal) {
             out << " [P]";
         }
-        if (pd.IsShared) {
+        if (port.IsShared) {
             out << " [S]";
         }
-        if (pd.TransitiveAdd) {
-            out << " +" << pd.TransitiveAdd;
+        if (port.TransitiveAdd) {
+            out << " +" << port.TransitiveAdd;
         }
         if (binding.hasAttribute(AttrId::ZeroExtended)) {
-            if (pd.IsZeroExtended) {
+            if (port.IsZeroExtended) {
                 out << " [Z]";
             } else {
                 out << " [z&#x336;]";
             }
         }
 
-        if (pd.LookBehind) {
-            out << " [LB:" << pd.LookBehind << ']';
+        if (port.LookBehind) {
+            out << " [LB:" << port.LookBehind << ']';
         }
-        if (pd.LookAhead) {
-            out << " [LA:" << pd.LookAhead << ']';
+        if (port.LookAhead) {
+            out << " [LA:" << port.LookAhead << ']';
         }
-        if (pd.Delay) {
-            out << " [Delay:" << pd.Delay << ']';
+        if (port.Delay) {
+            out << " [Delay:" << port.Delay << ']';
         }
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
         out << "\\n" << name << "\"";
         if (isLocal) {
             out << " style=dashed";
-        } else if (isChecked) {
+        } else if (port.CanModifySegmentLength) {
             out << " style=bold";
         }
         out << "];\n";

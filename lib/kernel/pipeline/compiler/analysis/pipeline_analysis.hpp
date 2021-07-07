@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <queue>
 #include <z3.h>
-// #include <util/maxsat.hpp>
 #include <assert.h>
 
 #include <kernel/core/kernel.h>
@@ -17,8 +16,6 @@
 #include <kernel/core/kernel_builder.h>
 
 #include <llvm/Support/Format.h>
-
-#define EXPERIMENTAL_SCHEDULING
 
 // #define PRINT_STAGES
 
@@ -49,8 +46,6 @@ public:
         #endif
 
         P.generateInitialPipelineGraph(b);
-
-      //  P.printRelationshipGraph(P.Relationships, errs(), "R");
 
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
@@ -107,14 +102,6 @@ public:
         errs() << "determineBufferSize\n";
         #endif
 
-        P.determineBufferSize(b);
-
-
-
-//        errs() << "determineBufferLayout\n";
-
-        P.determineBufferLayout(b, rng);
-
 //        errs() << "identifyBufferLocality\n";
 
         P.markInterPartitionStreamSetsAsGloballyShared(); // linkedPartitions
@@ -128,11 +115,17 @@ public:
 
         P.annotateBufferGraphWithAddAttributes();
 
-        // Finish annotating the buffer graph       
-        P.identifyLinearBuffers();
-        P.identifyZeroExtendedStreamSets();
-//        P.identifyLocalPortIds();
+        P.identifyInterPartitionSymbolicRates();
 
+        // Finish annotating the buffer graph
+        P.identifyOwnedBuffers();
+        P.identifyLinearBuffers();
+//        P.identifyLocalPortIds();
+        P.identifyPortsThatModifySegmentLength();
+        P.identifyZeroExtendedStreamSets();
+
+        P.determineBufferSize(b);
+        P.determineBufferLayout(b, rng);
 
         // Make the remaining graphs
         P.makeConsumerGraph();
@@ -149,9 +142,9 @@ public:
 
         P.gatherInfo();
 
-        #ifdef PRINT_BUFFER_GRAPH
-        P.printBufferGraph(errs());
-        #endif
+        if (codegen::DebugOptionIsSet(codegen::PrintPipelineGraph)) {
+            P.printBufferGraph(errs());
+        }
 
         return P;
     }
@@ -210,8 +203,6 @@ private:
 
     PartitionGraph identifyKernelPartitions();
 
-    void makePartitionIOGraph();
-
     void determinePartitionJumpIndices();
 
     void makePartitionJumpTree();
@@ -245,11 +236,15 @@ private:
 
     void determineBufferLayout(BuilderRef b, random_engine & rng);
 
+    void identifyOwnedBuffers();
+
     void identifyLinearBuffers();
     void markInterPartitionStreamSetsAsGloballyShared();
     void identifyLocalPortIds();
 
     void identifyOutputNodeIds();
+
+    void identifyPortsThatModifySegmentLength();
 
     // void identifyDirectUpdatesToStateObjects();
 
@@ -335,6 +330,7 @@ public:
 
     std::vector<unsigned>           MinimumNumOfStrides;
     std::vector<unsigned>           MaximumNumOfStrides;
+    std::vector<unsigned>           StrideStepLength;
 
     BufferGraph                     mBufferGraph;
 

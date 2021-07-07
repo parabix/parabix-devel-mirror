@@ -44,6 +44,7 @@ enum DebugFlags {
     EnableCycleCounter,
     EnableBlockingIOCounter,
     DisableIndirectBranch,
+    PrintPipelineGraph,
     DebugFlagSentinel
 };
 

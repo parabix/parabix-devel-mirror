@@ -19,6 +19,9 @@ using namespace boost::adaptors;
 using boost::container::flat_set;
 using boost::container::flat_map;
 using boost::intrusive::detail::floor_log2;
+using boost::intrusive::detail::ceil_log2;
+using boost::intrusive::detail::ceil_pow2;
+using boost::intrusive::detail::is_pow2;
 using namespace llvm;
 
 
@@ -230,7 +233,6 @@ public:
     ArgVec buildKernelCallArgumentList(BuilderRef b);
     void updateProcessedAndProducedItemCounts(BuilderRef b);
     void readReturnedOutputVirtualBaseAddresses(BuilderRef b) const;
-    Value * addItemCountArg(BuilderRef b, const BufferPort &binding, const bool addressable, Value * const itemCount, ArgVec &args);
     Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args);
 
     void normalCompletionCheck(BuilderRef b);
@@ -272,6 +274,7 @@ public:
     Value * getAccessibleInputItems(BuilderRef b, const BufferPort & inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const BufferPort & inputPort, Value * const numOfLinearStrides);
     Value * getWritableOutputItems(BuilderRef b, const BufferPort & outputPort, const bool useOverflow = true);
+    Value * getNumOfWritableStrides(BuilderRef b, const BufferPort & port, Value * const numOfLinearStrides);
     Value * addLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount) const;
     Value * subtractLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount);
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * const terminationSignal) const;
@@ -331,7 +334,7 @@ public:
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
 
     void prepareLinearThreadLocalOutputBuffers(BuilderRef b);
-    Value * getVirtualBaseAddress(BuilderRef b, const BufferPort & rateData, const BufferNode & bn, Value * position) const;
+    Value * getVirtualBaseAddress(BuilderRef b, const BufferPort & rateData, const BufferNode & bn, Value * position, Value * isFinal) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
 
@@ -779,7 +782,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , TraceProducedItemCounts(DebugOptionIsSet(codegen::TraceProducedItemCounts))
 
 , KernelPartitionId(std::move(P.KernelPartitionId))
-, StrideStepLength(std::move(P.MinimumNumOfStrides))
+, StrideStepLength(std::move(P.StrideStepLength))
 , MaximumNumOfStrides(std::move(P.MaximumNumOfStrides))
 
 , mStreamGraph(std::move(P.mStreamGraph))

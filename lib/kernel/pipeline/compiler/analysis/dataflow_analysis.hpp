@@ -431,7 +431,7 @@ retry:
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
 
-#if 0
+#ifdef COMPUTE_SYMBOLIC_RATE_IDS
 
     const auto cfg = Z3_mk_config();
     Z3_set_param_value(cfg, "model", "true");
@@ -491,30 +491,15 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
     BEGIN_SCOPED_REGION
 
     auto make_partition_vars = [&](const unsigned first, const unsigned last) {
-
-        const auto & expectedBase = ExpectedNumOfStrides[first];
-        assert (expectedBase.numerator() >= 1);
         auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
-        VarList[first] = rootVar;
-
-        Z3_solver_assert(ctx, solver, Z3_mk_ge(ctx, rootVar, ONE));
-        assert (MaximumNumOfStrides.size() > first);
-        const auto max = constant_real(MaximumNumOfStrides[first]);
-        Z3_solver_assert(ctx, solver, Z3_mk_le(ctx, rootVar, max));
-
-        if (in_degree(first, mBufferGraph) == 0) {
-            vars.push_back((Z3_app)rootVar);
-        }
-
-        for (auto kernel = first + 1U; kernel <= last; ++kernel) {
-            const auto r = ExpectedNumOfStrides[kernel] / expectedBase;
+        for (auto kernel = first; kernel <= last; ++kernel) {
             auto kernelVar = rootVar;
-            if (LLVM_UNLIKELY(r != Rational{1})) {
-                kernelVar = multiply(kernelVar, constant_real(r));
+            const auto m = MinimumNumOfStrides[kernel];
+            if (LLVM_UNLIKELY(m != 1)) {
+                kernelVar = multiply(kernelVar, constant_real(m));
             }
             VarList[kernel] = kernelVar;
         }
-
         return rootVar;
 
     };
@@ -595,7 +580,9 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
                         BEGIN_SCOPED_REGION
                         assert ("greedy rate cannot be an output rate" && producer != kernel);
                         assert (outRateExpr);
-                        expr = outRateExpr;
+                        const auto lb = constant_real(port.Minimum);
+                        const auto comp = Z3_mk_ge(ctx, outRateExpr, lb);
+                        expr = Z3_mk_ite(ctx, comp, outRateExpr, constant_real(0));
                         END_SCOPED_REGION
                         break;
                     case RateId::Bounded:
@@ -704,13 +691,12 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
             auto & port = mBufferGraph[input];
 
             auto inRateExpr = calculateBaseSymbolicRateVar(consumer, port);
-            hard_assert(Z3_mk_eq(ctx, outRateExpr, inRateExpr));
-//            hard_assert(Z3_mk_ge(ctx, inRateExpr, ONE));
+            hard_assert(Z3_mk_ge(ctx, outRateExpr, inRateExpr));
+
 
             add_edge(streamSetVertex, consPartId, EdgeData{port, inRateExpr}, G);
 
-            auto & P = minConstraints[consPartId];
-            P.push_back(Z3_mk_div(ctx, outRateExpr, inRateExpr));
+
 
         }
 
@@ -723,7 +709,6 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
     if (!mLengthAssertions.empty()) {
         flat_map<const StreamSet *, unsigned> M;
 
-<<<<<<< HEAD
         for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
             const auto output = in_edge(streamSet, mBufferGraph);
             const BufferPort & br = mBufferGraph[output];
@@ -741,75 +726,20 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
             const auto A = VarList[offset(la[0])];
             const auto B = VarList[offset(la[1])];
             hard_assert(Z3_mk_eq(ctx, A, B));
-=======
-        Z3_int64 z3_num, z3_denom;
-        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &z3_num, &z3_denom) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-        }
-        assert (z3_num > 0);
-
-        const auto r = Rational{z3_num, z3_denom};
-        for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
-            current[kernel][bound] = r;
->>>>>>> origin/master
         }
     }
 
     if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) != Z3_L_TRUE)) {
-
-        errs() << "Z3 failed to find a solution to the core symbolic rate graph\n";
-
-        report_fatal_error("Z3 failed to find a solution to the core symbolic rate graph");
+        report_fatal_error("Z3 failed to find a solution to the symbolic rate graph");
     }
 
-//    for (unsigned i = 0; i < PartitionCount; ++i) {
-//        const auto & P = minConstraints[i];
-//        const auto n = P.size();
-//        if (n == 1) {
-//            hard_assert(Z3_mk_eq(ctx, PartitionVarList[i], P[0]));
-//        } else if (n > 1) {
-//            Z3_ast a = P[0];
-//            for (unsigned i = 1; i < n; ++i) {
-//                const auto b = P[i];
-//                const auto c = Z3_mk_lt(ctx, a, b);
-//                a = Z3_mk_ite(ctx, c, a, b);
-//            }
-//            hard_assert(Z3_mk_eq(ctx, PartitionVarList[i], a));
-//        }
-//    }
 
-//    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver)  != Z3_L_TRUE)) {
 
-//        errs() << "Z3 failed to find a solution to the connected symbolic rate graph\n";
 
-//        report_fatal_error("Z3 failed to find a solution to the connected symbolic rate graph");
-//    }
+    const auto forall = Z3_mk_forall_const(ctx, 0, vars.size(), vars.data(), 0, nullptr, c);
 
-    const auto m = num_edges(G);
 
-    adjacency_list<hash_setS, vecS, directedS> L;
 
-    Graph::edge_iterator begin, end;
-    std::tie(begin, end) = edges(G);
-
-<<<<<<< HEAD
-    auto ei = begin;
-=======
-                    Z3_int64 z3_num, z3_denom;
-                    if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &z3_num, &z3_denom) != Z3_L_TRUE)) {
-                        report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-                    }
-                    assert (z3_num > 0);
-                    current[kernel][bound] = Rational{z3_num, z3_denom};
-                }
-                Z3_model_dec_ref(ctx, model);
->>>>>>> origin/master
-
-    enum ConstraintType {
-        EQ,
-        GT,
-        LT
-    };
 
     for (unsigned i = 1; ++ei, i < m; ++i) {
         EdgeData & A = G[*ei];
@@ -880,23 +810,22 @@ void PipelineAnalysis::identifyInterPartitionSymbolicRates() {
  * @brief computeMinimumStrideLengthForConsistentDataflow
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::computeMinimumStrideLengthForConsistentDataflow() {
-#ifndef USE_EXPECTED_DATAFLOW_RATE_AS_MINUMUM_STRIDE_LENGTH
 
     // TODO: we already do this when scheduling. Organize the logic better to only do it once if this
-    // ends up being necessary for performance.s
+    // ends up being necessary for performance.
 
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    StrideStepLength.resize(PipelineOutput + 1);
 
     auto make_partition_vars = [&](const unsigned first, const unsigned last) {
         auto gcd = MinimumNumOfStrides[first];
         for (auto i = first + 1; i <= last; ++i) {
             gcd = boost::gcd(gcd, MinimumNumOfStrides[i]);
         }
-        if (gcd > 1) {
-            for (auto i = first; i <= last; ++i) {
-                MinimumNumOfStrides[i] /= gcd;
-            }
+        for (auto i = first; i <= last; ++i) {
+            StrideStepLength[i] = (MinimumNumOfStrides[i] / gcd);
         }
     };
 
@@ -915,7 +844,6 @@ void PipelineAnalysis::computeMinimumStrideLengthForConsistentDataflow() {
         make_partition_vars(firstKernelInPartition, lastKernel);
     }
 
-#endif
 }
 
 } // end of kernel namespace

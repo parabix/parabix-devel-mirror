@@ -168,6 +168,7 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
                 value = b->CreateNot(value);
             }
             adders[0] = value;
+
             // load and half-add the subsequent blocks
             for (unsigned i = 1; i < step; ++i) {
                 Constant * const I = b->getSize(i);

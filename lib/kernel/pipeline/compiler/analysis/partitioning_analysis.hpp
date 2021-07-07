@@ -731,9 +731,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
                                 if (f == symbolicPopCountRateVar.end()) {
                                     var = Z3_mk_fresh_const(ctx, "partialSumVar", intType);
                                     hard_assert(Z3_mk_ge(ctx, var, Z3_mk_int(ctx, 0, intType)));
-
-
-
                                     symbolicPopCountRateVar.emplace(refStreamSet, var);
                                 } else {
                                     var = f->second;
@@ -1566,289 +1563,6 @@ PartitionGraph PipelineAnalysis::identifyKernelPartitions() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePartitionIOGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::makePartitionIOGraph() {
-
-    // NOTE: we iterate through the kernels to assemble the final graph --- despite the fact
-    // it would be faster to iterate through the streamsets. The reason for this is want the
-    // edges to be in the same order they occur in the buffer graph.
-
-    // When the buffer graph is constructed, it rearranges the I/O ordering to put reference
-    // channels for both PopCount/PartialSum and Relative rates prior to them, regardless of
-    // the actual port ordering. We need this property for checking PartialSum streams later
-    // since we want to ensure we do not read an out-of-bounds/undefined value later.
-
-    // Ensuring the edges in this graph are correctly ordered simplifies compilation later.
-
-    const auto numOfStreamSets = LastStreamSet - FirstStreamSet + 1;
-
-    PartitionIOGraph G(PartitionCount + numOfStreamSets);
-
-    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
-        const auto partId = KernelPartitionId[kernel];
-        assert (partId < PartitionCount);
-        if (KernelPartitionId[kernel - 1] != partId) {
-            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-                const auto streamSet = source(input, mBufferGraph);
-                const BufferNode & bn = mBufferGraph[streamSet];
-                if (bn.Locality == BufferLocality::GloballyShared)  {
-                    // Only add in cross-partition edges
-                    if (KernelPartitionId[parent(streamSet, mBufferGraph)] != partId) {
-                        BufferPort & inputPort = mBufferGraph[input];
-                        const auto streamSetId = PartitionCount + streamSet - FirstStreamSet;
-                        add_edge(streamSetId, partId, PartitionIOData{inputPort, kernel}, G);
-                    }
-                }
-            }
-        }
-    }
-
-#if 0
-
-    const auto cfg = Z3_mk_config();
-    Z3_set_param_value(cfg, "model", "true");
-    Z3_set_param_value(cfg, "proof", "false");
-    const auto ctx = Z3_mk_context(cfg);
-    Z3_del_config(cfg);
-
-    const auto tQE = Z3_mk_tactic(ctx, "qe");
-    Z3_tactic_inc_ref (ctx, tQE);
-    const auto tSMT = Z3_mk_tactic(ctx, "smt");
-    Z3_tactic_inc_ref (ctx, tSMT);
-    const auto tactics = Z3_tactic_and_then (ctx, tQE, tSMT);
-    const auto solver = Z3_mk_solver_from_tactic(ctx, tactics);
-    Z3_solver_inc_ref(ctx, solver);
-    Z3_tactic_dec_ref (ctx, tQE);
-    Z3_tactic_dec_ref (ctx, tSMT);
-
-    Z3_params params = Z3_mk_params(ctx);
-    Z3_params_inc_ref(ctx, params);
-
-    Z3_symbol r = Z3_mk_string_symbol(ctx, ":timeout");
-    Z3_params_set_uint(ctx, params, r, 500);
-    Z3_solver_set_params(ctx, solver, params);
-    Z3_params_dec_ref(ctx, params);
-
-    std::vector<Z3_ast> VarList(PartitionCount + n);
-
-    auto hard_assert = [&](Z3_ast c) {
-        Z3_solver_assert(ctx, solver, c);
-    };
-
-    const auto intType = Z3_mk_int_sort(ctx);
-
-    auto constant_real = [&](const Rational & value) {
-        if (value.denominator() == 1) {
-            return Z3_mk_int(ctx, value.numerator(), intType);
-        } else {
-            return Z3_mk_real(ctx, value.numerator(), value.denominator());
-        }
-    };
-
-    auto multiply =[&](Z3_ast X, Z3_ast Y) {
-        Z3_ast args[2] = { X, Y };
-        return Z3_mk_mul(ctx, 2, args);
-    };
-
-    const auto ONE = Z3_mk_int(ctx, 1, intType);
-
-    const auto TWO = Z3_mk_int(ctx, 2, intType);
-
-    std::vector<std::vector<Z3_app>> partitionVars(PartitionCount);
-
-    BEGIN_SCOPED_REGION
-
-    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
-    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
-
-    unsigned currentPartitionId = 0;
-    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-        const auto partitionId = KernelPartitionId[kernel];
-        if (partitionId != currentPartitionId) {
-
-            Z3_ast rootVar = ONE;
-            if (MinimumNumOfStrides[kernel] != MaximumNumOfStrides[kernel]) {
-                #ifndef NDEBUG
-                const auto r = MaximumNumOfStrides[kernel] / MinimumNumOfStrides[kernel];
-                assert (r == Rational{2});
-                #endif
-                rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
-                hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
-                hard_assert(Z3_mk_le(ctx, rootVar, TWO));
-            }
-
-            VarList[currentPartitionId] = rootVar;
-            assert (Z3_is_app(ctx, rootVar));
-            partitionVars[currentPartitionId].push_back((Z3_app)rootVar);
-            currentPartitionId = partitionId;
-        }
-    }
-
-
-    END_SCOPED_REGION
-
-
-    flat_map<unsigned, Z3_ast> symbolicPopCountRateVar;
-
-    flat_map<unsigned, Z3_ast> IORateVarMap;
-
-    IORateVarMap.reserve(num_edges(G));
-
-    flat_map<const StreamSet *, Z3_ast> streamSetVar;
-
-    for (unsigned i = 0; i < n; ++i) {
-
-        const auto streamSet = streamSets[i];
-        const auto output = in_edge(streamSet, mBufferGraph);
-        const unsigned producer = source(output, mBufferGraph);
-        assert (producer >= PipelineInput && producer < PipelineOutput);
-        const auto pid = KernelPartitionId[producer];
-
-        Z3_ast outRateExpr = nullptr;
-
-        auto calculateBaseSymbolicRateVar = [&](const unsigned partitionId, const unsigned kernel, const BufferPort & port)  {
-
-            const auto strideVar =  (Z3_ast)partitionVars[partitionId].front();
-
-            const Binding & binding = port.Binding;
-            const ProcessingRate & rate = binding.getRate();
-
-            Z3_ast expr = nullptr;
-
-            switch (rate.getKind()) {
-                case RateId::Fixed:
-                    BEGIN_SCOPED_REGION
-                    expr = multiply(strideVar, constant_real(MinimumNumOfStrides[kernel] * port.Minimum));
-                    END_SCOPED_REGION
-                    break;
-                case RateId::Greedy:
-                    BEGIN_SCOPED_REGION
-                    assert ("greedy rate cannot be an output rate" && producer != kernel);
-                    assert (outRateExpr);
-                    expr = outRateExpr;
-                    END_SCOPED_REGION
-                    break;
-                case RateId::Bounded:
-                    BEGIN_SCOPED_REGION
-                    assert (port.Minimum < port.Maximum);
-                    auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
-                    assert (Z3_is_app(ctx, v));
-                    partitionVars[partitionId].push_back((Z3_app)v);
-
-                    const auto lb = constant_real(MinimumNumOfStrides[kernel] * port.Minimum);
-                    hard_assert(Z3_mk_ge(ctx, v, lb));
-                    const auto ub = constant_real(MinimumNumOfStrides[kernel] * port.Maximum);
-                    hard_assert(Z3_mk_le(ctx, v, ub));
-                    expr = multiply(strideVar, v);
-                    END_SCOPED_REGION
-                    break;
-                case RateId::Unknown:
-                    BEGIN_SCOPED_REGION
-                    auto v = Z3_mk_fresh_const(ctx, nullptr, intType);
-                    assert (Z3_is_app(ctx, v));
-                    partitionVars[partitionId].push_back((Z3_app)v);
-                    const auto lb = constant_real(MinimumNumOfStrides[kernel] * port.Minimum);
-                    hard_assert(Z3_mk_ge(ctx, v, lb));
-                    expr = multiply(strideVar, v);
-                    END_SCOPED_REGION
-                    break;
-                case RateId::PartialSum:
-                    BEGIN_SCOPED_REGION
-                    const auto refStreamSet = getReferenceBufferVertex(kernel, port.Port);
-                    const auto f = symbolicPopCountRateVar.find(refStreamSet);
-                    Z3_ast symbolicRateVar;
-                    if (f == symbolicPopCountRateVar.end()) {
-                        symbolicRateVar = Z3_mk_fresh_const(ctx, nullptr, intType);
-                        const auto ZERO = Z3_mk_int(ctx, 0, intType);
-                        Z3_solver_assert(ctx, solver, Z3_mk_ge(ctx, symbolicRateVar, ZERO));
-                        symbolicPopCountRateVar.emplace(refStreamSet, symbolicRateVar);
-                    } else {
-                        symbolicRateVar = f->second;
-                    }
-
-                    assert (Z3_is_app(ctx, symbolicRateVar));
-                    partitionVars[partitionId].push_back((Z3_app)symbolicRateVar);
-
-                    Z3_ast args[2] = { symbolicRateVar, strideVar };
-                    expr = Z3_mk_mul(ctx, 2, args);
-                    END_SCOPED_REGION
-                    break;
-                case RateId::Relative:
-                    BEGIN_SCOPED_REGION
-                    const auto refBinding = getReferenceBufferVertex(kernel, port.Port);
-                    const auto f = IORateVarMap.find(refBinding);
-                    assert ("relative rate occured before ref" && f != IORateVarMap.end());
-                    expr = f->second;
-                    assert ("failed to locate symbolic rate for relative rate?" && expr);
-                    if (rate.getLowerBound() != Rational{1}) {
-                        expr = multiply(expr, constant_real(rate.getLowerBound()) );
-                    }
-                    END_SCOPED_REGION
-                    break;
-                default:
-                    llvm_unreachable("unknown rate type?");
-            }
-            assert (expr);
-
-            for (const Attribute & attr : binding.getAttributes()) {
-                switch (attr.getKind()) {
-                    case AttrId::LookAhead:
-                        if (port.Port.Type == PortType::Output) {
-                            break;
-                        }
-                    case AttrId::Delayed:
-                        BEGIN_SCOPED_REGION
-                        Z3_ast args[2] = { expr, Z3_mk_int(ctx, attr.amount(), intType) };
-                        expr = Z3_mk_sub(ctx, 2, args);
-                        END_SCOPED_REGION
-                        break;
-                    case AttrId::Deferred:
-                        // A deferred output rate is closer to an bounded rate than a
-                        // countable rate but a deferred input rate simply means the
-                        // buffer must be dynamic.
-                        if (port.Port.Type == PortType::Output) {
-                            const auto deferred = Z3_mk_fresh_const(ctx, nullptr, intType);
-                            vars.push_back((Z3_app)deferred);
-                            hard_assert(Z3_mk_ge(ctx, deferred, Z3_mk_int(ctx, 0, intType)));
-                            hard_assert(Z3_mk_le(ctx, deferred, expr));
-                            expr = deferred;
-                        }
-                        break;
-                    case AttrId::BlockSize:
-                        BEGIN_SCOPED_REGION
-                        expr = Z3_mk_mod(ctx, expr, Z3_mk_int(ctx, attr.amount(), intType) );
-                        END_SCOPED_REGION
-                        break;
-                    default: break;
-                }
-            }
-
-            return expr;
-        };
-
-
-
-        for (const auto input : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const unsigned consumer = target(input, mBufferGraph);
-            assert (consumer > PipelineInput && consumer <= PipelineOutput);
-            const auto cid = KernelPartitionId[consumer];
-            if (pid != cid) {
-
-            }
-        }
-
-    }
-
-    Z3_solver_dec_ref(ctx, solver);
-    Z3_del_context(ctx);
-
-#endif
-
-    mPartitionIOGraph = G;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief determinePartitionJumpIndices
  *
  * If a partition determines it has insufficient data to execute, identify which partition is the next one to test.
@@ -1901,20 +1615,7 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
     transitive_reduction_dag(ordering, G);
     END_SCOPED_REGION
 
-//    auto & out = errs();
-
-//    out << "digraph \"" << "J0" << "\" {\n";
-//    for (auto v : make_iterator_range(vertices(G))) {
-//        out << "v" << v << " [label=\"" << v << " : {";
-////        out << reverseLCA[v];
-//        out << "}\"];\n";
-//    }
-//    for (auto e : make_iterator_range(edges(G))) {
-//        const auto s = source(e, G);
-//        const auto t = target(e, G);
-//        out << "v" << s << " -> v" << t << ";\n";
-//    }
-//    out << "}\n\n";
+    auto & out = errs();
 
     #ifndef NDEBUG
     for (unsigned i = 0; i < PartitionCount; ++i) {
@@ -2024,6 +1725,12 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
         }
         mPartitionJumpIndex[i] = n;
     }
+
+
+
+
+
+
 
 //    out << "digraph \"" << "J2" << "\" {\n";
 //    for (auto v : make_iterator_range(vertices(G))) {

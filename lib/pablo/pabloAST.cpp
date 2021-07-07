@@ -183,6 +183,7 @@ const String & Statement::getName() const {
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
             MAKE_PREFIX(Ternary, "ternary");
+            MAKE_PREFIX(Assign, "=");
             case ClassTypeId::IntrinsicCall:
                 {
                     const auto nm = cast<IntrinsicCall>(this)->getIntrinsicName();
@@ -190,7 +191,8 @@ const String & Statement::getName() const {
                     length = nm.size();
                 }
                 break;
-            default: llvm_unreachable("invalid statement type");
+            default:
+                llvm_unreachable("invalid statement type");
         }
         #undef MAKE_PREFIX
         const StringRef __prefix(prefix, length);

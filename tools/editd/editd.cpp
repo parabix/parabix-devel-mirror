@@ -33,6 +33,12 @@
 #include <mutex>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <util/aligned_allocator.h>
+#ifdef ENABLE_PAPI
+#include <util/papi_helper.hpp>
+// #define REPORT_PAPI_TESTS
+#endif
+
+#define USE_MULTI_EDITD_MERGE_GROUPS
 
 using namespace llvm;
 
@@ -53,6 +59,10 @@ static cl::opt<bool> ShowPositions("display", cl::desc("Display the match positi
 static cl::opt<int> Threads("threads", cl::desc("Total number of threads."), cl::init(1));
 
 static cl::opt<bool> MultiEditdKernels("enable-multieditd-kernels", cl::desc("Construct multiple editd kernels in one pipeline."));
+#ifdef USE_MULTI_EDITD_MERGE_GROUPS
+static cl::opt<unsigned> MergeGroupSize("merge-group-size", cl::desc("Number of editd kernels executed before merging results"), cl::init(4));
+#endif
+
 static cl::opt<bool> EditdIndexPatternKernels("enable-index-kernels", cl::desc("Use pattern index method."));
 
 using namespace kernel;
@@ -205,7 +215,7 @@ preprocessFunctionType preprocessPipeline(CPUDriver & pxDriver) {
     P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
     StreamSet * const BasisBits = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-    P->CreateKernelCall<PreprocessKernel>(BasisBits, CCResults);    
+    P->CreateKernelCall<PreprocessKernel>(BasisBits, CCResults);
     return reinterpret_cast<preprocessFunctionType>(P->compile());
 }
 
@@ -277,7 +287,7 @@ PatternKernel::PatternKernel(BuilderRef b, const std::vector<std::string> & patt
 {{"E", E}})
 , mPatterns(patterns)
 , mSignature(createName(patterns)) {
-    addAttribute(InfrequentlyUsed());
+    // addAttribute(InfrequentlyUsed());
 }
 
 void PatternKernel::generatePabloMethod() {
@@ -293,17 +303,14 @@ void PatternKernel::generatePabloMethod() {
     pattern_compiler.compile(mPatterns, entry, basisBits, editDistance, optPosition, stepSize);
 }
 
-std::mutex store_mutex;
-extern "C" void wrapped_report_pos(size_t match_pos, int dist) {
+void wrapped_report_pos(size_t match_pos, int dist) {
     struct matchPosition curMatch;
     curMatch.pos = match_pos;
     curMatch.dist = dist;
-
-    store_mutex.lock();
     matchList.push_back(curMatch);
-    if(ShowPositions)
+    if (ShowPositions) {
         std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
-    store_mutex.unlock();
+    }
 }
 
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
@@ -335,14 +342,20 @@ multiEditdFunctionType multiEditdPipeline(CPUDriver & pxDriver) {
     StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
 
-    std::vector<re::CC *> ccs;
-    ccs.emplace_back(re::makeCC(re::makeCC(0x41), re::makeCC(0x61)));
-    ccs.emplace_back(re::makeCC(re::makeCC(0x43), re::makeCC(0x63)));
-    ccs.emplace_back(re::makeCC(re::makeCC(0x47), re::makeCC(0x67)));
-    ccs.emplace_back(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)));
+//    std::vector<re::CC *> ccs;
+//    ccs.emplace_back(re::makeCC(0x41, 0x61, &cc::Byte));
+//    ccs.emplace_back(re::makeCC(0x43, 0x63, &cc::Byte));
+//    ccs.emplace_back(re::makeCC(0x47, 0x67, &cc::Byte));
+//    ccs.emplace_back(re::makeCC(0x54, 0x74, &cc::Byte));
+
+//    StreamSet * const ChStream = P->CreateStreamSet(4);
+//    P->CreateKernelCall<CharacterClassKernelBuilder>(ccs, ByteStream, ChStream);
+
+    StreamSet * const BasisBits = P->CreateStreamSet(8);
+    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
 
     StreamSet * const ChStream = P->CreateStreamSet(4);
-    P->CreateKernelCall<CharacterClassKernelBuilder>(ccs, ByteStream, ChStream);
+    P->CreateKernelCall<PreprocessKernel>(BasisBits, ChStream);
 
     const auto n = pattGroups.size();
     std::vector<StreamSet *> MatchResults(n);
@@ -351,12 +364,39 @@ multiEditdFunctionType multiEditdPipeline(CPUDriver & pxDriver) {
         P->CreateKernelCall<PatternKernel>(pattGroups[i], ChStream, MatchResults[i]);
     }
 
-    StreamSet * MergedResults = MatchResults[0];
+    StreamSet * finalResults = MatchResults[0];
     if (n > 1) {
-        StreamSet * const MergedResults = P->CreateStreamSet();
-        P->CreateKernelCall<StreamsMerge>(MatchResults, MergedResults);
+        #ifdef USE_MULTI_EDITD_MERGE_GROUPS
+        const unsigned m = MergeGroupSize.getValue();
+        if (m < 2) {
+            report_fatal_error("merge-group-size cannot be less than 2");
+        }
+        std::vector<StreamSet *> mergeGroup;
+        mergeGroup.reserve(m);
+        assert (MatchResults[0]);
+        mergeGroup.push_back(MatchResults[0]);
+        for (unsigned i = 1; i < n; ++i) {
+            if (mergeGroup.size() >= m) {
+                StreamSet * const result = P->CreateStreamSet(editDistance + 1);
+                P->CreateKernelCall<StreamsMerge>(mergeGroup, result);
+                mergeGroup.clear();
+                assert (result);
+                mergeGroup.push_back(result);
+            }
+            assert (mergeGroup.size() < m);
+            assert (MatchResults[i]);
+            mergeGroup.push_back(MatchResults[i]);
+        }
+        assert (mergeGroup.size() > 1);
+        finalResults = P->CreateStreamSet(editDistance + 1);
+        assert (finalResults);
+        P->CreateKernelCall<StreamsMerge>(mergeGroup, finalResults);
+        #else
+        finalResults = P->CreateStreamSet(editDistance + 1);
+        P->CreateKernelCall<StreamsMerge>(MatchResults, finalResults);
+        #endif
     }
-    Kernel * const scan = P->CreateKernelCall<editdScanKernel>(MergedResults);
+    Kernel * const scan = P->CreateKernelCall<editdScanKernel>(finalResults);
     scan->link("wrapped_report_pos", wrapped_report_pos);
     return reinterpret_cast<multiEditdFunctionType>(P->compile());
 }
@@ -381,31 +421,6 @@ editdIndexFunctionType editdIndexPatternPipeline(CPUDriver & pxDriver, unsigned 
     return reinterpret_cast<editdIndexFunctionType>(P->compile());
 }
 
-std::mutex count_mutex;
-size_t groupCount;
-void * DoEditd(void *)
-{
-    size_t groupIdx;
-    count_mutex.lock();
-    groupIdx = groupCount;
-    groupCount++;
-    count_mutex.unlock();
-
-    CPUDriver pxDriver("editd");
-
-    while (groupIdx < pattGroups.size()){
-
-        auto editd = editdPipeline(pxDriver, pattGroups[groupIdx]);
-        editd(chStream, fsize);
-
-        count_mutex.lock();
-        groupIdx = groupCount;
-        groupCount++;
-        count_mutex.unlock();
-    }
-
-    pthread_exit(NULL);
-}
 
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv);
@@ -426,7 +441,15 @@ int main(int argc, char *argv[]) {
             std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
             exit(-1);
         }
+        #ifdef REPORT_PAPI_TESTS
+        papi::PapiCounter<4> jitExecution{{PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
+        jitExecution.start();
+        #endif
         editd(fd);
+        #ifdef REPORT_PAPI_TESTS
+        jitExecution.stop();
+        jitExecution.write(std::cerr);
+        #endif
         close(fd);
         run_second_filter(pattern_segs, total_len, 0.15);
         return 0;
@@ -435,53 +458,28 @@ int main(int argc, char *argv[]) {
     auto preprocess_ptr = preprocessPipeline(pxDriver);
     preprocess(preprocess_ptr);
 
-    if(pattVector.size() == 1){
+    if (pattVector.size() == 1) {
         auto editd = editdPipeline(pxDriver, pattVector);
         editd(chStream, fsize);
         std::cout << "total matches is " << matchList.size() << std::endl;
-    }
-    else{
-        if (Threads == 1) {
-            if (EditdIndexPatternKernels) {
-                auto editd_ptr = editdIndexPatternPipeline(pxDriver, pattVector[0].length());
-                for(unsigned i=0; i< pattVector.size(); i+=groupSize){
-                    std::string pattern = "";
-                    for (int j=0; j<groupSize; j++){
-                        pattern += pattVector[i+j];
-                    }
-                    editd_ptr(chStream, fsize, pattern.c_str());
-                }
+    } else if (EditdIndexPatternKernels) {
+        auto editd_ptr = editdIndexPatternPipeline(pxDriver, pattVector[0].length());
+        for(unsigned i=0; i< pattVector.size(); i+=groupSize){
+            std::string pattern = "";
+            for (int j=0; j<groupSize; j++){
+                pattern += pattVector[i+j];
             }
-            else {
-                for(unsigned i=0; i< pattGroups.size(); i++){
-                    auto editd = editdPipeline(pxDriver, pattGroups[i]);
-                    editd(chStream, fsize);
-                }
-            }
+            editd_ptr(chStream, fsize, pattern.c_str());
         }
-        else{
-            const unsigned numOfThreads = Threads;
-            SmallVector<pthread_t, 8> threads(numOfThreads);
-            groupCount = 0;
-
-            for(unsigned long i = 0; i < numOfThreads; ++i){
-                const int rc = pthread_create(&threads[i], NULL, DoEditd, (void *)i);
-                if (rc) {
-                    llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
-                }
-            }
-
-            for(unsigned i = 0; i < numOfThreads; ++i) {
-                void * status = nullptr;
-                const int rc = pthread_join(threads[i], &status);
-                if (rc) {
-                    llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
-                }
-            }
-
-        }
-        run_second_filter(pattern_segs, total_len, 0.15);
     }
+    else {
+        for(unsigned i=0; i< pattGroups.size(); i++){
+            auto editd = editdPipeline(pxDriver, pattGroups[i]);
+            editd(chStream, fsize);
+        }
+    }
+
+    run_second_filter(pattern_segs, total_len, 0.15);
 
     AlignedAllocator<char, 32> alloc;
     alloc.deallocate(chStream, 0);

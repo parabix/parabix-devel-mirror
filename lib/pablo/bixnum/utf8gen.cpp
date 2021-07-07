@@ -29,6 +29,7 @@ Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
 
 void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
+
     // If any of bits 16 through 20 are 1, a four-byte UTF-8 sequence is required.
     Value * u8len4 = b->loadInputStreamBlock("basis", b->getSize(16), b->getSize(0));
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(17), b->getSize(0)));
@@ -36,6 +37,7 @@ void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(19), b->getSize(0)));
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(20), b->getSize(0)), "u8len4");
     u8len4 = b->CreateAnd(u8len4, fileExtentMask);
+
     Value * u8len34 = u8len4;
     // Otherwise, if any of bits 11 through 15 are 1, a three-byte UTF-8 sequence is required.
     u8len34 = b->CreateOr(u8len34, b->loadInputStreamBlock("basis", b->getSize(11), b->getSize(0)));
@@ -44,6 +46,7 @@ void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     u8len34 = b->CreateOr(u8len34, b->loadInputStreamBlock("basis", b->getSize(14), b->getSize(0)));
     u8len34 = b->CreateOr(u8len34, b->loadInputStreamBlock("basis", b->getSize(15), b->getSize(0)));
     u8len34 = b->CreateAnd(u8len34, fileExtentMask);
+
     Value * nonASCII = u8len34;
     // Otherwise, if any of bits 7 through 10 are 1, a two-byte UTF-8 sequence is required.
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(7), b->getSize(0)));
@@ -51,6 +54,7 @@ void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(9), b->getSize(0)));
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(10), b->getSize(0)), "nonASCII");
     nonASCII = b->CreateAnd(nonASCII, fileExtentMask);
+
     //
     //  UTF-8 sequence length:    1     2     3       4
     //  extraction mask        1000  1100  1110    1111

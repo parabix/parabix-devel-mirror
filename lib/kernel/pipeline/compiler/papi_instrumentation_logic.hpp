@@ -137,7 +137,7 @@ void PipelineCompiler::addPAPIEventCounterKernelProperties(BuilderRef b, const u
  * @brief initializePAPIAndCreateEventSet
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::initializePAPI(BuilderRef b) const {
-    if (LLVM_UNLIKELY(EnablePAPICounters)) {
+    if (LLVM_UNLIKELY(EnablePAPICounters && !ExternallySynchronized)) {
         Module * const m = b->getModule();
         Function * PAPIlibInitFn = m->getFunction("PAPI_library_init");
         IntegerType * const intTy = TypeBuilder<int, false>::get(b->getContext());
@@ -170,7 +170,7 @@ void PipelineCompiler::registerPAPIThread(BuilderRef /* b */) const {
  * @brief initializePAPIAndCreateEventSet
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
-    if (LLVM_UNLIKELY(EnablePAPICounters)) {
+    if (LLVM_UNLIKELY(EnablePAPICounters && !ExternallySynchronized)) {
         Module * const m = b->getModule();
 
         IntegerType * const intTy = TypeBuilder<int, false>::get(b->getContext());
@@ -297,7 +297,7 @@ void PipelineCompiler::unregisterPAPIThread(BuilderRef /* b */) const {
  * @brief stopPAPIAndDestroyEventSet
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::stopPAPIAndDestroyEventSet(BuilderRef b) {
-    if (LLVM_UNLIKELY(EnablePAPICounters)) {
+    if (LLVM_UNLIKELY(EnablePAPICounters && !ExternallySynchronized)) {
 
         Module * const m = b->getModule();
 

@@ -57,6 +57,14 @@ private:
     cc::ByteNumbering mByteNumbering;
 };
 
+class P2S16KernelWithCompressedOutputOld final : public BlockOrientedKernel {
+public:
+    P2S16KernelWithCompressedOutputOld(BuilderRef b,
+                                       StreamSet * basisBits, StreamSet * delCounts, StreamSet * byteStream);
+private:
+    void generateDoBlockMethod(BuilderRef b) override;
+};
+
 class P2S21Kernel final : public BlockOrientedKernel {
 public:
     P2S21Kernel(BuilderRef b, StreamSet * u21bits, StreamSet * u32stream, cc::ByteNumbering = cc::ByteNumbering::LittleEndian);

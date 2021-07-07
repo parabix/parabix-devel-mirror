@@ -83,7 +83,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
         #ifndef NDEBUG
         assert ("null argument" && arg);
-
         const auto n = mKernelDoSegmentFunctionType->getNumParams();
         if (LLVM_UNLIKELY(args.size() >= n)) {
             SmallVector<char, 256> tmp;
@@ -97,9 +96,18 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         if (LLVM_UNLIKELY(argTy != arg->getType())) {
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);
+
+            Function * const func = mKernel->getDoSegmentFunction(b, true);
+
             out << mKernel->getName() << ": "
-                "invalid argument type for #" << args.size()
-                << ": expected ";
+                "invalid argument type for ";
+
+            auto argItr = func->arg_begin();
+            std::advance(argItr, args.size());
+            out << argItr->getName();
+
+            out << " (#" << args.size()
+                << "): expected ";
             argTy->print(out);
             out << " but got ";
             arg->getType()->print(out);
@@ -108,6 +116,43 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         #endif
 
         args.push_back(arg);
+    };
+
+    auto addItemCountArg = [&](const BufferPort & port,
+                               const bool forceAddressability,
+                               Value * const itemCount) {
+        const Binding & binding = port.Binding;
+        const ProcessingRate & rate = binding.getRate();
+
+        Value * ptr = nullptr;
+        if (LLVM_UNLIKELY(rate.isRelative())) {
+            return ptr;
+        }
+        if (forceAddressability || isAddressable(binding)) {
+            if (LLVM_UNLIKELY(mNumOfAddressableItemCount == mAddressableItemCountPtr.size())) {
+                auto aic = b->CreateAllocaAtEntryPoint(b->getSizeTy());
+                mAddressableItemCountPtr.push_back(aic);
+            }
+            ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
+            b->CreateStore(itemCount, ptr);
+            addNextArg(ptr);
+        } else if (isCountable(binding)) {
+            addNextArg(itemCount);
+        }
+        return ptr;
+    };
+
+    auto addVirtualBaseAddressArg = [&](const StreamSetBuffer * buffer) {
+        PointerType * const voidPtrTy = b->getVoidPtrTy();
+        if (LLVM_UNLIKELY(mNumOfVirtualBaseAddresses == mVirtualBaseAddressPtr.size())) {
+            auto vba = b->CreateAllocaAtEntryPoint(voidPtrTy);
+            mVirtualBaseAddressPtr.push_back(vba);
+        }
+        Value * ptr = mVirtualBaseAddressPtr[mNumOfVirtualBaseAddresses++];
+        ptr = b->CreatePointerCast(ptr, buffer->getPointerType()->getPointerTo());
+        b->CreateStore(buffer->getBaseAddress(b.get()), ptr);
+        addNextArg(b->CreatePointerCast(ptr, voidPtrTy->getPointerTo()));
+        return ptr;
     };
 
     args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
@@ -127,12 +172,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocation);
     #endif
     const auto greedy = mKernel->isGreedy();
+    Value * isFinal = nullptr;
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
         }
-        addNextArg(b->CreateIsNotNull(mIsFinalInvocation));
+        isFinal = b->CreateIsNotNull(mIsFinalInvocation);
+        addNextArg(isFinal);
     } else {
+        isFinal = b->CreateIsNull(mNumOfLinearStrides);
         addNextArg(mNumOfLinearStrides);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
@@ -187,8 +235,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
             Value * addr = nullptr;
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-                assert ("internally synchronized I/O must be linear!" && !bn.NonLinear);
-                addr = getVirtualBaseAddress(b, rt, bn, processed);
+                assert ("internally synchronized I/O must be linear!" && bn.IsLinear);
+                addr = getVirtualBaseAddress(b, rt, bn, processed, nullptr);
             } else {
                 addr = mInputVirtualBaseAddressPhi[rt.Port];
             }
@@ -205,7 +253,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                 mReturnedProcessedItemCountPtr[rt.Port] = ptr;
                 addNextArg(ptr);
             } else {
-                mReturnedProcessedItemCountPtr[rt.Port] = addItemCountArg(b, rt, deferred, processed, args);
+                mReturnedProcessedItemCountPtr[rt.Port] = addItemCountArg(rt, deferred, processed);
             }
 
             if (mKernelIsInternallySynchronized) {
@@ -238,7 +286,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
         Value * produced = nullptr;
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-            assert ("internally synchronized I/O must be linear!" && !bn.NonLinear);
+            assert ("internally synchronized I/O must be linear!" && bn.IsLinear);
             produced = mInitiallyProducedItemCount[streamSet];
         } else {
             produced = mAlreadyProducedPhi[rt.Port];
@@ -248,9 +296,9 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         if (LLVM_UNLIKELY(rt.IsShared)) {
             addNextArg(b->CreatePointerCast(buffer->getHandle(), voidPtrTy));
         } else if (LLVM_UNLIKELY(managed)) {
-            mReturnedOutputVirtualBaseAddressPtr[rt.Port] = addVirtualBaseAddressArg(b, buffer, args);
+            mReturnedOutputVirtualBaseAddressPtr[rt.Port] = addVirtualBaseAddressArg(buffer);
         } else {
-            Value * const vba = getVirtualBaseAddress(b, rt, bn, produced);
+            Value * const vba = getVirtualBaseAddress(b, rt, bn, produced, isFinal);
             addNextArg(b->CreatePointerCast(vba, voidPtrTy));
         }
 
@@ -264,7 +312,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             mReturnedProducedItemCountPtr[rt.Port] = ptr;
             addNextArg(ptr);
         } else {
-            mReturnedProducedItemCountPtr[rt.Port] = addItemCountArg(b, rt, mKernelCanTerminateEarly, produced, args);
+            mReturnedProducedItemCountPtr[rt.Port] = addItemCountArg(rt, mKernelCanTerminateEarly, produced);
         }
 
         if (LLVM_UNLIKELY(managed)) {
@@ -412,66 +460,6 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         mProducedItemCount[outputPort] = produced;
     }
 
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addItemCountArg
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::addItemCountArg(BuilderRef b, const BufferPort & port,
-                                          const bool forceAddressability,
-                                          Value * const itemCount,
-                                          ArgVec & args) {
-    const Binding & binding = port.Binding;
-    const ProcessingRate & rate = binding.getRate();
-    if (LLVM_UNLIKELY(rate.isRelative())) {
-        return nullptr;
-    }
-
-    auto addNextArg = [&](Value * arg) {
-        assert ("null argument" && arg);
-        assert ("too many arguments?" && args.size() < mKernelDoSegmentFunctionType->getNumParams());
-        assert ("invalid argument type" && (mKernelDoSegmentFunctionType->getParamType(args.size()) == arg->getType()));
-        args.push_back(arg);
-    };
-
-    Value * ptr = nullptr;
-
-    if (forceAddressability || isAddressable(binding)) {
-        if (LLVM_UNLIKELY(mNumOfAddressableItemCount == mAddressableItemCountPtr.size())) {
-            auto aic = b->CreateAllocaAtEntryPoint(b->getSizeTy());
-            mAddressableItemCountPtr.push_back(aic);
-        }
-        ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
-        b->CreateStore(itemCount, ptr);
-        addNextArg(ptr);
-    } else if (isCountable(binding)) {
-        addNextArg(itemCount);
-    }
-    return ptr;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addVirtualBaseAddressArg
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args) {
-    PointerType * const voidPtrTy = b->getVoidPtrTy();
-    if (LLVM_UNLIKELY(mNumOfVirtualBaseAddresses == mVirtualBaseAddressPtr.size())) {
-        auto vba = b->CreateAllocaAtEntryPoint(voidPtrTy);
-        mVirtualBaseAddressPtr.push_back(vba);
-    }
-
-    auto addNextArg = [&](Value * arg) {
-        assert ("null argument" && arg);
-        assert ("too many arguments?" && args.size() < mKernelDoSegmentFunctionType->getNumParams());
-        assert ("invalid argument type" && (mKernelDoSegmentFunctionType->getParamType(args.size()) == arg->getType()));
-        args.push_back(arg);
-    };
-
-    Value * ptr = mVirtualBaseAddressPtr[mNumOfVirtualBaseAddresses++];
-    ptr = b->CreatePointerCast(ptr, buffer->getPointerType()->getPointerTo());
-    b->CreateStore(buffer->getBaseAddress(b.get()), ptr);
-    addNextArg(b->CreatePointerCast(ptr, voidPtrTy->getPointerTo()));
-    return ptr;
 }
 
 }

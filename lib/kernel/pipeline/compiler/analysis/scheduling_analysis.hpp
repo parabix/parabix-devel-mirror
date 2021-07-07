@@ -11,37 +11,44 @@
 
 namespace kernel {
 
-#ifdef EXPERIMENTAL_SCHEDULING
+constexpr static unsigned INITIAL_TOPOLOGICAL_POPULATION_SIZE = 10;
 
-#define INITIAL_TOPOLOGICAL_POPULATION_SIZE (10)
+constexpr static unsigned MAX_PARTITION_POPULATION_SIZE = 20;
 
-constexpr unsigned MAX_PARTITION_POPULATION_SIZE = 100;
+constexpr static unsigned MAX_PROGRAM_POPULATION_SIZE = 20;
 
-#define MAX_EVOLUTIONARY_ROUNDS (0)
+constexpr static unsigned PARITION_SCHEDULING_GA_ROUNDS = 50;
 
-#define MUTATION_RATE (0.20)
+constexpr static unsigned PARITION_SCHEDULING_GA_STALLS = 10;
 
-constexpr unsigned MAX_PROGRAM_POPULATION_SIZE = 100;
+constexpr static unsigned PROGRAM_SCHEDULING_GA_ROUNDS = 50;
 
-constexpr static unsigned PARITION_SCHEDULING_GA_ROUNDS = 100;
+constexpr static unsigned PROGRAM_SCHEDULING_GA_STALLS = 10;
 
-constexpr static unsigned PARITION_SCHEDULING_GA_STALLS = 20;
+constexpr static unsigned BIPARTITE_GRAPH_UNPLACED = 0;
 
-constexpr static unsigned PROGRAM_SCHEDULING_GA_ROUNDS = 100;
+constexpr static unsigned BIPARTITE_GRAPH_LEFT_HAND = 1;
 
-constexpr static unsigned PROGRAM_SCHEDULING_GA_STALLS = 20;
+constexpr static unsigned BIPARTITE_GRAPH_RIGHT_HAND = 2;
 
-#define BIPARTITE_GRAPH_UNPLACED (0U)
+constexpr static unsigned MAX_CUT_HS_POPULATION_SIZE = 10;
 
-#define BIPARTITE_GRAPH_LEFT_HAND (1U)
+constexpr static double MAX_CUT_HS_AVERAGE_STALL_THRESHOLD = 3.0;
 
-#define BIPARTITE_GRAPH_RIGHT_HAND (2U)
+constexpr static unsigned MAX_CUT_HS_MAX_AVERAGE_STALLS = 20;
 
-#define INITIAL_SCHEDULING_POPULATION_ATTEMPTS (100)
+constexpr static unsigned INITIAL_SCHEDULING_POPULATION_ATTEMPTS = 100;
 
-#define INITIAL_SCHEDULING_POPULATION_SIZE (100)
+constexpr static unsigned INITIAL_SCHEDULING_POPULATION_SIZE = 20;
 
-#define SCHEDULING_FITNESS_COST_ACO_ROUNDS (200)
+static_assert(INITIAL_SCHEDULING_POPULATION_ATTEMPTS >= INITIAL_SCHEDULING_POPULATION_SIZE,
+    "cannot have fewer attemps than population size");
+
+static_assert(INITIAL_SCHEDULING_POPULATION_SIZE <= MAX_PROGRAM_POPULATION_SIZE,
+    "cannot have a larger initial population size than generational population size");
+
+
+constexpr static unsigned SCHEDULING_FITNESS_COST_ACO_ROUNDS = 200;
 
 //constexpr static unsigned MAX_CUT_HS_ROUNDS = 100;
 //constexpr static unsigned MAX_CUT_HS_INITIAL_CANDIDATES = 100;
@@ -282,7 +289,8 @@ struct MaxCutHarmonySearch : public BitStringBasedHarmonySearch {
         double weight = 0;
         unsigned numOfComponents = 0;
         unvisited.set(0, candidateLength - 1);
-        auto i = unvisited.find_first();
+        assert (unvisited.find_first() == 0);
+        int i = 0;
         for (;;) {
             assert ((unsigned)i < candidateLength);
             assert (unvisited.test(i));
@@ -292,11 +300,13 @@ struct MaxCutHarmonySearch : public BitStringBasedHarmonySearch {
             assert (out_degree(u, I) > 0);
             ++numOfComponents;
             for (;;) {
-                const auto uval = candidate.test(u);
+                const auto uval = candidate.test(i);
                 for (const auto e : make_iterator_range(out_edges(u, I))) {
                     const auto v = target(e, I);
-                    if (unvisited.test(v) && uval != candidate.test(v)) {
-                        unvisited.reset(v);
+                    const auto j = toBitIndex[v];
+
+                    if (unvisited.test(j) && uval != candidate.test(j)) {
+                        unvisited.reset(j);
                         const auto f = maxCutWeights.find(e);
                         assert (f != maxCutWeights.end());
                         weight += f->second;
@@ -322,31 +332,7 @@ struct MaxCutHarmonySearch : public BitStringBasedHarmonySearch {
         return weight;
     }
 
-    /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief constructor
-     ** ------------------------------------------------------------------------------------------------------------- */
-    MaxCutHarmonySearch(const MemIntervalGraph & I,
-                        const WeightMap & maxCutWeights,
-                        const unsigned numOfRounds,
-                        const unsigned populationSize,
-                        const double fixedConsiderationRate,
-                        const size_t seed)
-    : BitStringBasedHarmonySearch(numOfNonIsolatedVertices(I), numOfRounds, populationSize, fixedConsiderationRate, seed)
-    , I(I)
-    , maxCutWeights(maxCutWeights)
-    , toVertexIndex(candidateLength)
-    , toBitIndex(num_vertices(I))
-    , unvisited(num_vertices(I))
-    , maxNumOfComponents(MAX_CUT_MAX_NUM_OF_CONNECTED_COMPONENTS) {
-        const auto n = num_vertices(I);
-        for (unsigned i = 0, j = 0; i < n; ++i) {
-            if (out_degree(i, I) > 0) {
-                toVertexIndex[j] = i;
-                toBitIndex[i] = j;
-                ++j;
-            }
-        }
-    }
+
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief constructor
@@ -354,19 +340,21 @@ struct MaxCutHarmonySearch : public BitStringBasedHarmonySearch {
     MaxCutHarmonySearch(const MemIntervalGraph & I,
                         const WeightMap & maxCutWeights,
                         const unsigned numOfRounds,
-                        const unsigned populationSize,
-                        const HMCRType type,
-                        const double minHMCR,
-                        const double maxHMCR,
-                        const double angularFrequency,
+//                        const unsigned populationSize,
+//                        const HMCRType type,
+//                        const double minHMCR,
+//                        const double maxHMCR,
+//                        const double angularFrequency,
                         const size_t seed)
-    : BitStringBasedHarmonySearch(numOfNonIsolatedVertices(I), numOfRounds, populationSize, type, minHMCR, maxHMCR, angularFrequency, seed)
+    : BitStringBasedHarmonySearch(numOfNonIsolatedVertices(I), numOfRounds,
+                                  MAX_CUT_HS_POPULATION_SIZE, MAX_CUT_HS_AVERAGE_STALL_THRESHOLD, MAX_CUT_HS_MAX_AVERAGE_STALLS, seed)
     , I(I)
     , maxCutWeights(maxCutWeights)
     , toVertexIndex(candidateLength)
     , toBitIndex(num_vertices(I))
     , unvisited(num_vertices(I))
     , maxNumOfComponents(MAX_CUT_MAX_NUM_OF_CONNECTED_COMPONENTS) {
+        assert (candidateLength > 0);
         const auto n = num_vertices(I);
         for (unsigned i = 0, j = 0; i < n; ++i) {
             if (out_degree(i, I) > 0) {
@@ -709,8 +697,6 @@ is_bipartite_graph:
         // from 0 to pow(2,N) - 1 to represent our current premutation. If N > 10,
         // we'll need another method to converge on a solution.
 
-        assert (N <= 10);
-
         for (unsigned i = 0; i < (1U << N); ++i) {
             const auto X = calculate_orientation_clique_weight(i, weight, G);
             chromaticNumber = std::min<size_t>(chromaticNumber, X);
@@ -737,7 +723,7 @@ is_bipartite_graph:
         const auto predictionOf95PercentCut = 0.07930 * ((double)(numOfStreamSets * numOfStreamSets))
             + 7.63712 * ((double)numOfStreamSets) - 0.19735 * ((double)numOfEdges) - 80.59364;
 
-        const unsigned numOfRounds = std::ceil(std::max(predictionOf95PercentCut, 10.0) * maxCutRoundsFactor);
+        const unsigned numOfRounds = std::ceil(std::max(predictionOf95PercentCut, 10.0));
 
         const auto firstStreamSet = (2 * numOfKernels);
 
@@ -753,26 +739,21 @@ is_bipartite_graph:
             maxCutWeights.emplace(e, std::sqrt((double)(Wu * Wu + Wv * Wv)));
         }
 
-        constexpr double ANG_FREQ_PERIOD_20 = 0.3141592653589793238462643383279502884197169399375105820974944592;
-
-        auto bestScore = std::numeric_limits<MaxCutHarmonySearch::FitnessValueType>::lowest();
-
-        MaxCutHarmonySearch::Candidate assignment(0);
-        for (unsigned r = 0; r < maxCutPasses; ++r) {
-            std::uniform_int_distribution<uintmax_t> distribution(0, std::numeric_limits<uintmax_t>::max());
-            const auto seed = distribution(rng);
-            MaxCutHarmonySearch HS(I, maxCutWeights, numOfRounds, 10, HMCRType::Cos, 0.8, 1.0, ANG_FREQ_PERIOD_20, seed);
-            HS.runHarmonySearch();
-            const auto score = HS.getBestFitnessValue();
-            if (bestScore < score) {
-                assignment = HS.getResult();
-                bestScore = score;
-            }
+        if (LLVM_UNLIKELY(maxCutWeights.empty())) {
+            return 0;
         }
 
-        assert (bestScore > std::numeric_limits<MaxCutHarmonySearch::FitnessValueType>::lowest());
+        std::uniform_int_distribution<uintmax_t> distribution(0, std::numeric_limits<uintmax_t>::max());
+        const auto seed = distribution(rng);
+        MaxCutHarmonySearch HS(I, maxCutWeights, numOfRounds, seed);
+        HS.runHarmonySearch();
+        const auto assignment = HS.getResult();
+
+        assert (HS.getBestFitnessValue() > std::numeric_limits<MaxCutHarmonySearch::FitnessValueType>::lowest());
 
         MemIntervalGraph residualGraph(numOfStreamSets);
+
+        bool anyResiduals = false;
 
         std::vector<size_t> residualWeights(2 * numOfKernels + numOfStreamSets, 0);
 
@@ -783,14 +764,23 @@ is_bipartite_graph:
                 return false;
             } else {
                 add_edge(u, v, residualGraph);
-                residualWeights[firstStreamSet + u] = weight[firstStreamSet + u];
-                residualWeights[firstStreamSet + v] = weight[firstStreamSet + v];
+                const auto Wu = weight[firstStreamSet + u];
+                const auto Wv = weight[firstStreamSet + v];
+
+                if (Wu > 0 && Wv > 0) {
+                    anyResiduals = true;
+                    residualWeights[firstStreamSet + u] = weight[firstStreamSet + u];
+                    residualWeights[firstStreamSet + v] = weight[firstStreamSet + v];
+                }
                 return true;
             }
         }, I);
 
-        return calculateChomaticNumber(candidate, residualWeights, residualGraph);
-
+        if (anyResiduals) {
+            return calculateChomaticNumber(candidate, residualWeights, residualGraph);
+        } else {
+            return 0;
+        }
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -879,12 +869,10 @@ is_bipartite_graph:
 
 public:
 
-    MemoryAnalysis(const SchedulingGraph & S, const unsigned numOfKernels, random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
+    MemoryAnalysis(const SchedulingGraph & S, const unsigned numOfKernels, random_engine & rng)
     : S(S)
     , numOfKernels(numOfKernels)
     , numOfStreamSets(num_vertices(S) - numOfKernels)
-    , maxCutRoundsFactor(maxCutRoundsFactor)
-    , maxCutPasses(maxCutPasses)
     , rng(rng)
     , weight(2 * numOfKernels + numOfStreamSets)
     , ordinal(numOfStreamSets)
@@ -905,9 +893,6 @@ protected:
 
     const unsigned numOfKernels;
     const unsigned numOfStreamSets;
-
-    const double maxCutRoundsFactor;
-    const unsigned maxCutPasses;
 
     random_engine & rng;
 
@@ -950,11 +935,11 @@ protected:
     SchedulingAnalysisWorker(const SchedulingGraph & S,
                        const unsigned numOfKernels,
                        const unsigned candidateLength,
-                       random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
+                       random_engine & rng)
     : numOfKernels(numOfKernels)
     , candidateLength(candidateLength)
     , rng(rng)
-    , analyzer(S, numOfKernels, rng, maxCutRoundsFactor, maxCutPasses) {
+    , analyzer(S, numOfKernels, rng) {
 
     }
 
@@ -1015,7 +1000,7 @@ public:
      ** ------------------------------------------------------------------------------------------------------------- */
     PartitionSchedulingAnalysisWorker(const SchedulingGraph & S, const PartitionDependencyGraph & D,
                                       const unsigned numOfKernels, random_engine & rng)
-    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels, rng, 1, 1)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels, rng)
     , D(D)
     , replacement(numOfKernels)
     , remaining(numOfKernels) {
@@ -1048,7 +1033,7 @@ struct PartitionSchedulingAnalysis final : public PermutationBasedEvolutionaryAl
         // solution space.
 
         return enumerateUpToNTopologicalOrderings(D, INITIAL_TOPOLOGICAL_POPULATION_SIZE, [&](const Candidate & L) {
-            insertCandidate(L, initialPopulation);
+            insertCandidate(Candidate{L}, initialPopulation);
         });
 
     }
@@ -1121,6 +1106,7 @@ void PipelineAnalysis::analyzeDataflowWithinPartitions(PartitionGraph & P, rando
 
         const auto & kernels = currentPartition.Kernels;
         const auto numOfKernels = kernels.size();
+        assert (numOfKernels > 0);
         const auto fakeOutput = numOfKernels + 1U;
 
         // We want to generate a subgraph of S consisting of only the kernel nodes
@@ -1944,8 +1930,8 @@ public:
                                     const ProgramScheduleType mode,
                                     const unsigned numOfKernels,
                                     const unsigned maxPathLength,
-                                    random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
-    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels, rng, maxCutRoundsFactor, maxCutPasses)
+                                    random_engine & rng)
+    : SchedulingAnalysisWorker(S, numOfKernels, numOfKernels, rng)
     , O(O)
     , mode(mode)
     , visited(num_vertices(O))
@@ -2006,12 +1992,6 @@ private:
  ** ------------------------------------------------------------------------------------------------------------- */
 struct ProgramSchedulingAnalysis final : public PermutationBasedEvolutionaryAlgorithm {
 
-    static_assert(INITIAL_SCHEDULING_POPULATION_ATTEMPTS >= INITIAL_SCHEDULING_POPULATION_SIZE,
-        "cannot have fewer attemps than population size");
-
-    static_assert(INITIAL_SCHEDULING_POPULATION_SIZE <= MAX_PROGRAM_POPULATION_SIZE,
-        "cannot have a larger initial population size than generational population size");
-
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief initGA
      ** ------------------------------------------------------------------------------------------------------------- */
@@ -2040,23 +2020,6 @@ struct ProgramSchedulingAnalysis final : public PermutationBasedEvolutionaryAlgo
         return worker.fitness(candidate);
     }
 
-    void report() {
-        size_t sum = 0;
-        for (auto depth : worker.FitnessDepth) {
-            sum += depth;
-        }
-        const double avg = ((double)sum) / ((double)worker.FitnessDepth.size());
-
-        double var = 0.0;
-        for (auto depth : worker.FitnessDepth) {
-            const double d = (double)depth - avg;
-            var += (d * d);
-        }
-
-        // mean, stddev, count
-        errs() << format("%.5f", avg) << "," << format("%.5f", std::sqrt(var)) << "," << worker.FitnessDepth.size();
-    }
-
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief constructor
      ** ------------------------------------------------------------------------------------------------------------- */
@@ -2065,9 +2028,9 @@ struct ProgramSchedulingAnalysis final : public PermutationBasedEvolutionaryAlgo
                               const ProgramScheduleType mode,
                               const unsigned numOfKernels,
                               const unsigned maxPathLength,
-                              random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses)
+                              random_engine & rng)
     : PermutationBasedEvolutionaryAlgorithm(numOfKernels, PROGRAM_SCHEDULING_GA_ROUNDS, PROGRAM_SCHEDULING_GA_STALLS, MAX_PROGRAM_POPULATION_SIZE, rng)
-    , worker(S, O, mode, numOfKernels, maxPathLength, rng, maxCutRoundsFactor, maxCutPasses) {
+    , worker(S, O, mode, numOfKernels, maxPathLength, rng) {
 
     }
 
@@ -2737,7 +2700,7 @@ OrderingDAWG PipelineAnalysis::scheduleProgramGraph(const PartitionGraph & P,
     // ProgramScheduleType::NearestTopologicalOrdering
 
 
-    ProgramSchedulingAnalysis SA(S, O, ProgramScheduleType::RandomWalk, numOfFrontierKernels, maxPathLength, rng, 1, 1);
+    ProgramSchedulingAnalysis SA(S, O, ProgramScheduleType::RandomWalk, numOfFrontierKernels, maxPathLength, rng);
 
     SA.runGA();
 
@@ -2918,8 +2881,6 @@ void PipelineAnalysis::addSchedulingConstraints(const PartitionGraph & P,
         add_edge(u, PipelineOutput, RelationshipType{ReasonType::OrderingConstraint}, Relationships);
     }
 }
-
-#endif
 
 }
 
