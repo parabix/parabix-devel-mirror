@@ -47,8 +47,8 @@ StreamExpandKernel::StreamExpandKernel(BuilderRef b,
 + "_" + std::to_string(source->getNumElements())
 + ":" + std::to_string(expanded->getNumElements()),
 // input stream sets
-{Binding{"marker", mask, FixedRate()},
-Binding{"source", source, PopcountOf("marker"), BlockSize(b->getBitBlockWidth())}},
+{Binding{"marker", mask, FixedRate(), Principal()},
+    Binding{"source", source, PopcountOf("marker"), {ZeroExtended(), BlockSize(b->getBitBlockWidth())}}},
 // output stream set
 {Binding{"output", expanded}},
 // input scalar
