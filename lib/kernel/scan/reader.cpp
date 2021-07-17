@@ -52,6 +52,7 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
         b->setProcessedItemCount(name, nextIndex);
     }
     Function * const callback = module->getFunction(mCallbackName);
+    FunctionType * fTy = callback->getFunctionType();
     if (callback == nullptr) {
         llvm::report_fatal_error(mKernelName + ": failed to get function: " + mCallbackName);
     }

@@ -408,7 +408,7 @@ struct PartitionData {
     KernelIdVector          Kernels;
     std::vector<Rational>   Repetitions;
     OrderingDAWG            Orderings;
-    Rational                ExpectedRepetitions{0};
+//    Rational                ExpectedRepetitions{0};
 
 };
 

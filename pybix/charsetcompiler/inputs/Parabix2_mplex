@@ -1,0 +1,54 @@
+lex.RefStart = [&]
+lex.Semicolon = [;]
+lex.LAngle = [<]
+lex.RAngle = [>]
+lex.LBracket = [[]
+lex.RBracket = []]
+lex.Exclam = [!]
+lex.QMark = [?]
+lex.Hyphen =  [-]
+lex.Equals = [=]
+lex.SQuote = [']
+lex.DQuote = ["]
+lex.Slash = [/]
+lex.Hash = [#]
+lex.x = [x]
+lex.Colon = [:]
+lex.ASCII_name_start = [_:A-Za-z]
+lex.ASCII_name_char = [-_.0-:A-Za-z]
+lex.NameScan = [-_.0-:A-Za-z\x80-\xFF]
+x00_x1F = [\x00-\x1F]
+lex.CR = [\x0D]
+lex.LF = [\x0A]
+lex.HT = [\x09]
+lex.SP = [ ]
+lex.WS = [\x0D\x0A\x09 ]
+lex.Digit = [0-9]
+lex.Hex = [0-9A-Fa-f]
+
+#   Multiplexed scope stream encodings
+#   - Allow 13 scope streams to be computed using 4 shifts only.
+#
+#   0000 - nonscope stream (bytes not in any scope definition)
+#   0001 - LAngle
+#   0010 - Hyphen
+#   0011 - RefStart
+#   0100 - RBracket
+#   0101 - QMark
+#   0110 - u8prefix2 [\xC0-\xDF]
+#   0111 - unused, future
+#
+#   10xx  - u8prefix3 [\xE0-\xEF]
+#   1000  - xE0
+#   1001  - xED
+#   1011  - xEF
+#   11xx  - u8prefix4 [\xF0-\xFF]
+#   1100  - xF0
+#   1101  - xF4
+#   1111 - unused, future
+
+mplex.s0 = [\xE0-\xFF]
+mplex.s1 = []?\xC0-\xDF\xF0-\xFF]
+mplex.s2 = [-&\xC0-\xDF\xEF]
+mplex.s3 = [<&?\xED\xEF\xF4]
+

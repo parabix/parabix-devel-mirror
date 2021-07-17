@@ -1,0 +1,20 @@
+u8.unibyte = [\x00-\x7F]
+u8.prefix = [\xC0-\xFF]
+u8.prefix2 = [\xC0-\xDF]
+u8.prefix3 = [\xE0-\xEF]
+u8.prefix4 = [\xF0-\xFF]
+u8.suffix = [\x80-\xBF]
+# For 2 byte-sequence validation
+u8.badprefix2 = [\xC0-\xC1]
+# For 3 byte-sequence validation
+u8.xE0 = [\xE0]
+u8.xED = [\xED]
+u8.xA0_xBF = [\xA0-\xBF]
+u8.x80_x9F = [\x80-\x9F]
+# 4 byte sequence validation
+u8.badprefix4 = [\xF5-\xFF]
+u8.xF0 = [\xF0]
+u8.xF4 = [\xF4]
+u8.x90_xBF = [\x90-\xBF]
+u8.x80_x8F = [\x80-\x8F]
+

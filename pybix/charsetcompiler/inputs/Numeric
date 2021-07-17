@@ -1,0 +1,6 @@
+lex.Digit = [0-9]
+lex.Sign = [-+]
+lex.Point = [.]
+lex.ExponMark = [eE]
+lex.NumBreak = [^A-Za-z_.]
+

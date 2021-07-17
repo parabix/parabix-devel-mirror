@@ -57,23 +57,13 @@ void PipelineAnalysis::computeMinimumExpectedDataflow(PartitionGraph & P) {
 
     std::vector<Z3_ast> VarList(m);
 
-    for (unsigned partition = 1; partition < numOfPartitions; ++partition) {
-        PartitionData & N = P[partition];
-        const auto & K = N.Kernels;
-//        auto rootVar = Z3_mk_fresh_const(ctx, nullptr, intType);
-//        hard_assert(Z3_mk_ge(ctx, rootVar, ONE));
-//        if (in_degree(partition, P) == 0) {
-//            assert (K.size() == 1);
-//            for (const auto u : K) {
-//                VarList[u] = rootVar;
-//            }
-//        } else {
-            for (const auto u : K) {
-                auto repVar = Z3_mk_fresh_const(ctx, nullptr, intType);
-                hard_assert(Z3_mk_ge(ctx, repVar, ONE));
-                VarList[u] = repVar; // multiply(rootVar, repVar);
-            }
-//        }
+    for (unsigned partition = 0; partition < numOfPartitions; ++partition) {
+        const PartitionData & N = P[partition];
+        for (const auto u : N.Kernels) {
+            auto repVar = Z3_mk_fresh_const(ctx, nullptr, intType);
+            hard_assert(Z3_mk_ge(ctx, repVar, ONE));
+            VarList[u] = repVar; // multiply(rootVar, repVar);
+        }
     }
 
     #warning Verify min dataflow considers multiple inputs of differing rates
@@ -111,6 +101,8 @@ void PipelineAnalysis::computeMinimumExpectedDataflow(PartitionGraph & P) {
 
                     const auto sum = rate.getLowerBound() + rate.getUpperBound();
                     const auto expectedOutput = sum * Rational{strideSize, 2};
+
+                    assert (VarList[producer]);
 
                     const Z3_ast expOutRate = multiply(VarList[producer], constant_real(expectedOutput));
 
@@ -168,7 +160,7 @@ void PipelineAnalysis::computeMinimumExpectedDataflow(PartitionGraph & P) {
 
     const auto model = Z3_optimize_get_model(ctx, solver);
     Z3_model_inc_ref(ctx, model);
-    for (unsigned partition = 1; partition < numOfPartitions; ++partition) {
+    for (unsigned partition = 0; partition < numOfPartitions; ++partition) {
         PartitionData & N = P[partition];
         const auto & K = N.Kernels;
         const auto n = K.size();

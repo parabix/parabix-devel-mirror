@@ -238,7 +238,8 @@ Value * PipelineCompiler::calculateTransferableItemCounts(BuilderRef b, Value * 
 
     Value * nonFinalNumOfLinearStrides = nullptr;
     if (LLVM_UNLIKELY(mIsPartitionRoot && StrideStepLength[mKernelId] > 1)) {
-        nonFinalNumOfLinearStrides = b->CreateRoundDown(numOfLinearStrides, b->getSize(StrideStepLength[mKernelId]));
+        ConstantInt * const STEP = b->getSize(StrideStepLength[mKernelId]);
+        nonFinalNumOfLinearStrides = b->CreateRoundDown(numOfLinearStrides, STEP);
     } else {
         nonFinalNumOfLinearStrides = numOfLinearStrides;
     }

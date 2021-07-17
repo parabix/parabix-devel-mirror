@@ -24,14 +24,11 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
         StreamSetBuffer * const buffer = bn.Buffer;
         Type * const handleType = buffer->getHandleType(b);
 
-        #ifdef PERMIT_BUFFER_MEMORY_REUSE
         // We automatically assign the buffer memory according to the buffer start position
         if (bn.Locality == BufferLocality::ThreadLocal) {
             assert (bn.isOwned());
             mTarget->addNonPersistentScalar(handleType, handleName);
-        } else
-        #endif
-        if (LLVM_LIKELY(bn.isOwned())) {
+        } else if (LLVM_LIKELY(bn.isOwned())) {
             mTarget->addInternalScalar(handleType, handleName);
 //            if (bn.Locality == BufferLocality::GloballyShared) {
 //                mTarget->addInternalScalar(handleType, handleName);
@@ -113,7 +110,6 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
            "%s: expected number of strides for internally allocated buffers is 0",
            b->GetString(mTarget->getName()));
     }
-
     // recursively allocate any internal buffers for the nested kernels, giving them the correct
     // num of strides it should expect to perform
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
@@ -136,7 +132,10 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
 
                 const auto scale = MaximumNumOfStrides[i] * Rational{mNumOfThreads};
                 params.push_back(b->CreateCeilUMulRational(expectedNumOfStrides, scale));
-                b->CreateCall(func, params);
+
+                FunctionType * const funcType = cast<FunctionType>(func->getType()->getPointerElementType());
+
+                b->CreateCall(funcType, func, params);
             }
         }
 
@@ -209,11 +208,9 @@ void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
     loadInternalStreamSetHandles(b, nonLocal);
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         const BufferNode & bn = mBufferGraph[streamSet];
-        #ifdef PERMIT_BUFFER_MEMORY_REUSE
         if (bn.Locality == BufferLocality::ThreadLocal) {
             continue;
         }
-        #endif
         if (bn.isUnowned() || bn.isShared() || bn.isNonThreadLocal() != nonLocal) {
             continue;
         }
@@ -455,9 +452,7 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
         if (LLVM_LIKELY(bn.isOwned() || bn.isExternal())) {
             continue;
         }
-        #ifdef PERMIT_BUFFER_MEMORY_REUSE
         assert (bn.Locality != BufferLocality::ThreadLocal);
-        #endif
         const BufferPort & rd = mBufferGraph[e];
         const StreamSetPort port(rd.Port.Type, rd.Port.Number);
         Value * const ptr = mReturnedOutputVirtualBaseAddressPtr[port]; assert (ptr);
@@ -486,9 +481,7 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderR
         if (LLVM_LIKELY(bn.isOwned() || bn.isExternal())) {
             continue;
         }
-        #ifdef PERMIT_BUFFER_MEMORY_REUSE
         assert (bn.Locality != BufferLocality::ThreadLocal);
-        #endif
         const BufferPort & rd = mBufferGraph[e];
         const auto handleName = makeBufferName(kernelId, rd.Port);
         Value * const vba = b->getScalarField(handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);

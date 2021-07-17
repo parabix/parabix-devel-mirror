@@ -571,7 +571,8 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             // Perhaps check for handler address and skip call back if none???
             Value * handler = b->getScalarField("handler_address");
             Function * const dispatcher = b->getModule()->getFunction("signal_dispatcher"); assert (dispatcher);
-            b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), s->getSignalCode())});
+            FunctionType * fTy = dispatcher->getFunctionType();
+            b->CreateCall(fTy, dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), s->getSignalCode())});
             //Value * rel_position = b->createCountForwardZeroes(signal_strm);
             //Value * position = b->CreateAdd(b->getProcessedItemCount(), rel_position);
             b->setFatalTerminationSignal();

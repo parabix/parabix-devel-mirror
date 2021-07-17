@@ -47,6 +47,7 @@ public:
 
         P.generateInitialPipelineGraph(b);
 
+
         // Initially, we gather information about our partition to determine what kernels
         // are within each partition in a topological order
         #ifdef PRINT_STAGES
@@ -67,7 +68,11 @@ public:
         errs() << "schedulePartitionedProgram\n";
         #endif
 
-        P.schedulePartitionedProgram(partitionGraph, rng, 1.0, 1);
+        P.schedulePartitionedProgram(partitionGraph, rng);
+
+        #ifdef PRINT_STAGES
+        errs() << "transcribeRelationshipGraph\n";
+        #endif
 
         // Construct the Stream and Scalar graphs
         P.transcribeRelationshipGraph(partitionGraph);
@@ -89,31 +94,45 @@ public:
 
         P.computeMaximumExpectedDataflow();
 
+        #ifdef PRINT_STAGES
+        errs() << "computeMinimumStrideLengthForConsistentDataflow\n";
+        #endif
+
         P.computeMinimumStrideLengthForConsistentDataflow();
 
         #ifdef PRINT_STAGES
         errs() << "computeInterPartitionSymbolicRates\n";
         #endif
 
-
         P.identifyInterPartitionSymbolicRates();
 
         #ifdef PRINT_STAGES
-        errs() << "determineBufferSize\n";
+        errs() << "markInterPartitionStreamSetsAsGloballyShared\n";
         #endif
-
-//        errs() << "identifyBufferLocality\n";
 
         P.markInterPartitionStreamSetsAsGloballyShared(); // linkedPartitions
 
-//        P.makePartitionIOGraph();
-
-//        errs() << "identifyTerminationChecks\n";
+        #ifdef PRINT_STAGES
+        errs() << "identifyTerminationChecks\n";
+        #endif
 
         P.identifyTerminationChecks();
+
+        #ifdef PRINT_STAGES
+        errs() << "determinePartitionJumpIndices\n";
+        #endif
+
         P.determinePartitionJumpIndices();
 
+        #ifdef PRINT_STAGES
+        errs() << "annotateBufferGraphWithAddAttributes\n";
+        #endif
+
         P.annotateBufferGraphWithAddAttributes();
+
+        #ifdef PRINT_STAGES
+        errs() << "identifyInterPartitionSymbolicRates\n";
+        #endif
 
         P.identifyInterPartitionSymbolicRates();
 
@@ -124,16 +143,33 @@ public:
         P.identifyPortsThatModifySegmentLength();
         P.identifyZeroExtendedStreamSets();
 
+        #ifdef PRINT_STAGES
+        errs() << "determineBufferSize\n";
+        #endif
+
         P.determineBufferSize(b);
+
+        #ifdef PRINT_STAGES
+        errs() << "determineBufferLayout\n";
+        #endif
+
         P.determineBufferLayout(b, rng);
+
+        #ifdef PRINT_STAGES
+        errs() << "makeConsumerGraph\n";
+        #endif
 
         // Make the remaining graphs
         P.makeConsumerGraph();
 
-
-
-
+        #ifdef PRINT_STAGES
+        errs() << "makePartitionJumpTree\n";
+        #endif
         P.makePartitionJumpTree();
+
+        #ifdef PRINT_STAGES
+        errs() << "makeTerminationPropagationGraph\n";
+        #endif
         P.makeTerminationPropagationGraph();
 
         // Finish the buffer graph
@@ -209,7 +245,7 @@ private:
 
     // scheduling analysis
 
-    void schedulePartitionedProgram(PartitionGraph & P, random_engine & rng, const double maxCutRoundsFactor, const unsigned maxCutPasses);
+    void schedulePartitionedProgram(PartitionGraph & P, random_engine & rng);
 
     void analyzeDataflowWithinPartitions(PartitionGraph & P, random_engine & rng) const;
 
@@ -217,15 +253,13 @@ private:
 
     PartitionDependencyGraph makePartitionDependencyGraph(const unsigned numOfKernels, const SchedulingGraph & S) const;
 
-    PartitionDataflowGraph analyzeDataflowBetweenPartitions(PartitionGraph & P) const;
+    OrderingDAWG scheduleProgramGraph(const PartitionGraph & P, random_engine & rng) const;
 
-    PartitionOrdering makeInterPartitionSchedulingGraph(PartitionGraph & P, const PartitionDataflowGraph & D) const;
+    OrderingDAWG assembleFullSchedule(const PartitionGraph & P, const OrderingDAWG & partial) const;
 
-    OrderingDAWG scheduleProgramGraph(const PartitionGraph & P, const PartitionOrdering & O, const PartitionDataflowGraph & D, random_engine & rng) const;
+    std::vector<unsigned> selectScheduleFromDAWG(const OrderingDAWG & schedule) const;
 
-    std::vector<unsigned> selectScheduleFromDAWG(const KernelIdVector & kernels, const OrderingDAWG & schedule);
-
-    void addSchedulingConstraints(const PartitionGraph & P, const std::vector<unsigned> & program);
+    void addSchedulingConstraints(const std::vector<unsigned> & program);
 
     // buffer management analysis functions
 
@@ -299,8 +333,8 @@ private:
 
 public:
 
-    static constexpr unsigned       PipelineInput = 0U;
-    static constexpr unsigned       FirstKernel = 1U;
+    static const unsigned           PipelineInput = 0U;
+    static const unsigned           FirstKernel = 1U;
     unsigned                        LastKernel = 0;
     unsigned                        PipelineOutput = 0;
     unsigned                        FirstStreamSet = 0;

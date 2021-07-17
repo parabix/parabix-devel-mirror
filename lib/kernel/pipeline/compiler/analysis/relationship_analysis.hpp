@@ -263,15 +263,15 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
         assert (partitionId < origPartitionCount);
         const PartitionData & P = partitionGraph[partitionId];
         const auto & R = P.Repetitions;
+        const KernelIdVector & K = P.Kernels;
+        assert (P.Repetitions.size() == K.size());
         if (R.empty()) {
             return 0U;
         }
-        const KernelIdVector & K = P.Kernels;
-        assert (P.Repetitions.size() == K.size());
         const auto k = std::find(K.begin(), K.end(), kernelId);
         assert (k != K.end());
         const auto j = std::distance(K.begin(), k);
-        const auto expected = R[j] * P.ExpectedRepetitions;
+        const auto & expected = R[j];
         assert (expected.numerator() > 0 && expected.denominator() == 1);
         return expected.numerator();
     };
@@ -791,6 +791,8 @@ void PipelineAnalysis::generateInitialPipelineGraph(BuilderRef b) {
     // Pipeline optimizations
     combineDuplicateKernels(b, kernels, Relationships);
     removeUnusedKernels(p_in, p_out, kernels, Relationships);
+
+
 
 }
 

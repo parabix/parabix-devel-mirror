@@ -16,6 +16,7 @@ namespace kernel {
 void CCScanKernel::generateDoBlockMethod(BuilderRef iBuilder) {
     auto savePoint = iBuilder->saveIP();
     Function * scanWordFunction = generateScanWordRoutine(iBuilder);
+    FunctionType * fTy = scanWordFunction->getFunctionType();
     iBuilder->restoreIP(savePoint);
 
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
@@ -33,7 +34,7 @@ void CCScanKernel::generateDoBlockMethod(BuilderRef iBuilder) {
     for(unsigned i = 0; i < fieldCount; ++i) {
         for(unsigned d = 0; d < mStreamNum; d++) {
             Value * matchWord = iBuilder->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
-            iBuilder->CreateCall(scanWordFunction, {matchWord, iBuilder->getInt32(d), scanwordPos});
+            iBuilder->CreateCall(fTy, scanWordFunction, {matchWord, iBuilder->getInt32(d), scanwordPos});
         }
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
     }
@@ -79,13 +80,13 @@ Function * CCScanKernel::generateScanWordRoutine(BuilderRef iBuilder) const {
 
     iBuilder->SetInsertPoint(matchesLoopBlock);
 
-    Value * cttzFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::cttz, matches_phi->getType());
-    Value * tz = iBuilder->CreateCall(cttzFunc, std::vector<Value *>({matches_phi, ConstantInt::get(iBuilder->getInt1Ty(), 0)}));
+    Function * cttzFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::cttz, matches_phi->getType());
+    Value * tz = iBuilder->CreateCall(cttzFunc->getFunctionType(), cttzFunc, std::vector<Value *>({matches_phi, ConstantInt::get(iBuilder->getInt1Ty(), 0)}));
 
     Value * match_pos = iBuilder->CreateAdd(tz, basePos);
     Value * matches_new = iBuilder->CreateAnd(matches_phi, iBuilder->CreateSub(matches_phi, ConstantInt::get(T, 1)));
     matches_phi->addIncoming(matches_new, matchesLoopBlock);
-    iBuilder->CreateCall(matchProcessor, std::vector<Value *>({match_pos, dist}));
+    iBuilder->CreateCall(fTy, matchProcessor, std::vector<Value *>({match_pos, dist}));
     iBuilder->CreateBr(matchesCondBlock);
 
     iBuilder->SetInsertPoint(matchesDoneBlock);

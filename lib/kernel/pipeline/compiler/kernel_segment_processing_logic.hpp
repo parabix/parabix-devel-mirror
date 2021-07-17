@@ -128,7 +128,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     }
 
     const auto nextPartitionId = mCurrentPartitionId + 1U;
-    const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
+    const auto jumpId = PartitionJumpTargetId[mCurrentPartitionId];
     const auto canJumpToAnotherPartition = mIsPartitionRoot && (mIsBounded || nextPartitionId == jumpId);
     const auto handleNoUpdateExit = mIsPartitionRoot; // || !canJumpToAnotherPartition;
 
@@ -162,7 +162,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         SmallVector<char, 256> tmp;
         raw_svector_ostream nm(tmp);
         nm << prefix << "_jumpFromPartition_" << mCurrentPartitionId
-           << "_to_" << mPartitionJumpIndex[mCurrentPartitionId];
+           << "_to_" << PartitionJumpTargetId[mCurrentPartitionId];
         mKernelJumpToNextUsefulPartition = b->CreateBasicBlock(nm.str(), mNextPartitionEntryPoint);
     } else {
         mKernelJumpToNextUsefulPartition = mKernelInitiallyTerminated;

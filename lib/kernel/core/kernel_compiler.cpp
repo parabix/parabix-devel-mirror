@@ -190,7 +190,6 @@ inline void KernelCompiler::callGenerateInitializeMethod(BuilderRef b) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect) && mTarget->isStateful())) {
         b->CreateMProtect(mSharedHandle, CBuilder::Protect::READ);
     }
-
     b->CreateRet(b->CreateLoad(mTerminationSignalPtr));
     clearInternalStateAfterCodeGen();
 }

@@ -41,7 +41,7 @@ void IDISA_Builder::UnsupportedFieldWidthError(const unsigned fw, std::string op
 
 CallInst * IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
-    Constant * printRegister = m->getFunction("print_register");
+    Function * printRegister = m->getFunction("print_register");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(0), getBitBlockType() }, false);
         Function * function = Function::Create(FT, Function::InternalLinkage, "print_register", m);
@@ -70,11 +70,12 @@ CallInst * IDISA_Builder::CallPrintRegister(StringRef name, Value * const value,
         for(unsigned i = (getBitBlockWidth() / 8); i != 0; --i) {
             args.push_back(builder.CreateZExt(builder.CreateExtractElement(value, builder.getInt32(i - 1)), builder.getInt32Ty()));
         }
-        builder.CreateCall(GetDprintf(), args);
+        Function * Dprintf = GetDprintf();
+        builder.CreateCall(Dprintf->getFunctionType(), Dprintf, args);
         builder.CreateRetVoid();
         printRegister = function;
     }
-    return CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
+    return CreateCall(printRegister->getFunctionType(), printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
@@ -521,8 +522,8 @@ Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
 
 Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
     /*  Pure sequential solution too slow!
-     Value * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
-     return CreateCall(func, fwCast(fw, a));
+     Function * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
+     return CreateCall(func->getFunctionType(), func, fwCast(fw, a));
      */
     if (fw > 8) {
         // Reverse the bits of each byte and then use a byte shuffle to complete the job.

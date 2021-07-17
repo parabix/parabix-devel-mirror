@@ -1,0 +1,4 @@
+lex.LParen = [(]
+lex.RParen = [)]
+lex.Pct = [%]
+lex.LF = [\x0A]

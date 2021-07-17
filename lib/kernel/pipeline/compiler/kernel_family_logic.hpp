@@ -141,6 +141,87 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
 
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializationFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::callKernelInitializeFunction(BuilderRef b, const ArgVec & args) const {
+    Function * const init = mKernel->getInitializeFunction(b);
+    assert (!mKernel->hasFamilyName());
+    return b->CreateCall(init->getFunctionType(), init, args);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializationThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::callKernelInitializeThreadLocalFunction(BuilderRef b, Value * handle) const {
+    Function * const init = mKernel->getInitializeThreadLocalFunction(b);
+    Value * func = init;
+    if (mKernel->hasFamilyName()) {
+        func = getFamilyFunctionFromKernelState(b, init->getType(), INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+    }
+    FixedArray<Value *, 1> args;
+    args[0] = handle;
+    return b->CreateCall(init->getFunctionType(), func, args);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getKernelAllocateSharedInternalStreamSetsFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getKernelAllocateSharedInternalStreamSetsFunction(BuilderRef b) const {
+    Function * const term = mKernel->getAllocateSharedInternalStreamSetsFunction(b, false);
+    if (mKernel->hasFamilyName()) {
+        return getFamilyFunctionFromKernelState(b, term->getType(), ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+    }
+    return term;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getKernelAllocateThreadLocalInternalStreamSetsFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getKernelAllocateThreadLocalInternalStreamSetsFunction(BuilderRef b) const {
+    Function * const term = mKernel->getAllocateThreadLocalInternalStreamSetsFunction(b, false);
+    if (mKernel->hasFamilyName()) {
+        return getFamilyFunctionFromKernelState(b, term->getType(), ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+    }
+    return term;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getDoSegmentFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getKernelDoSegmentFunction(BuilderRef b) const {
+    Function * const doSegment = mKernel->getDoSegmentFunction(b);
+    if (mKernel->hasFamilyName()) {
+        return getFamilyFunctionFromKernelState(b, doSegment->getType(), DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
+    }
+    return doSegment;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializationThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::callKernelFinalizeThreadLocalFunction(BuilderRef b, const SmallVector<Value *, 2> & args) const {
+    Function * const finalize = mKernel->getFinalizeThreadLocalFunction(b);
+    Value * func = finalize;
+    if (mKernel->hasFamilyName()) {
+        func = getFamilyFunctionFromKernelState(b, finalize->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+    }
+    return b->CreateCall(finalize->getFunctionType(), func, args);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getFinalizeFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::callKernelFinalizeFunction(BuilderRef b, const SmallVector<Value *, 1> & args) const {
+    Function * const term = mKernel->getFinalizeFunction(b);
+    Value * func = term;
+    if (mKernel->hasFamilyName()) {
+        func = getFamilyFunctionFromKernelState(b, term->getType(), FINALIZE_FUNCTION_POINTER_SUFFIX);
+    }
+    return b->CreateCall(term->getFunctionType(), func, args);
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFamilyFunctionFromKernelState
  ** ------------------------------------------------------------------------------------------------------------- */

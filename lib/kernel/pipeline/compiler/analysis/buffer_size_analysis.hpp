@@ -6,8 +6,6 @@
 
 namespace kernel {
 
-#ifdef PERMIT_BUFFER_MEMORY_REUSE
-
 // TODO: nested pipeline kernels could report how much internal memory they require
 // and reason about that here (and in the scheduling phase)
 
@@ -517,18 +515,6 @@ void PipelineAnalysis::determineBufferLayout(BuilderRef b, random_engine & rng) 
     assert (RequiredThreadLocalStreamSetMemory > 0);
 
 }
-
-#else // #ifndef PERMIT_BUFFER_MEMORY_REUSE
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief determineBufferLayout
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::determineBufferLayout(BuilderRef /* b */) {
-
-
-}
-
-#endif
 
 }
 

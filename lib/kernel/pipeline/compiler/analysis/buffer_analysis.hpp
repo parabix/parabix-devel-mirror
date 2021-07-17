@@ -563,6 +563,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
         }
     }
 
+#if 0
     // Any ImplicitPopCount/RegionSelector inputs must be linear to ensure
     // we can easily access all of the rate information.
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -581,6 +582,8 @@ void PipelineAnalysis::identifyLinearBuffers() {
             }
         }
     }
+#endif
+
 #else
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         BufferNode & N = mBufferGraph[streamSet];

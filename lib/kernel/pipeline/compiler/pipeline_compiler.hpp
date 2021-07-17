@@ -442,13 +442,13 @@ public:
 // misc. functions
 
     Value * getFamilyFunctionFromKernelState(BuilderRef b, Type * const type, const std::string &suffix) const;
-    Value * getKernelInitializeFunction(BuilderRef b) const;
+    Value * callKernelInitializeFunction(BuilderRef b, const ArgVec & args) const;
     Value * getKernelAllocateSharedInternalStreamSetsFunction(BuilderRef b) const;
-    Value * getKernelInitializeThreadLocalFunction(BuilderRef b) const;
+    Value * callKernelInitializeThreadLocalFunction(BuilderRef b, Value * handle) const;
     Value * getKernelAllocateThreadLocalInternalStreamSetsFunction(BuilderRef b) const;
     Value * getKernelDoSegmentFunction(BuilderRef b) const;
-    Value * getKernelFinalizeThreadLocalFunction(BuilderRef b) const;
-    Value * getKernelFinalizeFunction(BuilderRef b) const;
+    Value * callKernelFinalizeThreadLocalFunction(BuilderRef b, const SmallVector<Value *, 2> & args) const;
+    Value * callKernelFinalizeFunction(BuilderRef b, const SmallVector<Value *, 1> & args) const;
 
     LLVM_READNONE std::string makeKernelName(const size_t kernelIndex) const;
     LLVM_READNONE std::string makeBufferName(const size_t kernelIndex, const StreamSetPort port) const;
@@ -534,7 +534,7 @@ protected:
     const RelationshipGraph                     mScalarGraph;
     const BufferGraph                           mBufferGraph;
     const PartitionIOGraph                      mPartitionIOGraph;
-    const std::vector<unsigned>                 mPartitionJumpIndex;
+    const std::vector<unsigned>                 PartitionJumpTargetId;
     const PartitionJumpTree                     mPartitionJumpTree;
     const ConsumerGraph                         mConsumerGraph;
     const TerminationChecks                     mTerminationCheck;
@@ -723,9 +723,9 @@ protected:
 
     // misc.
 
-    OwningVector<Kernel>                           mInternalKernels;
-    OwningVector<Binding>                          mInternalBindings;
-    OwningVector<StreamSetBuffer>                  mInternalBuffers;
+    OwningVector<Kernel>                        mInternalKernels;
+    OwningVector<Binding>                       mInternalBindings;
+    OwningVector<StreamSetBuffer>               mInternalBuffers;
 
 
 };
@@ -789,7 +789,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mScalarGraph(std::move(P.mScalarGraph))
 , mBufferGraph(std::move(P.mBufferGraph))
 , mPartitionIOGraph(std::move(P.mPartitionIOGraph))
-, mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))
+, PartitionJumpTargetId(std::move(P.mPartitionJumpIndex))
 , mPartitionJumpTree(std::move(P.mPartitionJumpTree))
 , mConsumerGraph(std::move(P.mConsumerGraph))
 , mTerminationCheck(std::move(P.mTerminationCheck))

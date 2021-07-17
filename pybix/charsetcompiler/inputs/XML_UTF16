@@ -1,0 +1,39 @@
+# Control Characters and whitespace
+x00_x1F = [\u0000-\u001F]
+CR = [\u000D]
+LF = [\u000A]
+HT = [\u0009]
+SP = [ ]
+# XML Lexical Items
+lex.RefStart = [&]
+lex.Semicolon = [;]
+lex.LAngle = [<]
+lex.RAngle = [>]
+lex.LBracket = [[]
+lex.RBracket = []]
+lex.Exclam = [!]
+lex.QMark = [?]
+lex.Hyphen =  [-]
+lex.Equals = [=]
+lex.SQuote = [']
+lex.DQuote = ["]
+lex.Slash = [/]
+lex.Hash = [#]
+lex.x = [x]
+lex.Colon = [:]
+lex.ASCII_name_start = [_:A-Za-z]
+lex.ASCII_name_char = [-_.0-:A-Za-z]
+lex.NameScan = [-_.0-:A-Za-z\u0080-\uFFFF]
+lex.WS = [\u000D\u000A\u0009 ]
+lex.Digit = [0-9]
+lex.Hex = [0-9A-Fa-f]
+
+lex.NEL = [\u0085]
+lex.LS = [\u2028]
+
+lex.hi_surrogate = [\uD800-\uDBFF]
+lex.lo_surrogate = [\uDC00-\uDFFF]
+
+lex.illegal = [\uFFFE-\uFFFF]
+
+

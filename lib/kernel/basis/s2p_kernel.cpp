@@ -199,8 +199,9 @@ void S2PKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks)
         b->setProducedItemCount("basisBits", producedCount);
         b->setFatalTerminationSignal();
         Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
+        FunctionType * fTy = dispatcher->getFunctionType();
         Value * handler = b->getScalarField("handler_address");
-        b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), NULL_SIGNAL)});
+        b->CreateCall(fTy, dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), NULL_SIGNAL)});
         b->CreateBr(s2pExit);
 
         b->SetInsertPoint(s2pExit);
@@ -265,11 +266,12 @@ protected:
     bool mCompletionFromQuads;
 };
 
-void BitPairsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+void BitPairsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * bitPairLoop = b->CreateBasicBlock("bitPairLoop");
     BasicBlock * bitPairFinalize = b->CreateBasicBlock("bitPairFinalize");
     Constant * const ZERO = b->getSize(0);
+    Value * numOfBlocks = b->CreateMul(numOfStrides, b->getSize(getStride()/b->getBitBlockWidth()));
     b->CreateBr(bitPairLoop);
     b->SetInsertPoint(bitPairLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
@@ -301,11 +303,12 @@ BitPairsKernel::BitPairsKernel(BuilderRef b,
     setStride(2 * b->getBitBlockWidth());
 }
 
-void BitQuadsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+void BitQuadsKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * bitQuadLoop = b->CreateBasicBlock("bitQuadLoop");
     BasicBlock * bitQuadFinalize = b->CreateBasicBlock("bitQuadFinalize");
     Constant * const ZERO = b->getSize(0);
+    Value * numOfBlocks = b->CreateMul(numOfStrides, b->getSize(getStride()/b->getBitBlockWidth()));
     b->CreateBr(bitQuadLoop);
     b->SetInsertPoint(bitQuadLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
@@ -338,11 +341,12 @@ BitQuadsKernel::BitQuadsKernel(BuilderRef b,
     setStride(2 * b->getBitBlockWidth());
 }
 
-void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+void S2P_CompletionKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * s2pLoop = b->CreateBasicBlock("s2pLoop");
     BasicBlock * s2pFinalize = b->CreateBasicBlock("s2pFinalize");
     Constant * const ZERO = b->getSize(0);
+    Value * numOfBlocks = b->CreateMul(numOfStrides, b->getSize(getStride()/b->getBitBlockWidth()));
     b->CreateBr(s2pLoop);
     b->SetInsertPoint(s2pLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
@@ -374,6 +378,7 @@ S2P_CompletionKernel::S2P_CompletionKernel(BuilderRef b,
     : MultiBlockKernel(b, completionFromQuads ? "S2PfromQuads" : "S2PfromPairs",
                        {Binding{"bitPacks", bitPacks, FixedRate(), Principal()}},
                        {Binding{"basisBits", BasisBits}}, {}, {}, {}), mCompletionFromQuads(completionFromQuads) {
+        setStride(2 * b->getBitBlockWidth());
     }
 
 void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,

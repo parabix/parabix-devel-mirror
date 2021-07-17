@@ -16,8 +16,10 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     Value * const doSegment = getKernelDoSegmentFunction(b);
 
+    FunctionType * const doSegFuncType = cast<FunctionType>(doSegment->getType()->getPointerElementType());
+
     #ifndef NDEBUG
-    mKernelDoSegmentFunctionType = cast<FunctionType>(doSegment->getType()->getPointerElementType());
+    mKernelDoSegmentFunctionType = doSegFuncType;
     #endif
 
     const auto args = buildKernelCallArgumentList(b);
@@ -37,10 +39,10 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (mRethrowException) {
         const auto prefix = makeKernelName(mKernelId);
         BasicBlock * const invokeOk = b->CreateBasicBlock(prefix + "_invokeOk", mKernelCompletionCheck);
-        doSegmentRetVal = b->CreateInvoke(doSegment, invokeOk, mRethrowException, args);
+        doSegmentRetVal = b->CreateInvoke(doSegFuncType, doSegment, invokeOk, mRethrowException, args);
         b->SetInsertPoint(invokeOk);
     } else {
-        doSegmentRetVal = b->CreateCall(doSegment, args);
+        doSegmentRetVal = b->CreateCall(doSegFuncType, doSegment, args);
     }
     updateCycleCounter(b, mKernelId, beforeKernelCall, CycleCounter::KERNEL_EXECUTION);
     #ifdef ENABLE_PAPI

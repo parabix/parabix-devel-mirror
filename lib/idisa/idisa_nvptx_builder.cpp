@@ -26,13 +26,13 @@ Value * IDISA_NVPTX20_Builder::bitblock_any(Value * val) {
     Function * barrierOrFunc = Function::Create(barrierOrFuncTy, Function::ExternalLinkage, "llvm.nvvm.barrier0.or", m);
     Value * nonZero_i1 = CreateICmpUGT(val, ConstantInt::getNullValue(mBitBlockType));
     Value * nonZero_i32 = CreateZExt(CreateBitCast(nonZero_i1, getInt1Ty()), int32ty);
-    Value * anyNonZero = CreateCall(barrierOrFunc, nonZero_i32);
+    Value * anyNonZero = CreateCall(barrierOrFunc->getFunctionType(), barrierOrFunc, nonZero_i32);
     return CreateICmpNE(anyNonZero,  ConstantInt::getNullValue(int32ty));
 }
 
 Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos, const bool safe){
     Type * const int64ty = getInt64Ty();
-    Value * id = CreateCall(tidFunc);
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
     Value * id64 = CreateZExt(id, int64ty);
     Value * threadSize = getInt64(groupThreads);
     Value * fullBlocks = CreateUDiv(pos, threadSize);
@@ -44,7 +44,7 @@ Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos, const bool safe){
 
 Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos, const bool safe){
     Type * const int64ty = getInt64Ty();
-    Value * id = CreateCall(tidFunc);
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
     Value * id64 = CreateZExt(id, int64ty);
     Value * threadSize = getInt64(groupThreads);
     Value * fullBlocks = CreateUDiv(pos, threadSize);
@@ -54,16 +54,16 @@ Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos, const bool safe){
 }
 
 std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
-    Value * id = CreateCall(tidFunc);
-    Value * retVal = CreateCall(mLongAdvanceFunc, {id, a, CreateBitCast(getInt64(shift), mBitBlockType), shiftin});
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
+    Value * retVal = CreateCall(mLongAdvanceFunc->getFunctionType(), mLongAdvanceFunc, {id, a, CreateBitCast(getInt64(shift), mBitBlockType), shiftin});
     Value * shifted = CreateExtractValue(retVal, {0});
     Value * shiftOut = CreateExtractValue(retVal, {1});
     return std::pair<Value *, Value *>(shiftOut, shifted);
 }
 
 std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_add_with_carry(Value * a, Value * b, Value * carryIn) {
-    Value * id = CreateCall(tidFunc);
-    Value * retVal = CreateCall(mLongAddFunc, {id, a, b, carryIn});
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
+    Value * retVal = CreateCall(mLongAddFunc->getFunctionType(), mLongAddFunc, {id, a, b, carryIn});
     Value * sum = CreateExtractValue(retVal, {0});
     Value * carry_out_strm = CreateExtractValue(retVal, {1});
     return std::pair<Value *, Value *>(carry_out_strm, sum);
@@ -143,7 +143,7 @@ void IDISA_NVPTX20_Builder::CreateLongAdvanceFunc(){
     Value * lshr0 = CreateLShr(val, CreateSub(CreateBitCast(getInt64(64), mBitBlockType), shftAmount));
     CreateStore(lshr0, carryNextPtr);
 
-    CreateCall(barrierFunc);
+    CreateCall(barrierFunc->getFunctionType(), barrierFunc);
 
     Value * lastCarryPtr = CreateGEP(carry, {getInt32(0), getInt32(groupThreads)});
     Value * blockCarryOut = CreateLoad(lastCarryPtr, "blockCarryOut");
@@ -214,7 +214,7 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
   Value * bubblePtr = CreateGEP(bubble, {getInt32(0), id});
   CreateStore(bubbleInitVal, bubblePtr);
 
-  CreateCall(barrierFunc);
+  CreateCall(barrierFunc->getFunctionType(), barrierFunc);
 
   Value * carryVal = carryInitVal;
   Value * bubbleVal = bubbleInitVal;
@@ -226,7 +226,7 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
     Value * bubbleOffsetPtr = CreateGEP(bubble, {getInt32(0), CreateXor(id, getInt32(offset))});
     bubbleVal = CreateOr(bubbleVal, CreateLoad(bubbleOffsetPtr));
     CreateStore(bubbleVal, bubblePtr);
-    CreateCall(barrierFunc);
+    CreateCall(barrierFunc->getFunctionType(), barrierFunc);
   }
 
   Value * firstCarryPtr = CreateGEP(carry, {getInt32(0), getInt32(0)});
@@ -269,7 +269,7 @@ void IDISA_NVPTX20_Builder::CreateBallotFunc(){
                              "vote.ballot.b32  $0, %p1;}";
     FunctionType * AsmFnTy = FunctionType::get(int32ty, int32ty, false);
     InlineAsm *IA = InlineAsm::get(AsmFnTy, AsmStream, "=r,r", true, false);
-    CallInst * result = CreateCall(IA, conv);
+    CallInst * result = CreateCall(IA->getFunctionType(), IA, conv);
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
     result->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
 #else
