@@ -20,6 +20,7 @@
 // #define PRINT_STAGES
 
 #include <boost/graph/connected_components.hpp>
+#include <boost/graph/dominator_tree.hpp>
 
 namespace kernel {
 
