@@ -129,82 +129,60 @@ Value * s2p_bytes(BuilderRef b, Value * r) {
 }
 
 void S2PKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
-    Module * m = b->getModule();
-    DataLayout DL(m);
-    IntegerType * const intPtrTy = DL.getIntPtrType(b->getContext());
-    PointerType * const voidPtrTy = b->getVoidPtrTy();
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * s2pLoop = b->CreateBasicBlock("s2pLoop");
-    BasicBlock * s2pFinalize = b->CreateBasicBlock("s2pFinalize");
+    BasicBlock * s2pBody = nullptr;     // conditional block dependent on mZeroMask
+    BasicBlock * s2pStore =  nullptr;   // conditional block dependent on mZeroMask
+    BasicBlock * s2pDone = b->CreateBasicBlock("s2pDone");
     Constant * const ZERO = b->getSize(0);
-    // Declarations for AbortOnNull mode:
-    PHINode * nullCheckPhi = nullptr;
-    Value * nonNullSoFar = nullptr;
 
     b->CreateBr(s2pLoop);
 
     b->SetInsertPoint(s2pLoop);
     PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(ZERO, entry);
-    if (mAbortOnNull) {
-        nullCheckPhi = b->CreatePHI(b->getBitBlockType(), 2);
-        nullCheckPhi->addIncoming(b->allOnes(), entry);
-    }
+    Value * zeroMask = nullptr;
     Value * bytepack[8];
+    Value * basisbits[8];
+    if (mZeroMask) {
+        zeroMask = b->loadInputStreamBlock("mZeroMask", ZERO, blockOffsetPhi);
+        for (unsigned i = 0; i < mNumOfStreams; ++i) {
+            basisbits[i] = b->allZeroes();
+        }
+        s2pBody = b->CreateBasicBlock("s2pBody");
+        s2pStore = b->CreateBasicBlock("s2pStore");
+        b->CreateCondBr(b->bitblock_any(zeroMask), s2pBody, s2pStore);
+        b->SetInsertPoint(s2pBody);
+   }
     for (unsigned i = 0; i < 8; i++) {
         bytepack[i] = b->loadInputStreamPack("byteStream", ZERO, b->getInt32(i), blockOffsetPhi);
     }
-    Value * basisbits[8];
     s2p(b, bytepack, basisbits);
-    for (unsigned i = 0; i < mNumOfStreams; ++i) {
-        b->storeOutputStreamBlock("basisBits", b->getInt32(i), blockOffsetPhi, basisbits[i]);
+    if (mZeroMask) {
+        b->CreateBr(s2pStore);
+        b->SetInsertPoint(s2pStore);
     }
-    if (mAbortOnNull) {
-        Value * nonNull = b->simd_or(b->simd_or(b->simd_or(basisbits[0], basisbits[1]),
-                                                  b->simd_or(basisbits[2], basisbits[3])),
-                                      b->simd_or(b->simd_or(basisbits[4], basisbits[5]),
-                                                  b->simd_or(basisbits[6], basisbits[7])));
-        nonNullSoFar = b->simd_and(nonNull, nullCheckPhi);
-        nullCheckPhi->addIncoming(nonNullSoFar, s2pLoop);
+    for (unsigned i = 0; i < mNumOfStreams; ++i) {
+        if (mZeroMask) {
+            basisbits[i] = b->simd_and(basisbits[i], zeroMask);
+        }
+        b->storeOutputStreamBlock("basisBits", b->getInt32(i), blockOffsetPhi, basisbits[i]);
     }
     Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, s2pLoop);
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
 
-    b->CreateCondBr(moreToDo, s2pLoop, s2pFinalize);
+    b->CreateCondBr(moreToDo, s2pLoop, s2pDone);
 
-    b->SetInsertPoint(s2pFinalize);
-    //  s2p is complete, except for null byte check.
-    if (mAbortOnNull) {
-        BasicBlock * nullByteDetected = b->CreateBasicBlock("nullByteDetected");
-        BasicBlock * nullInFileDetected = b->CreateBasicBlock("nullInFileDetected");
-        BasicBlock * s2pExit = b->CreateBasicBlock("s2pExit");
-        Value * itemsToDo = b->getAccessibleItemCount("byteStream");
-        Value * anyNull = b->bitblock_any(b->simd_not(nonNullSoFar));
-        b->CreateCondBr(anyNull, nullByteDetected, s2pExit);
+    b->SetInsertPoint(s2pDone);
+}
 
-        b->SetInsertPoint(nullByteDetected);
-        // A null byte has been detected, determine its position and whether it is past EOF.
-        Value * byteStreamBasePtr = b->getInputStreamBlockPtr("byteStream", ZERO, ZERO);
-        Value * ptrToNull = b->CreateMemChr(b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), b->getInt32(0), itemsToDo);
-        Value * nullInFile = b->CreateICmpNE(ptrToNull, ConstantPointerNull::get(cast<PointerType>(ptrToNull->getType())));
-        b->CreateCondBr(nullInFile, nullInFileDetected, s2pExit);
-
-        b->SetInsertPoint(nullInFileDetected);
-        // A null byte has been located within the file; set the termination code and call the signal handler.
-        Value * firstNull = b->CreatePtrToInt(ptrToNull, intPtrTy);
-        Value * startOfStride = b->CreatePtrToInt(byteStreamBasePtr, intPtrTy);
-        Value * itemsBeforeNull = b->CreateZExtOrTrunc(b->CreateSub(firstNull, startOfStride), itemsToDo->getType());
-        Value * producedCount = b->CreateAdd(b->getProducedItemCount("basisBits"), itemsBeforeNull);
-        b->setProducedItemCount("basisBits", producedCount);
-        b->setFatalTerminationSignal();
-        Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
-        FunctionType * fTy = dispatcher->getFunctionType();
-        Value * handler = b->getScalarField("handler_address");
-        b->CreateCall(fTy, dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), NULL_SIGNAL)});
-        b->CreateBr(s2pExit);
-
-        b->SetInsertPoint(s2pExit);
+inline Bindings S2PKernel::makeInputBindings(StreamSet * codeUnitStream, StreamSet * zeroMask) {
+    if (zeroMask) {
+        return {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()},
+                Binding{"zeroMask", zeroMask}};
+    } else {
+        return {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}};
     }
 }
 
@@ -212,29 +190,17 @@ inline Bindings S2PKernel::makeOutputBindings(StreamSet * const BasisBits) {
     return {Binding("basisBits", BasisBits)};
 }
 
-inline Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
-    if (signalNullObject) {
-        return {Binding{"handler_address", signalNullObject}};
-    } else {
-        return {};
-    }
-}
-
 S2PKernel::S2PKernel(BuilderRef b,
                      StreamSet * const codeUnitStream,
                      StreamSet * const BasisBits,
-                     Scalar * signalNullObject)
-: MultiBlockKernel(b, (signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements())
-, {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
+                     StreamSet * zeroMask)
+: MultiBlockKernel(b, (zeroMask ? "s2pz" : "s2p") + std::to_string(BasisBits->getNumElements())
+, makeInputBindings(codeUnitStream, zeroMask)
 , makeOutputBindings(BasisBits)
-, makeInputScalarBindings(signalNullObject), {}, {})
-, mAbortOnNull(signalNullObject != nullptr)
+, {}, {}, {})
+, mZeroMask(zeroMask != nullptr)
 , mNumOfStreams(BasisBits->getNumElements()) {
     assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
-    if (mAbortOnNull) {
-        addAttribute(CanTerminateEarly());
-        addAttribute(MayFatallyTerminate());
-    }
 }
 
 class BitPairsKernel final : public MultiBlockKernel {

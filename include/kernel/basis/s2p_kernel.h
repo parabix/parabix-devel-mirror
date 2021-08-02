@@ -21,13 +21,13 @@ public:
     S2PKernel(BuilderRef b,
               StreamSet * const codeUnitStream,
               StreamSet * const BasisBits,
-              Scalar * signalNullObject = nullptr);
+              StreamSet * zeroMask = nullptr);
 protected:
+    Bindings makeInputBindings(StreamSet * codeUnitStream, StreamSet * zeroMask);
     Bindings makeOutputBindings(StreamSet * const BasisBits);
-    Bindings makeInputScalarBindings(Scalar * signalNullObject);
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 private:
-    bool mAbortOnNull;
+    bool mZeroMask;
     unsigned mNumOfStreams;
 };
 
