@@ -20,6 +20,7 @@ void StdOutKernel::generateDoSegmentMethod(BuilderRef b) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
     Value * length = b->getAccessibleItemCount("codeUnitBuffer");
+
     if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
         Constant * const scale = b->getSize(mCodeUnitWidth / 8);
         length = b->CreateMul(length, scale);
@@ -38,7 +39,7 @@ StdOutKernel::StdOutKernel(BuilderRef b, StreamSet *codeUnitBuffer)
 // output & scalars
 , {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitBuffer->getFieldWidth()) {
-    setStride(codegen::SegmentSize);
+    setStride((8 * BUFSIZ) / mCodeUnitWidth);
     addAttribute(SideEffecting());
 }
 
@@ -141,7 +142,7 @@ FileSink::FileSink(BuilderRef b, Scalar * outputFileName, StreamSet * codeUnitBu
 {InternalScalar{b->getInt8PtrTy(), "temporaryFileName"},
  InternalScalar{b->getInt32Ty(), "fileDescriptor"}})
 , mCodeUnitWidth(codeUnitBuffer->getFieldWidth()) {
-    setStride(codegen::SegmentSize);
+    setStride((8 * BUFSIZ) / mCodeUnitWidth);
     addAttribute(SideEffecting());
 }
 

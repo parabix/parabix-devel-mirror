@@ -48,10 +48,10 @@ def run_test(test_name):
 
     try:
         base64_out = subprocess.check_output(base64_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True)
-    except subprocess.CalledProcessError, e:
+    except subprocess.CalledProcessError as e:
         base64_out = e.output
 
-    inf = codecs.open(test_file, encoding='utf-8', mode='r')
+    inf = open(test_file, mode='rb')
     content = inf.read()
     inf.close()
     expectedOutput = base64.b64encode(content)

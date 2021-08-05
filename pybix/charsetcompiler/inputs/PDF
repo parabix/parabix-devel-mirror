@@ -1,0 +1,37 @@
+# Escape bit modifiers for translating the 2nd byte
+# of \b, \n, \f, \r, \t to the represented bytes.
+# 
+lex.pdf_mod_bit_1 = [bfnrt]
+lex.pdf_mod_bit_2 = [bfnrt]
+lex.pdf_mod_bit_3 = [rt]
+lex.pdf_mod_bit_4 = [bfrt]
+lex.pdf_mod_bit_5 = [nrt]
+lex.pdf_mod_bit_6 = [bfr]
+lex.pdf_mod_bit_7 = [rt]
+#
+#
+lex.CR = [\x0D]
+lex.LF = [\x0A]
+lex.EOL = [\x0D\x0A]
+lex.WS = [\x00\x0C\x0D\x0A\x09 ]
+#
+lex.LParen = [(]
+lex.RParen = [)]
+lex.Backslash = [\x5C]
+lex.Percent = [%]
+lex.Period = [.]
+lex.LAngle = [<]
+lex.RAngle = [>]
+lex.LBracket = [[]
+lex.RBracket = []]
+lex.Slash = [/]
+lex.Zero = [0]
+lex.Oct = [0-7]
+lex.Digit = [0-9]
+lex.Plus = [+]
+lex.Minus = [-]
+lex.Hash = [#]
+lex.Hex = [0-9A-Fa-f]
+lex.Operator1 = [A-Za-z'"]
+lex.Delimiter = [()<>[]{}%/]
+

@@ -250,6 +250,10 @@ public:
 
     PabloAST * createCount(PabloAST * expr, const llvm::StringRef prefix);
 
+    PabloAST * createEveryNth(PabloAST * expr, not_null<Integer *> n);
+
+    PabloAST * createEveryNth(PabloAST * expr, not_null<Integer *> n, const llvm::StringRef prefix);
+
     PabloAST * createInFile(PabloAST * expr);
 
     PabloAST * createInFile(PabloAST * expr, const llvm::StringRef prefix);

@@ -30,6 +30,7 @@ protected:
     virtual RE * transformReference(Reference * r);
     virtual RE * transformStart(Start * s);
     virtual RE * transformEnd(End * e);
+    virtual RE * transformAny(Any * a);
     virtual RE * transformCC(CC * cc);
     virtual RE * transformSeq(Seq * s);
     virtual RE * transformAlt(Alt * a);
@@ -39,6 +40,7 @@ protected:
     virtual RE * transformRange(Range * rg);
     virtual RE * transformGroup(Group * g);
     virtual RE * transformAssertion(Assertion * a);
+    virtual RE * transformPropertyExpression(PropertyExpression * pe);
 private:
     const std::string mTransformationName;
     const NameTransformationMode mNameTransform;

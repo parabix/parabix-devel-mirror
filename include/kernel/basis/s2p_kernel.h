@@ -7,6 +7,7 @@
 
 #include <re/alphabet/alphabet.h>
 #include <pablo/pablo_kernel.h>
+#include <kernel/pipeline/driver/driver.h>
 #include <string>
 
 namespace IDISA { class IDISA_Builder; }  // lines 14-14
@@ -14,9 +15,9 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
+    
 class S2PKernel final : public MultiBlockKernel {
 public:
-
     S2PKernel(BuilderRef b,
               StreamSet * const codeUnitStream,
               StreamSet * const BasisBits,
@@ -30,17 +31,11 @@ private:
     unsigned mNumOfStreams;
 };
 
-class S2PMultipleStreamsKernel final : public MultiBlockKernel {
-public:
-    S2PMultipleStreamsKernel(BuilderRef b,
-                             StreamSet * codeUnitStream,
-                             const StreamSets & outputStreams,
-                             const bool aligned = true);
-protected:
-    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
-private:
-    const bool mAligned;
-};
+// Equivalent to S2P, but split into stages for better balancing
+// with multiple cores.
+void Staged_S2P(const std::unique_ptr<ProgramBuilder> & P,
+                StreamSet * codeUnitStream, StreamSet * BasisBits,
+                bool completionFromQuads = false);
 
 
 class S2P_21Kernel final : public MultiBlockKernel {

@@ -12,6 +12,7 @@
 #include <re/adt/re_name.h>
 #include <re/ucd/ucd_compiler.hpp>
 #include <pablo/builder.hpp>
+#include <pablo/pe_zeroes.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -23,6 +24,10 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 using namespace UCD;
+
+static std::string sourceShape(StreamSet * s) {
+    return std::to_string(s->getNumElements()) + "x" + std::to_string(s->getFieldWidth());
+}
 
 inline std::string signature(const std::vector<re::CC *> & ccs) {
     if (LLVM_UNLIKELY(ccs.empty())) {
@@ -41,16 +46,16 @@ inline std::string signature(const std::vector<re::CC *> & ccs) {
     }
 }
 
-CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool useDirectCC)
-: mUseDirectCC(useDirectCC),
-  mSignature((useDirectCC ? "d" : "p") + signature(ccs)) {
+CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, StreamSet * BasisBits)
+: mUseDirectCC(BasisBits->getNumElements() == 1),
+  mSignature(signature(ccs)) {
 }
 
 
-CharClassesKernel::CharClassesKernel(BuilderRef b, std::vector<CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses)
-: CharClassesSignature(ccs, BasisBits->getNumElements() == 1)
-, PabloKernel(b, "cc" + getStringHash(mSignature), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
-, mCCs(std::move(ccs)) {
+CharClassesKernel::CharClassesKernel(BuilderRef b, std::vector<CC *> ccs, StreamSet * BasisBits, StreamSet * CharClasses)
+: CharClassesSignature(ccs, BasisBits)
+, PabloKernel(b, "cc" + sourceShape(BasisBits) + "_" + getStringHash(mSignature), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
+, mCCs(ccs) {
 
 }
 
@@ -62,45 +67,37 @@ void CharClassesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (mUseDirectCC) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     unsigned n = mCCs.size();
 
-    NameMap nameMap;
-    std::vector<Name *> names;
+    UCD::UCDCompiler unicodeCompiler(*ccc.get(), pb);
+    std::vector<Var *> mpx;
     for (unsigned i = 0; i < n; i++) {
-        Name * name = re::makeName("mpx_basis" + std::to_string(i), mCCs[i]);
-        nameMap.emplace(name, nullptr);
-        names.push_back(name);
+        mpx.push_back(pb.createVar("mpx_basis" + std::to_string(i), pb.createZeroes()));
+        unicodeCompiler.addTarget(mpx[i], mCCs[i]);
     }
-
-    UCD::UCDCompiler unicodeCompiler(*ccc.get());
     if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
-        unicodeCompiler.generateWithoutIfHierarchy(nameMap, pb);
+        unicodeCompiler.compile(UCDCompiler::IfHierarchy::None);
     } else {
-        unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
+        unicodeCompiler.compile();
     }
-    for (unsigned i = 0; i < names.size(); i++) {
-        auto t = nameMap.find(names[i]);
-        if (t != nameMap.end()) {
-            Extract * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
-            pb.createAssign(r, pb.createInFile(t->second));
-        } else {
-            llvm::report_fatal_error("Can't compile character classes.");
-        }
+    for (unsigned i = 0; i < mpx.size(); i++) {
+        Extract * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
+        pb.createAssign(r, pb.createInFile(mpx[i]));
     }
 }
 
 
 ByteClassesKernel::ByteClassesKernel(BuilderRef b,
-                                     std::vector<re::CC *> && ccs,
+                                     std::vector<re::CC *> ccs,
                                      StreamSet * inputStream,
                                      StreamSet * CharClasses):
-CharClassesSignature(ccs, inputStream->getNumElements() == 1)
-, PabloKernel(b, "ByteClassesKernel_" + getStringHash(mSignature), {Binding{"basis", inputStream}}, {Binding{"charclasses", CharClasses}})
-, mCCs(std::move(ccs)) {
+CharClassesSignature(ccs, inputStream)
+, PabloKernel(b, "ByteClassesKernel_" + sourceShape(inputStream) + "_" + getStringHash(mSignature), {Binding{"basis", inputStream}}, {Binding{"charclasses", CharClasses}})
+, mCCs(ccs) {
 
 }
 
@@ -112,9 +109,9 @@ void ByteClassesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (mUseDirectCC) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     unsigned n = mCCs.size();
 

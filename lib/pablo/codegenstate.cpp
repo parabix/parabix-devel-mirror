@@ -14,6 +14,7 @@
 #include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_everynth.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_integer.h>
 #include <pablo/pe_lookahead.h>
@@ -51,9 +52,13 @@ inline void __checkSameType(const PabloAST * const A, const PabloAST * const B) 
 /// UNARY CREATE FUNCTIONS
 ///
 
-Count * PabloBlock::createCount(PabloAST * const expr, const String * const name)  {
+Count * PabloBlock::createCount(PabloAST * const expr, const String * const name) {
     IntegerType * const type = getParent()->getSizeTy();
     return insertAtInsertionPoint(new (mAllocator) Count(expr, name, type, mAllocator));
+}
+
+EveryNth * PabloBlock::createEveryNth(PabloAST * const expr, Integer * n, const String * const name) {
+    return insertAtInsertionPoint(new (mAllocator) EveryNth(expr, n, name, mAllocator));
 }
 
 Not * PabloBlock::createNot(PabloAST * expr, const String * const name) {
@@ -317,6 +322,7 @@ Ternary * PabloBlock::createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, Pablo
 Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name) {
     CHECK_SAME_TYPE(a, b);
     CHECK_SAME_TYPE(b, c);
+    assert (mask->value() <= 0xFF);
     return insertAtInsertionPoint(new (mAllocator) Ternary(mask, a, b, c, name, mAllocator));
 }
 

@@ -48,6 +48,7 @@ struct ZeroWidthValidator : public RE_Validator {
         return defn && validate(defn);
     }
     bool validateAssertion(const Assertion * a) override {return true;}
+    bool validateAny(const Any *) override {return false;}
     bool validateCC(const CC *) override {return false;}
     bool validateRange(const Range *) override {return false;}
     bool validateDiff(const Diff * d) override {return validate(d->getLH());}

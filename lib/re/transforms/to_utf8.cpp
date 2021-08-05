@@ -55,10 +55,14 @@ static RE * rangeToUTF8(codepoint_t lo, codepoint_t hi) {
 RE * UTF8_Transformer::transformCC(CC * cc) {
     if (cc->getAlphabet() != &cc::Unicode) return cc;
     std::vector<RE *> alt;
-    for (const interval_t & i : *cc) {
+    for (const interval_t i : *cc) {
         alt.push_back(rangeToUTF8(lo_codepoint(i), hi_codepoint(i)));
     }
     return makeAlt(alt.begin(), alt.end());
+}
+
+RE * UTF8_Transformer::transformAny(Any * e) {
+    return rangeToUTF8(0, UCD::UNICODE_MAX);
 }
 
 UTF8_Transformer::UTF8_Transformer(NameTransformationMode m) :

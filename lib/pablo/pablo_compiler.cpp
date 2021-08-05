@@ -17,6 +17,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_everynth.h>
 #include <pablo/pe_integer.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_zeroes.h>
@@ -169,6 +170,9 @@ void PabloCompiler::examineBlock(BuilderRef b, const PabloBlock * const block) {
             examineBlock(b, cast<Branch>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
             mKernel->addInternalScalar(stmt->getType(), stmt->getName().str());
+        } else if (LLVM_UNLIKELY(isa<EveryNth>(stmt))) {
+            const auto fieldWidth = b->getSizeTy()->getBitWidth();
+            mKernel->addInternalScalar(b->getIntNTy(fieldWidth), stmt->getName().str());
         }
     }
 }
@@ -284,7 +288,7 @@ void PabloCompiler::compileIf(BuilderRef b, const If * const ifStatement) {
 
     mCarryManager->leaveIfScope(b, ifEntryBlock, ifExitBlock);
 
-    for (const auto i : incoming) {
+    for (const auto & i : incoming) {
         const Var * var; Value * incoming;
         std::tie(var, incoming) = i;
 
@@ -567,7 +571,8 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             // Perhaps check for handler address and skip call back if none???
             Value * handler = b->getScalarField("handler_address");
             Function * const dispatcher = b->getModule()->getFunction("signal_dispatcher"); assert (dispatcher);
-            b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), s->getSignalCode())});
+            FunctionType * fTy = dispatcher->getFunctionType();
+            b->CreateCall(fTy, dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), s->getSignalCode())});
             //Value * rel_position = b->createCountForwardZeroes(signal_strm);
             //Value * position = b->CreateAdd(b->getProcessedItemCount(), rel_position);
             b->setFatalTerminationSignal();
@@ -600,6 +605,33 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             Value * bitBlockCount = b->simd_popcount(b->getBitBlockWidth(), to_count);
             value = b->CreateAdd(b->mvmd_extract(fieldWidth, bitBlockCount, 0), countSoFar, "countSoFar");
             b->CreateAlignedStore(value, ptr, alignment);
+        } else if (const EveryNth * e = dyn_cast<EveryNth>(stmt)) {
+            Value * EOFbit = b->getScalarField("EOFbit");
+            Value * EOFmask = b->getScalarField("EOFmask");
+            Value * const to_count = b->simd_and(b->simd_or(b->simd_not(EOFmask), EOFbit), compileExpression(b, e->getExpr()));
+            Value * const ptr = b->getScalarFieldPtr(stmt->getName().str());
+            const auto alignment = getPointerElementAlignment(ptr);
+            Value * const pending = b->CreateAlignedLoad(ptr, alignment, e->getName() + "_accumulator");
+            const auto fieldWidth = b->getSizeTy()->getBitWidth();
+            const auto blockWidth = b->getBitBlockWidth();
+            const auto hiBlock = (blockWidth / fieldWidth) - 1;
+            const uint64_t n = e->getN()->value();
+            size_t mask = 0x0;
+            for (unsigned i = 0; i < sizeof(size_t) * 8; i += n) { mask = (mask << n) | 0x1; }
+            Value * const vmask = b->getIntN(fieldWidth, mask);
+            Value * const vn = b->getIntN(fieldWidth, n);
+            Value * const fieldCounts = b->simd_popcount(fieldWidth, to_count);
+            Value * const sumCounts = b->hsimd_partial_sum(fieldWidth, fieldCounts);
+            Value * const splatPending = b->simd_fill(fieldWidth, pending);
+            Value * const sumCountPend = b->simd_add(fieldWidth, sumCounts, splatPending);
+            Value * const splatN = b->simd_fill(fieldWidth, vn);
+            Value * const finalSumCounts = b->mvmd_dslli(fieldWidth, sumCountPend, splatPending, 1);
+            Value * const shift = b->CreateURem(b->CreateSub(splatN, b->CreateURem(finalSumCounts, splatN)), splatN);
+            Value * const splatMask = b->simd_fill(fieldWidth, vmask);
+            Value * const finalNthMask = b->simd_sllv(fieldWidth, splatMask, shift);
+            value = b->simd_pdep(fieldWidth, finalNthMask, to_count);
+            Value * const pendingOut = b->CreateURem(b->mvmd_extract(fieldWidth, sumCountPend, hiBlock), vn);
+            b->CreateAlignedStore(pendingOut, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             const Var * stream = findInputParam(l, cast<Var>(l->getExpression()));
             Value * index = nullptr;
@@ -753,14 +785,7 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
         assert (value);
         mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream name(tmp);
-            expr->print(name);
-            if (value->getType()->isVectorTy()) {
-                b->CallPrintRegister(name.str(), value);
-            } else if (value->getType()->isIntegerTy()) {
-                b->CallPrintInt(name.str(), value);
-            }
+            dumpValueToConsole(b, expr, value);
         }
     }
 }
@@ -1050,6 +1075,17 @@ PabloCompiler::PabloCompiler(PabloKernel * const kernel)
 , mCarryManager(makeCarryManager())
 , mBranchCount(0) {
     assert ("PabloKernel cannot be null!" && kernel);
+}
+
+void PabloCompiler::dumpValueToConsole(BuilderRef b, const PabloAST * expr, llvm::Value * value) {
+    SmallVector<char, 256> tmp;
+    raw_svector_ostream name(tmp);
+    expr->print(name);
+    if (value->getType()->isVectorTy()) {
+        b->CallPrintRegister(name.str(), value);
+    } else if (value->getType()->isIntegerTy()) {
+        b->CallPrintInt(name.str(), value);
+    }
 }
 
 }

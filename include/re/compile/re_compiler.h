@@ -21,7 +21,10 @@ namespace pablo { class Var; }
 
 namespace re {
 
+class RE_Block_Compiler;
+
 class RE_Compiler {
+    friend class RE_Block_Compiler;
     public:
 
 /*   The regular expression compiler works in terms of two fundamental bit stream
@@ -78,6 +81,27 @@ class RE_Compiler {
         pablo::PabloAST * mStream;
     };
 
+    //
+    // The regular expression compiler may include one or more externally
+    // defined Names.   Each name has a length, expressed in terms of the
+    // matching units defined by the index stream, and may also have a
+    // nonzero offset.   Note that external names that correspond to Unicode
+    // boundaries or other zero-width assertions will have a length of 0.
+    //
+    class ExternalStream {
+    public:
+        ExternalStream(Marker m, unsigned lgth = 1) :
+            mMarker(m), mLength(lgth) {}
+        ExternalStream & operator = (const ExternalStream &) = default;
+        unsigned length() {return mLength;}
+        Marker & marker() {return mMarker;}
+    private:
+        Marker mMarker;
+        unsigned mLength;
+    };
+
+    void addPrecompiled(std::string externalName, ExternalStream s);
+
     RE_Compiler(pablo::PabloBlock * scope,
                 const cc::Alphabet * codeUnitAlphabet = &cc::UTF8);
 
@@ -103,66 +127,14 @@ class RE_Compiler {
         addAlphabet(a.get(), basis_set);
     }
     
-    void addPrecompiled(std::string precompiledName, Marker precompiled);
-
     Marker compileRE(RE * re);
     
     Marker compileRE(RE * re, Marker initialMarkers);
-    
+        
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
-    
+
 private:
-
-    struct NameMap {
-        NameMap(NameMap * parent = nullptr) : mParent(parent), mMap() {}
-        bool get(const Name * name, Marker & marker) const {
-            auto f = mMap.find(name);
-            if (f == mMap.end()) {
-                return mParent ? mParent->get(name, marker) : false;
-            } else {
-                marker = f->second;
-                return true;
-            }
-        }
-        void add(const Name * const name, Marker marker) {
-            mMap.emplace(name, std::move(marker));
-        }
-        NameMap * getParent() const { return mParent; }
-    private:
-        NameMap * const mParent;
-        boost::container::flat_map<const Name *, Marker> mMap;
-    };
-
-
-    Marker compile(RE * re, pablo::PabloBuilder & pb);
-    Marker compile(RE * re, Marker initialMarkers, pablo::PabloBuilder & pb);
-
-    Marker process(RE * re, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileName(Name * name, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileCC(CC * cc, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileSeq(Seq * seq, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, int matchLenSoFar, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileAlt(Alt * alt, Marker base, pablo::PabloBuilder & pb);
-    Marker compileAssertion(Assertion * a, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileRep(Rep * rep, Marker marker, pablo::PabloBuilder & pb);
-    Marker compileDiff(Diff * diff, Marker marker, pablo::PabloBuilder & cg);
-    Marker compileIntersect(Intersect * x, Marker marker, pablo::PabloBuilder & cg);
-    pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated_j, int j, int repeat_count, const int match_length, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
-    pablo::PabloAST * reachable(pablo::PabloAST * repeated, int length, int repeat_count, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
-    static bool isFixedLength(RE * regexp);
-    Marker processLowerBound(RE * repeated,  int lb, Marker marker, int ifGroupSize, pablo::PabloBuilder & pb);
-    Marker processUnboundedRep(RE * repeated, Marker marker, pablo::PabloBuilder & pb);
-    Marker processBoundedRep(RE * repeated, int ub, Marker marker, int ifGroupSize,  pablo::PabloBuilder & pb);
-
-    Marker compileName(Name * name, pablo::PabloBuilder & pb);
-    Marker compileStart(Marker marker, pablo::PabloBuilder & pb);
-    Marker compileEnd(Marker marker, pablo::PabloBuilder & pb);
-
-    Marker AdvanceMarker(Marker marker, const unsigned newpos, pablo::PabloBuilder & pb);
-    void AlignMarkers(Marker & m1, Marker & m2, pablo::PabloBuilder & pb);
-    
-private:
-
+    using ExternalNameMap = std::map<std::string, ExternalStream>;
     pablo::PabloBlock * const                       mEntryScope;
     const cc::Alphabet *                            mCodeUnitAlphabet;
     EncodingTransformer *                           mIndexingTransformer;
@@ -172,9 +144,7 @@ private:
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
-    NameMap *                                       mCompiledName;
-    NameMap                                         mBaseMap;
-    std::map<std::string, pablo::PabloAST *>        mExternalNameMap;
+    ExternalNameMap                                 mExternalNameMap;
 };
 
 }

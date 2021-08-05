@@ -149,7 +149,7 @@ namespace kernel {
             for (unsigned iStreamIndex = 0; iStreamIndex < mNumberOfStream; iStreamIndex++) {
                 Value * source_field = bufferArray[iStreamIndex];
 
-                Value * PDEP_field = b->CreateCall(pdep, {source_field, mask});
+                Value * PDEP_field = b->CreateCall(pdep->getFunctionType(), pdep, {source_field, mask});
 
                 resultArray[iStreamIndex] = b->CreateInsertElement(resultArray[iStreamIndex], PDEP_field, i);
 

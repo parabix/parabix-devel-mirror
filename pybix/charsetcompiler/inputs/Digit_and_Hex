@@ -1,0 +1,2 @@
+lex.Digit = [0-9]
+lex.Hex = [0-9A-Fa-f]

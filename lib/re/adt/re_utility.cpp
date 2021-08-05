@@ -13,42 +13,27 @@ RE * makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
 }
 
-                           
-Name * makeDigitSet() {
-    return makeName("nd", Name::Type::UnicodeProperty);
-}
-
-Name * makeAlphaNumeric() {
-    return makeName("alnum", Name::Type::UnicodeProperty);
-}
-
-Name * makeWhitespaceSet() {
-    return makeName("whitespace", Name::Type::UnicodeProperty);
-}
-
-Name * makeWordSet() {
-    return makeName("word", Name::Type::UnicodeProperty);
+RE * makeZerowidthComplement(RE * s) {
+    return makeDiff(makeSeq({}), s);
 }
 
 RE * makeWordBoundary() {
-    Name * wordC = makeWordSet();
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)}),
-        makeSeq({makeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)})});
+    auto wordC = makePropertyExpression("word");
+    return makeBoundaryAssertion(wordC);
 }
 
 RE * makeWordNonBoundary() {
-    Name * wordC = makeWordSet();
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)}),
-        makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
+    auto wordC = makePropertyExpression("word");
+    return makeNegativeBoundaryAssertion(wordC);
 }
 
 RE * makeWordBegin() {
-    Name * wordC = makeWordSet();
+    auto wordC = makePropertyExpression("word");
     return makeNegativeLookBehindAssertion(wordC);
 }
 
 RE * makeWordEnd() {
-    Name * wordC = makeWordSet();
+    auto wordC = makePropertyExpression("word");
     return makeNegativeLookAheadAssertion(wordC);
 }
 

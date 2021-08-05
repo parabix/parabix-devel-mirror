@@ -27,7 +27,6 @@
 #include <re/cc/cc_compiler_target.h>
 #include <re/ucd/ucd_compiler.hpp>
 #include <re/unicode/resolve_properties.h>
-#include <re/unicode/re_name_resolve.h>
 #include <pablo/bixnum/bixnum.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/pe_zeroes.h>

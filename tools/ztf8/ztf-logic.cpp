@@ -12,7 +12,7 @@
 #include <pablo/builder.hpp>
 #include <pablo/pe_ones.h>
 #include <re/ucd/ucd_compiler.hpp>
-#include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <llvm/Support/raw_ostream.h>
@@ -73,15 +73,13 @@ WordMarkKernel::WordMarkKernel(BuilderRef kb, StreamSet * BasisBits, StreamSet *
 void WordMarkKernel::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("source"));
-    UCD::UCDCompiler ucdCompiler(ccc);
-    re::Name * word = re::makeName("word", re::Name::Type::UnicodeProperty);
-    word = llvm::cast<re::Name>(re::resolveUnicodeNames(word));
-    UCD::UCDCompiler::NameMap nameMap;
-    nameMap.emplace(word, nullptr);
-    ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    auto f = nameMap.find(word);
-    if (f == nameMap.end()) llvm::report_fatal_error("Cannot find word property");
-    PabloAST * wordChar = f->second;
+    re::RE * word_prop = re::makePropertyExpression("word");
+    word_prop = UCD::linkAndResolve(word_prop);
+    re::CC * word_CC = cast<re::CC>(cast<re::PropertyExpression>(word_prop)->getResolvedRE());
+    Var * wordChar = pb.createVar("word");
+    UCD::UCDCompiler unicodeCompiler(ccc, pb);
+    unicodeCompiler.addTarget(wordChar, word_CC);
+    unicodeCompiler.compile();
     pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(0)), wordChar);
 }
 
@@ -203,7 +201,8 @@ void ZTF_Symbols::generatePabloMethod() {
     // Nulls, Linefeeds and ZTF_symbols are also treated as symbol starts.
     PabloAST * LF = ccc.compileCC(re::makeByte(0x0A));
     PabloAST * Null = ccc.compileCC(re::makeByte(0x0));
-    PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr(LF, Null));
+    PabloAST * fileStart = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
+    PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr3(LF, Null, fileStart));
     // The next character after a ZTF symbol or a line feed also starts a new symbol.
     symStart = pb.createOr(symStart, pb.createAdvance(pb.createOr(ZTF_sym, LF), 1), "symStart");
     //

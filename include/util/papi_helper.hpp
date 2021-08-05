@@ -1,4 +1,4 @@
-#ifndef PAPICOUNTER_HPP
+#if defined(ENABLE_PAPI) && !defined(PAPICOUNTER_HPP)
 #define PAPICOUNTER_HPP
 
 #include <papi.h>

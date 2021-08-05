@@ -23,10 +23,11 @@ const cl::OptionCategory * pablo_toolchain_flags() {
     
     
 static cl::bits<PabloDebugFlags> 
-DebugOptions(cl::values(clEnumVal(VerifyPablo, "Run the Pablo verifier"),
+DebugOptions(cl::desc("Pablo Debug Flags"),
+             cl::values(clEnumVal(VerifyPablo, "Run the Pablo verifier"),
                         clEnumVal(DumpTrace, "Generate dynamic traces of executed Pablo assignments.")
                         CL_ENUM_VAL_SENTINEL), cl::cat(PabloOptions));
-    
+
 std::string ShowPabloOption = codegen::OmittedOption;
 static cl::opt<std::string, true> PabloOutputOption("ShowPablo", cl::location(ShowPabloOption), cl::ValueOptional,
                                                     cl::desc("Print generated Pablo code to stderr (by omitting =<filename>) or a file"), cl::value_desc("filename"), cl::cat(PabloOptions));

@@ -49,10 +49,10 @@ template <> inline unsigned popcount<unsigned long long>(const unsigned long lon
 
 SlabAllocator<> UnicodeSet::GlobalAllocator;
 
-const auto QUAD_BITS = (8 * sizeof(bitquad_t));
-const auto QUAD_LIMIT = (QUAD_BITS - 1);
-const auto UNICODE_QUAD_COUNT = (UNICODE_MAX + 1) / QUAD_BITS;
-const auto FULL_QUAD_MASK = std::numeric_limits<bitquad_t>::max();
+constexpr auto QUAD_BITS = (8UL * sizeof(bitquad_t));
+constexpr auto QUAD_LIMIT = (QUAD_BITS - 1UL);
+constexpr auto UNICODE_QUAD_COUNT = (UNICODE_MAX + 1) / QUAD_BITS;
+constexpr auto FULL_QUAD_MASK = std::numeric_limits<bitquad_t>::max();
 
 inline run_type_t typeOf(const run_t & run) {
     return run.first;
@@ -264,9 +264,11 @@ void UnicodeSet::print(llvm::raw_ostream & out) const noexcept {
     } else {
         char joiner = '(';
         for (auto r : *this) {
-            out << joiner << std::get<0>(r);
+            out << joiner;
+            out.write_hex(std::get<0>(r));
             if (std::get<0>(r) != std::get<1>(r)) {
-                out << '-' << std::get<1>(r);
+                out << '-';
+                out.write_hex(std::get<1>(r));
             }
             joiner = ',';
         }
@@ -1045,19 +1047,17 @@ void UnicodeSet::iterator::advance(const unsigned n) {
         throw std::runtime_error("UnicodeSet iterator exceeded maximum code point.");
     }
 
-    bool found = false;
     // Find the start of our interval
     while ( mBaseCodePoint <= UNICODE_MAX ) {
         // Find the first non-empty block
-        if (typeOf(*mRunIterator) != Mixed) {            
+        if (typeOf(*mRunIterator) != Mixed) {
             // If we found a full run, this must be the start of our interval.
             const auto baseCodePoint = mBaseCodePoint;
             const auto type = typeOf(*mRunIterator);
             mBaseCodePoint += lengthOf(*mRunIterator++) * QUAD_BITS;
             if (type == Full) {
                 mMinCodePoint = baseCodePoint;
-                found = true;
-                break;
+                goto found_lo;
             }
         } else { // if (typeOf(t) == Mixed)
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
@@ -1067,30 +1067,28 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                 if (m) {
                     mQuadOffset = scan_forward_zeroes<bitquad_t>(m);
                     mMinCodePoint = mBaseCodePoint + mQuadOffset;
-                    found = true;
-                    break;
+                    goto found_lo;
                 }
                 mBaseCodePoint += QUAD_BITS;
                 ++mQuadIterator;
                 ++mMixedRunIndex;
                 mQuadOffset = 0;
             }
-            if (found) break;
             ++mRunIterator;
             mQuadOffset = 0;
             mMixedRunIndex = 0;
         }
     }
 
-    if (!found) {
-        assert (mBaseCodePoint == (UNICODE_MAX+1));
-        mMinCodePoint = (UNICODE_MAX+1);
-        return;
-    }
+    // failed to find any code point interval after the current one
+    assert (mBaseCodePoint == (UNICODE_MAX+1));
+    mMinCodePoint = (UNICODE_MAX+1);
+    return;
+
+found_lo:
 
     // at this stage, the max code point is the previous max code point (initially 0)
     assert (mMaxCodePoint <= mMinCodePoint);
-    found = false;
     // Find the end of our interval
     while ( mBaseCodePoint <= UNICODE_MAX ) {
 
@@ -1102,8 +1100,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
             mBaseCodePoint += lengthOf(*mRunIterator++) * QUAD_BITS;
             if (type == Empty) {
                 mMaxCodePoint = baseCodePoint - 1;
-                found = true;
-                break;
+                goto found_hi;
             }
         } else { // if (typeOf(t) == Mixed)
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
@@ -1113,25 +1110,24 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                 if (m) {
                     mQuadOffset = scan_forward_zeroes<bitquad_t>(m);
                     mMaxCodePoint = mBaseCodePoint + mQuadOffset - 1;
-                    found = true;
-                    break;
+                    goto found_hi;
                 }
                 mBaseCodePoint += QUAD_BITS;
                 ++mQuadIterator;
                 ++mMixedRunIndex;
                 mQuadOffset = 0;
             }
-            if (found) break;
             ++mRunIterator;
             mQuadOffset = 0;
             mMixedRunIndex = 0;
         }
     }
+
     // if the very last block is a mixed block and we go past it, the last code point of the range is UNICODE_MAX
-    if (!found) {
-        assert (mBaseCodePoint == (UNICODE_MAX+1));
-        mMaxCodePoint = UNICODE_MAX;
-    }
+    assert (mBaseCodePoint == (UNICODE_MAX+1));
+    mMaxCodePoint = UNICODE_MAX;
+
+found_hi:
 
     assert (mMinCodePoint <= mMaxCodePoint);
 }

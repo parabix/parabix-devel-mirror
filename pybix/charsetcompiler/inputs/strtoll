@@ -1,0 +1,5 @@
+lex.ws		= [\x0D\x0A\x09 ]
+lex.neg   = [-]
+lex.pos   = [+]
+lex.sign  = [-+]
+lex.digit = [0-9]

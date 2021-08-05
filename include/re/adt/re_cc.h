@@ -50,7 +50,7 @@ protected:
     friend CC * makeCC(const CC * cc1, const CC * cc2);
     friend CC * makeCC(std::initializer_list<interval_t> list, const cc::Alphabet * alphabet);
     friend CC * makeCC(std::vector<interval_t> && list, const cc::Alphabet * alphabet);
-    friend CC * makeCC(UCD::UnicodeSet && set, const cc::Alphabet * alphabet);
+    friend CC * makeCC(UCD::UnicodeSet set, const cc::Alphabet * alphabet);
     friend bool intersects(const CC * a, const CC * b);
     friend CC * subtractCC(const CC * a, const CC * b);
     friend CC * intersectCC(const CC * a, const CC * b);
@@ -67,7 +67,7 @@ protected:
 
     explicit CC(const CC * cc1, const CC * cc2);
 
-    CC(const UCD::UnicodeSet && set, const cc::Alphabet * alphabet);
+    CC(const UCD::UnicodeSet set, const cc::Alphabet * alphabet);
 
     CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end, const cc::Alphabet * alphabet);
 
@@ -132,8 +132,8 @@ inline CC * makeCC(std::vector<interval_t> && list, const cc::Alphabet * alphabe
     return new CC(list.begin(), list.end(), alphabet);
 }
 
-inline CC * makeCC(UCD::UnicodeSet && set, const cc::Alphabet * alphabet = &cc::Unicode) {
-    return new CC(std::move(set), alphabet);
+inline CC * makeCC(UCD::UnicodeSet set, const cc::Alphabet * alphabet = &cc::Unicode) {
+    return new CC(set, alphabet);
 }
 
 inline CC * subtractCC(const CC * a, const CC * b) {

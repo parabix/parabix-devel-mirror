@@ -9,8 +9,8 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
-std::unique_ptr<KernelCompiler> OptimizationBranch::instantiateKernelCompiler(BuilderRef b) const noexcept {
-    return llvm::make_unique<OptimizationBranchCompiler>(b, const_cast<OptimizationBranch *>(this));
+std::unique_ptr<KernelCompiler> OptimizationBranch::instantiateKernelCompiler(BuilderRef b) const {
+    return std::make_unique<OptimizationBranchCompiler>(b, const_cast<OptimizationBranch *>(this));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -27,6 +27,27 @@ void OptimizationBranch::addKernelDeclarations(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranch::addInternalProperties(BuilderRef b) {
     COMPILER->addBranchProperties(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool OptimizationBranch::allocatesInternalStreamSets() const {
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateSharedInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
+    COMPILER->generateAllocateSharedInternalStreamSetsMethod(b, expectedNumOfStrides);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateThreadLocalInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
+    COMPILER->generateAllocateThreadLocalInternalStreamSetsMethod(b, expectedNumOfStrides);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -76,17 +97,16 @@ OptimizationBranch::OptimizationBranch(BuilderRef b,
 : Kernel(b, TypeId::OptimizationBranch, std::move(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
-{InternalScalar{b->getSizeTy(), LOGICAL_SEGMENT_NUMBER},
- InternalScalar{b->getSizeTy(), ALL_ZERO_LOGICAL_SEGMENT_NUMBER},
- InternalScalar{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS},
- InternalScalar{b->getSizeTy(), NON_ZERO_LOGICAL_SEGMENT_NUMBER},
- InternalScalar{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS},
+{InternalScalar{b->getSizeTy(), ALL_ZERO_EXTERNAL_SEGMENT_NUMBER},
+ InternalScalar{b->getSizeTy(), NON_ZERO_EXTERNAL_SEGMENT_NUMBER},
+ InternalScalar{b->getSizeTy(), ALL_ZERO_INTERNAL_SEGMENT_NUMBER},
+ InternalScalar{b->getSizeTy(), NON_ZERO_INTERNAL_SEGMENT_NUMBER},
  InternalScalar{ScalarType::ThreadLocal, b->getSizeTy()->getPointerTo(), SPAN_BUFFER},
  InternalScalar{ScalarType::ThreadLocal, b->getSizeTy(), SPAN_CAPACITY}})
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {
-    addAttribute(InternallySynchronized());
+
 }
 
 }

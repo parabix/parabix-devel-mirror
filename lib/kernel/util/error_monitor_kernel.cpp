@@ -68,7 +68,7 @@ void ErrorMonitorKernel::generateMultiBlockLogic(BuilderRef b, Value * const num
 
     // Process Error Block
     b->SetInsertPoint(processErrBB);
-    Value * numFwZeros = b->CreateCountForwardZeroes(accumBlock, true);
+    Value * numFwZeros = b->CreateCountForwardZeroes(accumBlock, "numFwZeros", true);
     Value * errBitMask = b->CreateShl(BLOCK_TY_ONE, numFwZeros);
     Value * errCode = b->getSize(0);
     for (uint32_t i = 0; i < numErrorStreams; ++i) {

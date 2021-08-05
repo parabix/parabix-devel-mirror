@@ -52,10 +52,11 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
         b->setProcessedItemCount(name, nextIndex);
     }
     Function * const callback = module->getFunction(mCallbackName);
+    FunctionType * fTy = callback->getFunctionType();
     if (callback == nullptr) {
         llvm::report_fatal_error(mKernelName + ": failed to get function: " + mCallbackName);
     }
-    b->CreateCall(callback, ArrayRef<Value *>(callbackParams));
+    b->CreateCall(fTy, callback, ArrayRef<Value *>(callbackParams));
     b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), readItem, exitBlock);
 
     b->SetInsertPoint(exitBlock);

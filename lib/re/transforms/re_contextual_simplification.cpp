@@ -21,13 +21,21 @@ namespace re {
 class GCB_Any_Free_Validator final : public RE_Validator {
 public:
     GCB_Any_Free_Validator() : RE_Validator(""), mAnySeen(false), mGCBseen(false) {}
+    bool validateAny(const Any * a) override {
+        if (mGCBseen) return false;
+        mAnySeen = true;
+        return true;
+    }
     bool validateName(const Name * n) override {
         std::string nm = n->getName();
-        if (nm == ".") {
-            if (mGCBseen) return false;
-            mAnySeen = true;
-        }
         if (nm == "\\b{g}") {
+            if (mAnySeen) return false;
+            mGCBseen = true;
+        }
+        return true;
+    }
+    bool validatePropertyExpression(const PropertyExpression * p) override {
+        if ((p->getKind() == PropertyExpression::Kind::Boundary) && (p->getPropertyIdentifier() == "g")) {
             if (mAnySeen) return false;
             mGCBseen = true;
         }
@@ -71,7 +79,13 @@ RE * firstSym(RE * re) {
         } else {
             UndefinedNameError(name);
         }
-    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
+    } else if (PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        if (LLVM_LIKELY(pe->getResolvedRE() != nullptr)) {
+            return firstSym(pe->getResolvedRE());
+        } else {
+            llvm::report_fatal_error("firstSym: unresolved property expression");
+        }
+    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re) || isa<Any>(re)) {
         return re;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         CC * cc = makeCC();
@@ -111,7 +125,13 @@ RE * finalSym(RE * re) {
         } else {
             UndefinedNameError(name);
         }
-    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
+    } else if (PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        if (LLVM_LIKELY(pe->getResolvedRE() != nullptr)) {
+            return finalSym(pe->getResolvedRE());
+        } else {
+            llvm::report_fatal_error("firstSym: unresolved property expression");
+        }
+    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re) || isa<Any>(re)) {
         return re;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         CC * cc = makeCC();
@@ -261,6 +281,30 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
             return ContextMatchCursor{nextContext, intersectCC(contextCC, cc)};
         }
         return ContextMatchCursor{nextContext, re};
+    } else if (isa<Any>(re)) {
+        RE_Context nextContext = cursor.ctxt;
+        RE * item = cursor.ctxt.currentItem();
+        if (isa<Start>(item) || isa<End>(item)) {
+            return ContextMatchCursor{cursor.ctxt, makeAlt()};
+        }
+        if (!nonEmpty(item)) {
+            return ContextMatchCursor{RE_Context{nullptr, nullptr, 0}, re};
+        }
+        RE * contextSym = nullptr;
+        if (kind == Assertion::Kind::LookBehind) {
+            contextSym = finalSym(item);
+            nextContext = cursor.ctxt.priorCCorNull();
+        } else {
+            contextSym = firstSym(item);
+            nextContext = cursor.ctxt.followingCCorNull();
+        }
+        if (CC * contextCC = dyn_cast<CC>(contextSym)) {
+            if (isEmptySeq(cursor.rslt)) {
+                return ContextMatchCursor{nextContext, makeSeq()};
+            }
+            return ContextMatchCursor{nextContext, contextCC};
+        }
+        return ContextMatchCursor{nextContext, re};
     } else if (isa<Start>(re)) {
         if (kind == Assertion::Kind::LookBehind) {
             RE * contextSym = finalSym(cursor.ctxt.currentItem());
@@ -278,6 +322,16 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     } else if (Name * n = dyn_cast<Name>(re)) {
         RE * def = n->getDefinition();
         ContextMatchCursor submatch = ctxt_match(def, kind, cursor);
+        if (submatch.rslt == def) {
+            return ContextMatchCursor{submatch.ctxt, re};
+        }
+        return submatch;
+    } else if (PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        RE * def = pe->getResolvedRE();
+        ContextMatchCursor submatch = ctxt_match(def, kind, cursor);
+        if (submatch.rslt == def) {
+            return ContextMatchCursor{submatch.ctxt, re};
+        }
         return submatch;
     } else if (Capture * c = dyn_cast<Capture>(re)) {
         RE * def = c->getCapturedRE();

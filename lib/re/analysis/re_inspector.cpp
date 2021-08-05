@@ -26,6 +26,7 @@ void RE_Inspector::inspect(RE * const re) {
         case T::Type: inspect##Type(llvm::cast<Type>(re)); break
     switch (re->getClassTypeId()) {
         INSPECT(Alt);
+        INSPECT(Any);
         INSPECT(Assertion);
         INSPECT(CC);
         INSPECT(Range);
@@ -39,14 +40,17 @@ void RE_Inspector::inspect(RE * const re) {
         INSPECT(Rep);
         INSPECT(Seq);
         INSPECT(Start);
+        INSPECT(PropertyExpression);
         default: llvm_unreachable("Unknown RE type");
     }
     #undef INSPECT
 }
 
 void RE_Inspector::inspectName(Name * nm) {
-    RE * const d = nm->getDefinition();
-    if (d) inspect(d);
+    if (mNameMode == NameProcessingMode::ProcessDefinition) {
+        RE * const d = nm->getDefinition();
+        if (d) inspect(d);
+    }
 }
 
 void RE_Inspector::inspectCapture(Capture * c) {
@@ -54,6 +58,9 @@ void RE_Inspector::inspectCapture(Capture * c) {
 }
 
 void RE_Inspector::inspectReference(Reference * r) {
+}
+
+void RE_Inspector::inspectAny(Any * a) {
 }
 
 void RE_Inspector::inspectCC(CC * cc) {
@@ -102,6 +109,9 @@ void RE_Inspector::inspectGroup(Group * g) {
 
 void RE_Inspector::inspectAssertion(Assertion * a) {
     inspect(a->getAsserted());
+}
+
+void RE_Inspector::inspectPropertyExpression(PropertyExpression * pe) {
 }
 
 } // namespace re

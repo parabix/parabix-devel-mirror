@@ -16,6 +16,7 @@
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>
+#include <unicode/data/PropertyObjectTable.h>
 #include <unicode/data/PropertyValueAliases.h>
 
 
@@ -196,7 +197,7 @@ RE * NFD_Transformer::transformCC(CC * cc) {
     if (mappingRequired.empty()) return cc;
     std::vector<RE *> alts;
     CC * finalCC = makeCC(*cc - mappingRequired);
-    for (const interval_t & i : mappingRequired) {
+    for (const interval_t i : mappingRequired) {
         for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
             std::u32string decomp;
             NFD_append1(decomp, cp);

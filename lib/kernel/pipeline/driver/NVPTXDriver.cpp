@@ -88,7 +88,7 @@ static int llvm2ptx(Module * M, std::string PTXFilename) {
     // Figure out where we are going to send the output.
     std::error_code EC;
     sys::fs::OpenFlags OpenFlags = sys::fs::F_None | sys::fs::F_Text;
-    std::unique_ptr<tool_output_file> Out = llvm::make_unique<tool_output_file>(PTXFilename, EC, OpenFlags);
+    std::unique_ptr<tool_output_file> Out = std::make_unique<tool_output_file>(PTXFilename, EC, OpenFlags);
     if (EC) {
         errs() << EC.message() << '\n';
         return 1;

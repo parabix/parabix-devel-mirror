@@ -7,13 +7,14 @@ parabix_add_module(
 NAME
     re.unicode
 SRC
+    boundaries.cpp
     casing.cpp
     decomposition.cpp
     equivalence.cpp
-    grapheme_clusters.cpp
     re_name_resolve.cpp
     resolve_properties.cpp
 DEPS
     re.compile
+    re.parse
     unicode.data
 )

@@ -8,6 +8,7 @@
 #include <kernel/core/kernel.h>
 #include <llvm/IR/Value.h>
 #include <kernel/pipeline/driver/driver.h>
+#include <kernel/streamutils/stream_select.h>
 
 namespace IDISA { class IDISA_Builder; }
 
@@ -46,7 +47,7 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
 //
 class DeletionKernel final : public BlockOrientedKernel {
 public:
-    DeletionKernel(BuilderRef b, unsigned fw, unsigned streamCount);
+    DeletionKernel(BuilderRef b, StreamSet * input, StreamSet * delMask, StreamSet * output, StreamSet * unitCounts);
 protected:
     void generateDoBlockMethod(BuilderRef iBuilder) override;
     void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;
@@ -59,13 +60,15 @@ private:
 class FieldCompressKernel final : public MultiBlockKernel {
 public:
     FieldCompressKernel(BuilderRef b,
-                        StreamSet * extractionMask, StreamSet * inputStreamSet, StreamSet * outputStreamSet,
-                        Scalar * inputBase, unsigned fieldWidth = 64);
+                        SelectOperation const & maskOp, SelectOperationList const & inputOps, StreamSet * outputStreamSet,
+                        unsigned fieldWidth = 64);
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     const unsigned mCompressFieldWidth;
-    const unsigned mStreamCount;
+    SelectedInput mMaskOp;
+    SelectedInputList mInputOps;
+
 };
 
 class PEXTFieldCompressKernel final : public MultiBlockKernel {

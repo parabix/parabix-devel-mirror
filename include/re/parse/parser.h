@@ -10,6 +10,7 @@
 #include <map>
 #include <set>
 #include <re/adt/re_cc.h>
+#include <re/adt/re_name.h>
 
 namespace re { class Name; class Capture;}
 
@@ -33,7 +34,7 @@ using ModeFlagSet = unsigned;
 class RE_Parser {
 public:
 
-    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false);
+    static RE * parse(const std::string &input_string, ModeFlagSet initialFlag = DEFAULT_MODE, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false);
 
 protected:
 
@@ -198,24 +199,10 @@ protected:
     
     codepoint_t parse_utf8_codepoint();
 
-    virtual RE * parsePropertyExpression();
+    virtual RE * parsePropertyExpression(PropertyExpression::Kind k);
 
-    Name * parseNamePatternExpression();
+    RE * parseNamePatternExpression();
 
-    RE * makeComplement(RE * s);
-    RE * makeZerowidthComplement(RE * s);
-
-    RE * makeWordBoundary();
-    RE * makeWordNonBoundary();
-    RE * makeReBoundary(RE * wordC);
-    RE * makeReNonBoundary(RE * wordC);
-    RE * makeWordBegin();
-    RE * makeWordEnd();
-    Name * makeDigitSet();
-    Name * makeAlphaNumeric();
-    Name * makeWhitespaceSet();
-    Name * makeWordSet();
-   
     Name * createName(std::string value);
     Name * createName(std::string prop, std::string value);
 
@@ -260,7 +247,7 @@ protected:
     unsigned                    mCaptureGroupCount;
     RE_Syntax                   mReSyntax;
     NameMap                     mNameMap;
-    std::map<std::string, re::RE *> mCaptureMap;
+    std::map<std::string, std::pair<re::RE *, unsigned>> mCaptureMap;
 };
 
 }

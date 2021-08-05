@@ -13,6 +13,7 @@
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/FileSystem.h>
+#include <llvm/Support/Timer.h>
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
@@ -48,11 +49,18 @@
 #define IN_DEBUG_MODE false
 #endif
 
+#if defined(__clang__) || defined (__GNUC__)
+    #define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#else
+    #define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif
+
 using namespace llvm;
 using namespace kernel;
 
 using AttrId = kernel::Attribute::KindId;
 
+ATTRIBUTE_NO_SANITIZE_ADDRESS
 CPUDriver::CPUDriver(std::string && moduleName)
 : BaseDriver(std::move(moduleName))
 , mTarget(nullptr)
@@ -108,8 +116,6 @@ CPUDriver::CPUDriver(std::string && moduleName)
     mBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
     mBuilder->setDriver(*this);
     mBuilder->setModule(mMainModule);
-
-
 }
 
 Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
@@ -132,7 +138,7 @@ inline void CPUDriver::preparePassManager() {
 
     if (mPassManager) return;
 
-    mPassManager = make_unique<legacy::PassManager>();
+    mPassManager = std::make_unique<legacy::PassManager>();
 
     PassRegistry * Registry = PassRegistry::getPassRegistry();
     initializeCore(*Registry);
@@ -142,9 +148,9 @@ inline void CPUDriver::preparePassManager() {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (!codegen::ShowUnoptimizedIROption.empty()) {
                 std::error_code error;
-                mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
+                mUnoptimizedIROutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
             } else {
-                mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+                mUnoptimizedIROutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
         mPassManager->add(createPrintModulePass(*mUnoptimizedIROutputStream));
@@ -159,14 +165,13 @@ inline void CPUDriver::preparePassManager() {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (!codegen::ShowIROption.empty()) {
                 std::error_code error;
-                mIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
+                mIROutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
             } else {
-                mIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+                mIROutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
         mPassManager->add(createPrintModulePass(*mIROutputStream));
     }
-    mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
     mPassManager->add(createSROAPass());                       // Promote elements of aggregate allocas whose addresses are not taken to registers.
@@ -176,23 +181,17 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
     mPassManager->add(createReassociatePass());                // Canonicalizes commutative expressions
     mPassManager->add(createGVNPass());                        // Global value numbering redundant expression elimination pass
-    mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
-    #ifdef NDEBUG
+    mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes    
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-    #endif
         mPassManager->add(createRemoveRedundantAssertionsPass());
-        mPassManager->add(createDeadCodeEliminationPass());
-        mPassManager->add(createCFGSimplificationPass());
-    #ifdef NDEBUG
     }
-    #endif
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
         if (!codegen::ShowASMOption.empty()) {
             std::error_code error;
-            mASMOutputStream = make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
         } else {
-            mASMOutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+            mASMOutputStream = std::make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
         }
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
         if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, TargetMachine::CGFT_AssemblyFile))) {
@@ -207,14 +206,32 @@ inline void CPUDriver::preparePassManager() {
 
 void CPUDriver::generateUncachedKernels() {
     if (mUncachedKernel.empty()) return;
+
+    // TODO: we may be able to reduce unnecessary optimization work by having kernel specific optimization passes.
+
+    // NOTE: we currently require DCE and Mem2Reg for each kernel to eliminate any unnecessary scalar -> value
+    // mappings made by the base KernelCompiler. That could be done in a more focused manner, however, as each
+    // mapping is known.
+
     preparePassManager();
     mCachedKernel.reserve(mUncachedKernel.size());
     for (auto & kernel : mUncachedKernel) {
-        kernel->generateKernel(mBuilder);
-        Module * const module = kernel->getModule(); assert (module);
-        module->setTargetTriple(mMainModule->getTargetTriple());
-        mPassManager->run(*module);
-        mCachedKernel.emplace_back(kernel.release());
+        {
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+            NamedRegionTimer T(kernel->getSignature(), kernel->getName(),
+                               "kernel", "Kernel Generation",
+                               codegen::TimeKernelsIsEnabled);
+#else
+            NamedRegionTimer T(kernel->getName(), "Kernel Generation",
+                               codegen::TimeKernelsIsEnabled);
+#endif
+            kernel->generateKernel(mBuilder);
+            Module * const module = kernel->getModule(); assert (module);
+            module->setTargetTriple(mMainModule->getTargetTriple());
+            module->setDataLayout(mMainModule->getDataLayout());
+            mPassManager->run(*module);
+            mCachedKernel.emplace_back(kernel.release());
+        }
     }
     mUncachedKernel.clear();
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
@@ -241,6 +258,7 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         Module * const m = kernel->getModule();
         assert ("cached kernel has no module?" && m);
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InfrequentlyUsed))) {
+            assert ("pipeline cannot be infrequently compiled" && !isa<PipelineKernel>(kernel));
             Infrequent.emplace_back(m);
         } else {
             Normal.emplace_back(m);
@@ -263,11 +281,11 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     };
 
     // compile any uncompiled kernels
-    addModules(Normal, codegen::BackEndOptLevel);
-    addModules(Infrequent, CodeGenOpt::None);
+    addModules(Infrequent, codegen::BackEndOptLevel);
+    addModules(Normal, CodeGenOpt::Default);
 
     // write/declare the "main" method
-    auto mainModule = make_unique<Module>("main", *mContext);
+    auto mainModule = std::make_unique<Module>("main", *mContext);
     mainModule->setTargetTriple(mMainModule->getTargetTriple());
     mainModule->setDataLayout(mMainModule->getDataLayout());
     mBuilder->setModule(mainModule.get());
@@ -291,7 +309,7 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     mCompiledKernel.clear();
 
     // return the compiled main method
-    mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
+    mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::None);
     mEngine->addModule(std::move(mainModule));
     mEngine->finalizeObject();
     auto mainFnPtr = mEngine->getFunctionAddress(main->getName());
@@ -311,6 +329,90 @@ CPUDriver::~CPUDriver() {
     delete mTarget;
 }
 
+#if 0
+
+class TracePass : public ModulePass {
+public:
+    static char ID;
+    TracePass(kernel::KernelBuilder * kb, StringRef to_trace) : ModulePass(ID), iBuilder(kb), mToTrace(to_trace) { }
+    virtual bool runOnModule(Module &M) override;
+private:
+    kernel::KernelBuilder * const iBuilder;
+    const StringRef mToTrace;
+};
+
+char TracePass::ID = 0;
+
+bool TracePass::runOnModule(Module & M) {
+    Module * const saveModule = iBuilder->getModule();
+    iBuilder->setModule(&M);
+    bool modified = false;
+    const auto includeEverything = M.getName().startswith(mToTrace);
+    const auto blockWidth = iBuilder->getBitBlockWidth();
+
+    for (Function & F : M) {
+        for (BasicBlock & B : F) {
+
+            auto match = [&](const Instruction & inst) {
+                return (includeEverything || inst.getName().startswith(mToTrace));
+            };
+
+            auto print = [&](Instruction & inst, const BasicBlock::iterator ip) {
+                if (isa<AllocaInst>(inst)) {
+                    return false;
+                }
+                if (match(inst)) {
+                    Type * const t = inst.getType();
+                    if (t->isVectorTy()) {
+                        if (cast<VectorType>(t)->getBitWidth() == blockWidth) {
+                            iBuilder->SetInsertPoint(&B, ip);
+                            iBuilder->CallPrintRegister(inst.getName(), &inst);
+                            return true;
+                        }
+                    }
+                    if (isa<IntegerType>(t) || isa<PointerType>(t)) {
+                        if (isa<PointerType>(t) || cast<IntegerType>(t)->getBitWidth() <= 64) {
+                            iBuilder->SetInsertPoint(&B, ip);
+                            iBuilder->CallPrintInt(inst.getName(), &inst);
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+
+            auto i = B.begin();
+            auto ip = i;
+
+            for (; isa<PHINode>(*ip); ++ip);
+
+            for (; isa<PHINode>(*i); ++i) {
+                if (print(*i, ip)) {
+                    ip++;
+                    modified = true;
+                }
+            }
+
+            for (;;) {
+                assert (i != B.end());
+                Instruction & inst = *i;
+                if (LLVM_UNLIKELY(inst.isTerminator())) {
+                    break;
+                }
+                const auto ip = i;
+                ++i;
+                if (print(inst, ip)) {
+                    modified = true;
+                }
+            }
+
+        }
+    }
+    iBuilder->setModule(saveModule);
+    return modified;
+}
+
+#endif
 
 class TracePass : public ModulePass {
 public:

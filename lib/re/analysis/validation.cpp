@@ -28,6 +28,7 @@ bool RE_Validator::validate(const RE * const re) {
 case T::Type: return validate##Type(llvm::cast<Type>(re)); break
     switch (re->getClassTypeId()) {
             VALIDATE(Alt);
+            VALIDATE(Any);
             VALIDATE(Assertion);
             VALIDATE(CC);
             VALIDATE(Range);
@@ -41,6 +42,7 @@ case T::Type: return validate##Type(llvm::cast<Type>(re)); break
             VALIDATE(Rep);
             VALIDATE(Seq);
             VALIDATE(Start);
+            VALIDATE(PropertyExpression);
         default: llvm_unreachable("Unknown RE type");
     }
 #undef VALIDATE
@@ -56,6 +58,10 @@ bool RE_Validator::validateCapture(const Capture * c) {
 }
 
 bool RE_Validator::validateReference(const Reference * r) {
+    return true;
+}
+
+bool RE_Validator::validateAny(const Any * a) {
     return true;
 }
 
@@ -109,6 +115,10 @@ bool RE_Validator::validateAssertion(const Assertion * a) {
     return validate(a->getAsserted());
 }
 
+bool RE_Validator::validatePropertyExpression(const PropertyExpression * pe) {
+    return true;
+}
+
 bool validateNamesDefined(const RE * r) {
     return RE_Validator("NamesDefinedValidator").validateRE(r);
 }
@@ -133,6 +143,9 @@ public:
     bool validateAssertion(const Assertion * a) override {return false;}
     bool validateStart(const Start * s) override {return false;}
     bool validateEnd(const End * e) override {return false;}
+    bool validatePropertyExpression(const PropertyExpression * pe) override {
+        return true;
+    }
 };
 
 bool validateAssertionFree(const RE * r) {

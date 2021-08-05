@@ -20,10 +20,11 @@ enable_testing()
 
 ###   Build Options   ###
 
-option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
-option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
+option(ENABLE_PAPI "Enable PAPI support if available" OFF)
+option(LLVM_PATH "LLVM root directory")
+option(GENERATE_TOOLS "Controls whether or not it generate tools" ON)
 
 # Build Artifact Configuration
 set(ARTIFACT_MODE "Multiple" CACHE STRING "Build framework into a single artifact (Single) or multiple artifacts (Multiple)")
@@ -55,10 +56,12 @@ add_version_info_from_vcs(Parabix_REVISION)
 message(STATUS "Parabix Revision: ${Parabix_REVISION}")
 
 
-
 ###   Import Dependency: LLVM   ###
-
+if (LLVM_PATH)
+find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_PATH} NO_DEFAULT_PATH)
+else()
 find_package(LLVM REQUIRED CONFIG)
+endif()
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
 set(LLVM_ALL_TARGETS X86)
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
@@ -78,29 +81,40 @@ set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost 1.61 REQUIRED COMPONENTS system filesystem iostreams)
-message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
+message(STATUS "Found Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
 include_directories("${Boost_INCLUDE_DIRS}")
-link_directories(${Boost_LIBRARY_DIR})
+link_directories(${Boost_LIBRARY_DIRS})
 
 
 
 ###   Import Dependency: Z3   ###
 
-if(ENABLE_MULTIPLEXING)
-    message(STATUS "Enabling Multiplexing")
-    find_package(Z3 REQUIRED)
-    include_directories(${Z3_INCLUDE_DIRS})
-    # target_link_libraries(PabloADT ${Z3_LIBRARIES})
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
-endif()
+find_package(Z3 REQUIRED) # libz3-dev
+message(STATUS "Found Z3 ${Z3_VERSION_STRING} in: ${Z3_INCLUDE_DIR}")
+include_directories(${Z3_INCLUDE_DIRS})
+string(REGEX REPLACE "([0-9]+)[.].*" "\\1" Z3_VERSION_MAJOR "${Z3_VERSION_STRING}")
+string(REGEX REPLACE "[0-9]+[.]([0-9]+).*" "\\1" Z3_VERSION_MINOR "${Z3_VERSION_STRING}")
+string(REGEX REPLACE "[0-9]+[.][0-9]+[.]([0-9]+).*" "\\1" Z3_VERSION_PATCH "${Z3_VERSION_STRING}")
+math(EXPR Z3_VERSION_INTEGER "${Z3_VERSION_MAJOR} * 10000 + ${Z3_VERSION_MINOR} * 100 + ${Z3_VERSION_PATCH}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DZ3_VERSION_INTEGER=${Z3_VERSION_INTEGER}")
 
+###   Import Dependency: PAPI   ###
+
+if (ENABLE_PAPI)
+find_package(PAPI REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_PAPI -lpapi")
+include_directories(${PAPI_INCLUDE_DIRS})
+message(STATUS "Found PAPI_INCLUDE_DIRS: ${PAPI_INCLUDE_DIRS}")
+endif()
 
 
 ###   Project Configuration   ###
 
-# Use C++ 11, fail if unable to do so.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+# Require that compilers support all features of C14 and C++14.
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 14)
 
 # Define `CXX_STANDARD` to enable conditional compilation based on standard version.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCXX_STANDARD=${CMAKE_CXX_STANDARD}")
@@ -113,9 +127,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
 # Parabix Object Cache default
 set(PARABIX_OBJECT_CACHE "$ENV{HOME}/.cache/parabix/")
-if (NOT EXISTS(${PARABIX_OBJECT_CACHE}))
-    file(MAKE_DIRECTORY ${PARABIX_OBJECT_CACHE})
-endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_OBJECT_CACHE='\"${PARABIX_OBJECT_CACHE}\"'")
 
 # Use @rpath for dylibs on macOS
@@ -131,7 +142,7 @@ endif()
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
 if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fvisibility-inlines-hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
 endif()
 
 # no pie disables the generation of position-independent executables, which is a default security feature of newer compiles
@@ -187,45 +198,35 @@ endfunction(parabix_set_library_name)
 
 include(CMakeParseArguments)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ARTIFACT_TYPE STREQUAL "Static")
-    set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-
-    # Add assertion debug symbol support checks
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     include(CheckIncludeFileCXX)
-    CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
-    IF (HAS_MACH_VM_TYPES)
-      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")
-    ELSE()
-      UNSET(LIBUNWIND_FOUND CACHE)
-      find_package(Libunwind)
-      IF (LIBUNWIND_FOUND)
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
-        include_directories(${LIBUNWIND_INCLUDE_DIR})
-        target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
-      ELSE()
-        CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
-        IF (HAS_EXECINFO)
-           SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
-        ENDIF()
-      ENDIF()
-    ENDIF()
+    CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
+    if (HAS_EXECINFO)
+        ###   Import Dependency: DWARF   ###
+        #find_package(LibDwarf) # libelf-dev libdwarf-dev
+        #if (LIBDWARF_FOUND)
+        #    include_directories(${LIBDWARF_INCLUDE_DIRS})
+        #    link_directories(${LIBDWARF_LIBRARIES})
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_ASSERTION_TRACE")
+        #endif()
+    endif()
 endif()
 
 # Release & Debug flags
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -g2 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 function(parabix_add_module)
     cmake_parse_arguments(
-        ARG         # resultant argument prefix
-        ""          # boolean args
-        "NAME"      # mono-valued arguments:
-                    #   NAME: target name
-        "SRC;DEPS"  # multi-valued arguments:
-                    #   SRC:  source file list
-                    #   DEPS: target dependencies
-        ${ARGN}     # arguments to parse
+        ARG             # resultant argument prefix
+        "USES_Z3"       # boolean args
+        "NAME"          # mono-valued arguments:
+                        #   NAME: target name
+        "SRC;DEPS"      # multi-valued arguments:
+                        #   SRC:  source file list
+                        #   DEPS: target dependencies
+        ${ARGN}         # arguments to parse
     )
     if(NOT ARG_NAME)
         message(FATAL_ERROR "parabix_add_module: A target name is required")
@@ -242,6 +243,12 @@ function(parabix_add_module)
         endif()
         parabix_set_library_name(${ARG_NAME})
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
+        if (ARG_USES_Z3)
+            target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
+        endif()
+        if (ENABLE_PAPI)
+            target_link_libraries(${ARG_NAME} ${PAPI_LIBRARIES})
+        endif()
     endif()
 endfunction(parabix_add_module)
 
@@ -265,6 +272,9 @@ function(parabix_add_executable)
     else()
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
     endif()
+    if(ARTIFACT_MODE STREQUAL "Single")
+        target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
+    endif()
 endfunction(parabix_add_executable)
 
 # Creates a pablo source target which copies pablo source files to the parabix
@@ -276,7 +286,7 @@ function(parabix_add_pablo_src NAME)
     foreach(PABLO_FILE ${ARGN})
         list(APPEND FILE_LIST "${CMAKE_CURRENT_SOURCE_DIR}/${PABLO_FILE}")
     endforeach(PABLO_FILE)
-    
+
     add_custom_target(${NAME}
         COMMAND cp ${FILE_LIST} ${PARABIX_OBJECT_CACHE}
         DEPENDS ${ARGN})
@@ -329,26 +339,27 @@ add_subdirectory(lib/kernel/unicode)
 add_subdirectory(lib/kernel/util)
 
 # Executables
-add_subdirectory(tools/base64)
-add_subdirectory(tools/editd)
-add_subdirectory(tools/icgrep)
-add_subdirectory(tools/idisa_test)
-add_subdirectory(tools/json)
-add_subdirectory(tools/transcoders)
-add_subdirectory(tools/wc)
-# add_subdirectory(tools/wc/wc-pablo)
-add_subdirectory(tools/xml)
-add_subdirectory(tools/ztf8)
-add_subdirectory(tools/util)
+if (GENERATE_TOOLS)
+    add_subdirectory(tools/base64)
+    add_subdirectory(tools/editd)
+    add_subdirectory(tools/icgrep)
+    add_subdirectory(tools/idisa_test)
+    add_subdirectory(tools/transcoders)
+    add_subdirectory(tools/wc)
+    # add_subdirectory(tools/wc/wc-pablo)
+    add_subdirectory(tools/xml)
+    add_subdirectory(tools/ztf8)
+    add_subdirectory(tools/util)
+    add_subdirectory(tools/json)
+endif()
 
 # Kernel Tests
 add_subdirectory(tests)
 
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")
-    target_link_libraries(${PARABIX_MONO_TARGET} ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
+    target_link_libraries(${PARABIX_MONO_TARGET} ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${Z3_LIBRARIES})
 endif()
-
 
 ###   Test Suite   ###
 
@@ -396,6 +407,16 @@ add_test(
     WORKING_DIRECTORY ${QA_DIR}/base64
     COMMAND python base64test.py ${BIN_DIR}/base64)
 
+add_test(
+  NAME gb18030_single_threaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=1")
+
+add_test(
+  NAME gb18030_multithreaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
+
 
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
@@ -426,6 +447,14 @@ add_custom_target (base64_test
     WORKING_DIRECTORY ${QA_DIR}/base64
     COMMAND python base64test.py "${BIN_DIR}/base64")
 
+add_custom_target(gb18030_single_threaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=1")
+
+add_custom_target(gb18030_multithreaded_test
+  WORKING_DIRECTORY ${QA_DIR}/gb18030
+  COMMAND ./run_all "${BIN_DIR}/gb18030 -thread-num=2")
+
 add_custom_target (abc_gen
     WORKING_DIRECTORY ${QA_DIR}
     COMMAND python abc_testgen.py)
@@ -436,7 +465,7 @@ add_custom_target (abc_test
 
 add_custom_target (check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test kernel-test-suite)
+    DEPENDS icgrep u8u16 u32u8 base64 editd gb18030 idisa_test kernel-test-suite)
 
 add_custom_target (perf_icgrep
     COMMAND python2 perf.py icgrep

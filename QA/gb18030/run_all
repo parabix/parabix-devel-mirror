@@ -1,0 +1,34 @@
+#!/bin/bash 
+#
+# Robert D. Cameron
+#
+# Usage: ./run_all test_program
+# Example ./run_all ../u8u16
+#
+test_dir=`echo "$0" | sed "s/[^\/]*$//"`
+
+test_program=$1
+input_directory=TestFiles
+output_directory=TestOutput
+
+
+[ -x "$output_directory.bak" ] && rm -rf $output_directory.bak
+[ -x "$output_directory" ] && mv $output_directory $output_directory.bak
+
+mkdir $output_directory
+mkdir $output_directory/Files
+mkdir $output_directory/Messages
+
+for f in $input_directory/*
+do
+   fbase=`echo $f | sed "s/$input_directory\///"`
+   $test_program $input_directory/$fbase > $output_directory/Files/$fbase 2>$output_directory/Messages/$fbase
+done
+
+if diff -q --exclude='.svn' ExpectedOutput/Files TestOutput/Files
+  then
+    diff --exclude='.svn' ExpectedOutput/Messages TestOutput/Messages
+  else
+    exit 2
+fi
+

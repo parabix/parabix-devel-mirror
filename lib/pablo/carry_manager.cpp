@@ -1093,10 +1093,10 @@ StructType * CarryManager::analyse(BuilderRef b, const PabloBlock * const scope,
                 unsigned required = blocks;
                 if (loopDepth > 0) {
                     required++;
-                    mIndexedLongAdvanceTotal++;
                 }
                 if (LLVM_UNLIKELY(isa<IndexedAdvance>(stmt))) {
                     required++;
+                    mIndexedLongAdvanceTotal++;
                 }
                 type = ArrayType::get(blockTy, nearest_pow2(required));
                 if (LLVM_UNLIKELY(blocks != 1 && (ifDepth > 0 || loopDepth > 0))) {

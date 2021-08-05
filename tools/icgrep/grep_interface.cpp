@@ -99,7 +99,7 @@ static cl::opt<BinaryFilesMode, true> BinaryFilesOption("binary-files", cl::desc
                                                      cl::values(clEnumValN(Binary, "binary", "Report match/non-match without printing matches."),
                                                                 clEnumValN(WithoutMatch, "without-match", "Always report as non-matching."),
                                                                 clEnumValN(Text, "text", "Treat binary files as text.")
-                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(Text));
+                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(WithoutMatch));
     
 
     
@@ -196,9 +196,6 @@ static cl::alias ColorAlias("colours", cl::desc("Alias for -color"), cl::aliasop
 // 
 static void icgrep_error_handler(void *UserData, const std::string &Message, bool GenCrashDiag) {
     // Modified from LLVM's internal report_fatal_error logic.
-    #ifndef NDEBUG
-    throw std::runtime_error(Message);
-    #else
     SmallVector<char, 64> Buffer;
     raw_svector_ostream OS(Buffer);
     OS << "icgrep ERROR: " << Message << "\n";
@@ -209,7 +206,6 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
     // particular that we remove files registered with RemoveFileOnSignal.
     llvm::sys::RunInterruptHandlers();
     exit(InternalFailureCode);
-    #endif
 }
 
 void InitializeCommandLineInterface(int argc, char *argv[]) {

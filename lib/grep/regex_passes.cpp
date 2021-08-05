@@ -6,7 +6,7 @@
 
 #include <grep/regex_passes.h>
 
-#include <grep/grep_name_resolve.h>
+#include <grep/grep_engine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <re/adt/adt.h>
 #include <re/analysis/validation.h>
@@ -20,11 +20,12 @@
 #include <re/transforms/re_star_normal.h>
 #include <re/transforms/resolve_diffs.h>
 #include <re/transforms/remove_nullable.h>
-#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/boundaries.h>
 #include <re/unicode/casing.h>
 #include <re/unicode/decomposition.h>
 #include <re/unicode/equivalence.h>
 #include <re/unicode/re_name_resolve.h>
+#include <re/unicode/resolve_properties.h>
 #include <re/toolchain/toolchain.h>
 #include <toolchain/toolchain.h>
 
@@ -38,17 +39,21 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
         errs() << "Parser:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     r = removeUnneededCaptures(r);
+    r = resolveEscapeNames(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
-    r = grep::resolveUnicodeNames(r); // use full name resolution
+    r = UCD::linkAndResolve(r, grep::lineNumGrep);
+    r = UCD::inlineSimpleProperties(r);
+    //r = resolveBoundaryProperties(r);
+    r = UCD::externalizeProperties(r);
+    //r = grep::resolveUnicodeNames(r); // use full name resolution
     validateNamesDefined(r);
     if (UnicodeLevel2IsSet() && validateAlphabet(&cc::Unicode, r)) {
         r = UCD::toNFD(r);
         r = UCD::addClusterMatches(r);
         r = UCD::addEquivalentCodepoints(r);
-    } else {
-        r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     }
-    r = expandBoundaryAssertions(r);
+    r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
+    //r = expandBoundaryAssertions(r);
     r = simplifyAssertions(r);
     //r = lookaheadPromotion(r);
     return r;

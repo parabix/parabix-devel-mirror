@@ -1,0 +1,8 @@
+BackSlash = [\\]
+DQuote = ["]
+SQuote = [']
+CR = [\x0D]
+LF = [\x0A]
+Comma = [,]
+HT = [\x09]
+Period = [.]

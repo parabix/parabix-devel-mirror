@@ -13,7 +13,6 @@
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/ADT/STLExtras.h> // for make_unique
 #include <re/parse/parser_helper.h>
 #include <re/parse/PCRE_parser.h>
 #include <re/parse/ERE_parser.h>
@@ -22,7 +21,10 @@
 #include <re/parse/Prosite_parser.h>
 #include <re/parse/fixed_string_parser.h>
 #include <re/adt/adt.h>
+#include <re/adt/re_utility.h>
 #include <re/adt/printer_re.h>
+#include <unicode/core/unicode_set.h>
+#include <unicode/data/RadicalSets.h>
 
 using namespace llvm;
 
@@ -34,25 +36,25 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     std::unique_ptr<RE_Parser> parser = nullptr;
     switch (syntax) {
         case RE_Syntax::PCRE:
-            parser = make_unique<PCRE_Parser>(regular_expression);
+            parser = std::make_unique<PCRE_Parser>(regular_expression);
             break;
         case RE_Syntax::ERE:
-            parser = make_unique<ERE_Parser>(regular_expression);
+            parser = std::make_unique<ERE_Parser>(regular_expression);
             break;
         case RE_Syntax::BRE:
-            parser = make_unique<BRE_Parser>(regular_expression);
+            parser = std::make_unique<BRE_Parser>(regular_expression);
             break;
         case RE_Syntax::FileGLOB:
-            parser = make_unique<FileGLOB_Parser>(regular_expression);
+            parser = std::make_unique<FileGLOB_Parser>(regular_expression);
             break;
         case RE_Syntax::GitGLOB:
-            parser = make_unique<FileGLOB_Parser>(regular_expression, GLOB_kind::GIT);
+            parser = std::make_unique<FileGLOB_Parser>(regular_expression, GLOB_kind::GIT);
             break;
         case RE_Syntax ::PROSITE:
-            parser = make_unique<RE_Parser_PROSITE>(regular_expression);
+            parser = std::make_unique<RE_Parser_PROSITE>(regular_expression);
             break;
         default:
-            parser = make_unique<FixedStringParser>(regular_expression);
+            parser = std::make_unique<FixedStringParser>(regular_expression);
             break;
     }
     parser->fByteMode = ByteMode;
@@ -105,14 +107,16 @@ RE * RE_Parser::parse_seq() {
 }
 
 RE * createStart(ModeFlagSet flags) {
-    if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("^s");  //single-line mode
+    // FIXME: deal with single-line mode properly 
+    //if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("^s");  //single-line mode
     if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
         return makeAlt({makeNegativeLookBehindAssertion(makeByte(0, 0xFF)), makeLookBehindAssertion(makeCC(0x0A, &cc::Unicode))});
     }
     return makeStart();
 }
 RE * createEnd(ModeFlagSet flags) {
-    if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("$s");  //single-line mode
+    // FIXME: deal with single-line mode properly
+    //if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("$s");  //single-line mode
     if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
         return makeAlt({makeNegativeLookAheadAssertion(makeByte(0, 0xFF)), makeLookAheadAssertion(makeCC(0x0A, &cc::Unicode))});
     }
@@ -132,7 +136,12 @@ RE * RE_Parser::parse_next_item() {
     else if (accept('(')) return parse_group();
     else if (accept('[')) return parse_extended_bracket_expression();
     else if (accept('\\')) return parse_escaped();
-    else return createCC(parse_literal_codepoint());
+    else {
+        auto cp = parse_literal_codepoint();
+        auto radicalSet = UCD::getRadicalSet(cp);
+        if (radicalSet == nullptr) return createCC(cp);
+        return makeCC(*radicalSet);
+    }
 }
     
     
@@ -217,13 +226,13 @@ RE * RE_Parser::parse_group() {
             group_expr = makeLookAheadAssertion(parse_alt());
         } else if (accept('!')) { // negative look ahead
             group_expr = makeNegativeLookAheadAssertion(parse_alt());
-        } else if (accept("<=")) { // positive look ahead
+        } else if (accept("<=")) { // positive look behind
             group_expr = makeLookBehindAssertion(parse_alt());
-        } else if (accept("<!")) { // negative look ahead
+        } else if (accept("<!")) { // negative look behind
             group_expr = makeNegativeLookBehindAssertion(parse_alt());
-        } else if (accept('>')) { // negative look ahead
+        } else if (accept('>')) {
             group_expr = makeAtomicGroup(parse_alt());
-        } else if (accept('|')) { // negative look ahead
+        } else if (accept('|')) {
             group_expr = makeBranchResetGroup(parse_alt());
         } else if (atany("-dimsxgK")) { // mode switches
             bool closing_paren_parsed;
@@ -248,7 +257,7 @@ RE * RE_Parser::parse_capture_body() {
     mCaptureGroupCount++;
     std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
     RE * const capture  = makeCapture(captureName, captured);
-    mCaptureMap.emplace(captureName, capture);
+    mCaptureMap.emplace(captureName, std::make_pair(capture, 0));
     return capture;
 }
     
@@ -257,7 +266,12 @@ RE * RE_Parser::parse_back_reference() {
     std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
     auto f = mCaptureMap.find(backref);
     if (f != mCaptureMap.end()) {
-        return makeReference(backref, f->second);
+        RE * captured = f->second.first;
+        unsigned instanceCount = f->second.second;
+        llvm::errs() << "instanceCount:" << instanceCount << "\n";
+        RE * ref = makeReference(backref, captured, instanceCount);
+        f->second = std::make_pair(captured, instanceCount+1);
+        return ref;
     }
     else {
         ParseFailure("Back reference " + backref + " without prior capture group.");
@@ -360,34 +374,20 @@ RE * RE_Parser::parseEscapedSet() {
     switch (escapeCh) {
         case 'b':
             if (accept('{')) {
-                if (accept("g}")) {
-                    re = makeZeroWidth("\\b{g}");
-                    return complemented ? makeZerowidthComplement(re) : re;
-                } else if (accept("w}")) {
-                    ParseFailure("\\b{w} not yet supported.");
-                    //return complemented ? makeZerowidthComplement(re) : re;
-                } else if (accept("l}")) {
-                    ParseFailure("\\b{l} not yet supported.");
-                    //return complemented ? makeZerowidthComplement(re) : re;
-                } else if (accept("s}")) {
-                    ParseFailure("\\b{s} not yet supported.");
-                    //return complemented ? makeZerowidthComplement(re) : re;
-                } else {
-                    re = parsePropertyExpression();
-                    require('}');
-                    return complemented ? makeReNonBoundary(re) : makeReBoundary(re);
-                }
+                re = parsePropertyExpression(PropertyExpression::Kind::Boundary);
+                require('}');
             } else {
-                return complemented ? makeWordNonBoundary() : makeWordBoundary();
+                re = makeZeroWidth("\\b");
             }
+            return complemented ? makeZerowidthComplement(re) : re;
         case 'd':
-            re = makeDigitSet();
+            re = makePropertyExpression("digit");
             return complemented ? makeComplement(re) : re;
         case 's':
-            re = makeWhitespaceSet();
+            re = makePropertyExpression("whitespace");
             return complemented ? makeComplement(re) : re;
         case 'w':
-            re = makeWordSet();
+            re = makePropertyExpression("word");
             return complemented ? makeComplement(re) : re;
         case 'q':
             require('{');
@@ -396,13 +396,13 @@ RE * RE_Parser::parseEscapedSet() {
             return complemented ? makeComplement(re) : re;
         case 'p':
             require('{');
-            re = parsePropertyExpression();
+            re = parsePropertyExpression(PropertyExpression::Kind::Codepoint);
             require('}');
             return complemented ? makeComplement(re) : re;
         case 'X': {
             // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
             // to get to the next extended grapheme cluster boundary.
-            RE * GCB = makeZeroWidth("\\b{g}");
+            RE * GCB = makePropertyExpression(PropertyExpression::Kind::Boundary, "g");
             return makeSeq({makeAny(), makeRep(makeSeq({makeZerowidthComplement(GCB), makeAny()}), 0, Rep::UNBOUNDED_REP), GCB});
         }
         case 'N':
@@ -481,20 +481,28 @@ std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
     return s.str();
 }
 
-RE * RE_Parser::parsePropertyExpression() {
+RE * RE_Parser::parsePropertyExpression(PropertyExpression::Kind k) {
     const auto start = mCursor.pos();
-    while (mCursor.more() && !atany("}:=")) {
+    while (mCursor.more() && !atany("}:=<>")) {
         get1();
     }
-    if (accept('=')) {
-        // We have a property-name = value expression
-        const auto prop_end = mCursor.pos()-1;
+    const auto prop_end = mCursor.pos();
+    std::string prop = canonicalize(start, prop_end);
+    while (accept(' ') || accept('\t')) {/* skip whitespace, do nothing */}
+    PropertyExpression::Operator op;
+    if (atany("<>=:")) {
+        // We have a property-name op value expression
+        if (accept('=') || accept(':')) op = PropertyExpression::Operator::Eq;
+        else if (accept("<=")) op = PropertyExpression::Operator::LEq;
+        else if (accept(">=")) op = PropertyExpression::Operator::GEq;
+        else if (accept('<')) op = PropertyExpression::Operator::Less;
+        else if (accept('>')) op = PropertyExpression::Operator::Greater;
+        while (accept(' ') || accept('\t')) {/* skip whitespace, do nothing */}
         auto val_start = mCursor.pos();
         if (accept('/')) {
             // property-value is another regex
             auto previous = val_start;
             auto current = mCursor.pos();
-            val_start = current;
             
             while (true) {
                 if (*current == '/' && *previous != '\\') {
@@ -509,14 +517,12 @@ RE * RE_Parser::parsePropertyExpression() {
                 current = (++mCursor).pos();
             }
             ++mCursor;
-            //return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
-            return createName(canonicalize(start, prop_end), std::string(val_start-1, current));
+            return makePropertyExpression(k, prop, op, std::string(val_start, current));
         }
         if (*val_start == '@') {
             // property-value is @property@ or @identity@
             auto previous = val_start;
             auto current = (++mCursor).pos();
-            val_start = current;
             
             while (true) {
                 if (*current == '@' && *previous != '\\') {
@@ -531,8 +537,7 @@ RE * RE_Parser::parsePropertyExpression() {
                 current = (++mCursor).pos();
             }
             ++mCursor;
-            //return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
-            return createName(canonicalize(start, prop_end), std::string(val_start-1, current));
+            return makePropertyExpression(k, prop, op, std::string(val_start, current));
         }
         else {
             // property-value is normal string
@@ -547,13 +552,13 @@ RE * RE_Parser::parsePropertyExpression() {
                 }
                 ++mCursor;
             }
-            return createName(canonicalize(start, prop_end), std::string(val_start, mCursor.pos()));
+            return makePropertyExpression(k, prop, op, std::string(val_start, mCursor.pos()));
         }
     }
-    return createName(canonicalize(start, mCursor.pos()));
+    return makePropertyExpression(k, prop);
 }
 
-Name * RE_Parser::parseNamePatternExpression(){
+RE * RE_Parser::parseNamePatternExpression(){
     require('{');
     std::stringstream nameRegexp;
     nameRegexp << "/(?m)^";
@@ -567,7 +572,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     }
     nameRegexp << "$";
     require('}');
-    return createName("na", nameRegexp.str());
+    return makePropertyExpression("na", nameRegexp.str());
 }
 
 
@@ -655,7 +660,7 @@ RE * RE_Parser::parse_collation_element() {
 
 RE * RE_Parser::parse_Posix_class() {
     bool negated = accept('^');
-    RE * posixSet = parsePropertyExpression();
+    RE * posixSet = parsePropertyExpression(PropertyExpression::Kind::Codepoint);
     require(":]");
     if (negated) return makeComplement(posixSet);
     else return posixSet;
@@ -768,57 +773,6 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
 
 CC * RE_Parser::createCC(const codepoint_t cp) {
     return makeCC(cp);
-}
-
-RE * RE_Parser::makeComplement(RE * s) {
-  return makeDiff(makeAny(), s);
-}
-
-RE * RE_Parser::makeZerowidthComplement(RE * s) {
-    return makeDiff(makeSeq({}), s);
-}
-
-RE * RE_Parser::makeWordBoundary() {
-    Name * wordC = makeWordSet();
-    return makeReBoundary(wordC);
-}
-
-RE * RE_Parser::makeWordNonBoundary() {
-    Name * wordC = makeWordSet();
-    return makeReNonBoundary(wordC);
-}
-
-inline RE * RE_Parser::makeReBoundary(RE * re) {
-    return makeBoundaryAssertion(re);
-}
-inline RE * RE_Parser::makeReNonBoundary(RE * re) {
-    return makeNegativeBoundaryAssertion(re);
-}
-
-RE * RE_Parser::makeWordBegin() {
-    Name * wordC = makeWordSet();
-    return makeNegativeLookBehindAssertion(wordC);
-}
-
-RE * RE_Parser::makeWordEnd() {
-    Name * wordC = makeWordSet();
-    return makeNegativeLookAheadAssertion(wordC);
-}
-
-Name * RE_Parser::makeDigitSet() {
-    return createName("nd");
-}
-
-Name * RE_Parser::makeAlphaNumeric() {
-    return createName("alnum");
-}
-
-Name * RE_Parser::makeWhitespaceSet() {
-    return createName("whitespace");
-}
-
-Name * RE_Parser::makeWordSet() {
-    return createName("word");
 }
 
 Name * RE_Parser::createName(std::string value) {

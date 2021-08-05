@@ -19,7 +19,7 @@ namespace kernel {
 
 const unsigned ScanKernelBase::ScanWordContext::maxStrideWidth = 4096; // gives scan word width of 64-bits;
 
-ScanKernelBase::ScanWordContext::ScanWordContext(BuilderRef b, unsigned strideWidth) 
+ScanKernelBase::ScanWordContext::ScanWordContext(BuilderRef b, unsigned strideWidth)
 : width(std::max(minScanWordWidth, strideWidth / strideMaskWidth))
 , wordsPerBlock(b->getBitBlockWidth() / width)
 , wordsPerStride(strideMaskWidth)
@@ -111,7 +111,7 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     BasicBlock * const wordDone = b->CreateBasicBlock("wordDone");
     BasicBlock * const maskDone = b->CreateBasicBlock("maskDone");
     BasicBlock * const exitBlock = b->CreateBasicBlock("exitBlock");
-    
+
     initializeBase(b);
     b->CreateBr(strideInit);
 
@@ -142,7 +142,7 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     // There is at least one 1 bit in the mask.
     PHINode * const processingMask = b->CreatePHI(sw.StrideMaskTy, 2, "processingMask");
     processingMask->addIncoming(strideMask, maskReady);
-    Value * const wordOffset = b->CreateCountForwardZeroes(processingMask, true);
+    Value * const wordOffset = b->CreateCountForwardZeroes(processingMask, "wordOffset", true);
     Value * const word = loadScanWord(b, sw, wordOffset, strideNo);
     b->CreateBr(processWord);
 
@@ -153,20 +153,20 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         b->CreateAssert(b->CreateICmpNE(processingWord, ZERO_WORD), "ScanKernel::processWord: processing word cannot be zero!");
     }
-    Value * const bitIndex_InWord = b->CreateZExt(b->CreateCountForwardZeroes(processingWord, true), sizeTy);
+    Value * const bitIndex_InWord = b->CreateZExt(b->CreateCountForwardZeroes(processingWord, "inWord", true), sizeTy);
     Value * const wordIndex_InStride = b->CreateMul(wordOffset, sw.WIDTH);
     Value * const strideIndex = computeStridePosition(b, strideNo);
     Value * const callbackIndex = b->CreateAdd(strideIndex, b->CreateAdd(wordIndex_InStride, bitIndex_InWord), "callbackIndex");
     Value * const sourcePtr = b->getRawInputPointer("source", callbackIndex);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
-    b->CreateCall(callback, {sourcePtr, callbackIndex});
+    b->CreateCall(callback->getFunctionType(), callback, {sourcePtr, callbackIndex});
     Value * const processedWord = b->CreateResetLowestBit(processingWord);
     processingWord->addIncoming(processedWord, processWord);
     // Loop back if the scan word has another 1 bit in it.
     createOptimizedContinueProcessingBr(b, processedWord, processWord, wordDone);
 
     b->SetInsertPoint(wordDone);
-    // Finished processing the scan word. If there are more bits still in the 
+    // Finished processing the scan word. If there are more bits still in the
     // mask loop back and process those as well.
     Value * const processedMask = b->CreateResetLowestBit(processingMask);
     processingMask->addIncoming(processedMask, wordDone);
@@ -187,7 +187,7 @@ static inline std::string ScanKernel_GenName(unsigned strideWidth, std::string c
 
 ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, StringRef callbackName, OptimizeMode optimizeMode)
 : ScanKernelBase(b, std::min(codegen::ScanBlocks * b->getBitBlockWidth(), ScanWordContext::maxStrideWidth), "scan", optimizeMode)
-, MultiBlockKernel(b, ScanKernel_GenName(ScanKernelBase::mStrideWidth, callbackName), 
+, MultiBlockKernel(b, ScanKernel_GenName(ScanKernelBase::mStrideWidth, callbackName),
     {{"scan", scanStream}, {"source", sourceStream}}, {}, {}, {}, {})
 , mCallbackName(callbackName)
 {
@@ -226,7 +226,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     Module * const module = b->getModule();
 
     uint32_t numInputStreams = getInputStreamSet("scan")->getNumElements();
-    
+
     Type * const sizeTy = b->getSizeTy();
     Value * const sz_ZERO = b->getSize(0);
     Value * const sz_ONE = b->getSize(1);
@@ -280,7 +280,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_NUM_BLOCKS_PER_STRIDE), buildMasks, phiMasksReady);
 
     b->SetInsertPoint(phiMasksReady);
-    // First check to see if there are any bits in any of the masks. If there are 
+    // First check to see if there are any bits in any of the masks. If there are
     // none, then we don't need to bother with writting values to the array.
     assert (maskValues.size() > 0);
     Value * phiMaskAccum = maskValues[0];
@@ -298,8 +298,8 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     }
     b->CreateBr(parallelProcessMasks);
 
-    // To ensure that callback bits are processed in the order that they appear 
-    // in the scan streamset, regardless of which stream they are in, all of 
+    // To ensure that callback bits are processed in the order that they appear
+    // in the scan streamset, regardless of which stream they are in, all of
     // the masks for stride are processed in parallel.
     //
     // We can't simply process each mask in order of its index because that
@@ -328,7 +328,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     Value * const allOneMaskVector = Constant::getAllOnesValue(maskVectorTy);
     PHINode * const maskVectorPhi = b->CreatePHI(maskVectorTy, 2);
     maskVectorPhi->addIncoming(maskVec, masksReady);
-    Value * const isolatedOrFull = b->CreateSelect(b->CreateICmpNE(maskVectorPhi, nullMaskVector), 
+    Value * const isolatedOrFull = b->CreateSelect(b->CreateICmpNE(maskVectorPhi, nullMaskVector),
                                                    b->CreateIsolateLowestBit(maskVectorPhi),
                                                    allOneMaskVector);
     Value * minMask = b->CreateExtractElement(isolatedOrFull, (uint64_t) 0);
@@ -341,7 +341,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     Value * const shiftedMaskVector = b->CreateLShr(maskVectorPhi, vectorFromRepeating(b, maskShiftAmount, numInputStreams));
     // Load scan words for this offset for masks with a 1-bit in the lowest position.
     Value * const lowBitVec = b->CreateTrunc(shiftedMaskVector, i1VecTy);
-    
+
     // FIXME: Here we are loading words for all streams instead of only the ones with
     //        a bit in the lowest position. This is to reduce the number of branches
     //        but it may be better to loop through each mask and only load the words
@@ -397,7 +397,7 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
     Value * const callbackIndex = b->CreateAdd(strideIndex, b->CreateAdd(wordIndex, bitOffset), "callbackIndex");
     Value * const sourcePtr = b->getRawInputPointer("source", callbackIndex);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
-    b->CreateCall(callback, {sourcePtr, callbackIndex, streamIndex});
+    b->CreateCall(callback->getFunctionType(), callback, {sourcePtr, callbackIndex, streamIndex});
     b->CreateBr(performCallbackLoopTail);
 
     b->SetInsertPoint(performCallbackLoopTail);

@@ -4,12 +4,14 @@
 #include <kernel/core/streamset.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/Module.h>
+#include <boost/intrusive/detail/math.hpp>
 
 using namespace llvm;
 
 namespace kernel {
 
 using PortType = Kernel::PortType;
+using boost::intrusive::detail::floor_log2;
 
 #define COMPILER (not_null<KernelCompiler *>(mCompiler))
 
@@ -52,7 +54,6 @@ void KernelBuilder::setScalarField(const StringRef fieldName, Value * const valu
  * @brief CreateMonitoredScalarFieldLoad
  ** ------------------------------------------------------------------------------------------------------------- */
 LoadInst * KernelBuilder::CreateMonitoredScalarFieldLoad(const StringRef fieldName, Value * internalPtr) {
-    DataLayout DL(getModule());
     Value * scalarPtr = getScalarFieldPtr(fieldName);
     Value * scalarEndPtr = CreateGEP(scalarPtr, getInt32(1));
     Value * internalEndPtr = CreateGEP(internalPtr, getInt32(1));
@@ -61,8 +62,8 @@ LoadInst * KernelBuilder::CreateMonitoredScalarFieldLoad(const StringRef fieldNa
     Value * internalAddr = CreatePtrToInt(internalPtr, getSizeTy());
     Value * internalEndAddr = CreatePtrToInt(internalEndPtr, getSizeTy());
     Value * inBounds = CreateAnd(CreateICmpULE(scalarAddr, internalAddr), CreateICmpUGE(scalarEndAddr, internalEndAddr));
-    __CreateAssert(inBounds, "Access (%x," PRId64 " %x)" PRId64 " to scalar " + fieldName + " out of bounds (%x," PRId64 " %x)" PRId64 ").",
-                   {internalAddr, internalEndAddr, scalarAddr, scalarEndAddr});
+    __CreateAssert(inBounds, "Access (%" PRIx64 ",%" PRIx64 ") to scalar " + fieldName + " out of bounds (%" PRIx64 ",%" PRIx64 ").",
+                   {scalarAddr, scalarEndAddr, internalAddr, internalEndAddr});
     return CreateLoad(internalPtr);
 }
 
@@ -78,8 +79,8 @@ StoreInst * KernelBuilder::CreateMonitoredScalarFieldStore(const StringRef field
     Value * internalAddr = CreatePtrToInt(internalPtr, getSizeTy());
     Value * internalEndAddr = CreateAdd(internalAddr, getSize(DL.getTypeAllocSize(toStore->getType())));
     Value * inBounds = CreateAnd(CreateICmpULE(scalarAddr, internalAddr), CreateICmpUGE(scalarEndAddr, internalEndAddr));
-    __CreateAssert(inBounds, "Store (%x," PRId64 " %x)" PRId64 " to scalar " + fieldName + " out of bounds (%x," PRId64 " %x)" PRId64 ").",
-                   {internalAddr, internalEndAddr, scalarAddr, scalarEndAddr});
+    __CreateAssert(inBounds, "Store (%" PRIx64 ",%" PRIx64 ") to scalar " + fieldName + " out of bounds (%" PRIx64 ",%" PRIx64 ").",
+                   {scalarAddr, scalarEndAddr, internalAddr, internalEndAddr});
     return CreateStore(toStore, internalPtr);
 }
 
@@ -110,7 +111,7 @@ Value * KernelBuilder::getInputStreamBlockPtr(const StringRef name, Value * cons
     const StreamSetBuffer * const buf = COMPILER->getInputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const processed = getProcessedItemCount(name);
-    Value * blockIndex = CreateLShr(processed, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(processed, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
@@ -121,7 +122,7 @@ Value * KernelBuilder::getInputStreamPackPtr(const StringRef name, Value * const
     const StreamSetBuffer * const buf = COMPILER->getInputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const processed = getProcessedItemCount(name);
-    Value * blockIndex = CreateLShr(processed, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(processed, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
@@ -145,7 +146,7 @@ Value * KernelBuilder::getOutputStreamBlockPtr(const StringRef name, Value * str
     const StreamSetBuffer * const buf = COMPILER->getOutputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const produced = getProducedItemCount(name);
-    Value * blockIndex = CreateLShr(produced, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(produced, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
@@ -156,7 +157,7 @@ Value * KernelBuilder::getOutputStreamPackPtr(const StringRef name, Value * stre
     const StreamSetBuffer * const buf = COMPILER->getOutputStreamSetBuffer(name);
     assert ("buffer is not accessible in this context!" && buf->getHandle());
     Value * const produced = getProducedItemCount(name);
-    Value * blockIndex = CreateLShr(produced, std::log2(getBitBlockWidth()));
+    Value * blockIndex = CreateLShr(produced, floor_log2(getBitBlockWidth()));
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
@@ -448,9 +449,9 @@ Scalar * KernelBuilder::getOutputScalar(const StringRef name) noexcept {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateUDivRate
+ * @brief CreateUDivRational
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateUDivRate(Value * const number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateUDivRational(Value * const number, const Rational divisor, const Twine & Name) {
     if (divisor.numerator() == 1 && divisor.denominator() == 1) {
         return number;
     }
@@ -464,9 +465,9 @@ Value * KernelBuilder::CreateUDivRate(Value * const number, const Rational divis
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateCeilUDivRate
+ * @brief CreateCeilUDivRational
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateCeilUDivRate(Value * number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateCeilUDivRational(Value * number, const Rational divisor, const Twine & Name) {
     if (LLVM_UNLIKELY(divisor.numerator() == 1 && divisor.denominator() == 1)) {
         return number;
     }
@@ -479,9 +480,9 @@ Value * KernelBuilder::CreateCeilUDivRate(Value * number, const Rational divisor
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateMulRate
+ * @brief CreateMulRational
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateMulRate(Value * const number, const Rational factor, const Twine & Name) {
+Value * KernelBuilder::CreateMulRational(Value * const number, const Rational factor, const Twine & Name) {
     if (LLVM_UNLIKELY(factor.numerator() == 1 && factor.denominator() == 1)) {
         return number;
     }
@@ -495,11 +496,11 @@ Value * KernelBuilder::CreateMulRate(Value * const number, const Rational factor
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateCeilUMulRate
+ * @brief CreateCeilUMulRational
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateCeilUMulRate(Value * const number, const Rational factor, const Twine & Name) {
+Value * KernelBuilder::CreateCeilUMulRational(Value * const number, const Rational factor, const Twine & Name) {
     if (LLVM_LIKELY(factor.denominator() == 1)) {
-        return CreateMulRate(number, factor, Name);
+        return CreateMulRational(number, factor, Name);
     }
     Constant * const n = ConstantInt::get(number->getType(), factor.numerator());
     Constant * const d = ConstantInt::get(number->getType(), factor.denominator());
@@ -507,20 +508,20 @@ Value * KernelBuilder::CreateCeilUMulRate(Value * const number, const Rational f
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateURemRate
+ * @brief CreateURemRational
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateURemRate(Value * const number, const Rational factor, const Twine & Name) {
+Value * KernelBuilder::CreateURemRational(Value * const number, const Rational factor, const Twine & Name) {
     Constant * const n = ConstantInt::get(number->getType(), factor.numerator());
     if (LLVM_LIKELY(factor.denominator() == 1)) {
         return CreateURem(number, n, Name);
     }
-    return CreateSub(number, CreateMulRate(CreateUDivRate(number, factor), factor), Name);
+    return CreateSub(number, CreateMulRational(CreateUDivRational(number, factor), factor), Name);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateRoundDownRate
+ * @brief CreateRoundDownRational
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateRoundDownRate(Value * const number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateRoundDownRational(Value * const number, const Rational divisor, const Twine & Name) {
     Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
     if (divisor.denominator() == 1) {
         return CBuilder::CreateRoundDown(number, n, Name);
@@ -530,9 +531,9 @@ Value * KernelBuilder::CreateRoundDownRate(Value * const number, const Rational 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateRoundUpRate
+ * @brief CreateRoundUpRational
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateRoundUpRate(Value * const number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateRoundUpRational(Value * const number, const Rational divisor, const Twine & Name) {
     Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
     if (divisor.denominator() == 1) {
         return CBuilder::CreateRoundUp(number, n, Name);

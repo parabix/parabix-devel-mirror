@@ -11,6 +11,7 @@
 #include <re/adt/re_any.h>
 #include <re/adt/re_alt.h>
 #include <re/adt/re_seq.h>
+#include <re/adt/re_utility.h>
 
 namespace re {
 
@@ -39,8 +40,8 @@ RE * ERE_Parser::parse_group() {
 RE * ERE_Parser::parse_escaped() {
     if (accept('b')) return makeWordBoundary();
     if (accept('B')) return makeWordNonBoundary();
-    if (accept('s')) return makeWhitespaceSet();
-    if (accept('S')) return makeComplement(makeWhitespaceSet());
+    if (accept('s')) return makePropertyExpression("whitespace");
+    if (accept('S')) return makeComplement(makePropertyExpression("whitespace"));
     if (accept('<')) return makeWordBegin();
     if (accept('>')) return makeWordEnd();
     if (isdigit(*mCursor)) return parse_back_reference();

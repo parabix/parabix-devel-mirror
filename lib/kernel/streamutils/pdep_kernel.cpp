@@ -47,8 +47,8 @@ StreamExpandKernel::StreamExpandKernel(BuilderRef b,
 + "_" + std::to_string(source->getNumElements())
 + ":" + std::to_string(expanded->getNumElements()),
 // input stream sets
-{Binding{"marker", mask, FixedRate()},
-Binding{"source", source, PopcountOf("marker")}},
+{Binding{"marker", mask, FixedRate(), Principal()},
+    Binding{"source", source, PopcountOf("marker"), {ZeroExtended(), BlockSize(b->getBitBlockWidth())}}},
 // output stream set
 {Binding{"output", expanded}},
 // input scalar
@@ -76,6 +76,7 @@ void StreamExpandKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * con
     Value * initialSourceOffset = b->CreateURem(processedSourceItems, BLOCK_WIDTH);
 
     Value * const streamBase = b->getScalarField("base");
+
     SmallVector<Value *, 16> pendingData(mSelectedStreamCount);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
         Constant * const streamIndex = ConstantInt::get(streamBase->getType(), i);
@@ -231,71 +232,76 @@ void FieldDepositKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * co
 }
 
 void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsigned fieldWidth, unsigned streamCount) {
-        Type * fieldTy = kb->getIntNTy(fieldWidth);
-        Type * fieldPtrTy = PointerType::get(fieldTy, 0);
-        Constant * PDEP_func = nullptr;
-        if (fieldWidth == 64) {
-            PDEP_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pdep_64);
-        } else if (fieldWidth == 32) {
-            PDEP_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pdep_32);
-        }
-        BasicBlock * entry = kb->GetInsertBlock();
-        BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
-        BasicBlock * done = kb->CreateBasicBlock("done");
-        Constant * const ZERO = kb->getSize(0);
-        const unsigned fieldsPerBlock = kb->getBitBlockWidth()/fieldWidth;
-        kb->CreateBr(processBlock);
-        kb->SetInsertPoint(processBlock);
-        PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
-        blockOffsetPhi->addIncoming(ZERO, entry);
-        std::vector<Value *> mask(fieldsPerBlock);
-        //  When operating on fields individually, we can use vector load/store with
-        //  extract/insert element operations, or we can use individual field load
-        //  and stores.   Individual field operations require fewer total operations,
-        //  but more memory instructions.   It may be that vector load/extract is better,
-        //  while field store is better.   Vector insert then store creates long dependence
-        //  chains.
-        //
-#define PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
+    Type * fieldTy = kb->getIntNTy(fieldWidth);
+    Type * fieldPtrTy = PointerType::get(fieldTy, 0);
+    Function * PDEP_func = nullptr;
+    if (fieldWidth == 64) {
+        PDEP_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pdep_64);
+    } else if (fieldWidth == 32) {
+        PDEP_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pdep_32);
+    }
+    FunctionType * fTy = PDEP_func->getFunctionType();
+    BasicBlock * entry = kb->GetInsertBlock();
+    BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
+    BasicBlock * done = kb->CreateBasicBlock("done");
+    Constant * const ZERO = kb->getSize(0);
+    const unsigned fieldsPerBlock = kb->getBitBlockWidth()/fieldWidth;
+    kb->CreateBr(processBlock);
+    kb->SetInsertPoint(processBlock);
+    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
+    blockOffsetPhi->addIncoming(ZERO, entry);
+
+    SmallVector<Value *, 16> mask(fieldsPerBlock);
+    //  When operating on fields individually, we can use vector load/store with
+    //  extract/insert element operations, or we can use individual field load
+    //  and stores.   Individual field operations require fewer total operations,
+    //  but more memory instructions.   It may be that vector load/extract is better,
+    //  while field store is better.   Vector insert then store creates long dependence
+    //  chains.
+    //
+//#define PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
 #ifdef PREFER_FIELD_LOADS_OVER_EXTRACT_ELEMENT
-        Value * depositMaskPtr = kb->getInputStreamBlockPtr("depositMask", ZERO, blockOffsetPhi);
-        depositMaskPtr = kb->CreatePointerCast(depositMaskPtr, fieldPtrTy);
-        for (unsigned i = 0; i < fieldsPerBlock; i++) {
-            mask[i] = kb->CreateLoad(kb->CreateGEP(depositMaskPtr, kb->getInt32(i)));
-        }
+    Value * depositMaskPtr = kb->getInputStreamBlockPtr("depositMask", ZERO, blockOffsetPhi);
+    depositMaskPtr = kb->CreatePointerCast(depositMaskPtr, fieldPtrTy);
+    for (unsigned i = 0; i < fieldsPerBlock; i++) {
+        mask[i] = kb->CreateLoad(kb->CreateGEP(depositMaskPtr, kb->getInt32(i)));
+    }
 #else
-        Value * depositMask = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi));
-        for (unsigned i = 0; i < fieldsPerBlock; i++) {
-            mask[i] = kb->CreateExtractElement(depositMask, kb->getInt32(i));
-        }
+
+    Value * depositMask = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi));
+    for (unsigned i = 0; i < fieldsPerBlock; i++) {
+        mask[i] = kb->CreateExtractElement(depositMask, kb->getInt32(i));
+    }
 #endif
-        for (unsigned j = 0; j < streamCount; ++j) {
+    for (unsigned j = 0; j < streamCount; ++j) {
 #ifdef PREFER_FIELD_LOADS_OVER_EXTRACT_ELEMENT
-            Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
-            inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
+        Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+        inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
 #else
-            Value * inputStrm = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi));
+        Value * const input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+        Value * inputStrm = kb->fwCast(fieldWidth, input);
 #endif
 #ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
-            Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
-            outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
+        Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
+        outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
 #else
-            Value * outputStrm = kb->fwCast(mPDEPWidth, kb->allZeroes());
+        // Value * outputStrm = kb->fwCast(mPDEPWidth, kb->allZeroes());
+        Value * outputStrm = UndefValue::get(kb->fwVectorType(fieldWidth));
 #endif
-            for (unsigned i = 0; i < fieldsPerBlock; i++) {
+        for (unsigned i = 0; i < fieldsPerBlock; i++) {
 #ifdef PREFER_FIELD_LOADS_OVER_EXTRACT_ELEMENT
-                Value * field = kb->CreateLoad(kb->CreateGEP(inputPtr, kb->getInt32(i)));
+            Value * field = kb->CreateLoad(kb->CreateGEP(inputPtr, kb->getInt32(i)));
 #else
-                Value * field = kb->CreateExtractElement(inputStrm, kb->getInt32(i));
+            Value * field = kb->CreateExtractElement(inputStrm, kb->getInt32(i));
 #endif
-                Value * compressed = kb->CreateCall(PDEP_func, {field, mask[i]});
+            Value * compressed = kb->CreateCall(fTy, PDEP_func, {field, mask[i]});
 #ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
-                kb->CreateStore(compressed, kb->CreateGEP(outputPtr, kb->getInt32(i)));
-            }
-#else
-            outputStrm = kb->CreateInsertElement(outputStrm, compressed, kb->getInt32(i));
+            kb->CreateStore(compressed, kb->CreateGEP(outputPtr, kb->getInt32(i)));
         }
-        kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, outputStrm);
+#else
+        outputStrm = kb->CreateInsertElement(outputStrm, compressed, kb->getInt32(i));
+    }
+    kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, outputStrm);
 #endif
     }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));

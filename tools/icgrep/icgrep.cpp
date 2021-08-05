@@ -31,6 +31,10 @@
 #include <fcntl.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <kernel/pipeline/driver/cpudriver.h>
+#ifdef ENABLE_PAPI
+#include <util/papi_helper.hpp>
+// #define REPORT_PAPI_TESTS
+#endif
 
 using namespace llvm;
 
@@ -127,23 +131,23 @@ int main(int argc, char *argv[]) {
     std::unique_ptr<grep::GrepEngine> grep;
     switch (argv::Mode) {
         case argv::NormalMode:
-            grep = make_unique<grep::EmitMatchesEngine>(driver);
+            grep = std::make_unique<grep::EmitMatchesEngine>(driver);
             if (argv::MaxCountFlag) grep->setMaxCount(argv::MaxCountFlag);
             if (argv::WithFilenameFlag) grep->showFileNames();
             if (argv::LineNumberFlag) grep->showLineNumbers();
             if (argv::InitialTabFlag) grep->setInitialTab();
            break;
         case argv::CountOnly:
-            grep = make_unique<grep::CountOnlyEngine>(driver);
+            grep = std::make_unique<grep::CountOnlyEngine>(driver);
             if (argv::WithFilenameFlag) grep->showFileNames();
             if (argv::MaxCountFlag) grep->setMaxCount(argv::MaxCountFlag);
            break;
         case argv::FilesWithMatch:
         case argv::FilesWithoutMatch:
-            grep = make_unique<grep::MatchOnlyEngine>(driver, argv::Mode == argv::FilesWithMatch, argv::NullFlag);
+            grep = std::make_unique<grep::MatchOnlyEngine>(driver, argv::Mode == argv::FilesWithMatch, argv::NullFlag);
             break;
         case argv::QuietMode:
-            grep = make_unique<grep::QuietModeEngine>(driver);
+            grep = std::make_unique<grep::QuietModeEngine>(driver);
             break;
         default: llvm_unreachable("Invalid grep mode!");
     }
@@ -167,10 +171,18 @@ int main(int argc, char *argv[]) {
         ((argv::ColorFlag == argv::autoColor) && isatty(STDOUT_FILENO))) {
         grep->setColoring();
     }
-    grep->initREs(REs);
-    grep->grepCodeGen();
     grep->initFileResult(allFiles); // unnecessary copy!
+    grep->initREs(REs);
+    //llvm::errs() << "Before codegen, codegen::TaskThreads = " << codegen::TaskThreads << ", codegen::SegmentThreads = " << codegen::SegmentThreads << "\n";
+    grep->grepCodeGen();
+    #ifdef REPORT_PAPI_TESTS
+    papi::PapiCounter<4> jitExecution{{PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
+    jitExecution.start();
+    #endif
     const bool matchFound = grep->searchAllFiles();
-
+    #ifdef REPORT_PAPI_TESTS
+    jitExecution.stop();
+    jitExecution.write(std::cerr);
+    #endif
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
 }

@@ -19,6 +19,7 @@
 #include <unicode/core/unicode_set.h>
 #include "unicode/data/PropertyAliases.h"
 #include "unicode/data/PropertyObjects.h"
+#include <unicode/data/PropertyObjectTable.h>
 #include "unicode/data/PropertyValueAliases.h"
 #include <unicode/data/Equivalence.h>
 #include <unicode/data/PrecomposedMappings.h>
@@ -444,7 +445,7 @@ RE * addClusterMatches(RE * r, EquivalenceOptions options) {
 CC * add_equivalent_codepoints(CC * cc, EquivalenceOptions options) {
     if (cc->getAlphabet() != &cc::Unicode) return cc;
     UnicodeSet addedCC;
-    for (const interval_t & i : *cc) {
+    for (const interval_t i : *cc) {
         for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
             addedCC = addedCC + equivalentCodepoints(cp, options);
         }

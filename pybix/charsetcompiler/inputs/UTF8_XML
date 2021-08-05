@@ -1,0 +1,30 @@
+#  Definitions for UTF-8 plus XML 0xFFFE/0xFFFF identification.
+#
+u8_unibyte = [\x00-\x7F]
+u8_prefix = [\xC0-\xFF]
+u8_suffix = [\x80-\xBF]
+# 2-byte sequences
+u8_prefix2 = [\xC0-\xDF]
+# For 2 byte-sequence validation
+u8_badprefix2 = [\xC0-\xC1]
+# 3-byte sequences
+u8_prefix3or4 = [\xE0-\xFF]
+u8_prefix3 = [\xE0-\xEF]
+# For 3 byte-sequence validation
+xE0 = [\xE0]
+xED = [\xED]
+xA0_xBF = [\xA0-\xBF]
+x80_x9F = [\x80-\x9F]
+# For FFFE/FFFF recognition in XML
+xEF = [\xEF]
+xBF = [\xBF]
+xBE = [\xBE]
+# 4-byte sequences
+u8_prefix4 = [\xF0-\xFF]
+# 4 byte sequence validation
+u8_badprefix4 = [\xF5-\xFF]
+xF0 = [\xF0]
+xF4 = [\xF4]
+x90_xBF = [\x90-\xBF]
+x80_x8F = [\x80-\x8F]
+

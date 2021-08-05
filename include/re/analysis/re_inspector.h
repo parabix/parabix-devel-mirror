@@ -12,13 +12,16 @@
 
 namespace re {
 
+enum class NameProcessingMode {None, ProcessDefinition};
 enum class InspectionMode {TraverseNonUnique, IgnoreNonUnique};
 
 class RE_Inspector {
 public:
     void inspectRE(RE * r);
 protected:
-    RE_Inspector(const InspectionMode ignoreNonUnique = InspectionMode::IgnoreNonUnique) : mIgnoreNonUnique(ignoreNonUnique) {}
+    RE_Inspector(const NameProcessingMode m = NameProcessingMode::None,
+                 const InspectionMode ignoreNonUnique = InspectionMode::IgnoreNonUnique) :
+         mNameMode(m), mIgnoreNonUnique(ignoreNonUnique) {}
     virtual ~RE_Inspector() {}
     void inspect(RE * r);
     virtual void inspectName(Name * n);
@@ -26,6 +29,7 @@ protected:
     virtual void inspectReference(Reference * r);
     virtual void inspectStart(Start * s);
     virtual void inspectEnd(End * e);
+    virtual void inspectAny(Any * a);
     virtual void inspectCC(CC * cc);
     virtual void inspectSeq(Seq * s);
     virtual void inspectAlt(Alt * a);
@@ -35,7 +39,9 @@ protected:
     virtual void inspectRange(Range * rg);
     virtual void inspectGroup(Group * g);
     virtual void inspectAssertion(Assertion * a);
+    virtual void inspectPropertyExpression(PropertyExpression * pe);
 private:
+    const NameProcessingMode mNameMode;
     const InspectionMode mIgnoreNonUnique;
     std::set<RE *, MemoizerComparator> mMap;
 };

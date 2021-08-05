@@ -34,7 +34,7 @@ public:
     void setCombiningStream(GrepCombiningType t, StreamSet * toCombine);
     void setResults(StreamSet * r);
 
-    void addExternal(std::string name, StreamSet * strm, int offset = 0, int lgth = 1, StreamSet * indexStrm = nullptr);
+    void addExternal(std::string name, StreamSet * strm, unsigned offset = 0, unsigned lgth = 1);
 
     void addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet * basis);
     void setRE(re::RE * re);
@@ -56,7 +56,9 @@ private:
     GrepCombiningType           mCombiningType = GrepCombiningType::None;
     StreamSet *                 mCombiningStream = nullptr;
     StreamSet *                 mResults = nullptr;
-    Bindings                    mExternals;
+    Bindings                    mExternalBindings;
+    std::vector<unsigned>       mExternalOffsets;
+    std::vector<unsigned>       mExternalLengths;
     Alphabets                   mAlphabets;
     re::RE *                    mRE = nullptr;
     re::RE *                    mPrefixRE = nullptr;
@@ -94,6 +96,7 @@ private:
 class FixedMatchPairsKernel : public pablo::PabloKernel {
 public:
     FixedMatchPairsKernel(BuilderRef builder, unsigned length, StreamSet * MatchEnds, StreamSet * MatchPairs);
+    bool hasFamilyName() const override { return true; }
 protected:
     void generatePabloMethod() override;
     unsigned mMatchLength;
@@ -134,6 +137,10 @@ private:
 void GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
                           re::UTF8_Transformer * t,
                           StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream);
+
+void WordBoundaryLogic(const std::unique_ptr<ProgramBuilder> & P,
+                          re::UTF8_Transformer * t,
+                          StreamSet * Source, StreamSet * U8index, StreamSet * wordBoundary_stream);
 
 }
 #endif

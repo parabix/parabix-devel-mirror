@@ -126,7 +126,8 @@ namespace kernel {
                 addresses = b->CreateAdd(addresses, nullAddress);
 
                 Value *gather_result = b->CreateCall(
-                        gatherFunc,
+                                                     gatherFunc->getFunctionType(),
+                                                     gatherFunc,
                         {
                                 UndefValue::get(b->getBitBlockType()),
                                 b->CreatePointerCast(streamSetBlockBasePtr, b->getInt8PtrTy()),
@@ -168,7 +169,7 @@ namespace kernel {
             for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
                 Value * source_field = bufferVecArray[iStreamSetIndex / 4];
                 for (unsigned iStreamIndex = iStreamSetIndex; iStreamIndex < iStreamSetIndex + 4; iStreamIndex++) {
-                    Value * PDEP_field = b->CreateCall(pdep, {b->CreateExtractElement(source_field, iStreamIndex - iStreamSetIndex), mask});
+                    Value * PDEP_field = b->CreateCall(pdep->getFunctionType(), pdep, {b->CreateExtractElement(source_field, iStreamIndex - iStreamSetIndex), mask});
                     resultArray[iStreamIndex] = b->CreateInsertElement(resultArray[iStreamIndex], PDEP_field, i);
                 }
                 bufferVecArray[iStreamSetIndex / 4] = b->CreateLShr(bufferVecArray[iStreamSetIndex / 4], b->simd_fill(64, required));

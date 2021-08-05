@@ -20,11 +20,27 @@ private:
     void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
 };
 
+class ScanBatchKernel : public MultiBlockKernel {
+public:
+    ScanBatchKernel(BuilderRef b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks = 1);
+private:
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
+};
+
 class MatchCoordinatesKernel : public MultiBlockKernel {
 public:
     MatchCoordinatesKernel(BuilderRef b,
                            StreamSet * const Matches, StreamSet * const LineBreakStream,
                            StreamSet * const Coordinates, unsigned strideBlocks = 1);
+private:
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
+};
+
+class BatchCoordinatesKernel : public MultiBlockKernel {
+public:
+    BatchCoordinatesKernel(BuilderRef b,
+                           StreamSet * const Matches, StreamSet * const LineBreakStream,
+                           StreamSet * const Coordinates, Scalar * const callbackObject, unsigned strideBlocks = 1);
 private:
     void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
 };
@@ -52,6 +68,7 @@ public:
                        Scalar * const callbackObject);
 private:
     void generateDoSegmentMethod(BuilderRef iBuilder) override;
+    unsigned mColorizedLineNumberIndex;
 };
 
 }

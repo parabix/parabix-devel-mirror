@@ -200,13 +200,23 @@ std::pair<int, int> getLengthRange(const RE * re, const cc::Alphabet * indexAlph
             return std::make_pair(UTF<8>::encoded_length(lo_codepoint(cc->front())),
                                   UTF<8>::encoded_length(hi_codepoint(cc->back())));
         }
+        return std::make_pair(1, INT_MAX);
+    } else if (isa<Any>(re)) {
+        if (indexAlphabet == &cc::Unicode) return std::make_pair(1, 1);
+        if (indexAlphabet == &cc::UTF8) {
+            return std::make_pair(1, 4);
+        }
+        return std::make_pair(1, INT_MAX);
+    } else if (const PropertyExpression * pe = dyn_cast<PropertyExpression>(re)) {
+        RE * resolved = pe->getResolvedRE();
+        if (resolved) return getLengthRange(resolved, indexAlphabet);
         return std::make_pair(0, INT_MAX);
     } else if (const Name * n = dyn_cast<Name>(re)) {
         RE * defn = n->getDefinition();
         if (defn) return getLengthRange(defn, indexAlphabet);
         return std::make_pair(0, INT_MAX);
     }
-    return std::make_pair(1, 1);
+    return std::make_pair(0, INT_MAX);
 }
 
 bool isFixedLength(const RE * re) {
@@ -305,7 +315,7 @@ bool isTypeForLocal(const RE * re) {
         return isTypeForLocal(diff->getLH()) && isTypeForLocal(diff->getRH());
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isTypeForLocal(e->getLH()) && isTypeForLocal(e->getRH());
-    } else if (isa<Start>(re) || isa<End>(re) || isa<Assertion>(re)) {
+    } else if (isa<Start>(re) || isa<End>(re) || isa<Assertion>(re) || isa<Any>(re)) {
         return false;
     }
     return true; // otherwise
@@ -327,8 +337,17 @@ struct FixedUTF8Validator : public RE_Validator {
         return (alphabet == &cc::UTF8) || (alphabet == &cc::Byte);
     }
 
+    bool validateAny(const Any * a) override {
+        return false;
+    }
+
     bool validateName(const Name * name) override {
         RE * defn = name->getDefinition();
+        return (defn != nullptr) && validate(defn);
+    }
+
+    bool validatePropertyExpression(const PropertyExpression * pe) override {
+        RE * defn = pe->getResolvedRE();
         return (defn != nullptr) && validate(defn);
     }
 };
@@ -338,7 +357,7 @@ bool validateFixedUTF8(const RE * r) {
 }
 
 bool hasAssertion(const RE * re) {
-    if (isa<CC>(re)) {
+    if (isa<CC>(re) || isa<Any>(re)) {
         return false;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         return hasAssertion(n->getDefinition());

@@ -79,6 +79,8 @@ static bool lessThan(const Capture * const lh, const Capture * const rh) {
 static bool lessThan(const Reference * const lh, const Reference * const rh) {
     if (lh->getName() != rh->getName()) {
         return lh->getName() < rh->getName();
+    } else if (lh->getInstance() != rh->getInstance()) {
+        return lh->getInstance() < rh->getInstance();
     } else if (lh->getCapture() == nullptr) {
         return rh->getCapture() != nullptr;
     } else if (rh->getCapture() == nullptr) {
@@ -154,6 +156,19 @@ static bool lessThan(const Group * const lh, const Group * const rh) {
     return compare(lh->getRE(), rh->getRE());
 }
 
+static bool lessThan(const PropertyExpression * const lh, const PropertyExpression * const rh) {
+    if (lh->getKind() != rh->getKind()) {
+        return lh->getKind() < rh->getKind();
+    }
+    if (lh->getPropertyIdentifier() != rh->getPropertyIdentifier()) {
+        return lh->getPropertyIdentifier() < rh->getPropertyIdentifier();
+    }
+    if (lh->getOperator() != rh->getOperator()) {
+        return lh->getOperator() < rh->getOperator();
+    }
+    return lh->getValueString() < rh->getValueString();
+}
+
 static bool compare(const RE * const lh, const RE * const rh) {
     using Type = RE::ClassTypeId;
     assert (lh && rh);
@@ -167,7 +182,7 @@ static bool compare(const RE * const lh, const RE * const rh) {
             return lessThan(cast<Alt>(lh), cast<Alt>(rh));
         case Type::Seq:
             return lessThan(cast<Seq>(lh), cast<Seq>(rh));
-        case Type::End: case Type::Start:
+        case Type::Any: case Type::End: case Type::Start:
             return false;
         case Type::Assertion:
             return lessThan(cast<Assertion>(lh), cast<Assertion>(rh));
@@ -189,6 +204,8 @@ static bool compare(const RE * const lh, const RE * const rh) {
             return lessThan(cast<Intersect>(lh), cast<Intersect>(rh));
         case Type::Rep:
             return lessThan(cast<Rep>(lh), cast<Rep>(rh));
+        case Type::PropertyExpression:
+            return lessThan(cast<PropertyExpression>(lh), cast<PropertyExpression>(rh));
         default:
             llvm_unreachable("RE object of unknown type given to Memoizer");
             return false;

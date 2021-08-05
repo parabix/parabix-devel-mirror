@@ -26,11 +26,21 @@ struct CC_Remover : public RE_Transformer {
         if (intersects(mExcludedCC, cc)) return subtractCC(cc, mExcludedCC);
         else return cc;
     }
+    RE * transformAny (Any * a) override {
+        return makeDiff(a, mExcludedCC);
+    }
     RE * transformName (Name * name) override {
         RE * defn = name->getDefinition();
         if (!defn) return name;
         RE * d = transform(defn);
         if (d == defn) return name;
+        return d;
+    }
+    RE * transformPropertyExpression (PropertyExpression * pe) override {
+        RE * defn = pe->getResolvedRE();
+        if (!defn) return pe;
+        RE * d = transform(defn);
+        if (d == defn) return pe;
         return d;
     }
     RE * transformAssertion (Assertion * a) override {

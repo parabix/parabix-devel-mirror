@@ -39,19 +39,9 @@ void IDISA_Builder::UnsupportedFieldWidthError(const unsigned fw, std::string op
     report_fatal_error(op_name + ": Unsupported field width: " +  std::to_string(fw));
 }
 
-void IDISA_Builder::CallPrintRegisterCond(StringRef regName, Value * const value, Value * const cond, const STD_FD fd) {
-    BasicBlock * const insertBefore = GetInsertBlock()->getNextNode();
-    BasicBlock* const callBlock = CreateBasicBlock("callBlock", insertBefore);
-    BasicBlock* const exitBlock = CreateBasicBlock("exitBlock", insertBefore);
-    CreateCondBr(cond, callBlock, exitBlock);
-    CallPrintRegister(regName, value, fd);
-    CreateBr(exitBlock);
-    SetInsertPoint(exitBlock);
-}
-
-void IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const STD_FD fd) {
+CallInst * IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
-    Constant * printRegister = m->getFunction("print_register");
+    Function * printRegister = m->getFunction("print_register");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(0), getBitBlockType() }, false);
         Function * function = Function::Create(FT, Function::InternalLinkage, "print_register", m);
@@ -80,11 +70,12 @@ void IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const
         for(unsigned i = (getBitBlockWidth() / 8); i != 0; --i) {
             args.push_back(builder.CreateZExt(builder.CreateExtractElement(value, builder.getInt32(i - 1)), builder.getInt32Ty()));
         }
-        builder.CreateCall(GetDprintf(), args);
+        Function * Dprintf = GetDprintf();
+        builder.CreateCall(Dprintf->getFunctionType(), Dprintf, args);
         builder.CreateRetVoid();
         printRegister = function;
     }
-    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
+    return CreateCall(printRegister->getFunctionType(), printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
@@ -453,7 +444,7 @@ Value * IDISA_Builder::simd_pext(unsigned fieldwidth, Value * v, Value * extract
     for (unsigned fw = 2; fw < fieldwidth; fw = fw * 2) {
         Value * shift_fwd_amts = simd_srli(fw, simd_select_lo(fw*2, delcounts), fw/2);
         Value * shift_back_amts = simd_select_lo(fw, simd_select_hi(fw*2, delcounts));
-      w = simd_or(simd_sllv(fw, simd_select_lo(fw*2, w), shift_fwd_amts),
+        w = simd_or(simd_sllv(fw, simd_select_lo(fw*2, w), shift_fwd_amts),
                     simd_srlv(fw, simd_select_hi(fw*2, w), shift_back_amts));
         delcounts = simd_add(fw, simd_select_lo(fw, delcounts), simd_srli(fw, delcounts, fw/2));
     }
@@ -531,8 +522,8 @@ Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
 
 Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
     /*  Pure sequential solution too slow!
-     Value * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
-     return CreateCall(func, fwCast(fw, a));
+     Function * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
+     return CreateCall(func->getFunctionType(), func, fwCast(fw, a));
      */
     if (fw > 8) {
         // Reverse the bits of each byte and then use a byte shuffle to complete the job.
@@ -849,8 +840,38 @@ Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1
 }
 
 
-Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * a, Value * select_mask) {
-    UnsupportedFieldWidthError(fw, "mvmd_compress");
+Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * v, Value * select_mask) {
+    if (fw <= 8) UnsupportedFieldWidthError(fw, "mvmd_compress");
+    v = fwCast(fw, v);
+    Type * valueTy = v->getType();
+    Type * fieldTy = valueTy->getVectorElementType();
+    unsigned field_count = valueTy->getVectorNumElements();
+    Type * maskTy = select_mask->getType();
+    if (maskTy->isIntegerTy()) {
+        SmallVector<Constant *, 16> elements(field_count);
+        for (unsigned i = 0; i < field_count; i++) {
+            elements[i] = ConstantInt::get(fieldTy, 1<<i);
+        }
+        Constant * seq = ConstantVector::get(elements);
+        select_mask = simd_eq(fw, simd_and(simd_fill(fw, select_mask), seq), seq);
+    }
+    Value * selected = simd_and(v, select_mask);
+    Constant * oneSplat = ConstantVector::getSplat(field_count, ConstantInt::get(fieldTy, 1));
+    Value * deletion_counts = simd_add(fw, oneSplat, select_mask);
+    Value * deletion_totals = hsimd_partial_sum(fw, deletion_counts);
+    unsigned fields = getVectorBitWidth(v)/fw;
+    unsigned shift_amt = 1;
+    while (shift_amt < fields) {
+        Value * shift_splat = ConstantVector::getSplat(field_count, ConstantInt::get(fieldTy, shift_amt));
+        Value * shift_select = simd_and(deletion_totals, shift_splat);
+        Value * shift_mask = simd_eq(fw, shift_select, shift_splat);
+        Value * to_shift = simd_and(shift_mask, selected);
+        Value * shifted = mvmd_srli(fw, to_shift, shift_amt);
+        deletion_totals = simd_sub(fw, deletion_totals, shift_select);
+        selected = simd_or(shifted, simd_xor(selected, to_shift));
+        shift_amt *= 2;
+    }
+    return selected;
 }
 
 Value * IDISA_Builder::bitblock_any(Value * a) {

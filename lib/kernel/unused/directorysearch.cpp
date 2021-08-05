@@ -29,7 +29,7 @@ void DirectorySearch::generateInitializeMethod(BuilderRef b) {
     std::vector<Value *> args(2);
     args[0] = rootPath;
     args[1] = b->getInt32(O_RDONLY | O_DIRECTORY);
-    Value * const fd = b->CreateCall(fOpen, args);
+    Value * const fd = b->CreateCall(fOpen->getFunctionType(), fOpen, args);
     b->setScalarField("fileDescriptor", fd);
     BasicBlock * const invalid = b->CreateBasicBlock("invalidDirectory");
     BasicBlock * const exit = b->CreateBasicBlock("exit");
@@ -161,7 +161,7 @@ void DirectorySearch::generateDoSegmentMethod(BuilderRef b) {
     }
 
 
-    Value * const bytesRead = b->CreateCall(fSysCall, args);
+    Value * const bytesRead = b->CreateCall(fSysCall->getFunctionType(), fSysCall, args);
     // TODO: if -1, resize?
     Value * const hasData = b->CreateIsNotNull(bytesRead);
     BasicBlock * const readDirectoryExit = b->getInsertBlock();
@@ -277,7 +277,7 @@ void DirectorySearch::generateDoSegmentMethod(BuilderRef b) {
         std::vector<Value *> args(2);
         args[0] = nextPath;
         args[1] = b->getInt32(O_RDONLY | O_DIRECTORY);
-        Value * const fd = b->CreateCall(fOpen, args);
+        Value * const fd = b->CreateCall(fOpen->getFunctionType(), fOpen, args);
         b->setScalarField("fileDescriptor", fd);
         Value * const valid = b->CreateICmpNE(fd, ConstantInt::getAllOnesValue(fd->getType()));
         BasicBlock * const nextDirectoryExit = b->getInsertBlock();

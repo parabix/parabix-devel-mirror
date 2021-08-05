@@ -18,6 +18,8 @@ public:
     using CallBinding = PipelineKernel::CallBinding;
     using CallBindings = PipelineKernel::CallBindings;
     using NestedBuilders = std::vector<std::shared_ptr<PipelineBuilder>>;
+    using LengthAssertion = PipelineKernel::LengthAssertion;
+    using LengthAssertions = PipelineKernel::LengthAssertions;
 
     BaseDriver & getDriver() { return mDriver;}
 
@@ -68,15 +70,22 @@ public:
 
     void setOutputScalar(const llvm::StringRef name, Scalar * value);
 
+    void AssertEqualLength(const StreamSet * A, const StreamSet * B) {
+        mLengthAssertions.emplace_back(LengthAssertion{{A, B}});
+    }
+
     PipelineBuilder(BaseDriver & driver,
                     Bindings && stream_inputs, Bindings && stream_outputs,
                     Bindings && scalar_inputs, Bindings && scalar_outputs,
-                    const unsigned numOfThreads,
-                    const bool requiresPipeline);
+                    const unsigned numOfThreads);
 
     virtual ~PipelineBuilder() {}
 
     virtual Kernel * makeKernel();
+
+    void setExternallySynchronized(const bool value = true) {
+        mExternallySynchronized = value;
+    }
 
 protected:
 
@@ -95,8 +104,7 @@ protected:
     BaseDriver &        mDriver;
     // eventual pipeline configuration
     unsigned            mNumOfThreads;
-    unsigned            mNumOfBufferSegments;
-    const bool          mRequiresPipeline;
+    bool                mExternallySynchronized = false;
     Bindings            mInputStreamSets;
     Bindings            mOutputStreamSets;
     Bindings            mInputScalars;
@@ -105,6 +113,7 @@ protected:
     Kernels             mKernels;
     CallBindings        mCallBindings;
     NestedBuilders      mNestedBuilders;
+    LengthAssertions    mLengthAssertions;
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -120,16 +129,13 @@ public:
         mNumOfThreads = threads;
     }
 
-    void setNumOfBufferSegments(const unsigned bufferSegments) {
-        mNumOfBufferSegments = bufferSegments;
-    }
-
     ProgramBuilder(BaseDriver & driver,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs);
 
 private:
 
+    void * compileKernel(Kernel * const kernel);
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -35,7 +35,7 @@ public:
         return mCondition;
     }
 
-    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept final;
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const final;
 
 protected:
 
@@ -52,6 +52,12 @@ protected:
     void addKernelDeclarations(BuilderRef b) override;
 
     void addInternalProperties(BuilderRef b) override;
+
+    LLVM_READNONE bool allocatesInternalStreamSets() const final;
+
+    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) override;
+
+    void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) override;
 
     void generateInitializeMethod(BuilderRef b) override;
 

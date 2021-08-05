@@ -44,6 +44,7 @@ enum DebugFlags {
     EnableCycleCounter,
     EnableBlockingIOCounter,
     DisableIndirectBranch,
+    PrintPipelineGraph,
     DebugFlagSentinel
 };
 
@@ -55,6 +56,9 @@ extern std::string ShowUnoptimizedIROption;
 extern std::string ShowIROption;
 extern std::string TraceOption;
 extern std::string CCCOption;
+#ifdef ENABLE_PAPI
+extern std::string PapiCounterOptions;
+#endif
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
 extern std::string ShowASMOption;
 #endif
@@ -72,10 +76,10 @@ extern unsigned SegmentThreads;
 extern unsigned ScanBlocks;
 extern bool EnableObjectCache;
 extern bool TraceObjectCache;
-extern bool NVPTX;
 extern unsigned GroupNum;
 extern std::string ProgramName;
 extern llvm::TargetOptions target_Options;
+extern bool TimeKernelsIsEnabled;
 
 void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
 

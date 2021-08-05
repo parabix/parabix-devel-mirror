@@ -11,22 +11,42 @@ using namespace llvm;
 
 namespace kernel {
 
+
 std::string makeKernelName(const std::string & prefix, const std::vector<StreamSet *> & inputs, StreamSet * const output) {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << prefix << inputs.size();
-    char joiner = 'x';
+
+    out << prefix;
+
+    unsigned streamSetRunLength = 0;
     unsigned maxNumOfInputStreams = 0;
+    if (LLVM_UNLIKELY(inputs[0] == nullptr)) {
+null_streamset:
+        report_fatal_error("StreamsMerge: input streamset cannot be null");
+    }
+    unsigned lastNumOfInputs = inputs[0]->getNumElements();
     for (unsigned i = 0; i < inputs.size(); ++i) {
-        if (LLVM_UNLIKELY(inputs[i]->getFieldWidth() != 1)) {
-            report_fatal_error("input streams must be of field width 1");
+        if (LLVM_UNLIKELY(inputs[i] == nullptr)) {
+            goto null_streamset;
         }
-        maxNumOfInputStreams = std::max(maxNumOfInputStreams, inputs[i]->getNumElements());
-        out << joiner << inputs[i]->getNumElements();
-        joiner = '_';
+        if (LLVM_UNLIKELY(inputs[i]->getFieldWidth() != 1)) {
+            report_fatal_error("StreamsMerge: input streams must be of field width 1");
+        }
+        const auto numOfInputs = inputs[i]->getNumElements();
+        if (LLVM_LIKELY(lastNumOfInputs == numOfInputs)) {
+            streamSetRunLength++;
+        } else {
+            out << '_' << streamSetRunLength << 'x' << lastNumOfInputs;
+            lastNumOfInputs = numOfInputs;
+            streamSetRunLength = 1;
+            maxNumOfInputStreams = std::max(maxNumOfInputStreams, numOfInputs);
+        }
+    }
+    if (LLVM_LIKELY(streamSetRunLength > 0)) {
+        out << '_' << streamSetRunLength << 'x' << lastNumOfInputs;
     }
     if (LLVM_UNLIKELY(output->getNumElements() < maxNumOfInputStreams)) {
-        report_fatal_error("output streamset requires " + std::to_string(maxNumOfInputStreams) + " streams");
+        report_fatal_error("StreamsMerge: output streamset requires " + std::to_string(maxNumOfInputStreams) + " streams");
     }
     out << ':' << output->getNumElements();
     out.flush();
@@ -71,7 +91,7 @@ StreamsIntersect::StreamsIntersect(BuilderRef b, const std::vector<StreamSet *> 
     for (unsigned i = 0; i < inputs.size(); i++) {
         mInputStreamSets.push_back(Binding{"input" + std::to_string(i), inputs[i]});
     }
-    mOutputStreamSets.push_back(Binding{"output", output});
+    mOutputStreamSets.push_back(Binding{"output", output});    
 }
 
 void StreamsIntersect::generateDoBlockMethod(BuilderRef b) {

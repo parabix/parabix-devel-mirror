@@ -16,6 +16,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#ifdef ENABLE_PAPI
+#include <util/papi_helper.hpp>
+// #define REPORT_PAPI_TESTS
+#endif
+
 
 using namespace llvm;
 using namespace codegen;
@@ -24,10 +29,6 @@ static cl::OptionCategory base64Options("base64 Options",
                                             "Transcoding control options.");
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(base64Options));
-
-static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(base64Options));
-static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(base64Options));
-static cl::opt<int> Threads("threads", cl::desc("Total number of threads."), cl::init(1));
 
 using namespace kernel;
 
@@ -73,9 +74,18 @@ int main(int argc, char *argv[]) {
 
     CPUDriver pxDriver("base64");
     auto fn_ptr = base64PipelineGen(pxDriver);
+    #ifdef REPORT_PAPI_TESTS
+    // papi::PapiCounter<4> jitExecution{{PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
+    papi::PapiCounter<3> jitExecution{{PAPI_FUL_ICY, PAPI_STL_CCY, PAPI_RES_STL}};
+    jitExecution.start();
+    #endif
     for (unsigned i = 0; i != inputFiles.size(); ++i) {
         base64(fn_ptr, inputFiles[i]);
     }
+    #ifdef REPORT_PAPI_TESTS
+    jitExecution.stop();
+    jitExecution.write(std::cerr);
+    #endif
     return 0;
 }
 

@@ -1,0 +1,5 @@
+SOH = [\x01]
+Equals = [=]
+Digit = [0-9]
+Zero = [0]
+

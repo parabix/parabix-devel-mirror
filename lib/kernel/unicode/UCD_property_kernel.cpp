@@ -12,6 +12,7 @@
 #include <re/ucd/ucd_compiler.hpp>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
+#include <pablo/pe_zeroes.h>
 #include <llvm/Support/ErrorHandling.h>
 
 using namespace kernel;
@@ -32,18 +33,23 @@ void UnicodePropertyKernelBuilder::generatePabloMethod() {
     std::unique_ptr<cc::CC_Compiler> ccc;
     bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
     if (useDirectCC) {
-        ccc = llvm::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = llvm::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
+        ccc = std::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
-    UCD::UCDCompiler unicodeCompiler(*ccc.get());
-    UCD::UCDCompiler::NameMap nameMap;
-    nameMap.emplace(mName, nullptr);
-    unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    auto f = nameMap.find(mName);
-    if (f == nameMap.end()) llvm::report_fatal_error("Unknown property");
-    PabloAST * theStream = f-> second;
+    UCD::UCDCompiler unicodeCompiler(*ccc.get(), pb);
+    pablo::Var * propertyVar = pb.createVar(mName->getFullName(), pb.createZeroes());
+    re::RE * property_defn = mName->getDefinition();
+    if (re::CC * propertyCC = llvm::dyn_cast<re::CC>(property_defn)) {
+        unicodeCompiler.addTarget(propertyVar, propertyCC);
+    } else if (re::PropertyExpression * pe = llvm::dyn_cast<re::PropertyExpression>(property_defn)) {
+        if (pe->getKind() == re::PropertyExpression::Kind::Codepoint) {
+            re::CC * propertyCC = llvm::cast<re::CC>(pe->getResolvedRE());
+            unicodeCompiler.addTarget(propertyVar, propertyCC);
+        }
+    }
+    unicodeCompiler.compile();
     Var * const property_stream = getOutputStreamVar("property_stream");
-    pb.createAssign(pb.createExtract(property_stream, pb.getInteger(0)), theStream);
+    pb.createAssign(pb.createExtract(property_stream, pb.getInteger(0)), propertyVar);
 }
 

@@ -20,6 +20,7 @@
 #include <kernel/io/stdout_kernel.h>
 #include <kernel/streamutils/swizzle.h>
 #include <kernel/streamutils/zeroextend.h>
+#include <kernel/streamutils/stream_select.h>
 #include <pablo/builder.hpp>
 #include <pablo/boolean.h>
 #include <pablo/pablo_kernel.h>
@@ -32,6 +33,12 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <iostream>
+#ifdef ENABLE_PAPI
+#include <util/papi_helper.hpp>
+// #define REPORT_PAPI_TESTS
+#endif
+
+// #define COMPARISION_STUDY
 
 using namespace pablo;
 using namespace kernel;
@@ -47,26 +54,52 @@ static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 d
 
 static cl::opt<bool> BranchingMode("branch", cl::desc("Use Experimental branching pipeline mode"), cl::cat(u8u16Options));
 
+static cl::opt<bool> SplitTransposition("enable-split-s2p",
+                                                 cl::desc("Enable experimental split transposition."), cl::init(false));
+
 inline bool useAVX2() {
     return enableAVXdel && AVX2_available() && codegen::BlockSize == 256;
 }
 
 class U8U16Kernel final: public pablo::PabloKernel {
 public:
+    #ifdef COMPARISION_STUDY
+    U8U16Kernel(BuilderRef b, StreamSet *BasisBits, StreamSet *u8bits, StreamSet *delMask, StreamSet *errMask);
+    #else
     U8U16Kernel(BuilderRef b, StreamSet * BasisBits, StreamSet * u8bits, StreamSet * DelMask);
+    #endif
 protected:
     void generatePabloMethod() override;
 };
 
+#ifdef COMPARISION_STUDY
+U8U16Kernel::U8U16Kernel(BuilderRef b, StreamSet *BasisBits, StreamSet *u8bits, StreamSet *delMask, StreamSet *errMask)
+: PabloKernel(b, "u8u16",
+// input
+{Binding{"u8bit", BasisBits}},
+// outputs
+{Binding{"u16bit", u8bits}
+,Binding{"delMask", delMask}
+,Binding{"errMask", errMask}}) {
+
+}
+
+#else
 U8U16Kernel::U8U16Kernel(BuilderRef b, StreamSet *BasisBits, StreamSet *u8bits, StreamSet *selectors)
 : PabloKernel(b, "u8u16",
 // input
 {Binding{"u8bit", BasisBits}},
 // outputs
-{Binding{"u16bit", u8bits},
- Binding{"selectors", selectors}}) {
+{Binding{"u16bit", u8bits}
+,Binding{"selectors", selectors}}) {
 
 }
+
+#endif
+
+
+
+// {Binding{b->getStreamSetTy(16, 1), "u16bit"}, Binding{b->getStreamSetTy(1, 1), "delMask"}, Binding{b->getStreamSetTy(1, 1), "errMask"}}) {
 
 void U8U16Kernel::generatePabloMethod() {
     PabloBuilder main(getEntryScope());
@@ -256,8 +289,15 @@ void U8U16Kernel::generatePabloMethod() {
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i), u16_lo[i]);
     }
+    #ifdef COMPARISION_STUDY
+    Var * delmask_out = getOutputStreamVar("delMask");
+    Var * error_mask_out = getOutputStreamVar("errMask");
+    main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), delmask);
+    main.createAssign(main.createExtract(error_mask_out,  main.getInteger(0)), error_mask);
+    #else
     PabloAST * selectors = main.createInFile(main.createNot(delmask));
     main.createAssign(main.createExtract(getOutputStreamVar("selectors"), main.getInteger(0)), selectors);
+    #endif
 }
 
 typedef void (*u8u16FunctionType)(uint32_t fd, const char *);
@@ -275,34 +315,61 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver, cc::ByteNumbering byteN
 
     // Transposed bits from s2p
     StreamSet * BasisBits = P->CreateStreamSet(8);
-    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    if (SplitTransposition) {
+        Staged_S2P(P, ByteStream, BasisBits);
+    } else {
+        P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    }
 
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
     StreamSet * u8bits = P->CreateStreamSet(16);
+
+    #ifdef COMPARISION_STUDY
+    StreamSet * DelMask = P->CreateStreamSet();
+    StreamSet * ErrorMask = P->CreateStreamSet();
+    P->CreateKernelCall<U8U16Kernel>(BasisBits, u8bits, DelMask, ErrorMask);
+    #else
+    StreamSet * u16bits = P->CreateStreamSet(16);
     StreamSet * selectors = P->CreateStreamSet();
     P->CreateKernelCall<U8U16Kernel>(BasisBits, u8bits, selectors);
-
-    StreamSet * u16bits = P->CreateStreamSet(16);
+    #endif
     StreamSet * u16bytes = P->CreateStreamSet(1, 16);
     if (useAVX2()) {
+        #ifdef COMPARISION_STUDY
+        report_fatal_error("Not supported in comparison study");
+        #else
         // Allocate space for fully compressed swizzled UTF-16 bit streams
         std::vector<StreamSet *> u16Swizzles(4);
         u16Swizzles[0] = P->CreateStreamSet(4);
         u16Swizzles[1] = P->CreateStreamSet(4);
         u16Swizzles[2] = P->CreateStreamSet(4);
         u16Swizzles[3] = P->CreateStreamSet(4);
-
         // Apply a deletion algorithm to discard all but the final position of the UTF-8
         // sequences (bit streams) for each UTF-16 code unit. Also compresses and swizzles the result.
         P->CreateKernelCall<SwizzledDeleteByPEXTkernel>(selectors, u8bits, u16Swizzles);
         // Produce unswizzled UTF-16 bit streams
         P->CreateKernelCall<SwizzleGenerator>(u16Swizzles, std::vector<StreamSet *>{u16bits});
         P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes);
+        #endif
     } else {
+
+        #ifdef COMPARISION_STUDY
+
+        StreamSet * U16Bits = P->CreateStreamSet(16);
+        StreamSet * DeletionCounts = P->CreateStreamSet();
+
+        P->CreateKernelCall<DeletionKernel>(u8bits, DelMask, U16Bits, DeletionCounts);
+
+        P->CreateKernelCall<P2S16KernelWithCompressedOutputOld>(U16Bits, DeletionCounts, u16bytes);
+        #else
+
         const auto fieldWidth = b->getBitBlockWidth() / 16;
-        Scalar * inputBase = P->CreateConstant(b->getSize(0));
-        P->CreateKernelCall<FieldCompressKernel>(selectors, u8bits, u16bits, inputBase, fieldWidth);
+        P->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                                 SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
+                                                 u16bits,
+                                                 fieldWidth);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, byteNumbering);
+        #endif
     }
 
     Scalar * outputFileName = P->getInputScalar("outputFileName");
@@ -316,7 +383,7 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver, cc::ByteNumbering byteN
 void makeNonAsciiBranch(Kernel::BuilderRef b,
                         const std::unique_ptr<PipelineBuilder> & P,
                         StreamSet * const ByteStream, StreamSet * const u16bytes, cc::ByteNumbering byteNumbering) {
-
+    #ifndef COMPARISION_STUDY
     // Transposed bits from s2p
     StreamSet * BasisBits = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
@@ -342,10 +409,13 @@ void makeNonAsciiBranch(Kernel::BuilderRef b,
         P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes);
     } else {
         const auto fieldWidth = b->getBitBlockWidth() / 16;
-        Scalar * inputBase = P->CreateConstant(b->getSize(0));
-        P->CreateKernelCall<FieldCompressKernel>(selectors, u8bits, u16bits, inputBase, fieldWidth);
+        P->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                                 SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
+                                                 u16bits,
+                                                 fieldWidth);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, byteNumbering);
     }
+    #endif
 }
 
 void makeAllAsciiBranch(const std::unique_ptr<PipelineBuilder> & P, StreamSet * const ByteStream, StreamSet * const u16bytes, cc::ByteNumbering byteNumbering) {
@@ -414,12 +484,20 @@ int main(int argc, char *argv[]) {
         u8u16Function = generatePipeline(pxDriver, byteNumbering);
     }
     const int fd = open(inputFile.c_str(), O_RDONLY);
+    #ifdef REPORT_PAPI_TESTS
+    papi::PapiCounter<4> jitExecution{{PAPI_L3_TCM, PAPI_L3_TCA, PAPI_TOT_INS, PAPI_TOT_CYC}};
+    jitExecution.start();
+    #endif
     if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
     } else {
         u8u16Function(fd, outputFile.c_str());
         close(fd);
     }
+    #ifdef REPORT_PAPI_TESTS
+    jitExecution.stop();
+    jitExecution.write(std::cerr);
+    #endif
     return 0;
 }
 

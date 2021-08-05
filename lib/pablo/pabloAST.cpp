@@ -175,6 +175,7 @@ const String & Statement::getName() const {
             MAKE_PREFIX(InFile, "inFile");
             MAKE_PREFIX(AtEOF, "atEOF");
             MAKE_PREFIX(TerminateAt, "terminateAt");
+            MAKE_PREFIX(EveryNth, "everyNth");
             // Statistics operations
             MAKE_PREFIX(Count, "count");
             // Misc. operations
@@ -182,12 +183,16 @@ const String & Statement::getName() const {
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
             MAKE_PREFIX(Ternary, "ternary");
-
+            MAKE_PREFIX(Assign, "=");
             case ClassTypeId::IntrinsicCall:
-                prefix = cast<IntrinsicCall>(this)->getIntrinsicName().lower().c_str();
-                length = __length(prefix);
+                {
+                    const auto nm = cast<IntrinsicCall>(this)->getIntrinsicName();
+                    prefix = nm.data();
+                    length = nm.size();
+                }
                 break;
-            default: llvm_unreachable("invalid statement type");
+            default:
+                llvm_unreachable("invalid statement type");
         }
         #undef MAKE_PREFIX
         const StringRef __prefix(prefix, length);

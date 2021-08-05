@@ -22,6 +22,7 @@ SRC
     replaceCC.cpp
     resolve_diffs.cpp
     to_utf8.cpp
+    name_intro.cpp
 DEPS
     re.analysis
     re.ucd

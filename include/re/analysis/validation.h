@@ -38,6 +38,7 @@ protected:
     virtual bool validateName(const Name * n);
     virtual bool validateStart(const Start * s);
     virtual bool validateEnd(const End * e);
+    virtual bool validateAny(const Any * a);
     virtual bool validateCC(const CC * cc);
     virtual bool validateSeq(const Seq * s);
     virtual bool validateAlt(const Alt * a);
@@ -49,6 +50,7 @@ protected:
     virtual bool validateAssertion(const Assertion * a);
     virtual bool validateCapture(const Capture * c);
     virtual bool validateReference(const Reference * r);
+    virtual bool validatePropertyExpression(const PropertyExpression * pe);
 private:
     std::string mValidatorName;
 };

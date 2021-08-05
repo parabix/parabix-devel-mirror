@@ -47,7 +47,7 @@ void editdGPUKernel::generateDoBlockMethod(BuilderRef idb) {
     Module * m = idb->getModule();
     FunctionType * bidTy = FunctionType::get(int32ty, false);
     Function * const bidFunc = Function::Create(bidTy, Function::ExternalLinkage, "llvm.nvvm.read.ptx.sreg.ctaid.x", m);
-    Value * bid = idb->CreateCall(bidFunc);
+    Value * bid = idb->CreateCall(bidTy, bidFunc, {});
     Value * pattStartPtr = idb->CreateGEP(pattBuf, idb->CreateMul(groupLen, bid));
 
     for(unsigned j = 0; j <= mEditDistance; j++){

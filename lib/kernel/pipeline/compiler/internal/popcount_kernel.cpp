@@ -2,6 +2,11 @@
 
 #include <kernel/core/kernel_builder.h>
 
+// This option is mostly for testing lookbehind of an input streamset but
+// creates a cross-thread memory dependency that is otherwise unnecessary.
+
+// #define USE_LOOKBEHIND_FOR_LAST_VALUE // must match pipeline/compiler/config.h
+
 using namespace llvm;
 
 namespace kernel {
@@ -27,6 +32,8 @@ inline static unsigned floor_log2(const unsigned v) {
     return ((sizeof(unsigned) * CHAR_BIT) - 1U) - __builtin_clz(v);
 }
 
+// #define PRINT_POP_COUNTS_TO_STDERR
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiBlockLogic
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -35,7 +42,9 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
 
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
+    #ifdef USE_LOOKBEHIND_FOR_LAST_VALUE
     Constant * const NEG_ONE = ConstantExpr::getNeg(ONE);
+    #endif
     IntegerType * const sizeTy = b->getSizeTy();
 
     const Binding & input = b->getInputStreamSetBinding(INPUT);
@@ -57,8 +66,12 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         position = b->getProducedItemCount(POSITIVE_STREAM);
     }
 
-    // TODO: load the initial counts from a lookbehind
+    #ifdef PRINT_POP_COUNTS_TO_STDERR
+    ConstantInt * const STDERR = b->getInt32(STDERR_FILENO);
+    b->CreateDprintfCall(STDERR, "  initial position = %" PRIu64 "\n", position);
+    #endif
 
+    // TODO: load the initial counts from a lookbehind
     Value * positiveArray = nullptr;
     Value * initialPositiveCount = nullptr;
     Value * negativeArray = nullptr;
@@ -66,19 +79,38 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
 
     if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
         Value * const array = b->getRawOutputPointer(OUTPUT_STREAM, position);
+        #ifdef USE_LOOKBEHIND_FOR_LAST_VALUE
         Value * const count = b->CreateLoad(b->CreateInBoundsGEP(array, NEG_ONE));
+        #else
+        Value * const count = b->getScalarField("count");
+        #endif
         if (LLVM_LIKELY(mType == PopCountType::POSITIVE)) {
             positiveArray = array;
             initialPositiveCount = count;
+            #ifdef PRINT_POP_COUNTS_TO_STDERR
+            b->CreateDprintfCall(STDERR, "  initial count(pos) = %" PRIu64 "\n", count);
+            #endif
         } else { // if (mType == PopCountType::NEGATIVE) {
             negativeArray = array;
             initialNegativeCount = count;
+            #ifdef PRINT_POP_COUNTS_TO_STDERR
+            b->CreateDprintfCall(STDERR, "  initial count(neg) = %" PRIu64 "\n", count);
+            #endif
         }
     } else { // if (mType == PopCountType::BOTH) {
         positiveArray = b->getRawOutputPointer(POSITIVE_STREAM, position);
-        initialPositiveCount = b->CreateLoad(b->CreateInBoundsGEP(positiveArray, NEG_ONE));
         negativeArray = b->getRawOutputPointer(NEGATIVE_STREAM, position);
+        #ifdef USE_LOOKBEHIND_FOR_LAST_VALUE
+        initialPositiveCount = b->CreateLoad(b->CreateInBoundsGEP(positiveArray, NEG_ONE));
         initialNegativeCount = b->CreateLoad(b->CreateInBoundsGEP(negativeArray, NEG_ONE));
+        #else
+        initialPositiveCount = b->getScalarField("posCount");
+        initialNegativeCount = b->getScalarField("negCount");
+        #endif
+        #ifdef PRINT_POP_COUNTS_TO_STDERR
+        b->CreateDprintfCall(STDERR, "  initial count(pos) = %" PRIu64 "\n", initialPositiveCount);
+        b->CreateDprintfCall(STDERR, "  initial count(neg) = %" PRIu64 "\n", initialNegativeCount);
+        #endif
     }
 
     BasicBlock * const entry = b->GetInsertBlock();
@@ -136,6 +168,7 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
                 value = b->CreateNot(value);
             }
             adders[0] = value;
+
             // load and half-add the subsequent blocks
             for (unsigned i = 1; i < step; ++i) {
                 Constant * const I = b->getSize(i);
@@ -180,6 +213,11 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         positiveSum->addIncoming(positivePartialSum, popCountLoop);
         Value * const ptr = b->CreateInBoundsGEP(positiveArray, index);
         b->CreateStore(positivePartialSum, ptr);
+        #ifdef PRINT_POP_COUNTS_TO_STDERR
+        b->CreateDprintfCall(STDERR,
+                             "  > pos[%" PRIu64 "] = %" PRIu64 " (0x%" PRIx64 ")\n",
+                             b->CreateAdd(position, index), positivePartialSum, ptr);
+        #endif
     }
 
     Value * negativePartialSum = nullptr;
@@ -192,7 +230,12 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         negativePartialSum = b->CreateAdd(negativeSum, negSum);
         negativeSum->addIncoming(negativePartialSum, popCountLoop);
         Value * const ptr = b->CreateInBoundsGEP(negativeArray, index);
-        b->CreateStore(negativePartialSum, ptr);
+        b->CreateStore(negativePartialSum, ptr);       
+        #ifdef PRINT_POP_COUNTS_TO_STDERR
+        b->CreateDprintfCall(STDERR,
+                             "  > neg[%" PRIu64 "] = %" PRIu64 " (0x%" PRIx64 ")\n",
+                             b->CreateAdd(position, index), negativePartialSum, ptr);
+        #endif
     }
 
     BasicBlock * const popCountLoopEnd = b->GetInsertBlock();
@@ -202,19 +245,38 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
     b->CreateCondBr(done, popCountLoop, popCountExit);
 
     b->SetInsertPoint(popCountExit);
+
+    #ifndef USE_LOOKBEHIND_FOR_LAST_VALUE
+    if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
+        Value * count = positivePartialSum;
+        if (LLVM_UNLIKELY(mType == PopCountType::NEGATIVE)) {
+            count = negativePartialSum;
+        }
+        assert (count);
+        b->setScalarField("count", count);
+    } else {
+        b->setScalarField("posCount", positivePartialSum);
+        b->setScalarField("negCount", negativePartialSum);
+    }
+    #endif
+
 }
 
-// TODO: is a lookbehind window of 1 sufficient here?
+#ifdef USE_LOOKBEHIND_FOR_LAST_VALUE
+#define LOOK_BEHIND_ATTR , LookBehind(1)
+#else
+#define LOOK_BEHIND_ATTR
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 PopCountKernel::PopCountKernel(BuilderRef b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const output)
-    : MultiBlockKernel(b, "PopCount" + std::string{type == PopCountType::POSITIVE ? "P" : "N"} + std::to_string(stepFactor)
+: MultiBlockKernel(b, TypeId::PopCountKernel, "PopCount" + std::string{type == PopCountType::POSITIVE ? "P" : "N"} + std::to_string(stepFactor)
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor), Add1() }}
 // output stream
-,{Binding{OUTPUT_STREAM, output, FixedRate(), LookBehind(1) }}
+,{Binding{OUTPUT_STREAM, output, FixedRate() LOOK_BEHIND_ATTR }}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
@@ -223,18 +285,21 @@ PopCountKernel::PopCountKernel(BuilderRef b, const PopCountType type, const unsi
     // a block of input becomes a single integer of output
     setStride(1);
     assert (type != PopCountType::BOTH);
+    #ifndef USE_LOOKBEHIND_FOR_LAST_VALUE
+    addInternalScalar(b->getSizeTy(), "count");
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 PopCountKernel::PopCountKernel(BuilderRef b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const positive, StreamSet * const negative)
-: MultiBlockKernel(b, ".PopCountB" + std::to_string(stepFactor)
+: MultiBlockKernel(b, TypeId::PopCountKernel, ".PopCountB" + std::to_string(stepFactor)
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor), Add1() }}
 // output stream
-,{Binding{POSITIVE_STREAM, positive, FixedRate(), LookBehind(1) }
- ,Binding{NEGATIVE_STREAM, negative, FixedRate(), LookBehind(1) }}
+,{Binding{POSITIVE_STREAM, positive, FixedRate() LOOK_BEHIND_ATTR }
+ ,Binding{NEGATIVE_STREAM, negative, FixedRate() LOOK_BEHIND_ATTR }}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
@@ -243,6 +308,10 @@ PopCountKernel::PopCountKernel(BuilderRef b, const PopCountType type, const unsi
     // a block of input becomes a single integer of output
     setStride(1);
     assert (type == PopCountType::BOTH);
+    #ifndef USE_LOOKBEHIND_FOR_LAST_VALUE
+    addInternalScalar(b->getSizeTy(), "posCount");
+    addInternalScalar(b->getSizeTy(), "negCount");
+    #endif
 }
 
 }

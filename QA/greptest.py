@@ -24,8 +24,7 @@ import sys
 import codecs
 import random
 
-sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-sys.stderr = codecs.getwriter('utf8')(sys.stderr)
+
 
 in_datafile = False
 dataFileName = ""
@@ -124,6 +123,11 @@ def escape_quotes(e):  return e.replace(u"'", u"'\\''")
 
 failure_count = 0
 
+
+colorizationRE = re.compile("\x1B\[01;31m\x1B\[K|\x1B\[m")
+def filter_colorization(grep_output):
+    return colorizationRE.sub("", grep_output)
+
 def execute_grep_test(flags, regexp, datafile, expected_result):
     global failure_count
     flag_string = ""
@@ -139,7 +143,8 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
     except subprocess.CalledProcessError as e:
         grep_out = codecs.decode(e.output, 'utf-8')
     if len(grep_out) > 0 and grep_out[-1] == '\n': grep_out = grep_out[:-1]
-    if grep_out != expected_result:
+    filtered_out = filter_colorization(grep_out)
+    if filtered_out != expected_result:
         print(u"Test failure: {%s} expecting {%s} got {%s}" % (grep_cmd, expected_result, grep_out))
         failure_count += 1
     else:
@@ -156,15 +161,17 @@ flag_map = {'-CarryMode' : ['Compressed', 'BitBlock'],
             '-DisableMatchStar' : [],
             '-segment-size' : ['8192', '16384', '32768'],
             '-ccc-type' : ['ternary'],
+            '-colors' : ['always', 'never'],
             '-EnableTernaryOpt' : []}
 
 def add_random_flags(flags, fileLength):
     selected = {}
+    flag_keys = list(flag_map.keys())
     for i in range(options.random_flag_count):
-        rand_flag = flag_map.keys()[random.randint(0, len(flag_map) - 1)]
+        rand_flag = flag_keys[random.randint(0, len(flag_map) - 1)]
         # Avoid duplicate flags and expensive test cases
         while rand_flag in selected or (rand_flag == "-v" and fileLength > 4000):
-            rand_flag = flag_map.keys()[random.randint(0, len(flag_map) - 1)]
+            rand_flag = flag_keys[random.randint(0, len(flag_map) - 1)]
         selected[rand_flag] = True
         values = flag_map[rand_flag]
         if values == []:
@@ -258,6 +265,7 @@ if __name__ == '__main__':
         sys.exit(1)
     random.seed(options.random_seed)
     grep_program_under_test = args[0]
+    print("grep_program: %s" % grep_program_under_test)
     grep_test_file = open(os.path.join(QA_dir,options.testcases), 'r')
     grep_test_spec = grep_test_file.read()
     grep_test_file.close()

@@ -115,7 +115,7 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
     }
     if (cc->size() > 2) {
         bool combine = true;
-        for (const interval_t & i : *cc) {
+        for (const interval_t i : *cc) {
             if (lo_codepoint(i) != hi_codepoint(i)) {
                 combine = false;
                 break;
@@ -144,7 +144,7 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
         }
     }
     PabloAST * expr = nullptr;
-    for (const interval_t & i : *cc) {
+    for (const interval_t i : *cc) {
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
@@ -267,7 +267,7 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
     UCD::UnicodeSet negatedIsolates = (~(*cc)).isolates();
     UCD::UnicodeSet withNegatedIsolates = (*cc + negatedIsolates);
     PabloAST * ccStrm = pb.createZeroes();
-    for (const auto & interval : withNegatedIsolates) {
+    for (const auto interval : withNegatedIsolates) {
         unsigned lo = re::lo_codepoint(interval);
         unsigned hi = re::hi_codepoint(interval);
         if (lo == hi) {
@@ -293,7 +293,7 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
     }
     if (!negatedIsolates.empty()) {
         PabloAST * toExclude = pb.createZeroes();
-        for (const auto & interval : negatedIsolates) {
+        for (const auto interval : negatedIsolates) {
             auto lo = re::lo_codepoint(interval);
             PabloAST * testVal = pb.createRepeat(codeUnitWidth, pb.getInteger(lo, codeUnitWidth));
             toExclude = pb.createOr(toExclude, pb.createEquals(codeUnitStream, testVal));
@@ -520,7 +520,7 @@ octets_intervals_union_t Parabix_Ternary_CC_Compiler::make_octets_intervals_unio
     // Output: <0x60, 10000000>, <0x68, 00001011>, <0x70, 00000001>
     std::vector<octet_pair_t> octets;
     std::vector<interval_t> intervals;
-    for (const interval_t & i : *cc) {
+    for (const interval_t i : *cc) {
         codepoint_t lo_cp = lo_codepoint(i);
         codepoint_t hi_cp = hi_codepoint(i);
         codepoint_t fst_octet = lo_cp & 0xFFFFFFF8;

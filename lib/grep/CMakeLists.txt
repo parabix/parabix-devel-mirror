@@ -9,10 +9,8 @@ NAME
 SRC
     grep_engine.cpp
     grep_kernel.cpp
-    grep_name_resolve.cpp
     grep_toolchain.cpp
     nested_grep_engine.cpp
-    resolve_properties.cpp
     regex_passes.cpp
 DEPS
     kernel.pipeline
@@ -24,4 +22,5 @@ DEPS
     kernel.unicode
     re.parse
     re.unicode
+    unicode.data
 )

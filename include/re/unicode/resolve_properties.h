@@ -2,31 +2,40 @@
 #define RESOLVE_PROPERTIES_H
 
 #include <string>
-#include <unicode/core/unicode_set.h>
+#include <llvm/Support/Compiler.h>
 #include <unicode/data/PropertyObjects.h>
 
 namespace re {
     class RE;
-    class Name;    
+    class Name;
+    class PropertyExpression;
 }
 
 namespace UCD {
 
 LLVM_ATTRIBUTE_NORETURN void UnicodePropertyExpressionError(std::string errmsg);
 
-bool resolvePropertyDefinition(re::Name * const property);
-std::string resolvePropertyFunction(re::Name * const property);
+/*  Link all property expression nodes to their property_enum code, and
+    standardize the property name.   */
+re::RE * linkProperties(re::RE * r);
 
-/**
- * Resolves a re::Name into a unicode set where the value of name is NOT a 
- * regular expression.
- *
- * For cases where name's value may be a regular expression, use
- * grep::resolveUnicodeSet(re::Name * const) instead. Note that the use of the
- * grep variant will require linking with the grep module which may not be
- * desirable depending on the use case.
- */
-UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
+/*  Convert all property expression to standardized form, using the
+    full name of any enumerated properties. */
+re::RE * standardizeProperties(re::RE * r);
+
+/*  Resolve and store the equivalent regexp for all property expressions.
+    Whenever property values are expressed by regular expression, use the
+    passed in grep function to perform the resolution.  */
+re::RE * resolveProperties(re::RE * r, GrepLinesFunctionType grep = nullptr);
+
+/*  Link, standardize and resolve properties.  */
+re::RE * linkAndResolve(re::RE * r, GrepLinesFunctionType grep = nullptr);
+
+/*  Replace very simple codepoint properties (e.g. ASCII) with the equivalent CC. */
+re::RE * inlineSimpleProperties(re::RE * r);
+
+/*  Create named externals for all property expressions.  */
+re::RE * externalizeProperties(re::RE * r);
 
 }
 

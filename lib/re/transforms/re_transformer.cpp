@@ -36,6 +36,7 @@ RE * RE_Transformer::transform(RE * const from) { assert (from);
         case T::Type: to = transform##Type(llvm::cast<Type>(from)); break
     switch (from->getClassTypeId()) {
         TRANSFORM(Alt);
+        TRANSFORM(Any);
         TRANSFORM(Assertion);
         TRANSFORM(CC);
         TRANSFORM(Range);
@@ -49,6 +50,7 @@ RE * RE_Transformer::transform(RE * const from) { assert (from);
         TRANSFORM(Rep);
         TRANSFORM(Seq);
         TRANSFORM(Start);
+        TRANSFORM(PropertyExpression);
         default: llvm_unreachable("Unknown RE type");
     }
     #undef TRANSFORM
@@ -78,6 +80,10 @@ RE * RE_Transformer::transformCapture(Capture * c) {
 
 RE * RE_Transformer::transformReference(Reference * r) {
     return r;
+}
+
+RE * RE_Transformer::transformAny(Any * a) {
+    return a;
 }
 
 RE * RE_Transformer::transformCC(CC * cc) {
@@ -182,6 +188,19 @@ RE * RE_Transformer::transformAssertion(Assertion * a) {
     } else {
         return makeAssertion(x, a->getKind(), a->getSense());
     }
+}
+
+RE * RE_Transformer::transformPropertyExpression(PropertyExpression * pe) {
+    if (mNameTransform == NameTransformationMode::None) {
+        return pe;
+    }
+    RE * const defn = pe->getResolvedRE();
+    if (LLVM_UNLIKELY(defn == nullptr)) {
+        llvm::report_fatal_error("Unresolved property expression: " + pe->getPropertyIdentifier());
+    }
+    RE * t = transform(defn);
+    if (t == defn) return pe;
+    return t;
 }
 
 } // namespace re

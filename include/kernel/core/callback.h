@@ -29,7 +29,8 @@ namespace kernel {
         following code is illustrative.
         Value * handler = b->getScalarField("handler_address");
         Function * const dispatcher = m->getFunction("signal_dispatcher");
-        b->CreateCall(dispatcher, {handler, theSignal});
+        FunctionType * fTy = dispatcher->getFunctionType();
+        b->CreateCall(fTy, dispatcher, {handler, theSignal});
  
     4.  Ensure that the address of the signal_dispatcher is available
         to the JIT engine (should be automatic with LoadDynamicLibraryPermanently).
