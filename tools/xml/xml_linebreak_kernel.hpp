@@ -37,7 +37,7 @@ public:
         using namespace cc;
         PabloBuilder pb(getEntryScope());
         std::unique_ptr<CC_Compiler> ccc;
-        ccc = llvm::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInputStreamVar("basis"), pb.getInteger(0)));
+        ccc = std::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInputStreamVar("basis"), pb.getInteger(0)));
         PabloAST * breaks = ccc->compileCC(re::makeByte('\n'));;
         PabloAST * const eofBit = pb.createAtEOF(llvm::cast<PabloAST>(pb.createOnes()));
         Var * const output = pb.createExtract(getOutputStreamVar("out"), 0);

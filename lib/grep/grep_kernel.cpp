@@ -12,6 +12,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/codegenstate.h>
+#include <toolchain/toolchain.h>
 #include <toolchain/pablo_toolchain.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_ones.h>          // for Ones
@@ -169,6 +170,12 @@ void GrepKernelOptions::addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet *
     mAlphabets.emplace_back(a, basis);
 }
 
+unsigned round_up_to_blocksize(unsigned offset) {
+    unsigned lookahead_blocks = (codegen::BlockSize - 1 + offset)/codegen::BlockSize;
+    return lookahead_blocks * codegen::BlockSize;
+}
+
+
 void GrepKernelOptions::addExternal(std::string name, StreamSet * strm, unsigned offset, unsigned lgth) {
     if (offset == 0) {
         if (mSource) {
@@ -177,11 +184,12 @@ void GrepKernelOptions::addExternal(std::string name, StreamSet * strm, unsigned
             mExternalBindings.emplace_back(name, strm);
         }
     } else {
+        unsigned ahead = round_up_to_blocksize(offset);
         if (mSource) {
-            std::initializer_list<Attribute> attrs{ZeroExtended(), LookAhead(offset)};
+            std::initializer_list<Attribute> attrs{ZeroExtended(), LookAhead(ahead)};
             mExternalBindings.emplace_back(name, strm, FixedRate(), attrs);
         } else {
-            mExternalBindings.emplace_back(name, strm, FixedRate(), LookAhead(offset));
+            mExternalBindings.emplace_back(name, strm, FixedRate(), LookAhead(ahead));
         }
     }
     mExternalOffsets.push_back(offset);
@@ -410,7 +418,7 @@ InvertMatchesKernel::InvertMatchesKernel(BuilderRef b, StreamSet * Matches, Stre
 
 FixedMatchPairsKernel::FixedMatchPairsKernel(BuilderRef b, unsigned length, StreamSet * MatchResults, StreamSet * MatchPairs)
 : PabloKernel(b, "FixedMatchPairsKernel" + std::to_string(MatchResults->getNumElements()) + "x1_by" + std::to_string(length),
-{Binding{"MatchResults", MatchResults, FixedRate(1), LookAhead(length)}}, {Binding{"MatchPairs", MatchPairs}}),
+{Binding{"MatchResults", MatchResults, FixedRate(1), LookAhead(round_up_to_blocksize(length))}}, {Binding{"MatchPairs", MatchPairs}}),
 mMatchLength(length) {}
 
 void FixedMatchPairsKernel::generatePabloMethod() {

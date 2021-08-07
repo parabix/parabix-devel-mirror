@@ -259,7 +259,7 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
     //  while field store is better.   Vector insert then store creates long dependence
     //  chains.
     //
-#define PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
+//#define PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
 #ifdef PREFER_FIELD_LOADS_OVER_EXTRACT_ELEMENT
     Value * depositMaskPtr = kb->getInputStreamBlockPtr("depositMask", ZERO, blockOffsetPhi);
     depositMaskPtr = kb->CreatePointerCast(depositMaskPtr, fieldPtrTy);
@@ -285,6 +285,7 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
         Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
         outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
 #else
+        // Value * outputStrm = kb->fwCast(mPDEPWidth, kb->allZeroes());
         Value * outputStrm = UndefValue::get(kb->fwVectorType(fieldWidth));
 #endif
         for (unsigned i = 0; i < fieldsPerBlock; i++) {

@@ -96,6 +96,7 @@ private:
 class FixedMatchPairsKernel : public pablo::PabloKernel {
 public:
     FixedMatchPairsKernel(BuilderRef builder, unsigned length, StreamSet * MatchEnds, StreamSet * MatchPairs);
+    bool hasFamilyName() const override { return true; }
 protected:
     void generatePabloMethod() override;
     unsigned mMatchLength;

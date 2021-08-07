@@ -319,8 +319,10 @@ void PipelineAnalysis::transcribeRelationshipGraph(const PartitionGraph & partit
 
     // our new partition count can exceed the original one by at most one
     PartitionCount = outputPartitionId + 1U;
+    #ifndef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
     assert (origPartitionCount <= PartitionCount);
     assert ((origPartitionCount + 1) >= PartitionCount);
+    #endif
 
     // Originally, if the pipeline kernel does not have external I/O, both the pipeline in/out
     // nodes would be placed into the same (ignored) set but this won't be true after scheduling.

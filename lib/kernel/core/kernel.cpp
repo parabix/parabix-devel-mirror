@@ -999,7 +999,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         Function * catchFn = b->getBeginCatch();
         Function * catchEndFn = b->getEndCatch();
         b->CreateCall(catchFn->getFunctionType(), catchFn, {b->CreateExtractValue(caughtResult, 0)});
-        b->CreateCall(catchEndFn->getFunctionType(), catchEndFn);
+        b->CreateCall(catchEndFn->getFunctionType(), catchEndFn, {});
         BasicBlock * const afterCatch = b->GetInsertBlock();
         b->CreateBr(handleDeallocation);
 
@@ -1072,7 +1072,7 @@ Value * Kernel::initializeThreadLocalInstance(BuilderRef b, Value * const handle
             args[0] = handle;
             instance = b->CreateCall(init->getFunctionType(), init, args);
         } else {
-            instance = b->CreateCall(init->getFunctionType(), init);
+            instance = b->CreateCall(init->getFunctionType(), init, {});
         }
     }
     return instance;
@@ -1096,7 +1096,7 @@ Value * Kernel::finalizeInstance(BuilderRef b, Value * const handle) const {
     if (LLVM_LIKELY(isStateful())) {
         result = b->CreateCall(termFunc->getFunctionType(), termFunc, { handle });
     } else {
-        result = b->CreateCall(termFunc->getFunctionType(), termFunc);
+        result = b->CreateCall(termFunc->getFunctionType(), termFunc, {});
     }
     if (mOutputScalars.empty()) {
         assert (!result || result->getType()->isVoidTy());

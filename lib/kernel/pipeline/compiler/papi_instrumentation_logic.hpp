@@ -145,11 +145,13 @@ void PipelineCompiler::initializePAPI(BuilderRef b) const {
             report_fatal_error("Internal linking error: unable to find PAPI_library_init");
         }
         ConstantInt * const version = ConstantInt::get(intTy, PAPI_VER_CURRENT);
-        checkPAPIRetValAndExitOnError(b,  "PAPI_library_init", PAPI_VER_CURRENT, b->CreateCall(PAPIlibInitFn, { version }));
+        Value * PAPI_init = b->CreateCall(PAPIlibInitFn->getFunctionType(), PAPIlibInitFn, { version });
+        checkPAPIRetValAndExitOnError(b,  "PAPI_library_init", PAPI_VER_CURRENT, PAPI_init);
         if (mNumOfThreads > 1) {
             Function * PAPIThreadInitFn = m->getFunction("PAPI_thread_init");
             Function * pthreadSelfFn = m->getFunction("pthread_self");
-            checkPAPIRetValAndExitOnError(b,  "PAPI_thread_init", PAPI_OK, b->CreateCall(PAPIThreadInitFn, pthreadSelfFn));
+            Value * thrd_init = b->CreateCall(PAPIThreadInitFn->getFunctionType(), PAPIThreadInitFn, pthreadSelfFn);
+            checkPAPIRetValAndExitOnError(b,  "PAPI_thread_init", PAPI_OK, thrd_init);
         }
     }
 }
@@ -179,7 +181,7 @@ void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
 
         FixedArray<Value *, 1> createEventSetArgs;
         createEventSetArgs[0] = PAPIEventSet;
-        Value * const createEventSetRetVal = b->CreateCall(PAPICreateEventSetFn, createEventSetArgs);
+        Value * const createEventSetRetVal = b->CreateCall(PAPICreateEventSetFn->getFunctionType(), PAPICreateEventSetFn, createEventSetArgs);
         checkPAPIRetValAndExitOnError(b,  "PAPI_create_eventset", PAPI_OK, createEventSetRetVal);
 
         const auto n = PAPIEventList.size();
@@ -201,7 +203,7 @@ void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
 
         Function * const PAPIAddEventsFn = m->getFunction("PAPI_add_events");
 
-        Value * const addEventsRetVal = b->CreateCall(PAPIAddEventsFn, addEventArgs);
+        Value * const addEventsRetVal = b->CreateCall(PAPIAddEventsFn->getFunctionType(), PAPIAddEventsFn, addEventArgs);
         checkPAPIRetValAndExitOnError(b,  "PAPI_add_events", PAPI_OK, addEventsRetVal);
 
         Function * const PAPIStartFn = m->getFunction("PAPI_start");
@@ -209,7 +211,7 @@ void PipelineCompiler::createEventSetAndStartPAPI(BuilderRef b) {
         FixedArray<Value *, 1> startArgs;
         startArgs[0] = PAPIEventSetVal;
 
-        Value * const startRetVal = b->CreateCall(PAPIStartFn, startArgs);
+        Value * const startRetVal = b->CreateCall(PAPIStartFn->getFunctionType(), PAPIStartFn, startArgs);
         checkPAPIRetValAndExitOnError(b,  "PAPI_start", PAPI_OK, startRetVal);
 
         // PAPI_start starts counting all of the hardware events contained in the previously defined EventSet.
@@ -241,7 +243,7 @@ void PipelineCompiler::readPAPIMeasurement(BuilderRef b, const unsigned /* kerne
         // TODO: should probably check the error code here but if we do get an error,
         // what can we avoid contaminating the results but also inform the user something
         // went wrong?
-        b->CreateCall(PAPIReadFn, args);
+        b->CreateCall(PAPIReadFn->getFunctionType(), PAPIReadFn, args);
     }
 }
 
@@ -315,7 +317,7 @@ void PipelineCompiler::stopPAPIAndDestroyEventSet(BuilderRef b) {
         FixedArray<Value *, 2> stopArgs;
         stopArgs[0] = PAPIEventSetVal;
         stopArgs[1] = finalEventReads;
-        Value * const stopRetVal = b->CreateCall(PAPIStopFn, stopArgs);
+        Value * const stopRetVal = b->CreateCall(PAPIStopFn->getFunctionType(), PAPIStopFn, stopArgs);
         checkPAPIRetValAndExitOnError(b,  "PAPI_stop", PAPI_OK, stopRetVal);
 
         FixedArray<Value *, 1> args;
@@ -323,12 +325,12 @@ void PipelineCompiler::stopPAPIAndDestroyEventSet(BuilderRef b) {
 
         Function * const PAPICleanupEventsetFn = m->getFunction("PAPI_cleanup_eventset");
 
-        Value * const cleanupRetVal = b->CreateCall(PAPICleanupEventsetFn, args);
+        Value * const cleanupRetVal = b->CreateCall(PAPICleanupEventsetFn->getFunctionType(), PAPICleanupEventsetFn, args);
         checkPAPIRetValAndExitOnError(b,  "PAPI_cleanup_eventset", PAPI_OK, cleanupRetVal);
 
         args[0] = PAPIEventSet;
         Function * const PAPIDestroyEventsetFn = m->getFunction("PAPI_destroy_eventset");
-        Value * const destroyRetVal = b->CreateCall(PAPIDestroyEventsetFn, args);
+        Value * const destroyRetVal = b->CreateCall(PAPIDestroyEventsetFn->getFunctionType(), PAPIDestroyEventsetFn, args);
         checkPAPIRetValAndExitOnError(b,  "PAPI_destroy_eventset", PAPI_OK, destroyRetVal);
     }
 }
@@ -362,7 +364,7 @@ void PipelineCompiler::shutdownPAPI(BuilderRef b) const {
     if (LLVM_UNLIKELY(EnablePAPICounters)) {
         Module * const m = b->getModule();
         Function * const PAPIShutdownFn = m->getFunction("PAPI_shutdown");
-        b->CreateCall(PAPIShutdownFn);
+        b->CreateCall(PAPIShutdownFn->getFunctionType(), PAPIShutdownFn, {});
     }
 }
 
@@ -396,7 +398,7 @@ void PipelineCompiler::checkPAPIRetValAndExitOnError(BuilderRef b, StringRef sou
     }
     FixedArray<Value *, 1> strerrArgs;
     strerrArgs[0] = retVal;
-    Value * const strerr = b->CreateCall(PAPI_strerrFn, strerrArgs);
+    Value * const strerr = b->CreateCall(PAPI_strerrFn->getFunctionType(), PAPI_strerrFn, strerrArgs);
 
 
     FixedArray<Value *, 4> args;
@@ -404,7 +406,8 @@ void PipelineCompiler::checkPAPIRetValAndExitOnError(BuilderRef b, StringRef sou
     args[1] = b->GetString("Error: %s returned %s\n");
     args[2] = b->GetString(source);
     args[3] = strerr;
-    b->CreateCall(b->GetDprintf(), args);
+    Value * Dprintf = b->GetDprintf();
+    b->CreateCall(Dprintf->getFunctionType(), Dprintf, args);
     b->CreateExit(-1);
     b->CreateBr(onSuccess);
 
@@ -724,7 +727,7 @@ void PipelineCompiler::printPAPIReportIfRequested(BuilderRef b) {
 
         Function * const reportPrinter = b->getModule()->getFunction("__print_pipeline_PAPI_report");
         assert (reportPrinter);
-        b->CreateCall(reportPrinter, args);
+        b->CreateCall(reportPrinter->getFunctionType(), reportPrinter, args);
 
         b->CreateFree(values);
     }

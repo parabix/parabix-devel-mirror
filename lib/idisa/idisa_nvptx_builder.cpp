@@ -32,7 +32,7 @@ Value * IDISA_NVPTX20_Builder::bitblock_any(Value * val) {
 
 Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos, const bool safe){
     Type * const int64ty = getInt64Ty();
-    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc, {});
     Value * id64 = CreateZExt(id, int64ty);
     Value * threadSize = getInt64(groupThreads);
     Value * fullBlocks = CreateUDiv(pos, threadSize);
@@ -44,7 +44,7 @@ Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos, const bool safe){
 
 Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos, const bool safe){
     Type * const int64ty = getInt64Ty();
-    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc, {});
     Value * id64 = CreateZExt(id, int64ty);
     Value * threadSize = getInt64(groupThreads);
     Value * fullBlocks = CreateUDiv(pos, threadSize);
@@ -54,7 +54,7 @@ Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos, const bool safe){
 }
 
 std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
-    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc, {});
     Value * retVal = CreateCall(mLongAdvanceFunc->getFunctionType(), mLongAdvanceFunc, {id, a, CreateBitCast(getInt64(shift), mBitBlockType), shiftin});
     Value * shifted = CreateExtractValue(retVal, {0});
     Value * shiftOut = CreateExtractValue(retVal, {1});
@@ -62,7 +62,7 @@ std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_advance(Value * a, V
 }
 
 std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_add_with_carry(Value * a, Value * b, Value * carryIn) {
-    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc);
+    Value * id = CreateCall(tidFunc->getFunctionType(), tidFunc, {});
     Value * retVal = CreateCall(mLongAddFunc->getFunctionType(), mLongAddFunc, {id, a, b, carryIn});
     Value * sum = CreateExtractValue(retVal, {0});
     Value * carry_out_strm = CreateExtractValue(retVal, {1});
@@ -143,7 +143,7 @@ void IDISA_NVPTX20_Builder::CreateLongAdvanceFunc(){
     Value * lshr0 = CreateLShr(val, CreateSub(CreateBitCast(getInt64(64), mBitBlockType), shftAmount));
     CreateStore(lshr0, carryNextPtr);
 
-    CreateCall(barrierFunc->getFunctionType(), barrierFunc);
+    CreateCall(barrierFunc->getFunctionType(), barrierFunc, {});
 
     Value * lastCarryPtr = CreateGEP(carry, {getInt32(0), getInt32(groupThreads)});
     Value * blockCarryOut = CreateLoad(lastCarryPtr, "blockCarryOut");
@@ -214,7 +214,7 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
   Value * bubblePtr = CreateGEP(bubble, {getInt32(0), id});
   CreateStore(bubbleInitVal, bubblePtr);
 
-  CreateCall(barrierFunc->getFunctionType(), barrierFunc);
+    CreateCall(barrierFunc->getFunctionType(), barrierFunc, {});
 
   Value * carryVal = carryInitVal;
   Value * bubbleVal = bubbleInitVal;
@@ -226,7 +226,7 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
     Value * bubbleOffsetPtr = CreateGEP(bubble, {getInt32(0), CreateXor(id, getInt32(offset))});
     bubbleVal = CreateOr(bubbleVal, CreateLoad(bubbleOffsetPtr));
     CreateStore(bubbleVal, bubblePtr);
-    CreateCall(barrierFunc->getFunctionType(), barrierFunc);
+    CreateCall(barrierFunc->getFunctionType(), barrierFunc, {});
   }
 
   Value * firstCarryPtr = CreateGEP(carry, {getInt32(0), getInt32(0)});
