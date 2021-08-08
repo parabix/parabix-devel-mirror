@@ -859,7 +859,7 @@ void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, 
         E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
 
         StreamSet * ColorizedBreaks = E->CreateStreamSet(1);
-        E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks);
+        E->CreateKernelCall<UnixLinesKernelBuilder>(ColorizedBasis, ColorizedBreaks, UnterminatedLineAtEOF::Add1);
 
         StreamSet * ColorizedCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
         E->CreateKernelCall<MatchCoordinatesKernel>(ColorizedBreaks, ColorizedBreaks, ColorizedCoords, 1);
