@@ -1453,7 +1453,8 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     // If not we can immediately move on to the next stride.
     // We optimize for the case of no matches; the cost of the branch penalty
     // is expected to be small relative to the processing of each match.
-    Value * anyMatches = b->CreateOr(b->CreateIsNotNull(pendingMatchPhi), b->CreateIsNotNull(matchMask));
+    Value * havePending = b->CreateAnd(b->CreateICmpUGT(avail, stridePos), b->CreateIsNotNull(pendingMatchPhi));
+    Value * anyMatches = b->CreateOr(havePending, b->CreateIsNotNull(matchMask));
     b->CreateUnlikelyCondBr(anyMatches, strideMatchProcessing, strideMatchesDone);
 
     b->SetInsertPoint(strideMatchProcessing);
