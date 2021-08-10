@@ -1399,6 +1399,8 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     BasicBlock * const strideMatchLoop = b->CreateBasicBlock("strideMatchLoop");
     BasicBlock * const pendingMatchProcessing = b->CreateBasicBlock("pendingMatchProcessing");
     BasicBlock * const strideInitialMatch = b->CreateBasicBlock("strideInitialMatch");
+    BasicBlock * const writeLF = b->CreateBasicBlock("writeLF");
+    BasicBlock * const strideInitialDone = b->CreateBasicBlock("strideInitialDone");
     BasicBlock * const inStrideMatch = b->CreateBasicBlock("inStrideMatch");
     BasicBlock * const strideEndMatch = b->CreateBasicBlock("strideEndMatch");
     BasicBlock * const strideMatchesDone = b->CreateBasicBlock("strideMatchesDone");
@@ -1453,8 +1455,7 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     // If not we can immediately move on to the next stride.
     // We optimize for the case of no matches; the cost of the branch penalty
     // is expected to be small relative to the processing of each match.
-    Value * havePending = b->CreateAnd(b->CreateICmpUGT(avail, stridePos), b->CreateIsNotNull(pendingMatchPhi));
-    Value * anyMatches = b->CreateOr(havePending, b->CreateIsNotNull(matchMask));
+    Value * anyMatches = b->CreateOr(b->CreateIsNotNull(pendingMatchPhi), b->CreateIsNotNull(matchMask));
     b->CreateUnlikelyCondBr(anyMatches, strideMatchProcessing, strideMatchesDone);
 
     b->SetInsertPoint(strideMatchProcessing);
@@ -1530,14 +1531,24 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * breakWord1 = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, breakWordIdx1)), sizeTy);
     Value * breakWord1Pos = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx1, sw.WIDTH));
     Value * break1Pos = b->CreateAdd(breakWord1Pos, b->CreateCountForwardZeroes(breakWord1));
+    b->CallPrintInt("break1Pos", break1Pos);
     Value * initialLineLgth = b->CreateAdd(b->CreateSub(break1Pos, stridePos), sz_ONE);
     Value * const strideStartPtr = b->getRawInputPointer("InputStream", stridePos);
     Value * const outputPtr1 = b->getRawOutputPointer("Output", strideProducedPhi);
     b->CreateMemCpy(outputPtr1, strideStartPtr, initialLineLgth, 1);
     Value * producedPos1 = b->CreateAdd(strideProducedPhi, initialLineLgth);
-    matchMaskPhi->addIncoming(matchMask, strideInitialMatch);
-    matchWordPhi->addIncoming(sz_ZERO, strideInitialMatch);
-    producedPosPhi->addIncoming(producedPos1, strideInitialMatch);
+    b->CreateCondBr(b->CreateICmpUGE(break1Pos, avail), writeLF, strideInitialDone);
+
+    b->SetInsertPoint(writeLF);
+    Value * finalBytePtr = b->getRawOutputPointer("Output", b->CreateSub(producedPos1, sz_ONE));
+    finalBytePtr = b->CreateBitCast(finalBytePtr, b->getInt8PtrTy());
+    b->CreateStore(b->getInt8(0x0A), finalBytePtr);
+    b->CreateBr(strideInitialDone);
+
+    b->SetInsertPoint(strideInitialDone);
+    matchMaskPhi->addIncoming(matchMask, strideInitialDone);
+    matchWordPhi->addIncoming(sz_ZERO, strideInitialDone);
+    producedPosPhi->addIncoming(producedPos1, strideInitialDone);
     b->CreateCondBr(b->CreateIsNotNull(matchMask), strideMatchLoop, strideMatchesDone);
 
     b->SetInsertPoint(strideEndMatch);
@@ -1560,7 +1571,7 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     b->SetInsertPoint(strideMatchesDone);
     PHINode * const strideFinalProduced = b->CreatePHI(sizeTy, 3);
     strideFinalProduced->addIncoming(nextProducedPos, inStrideMatch);
-    strideFinalProduced->addIncoming(producedPos1, strideInitialMatch);
+    strideFinalProduced->addIncoming(producedPos1, strideInitialDone);
     strideFinalProduced->addIncoming(strideProducedPhi, strideMasksReady);
     strideNo->addIncoming(nextStrideNo, strideMatchesDone);
     pendingMatchPhi->addIncoming(Constant::getNullValue(pendingMatch->getType()), strideMatchesDone);
