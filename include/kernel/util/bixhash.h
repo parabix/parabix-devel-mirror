@@ -25,17 +25,18 @@ namespace kernel {
 class BixHash final: public pablo::PabloKernel {
 public:
     BixHash(BuilderRef b,
-            StreamSet * basis, StreamSet * run, StreamSet * hashes, unsigned steps=4, unsigned seed = 179321)
-    : PabloKernel(b, "BixHash" + std::to_string(hashes->getNumElements()) + "_" + std::to_string(steps) + "_" + std::to_string(seed),
+            StreamSet * basis, StreamSet * run, StreamSet * hashes, unsigned wordNum, unsigned steps=4, unsigned seed = 179321)
+    : PabloKernel(b, "BixHash" + std::to_string(hashes->getNumElements()) + "_" + std::to_string(steps) + "_" + std::to_string(seed) + "_" + std::to_string(wordNum),
                   {Binding{"basis", basis}, Binding{"run", run}},
                   {Binding{"hashes", hashes}}),
-    mHashBits(hashes->getNumElements()), mHashSteps(steps), mSeed(seed) {}
+    mHashBits(hashes->getNumElements()), mHashSteps(steps), mSeed(seed), mWordNum(wordNum) {}
 protected:
     void generatePabloMethod() override;
 private:
     unsigned mHashBits;
     unsigned mHashSteps;
     unsigned mSeed;
+    unsigned mWordNum;
 };
 
 }
